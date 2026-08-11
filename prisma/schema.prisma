@@ -1,23 +1,607 @@
-// Prisma schema — MINIMAL Phase 0 shape.
-// The full data model (§6: User, Client, Enquiry, Quotation, Booking, ...) lands in Phase 3.
+// Full data model — Phase 3, implementing BRIEF §6 exactly.
 //
-// datasource uses url + directUrl so the same schema runs on local Homebrew Postgres (both URLs
-// identical) and on Neon in production (url = pooled, directUrl = direct for migrations). See
-// DECISIONS.md D-002 / D-003.
+// Money is Decimal(10,2) / Prisma.Decimal (ADR-0001, D6). Email uses citext (case-insensitive).
+// Partial unique indexes (one CONFIRMED booking per crew per date; one ACCEPTED quotation per
+// enquiry) and the insert-only triggers for ActivityLog / SecurityEvent cannot be expressed in the
+// Prisma schema — they are added as raw SQL in the migration (ADR-0003, §6).
+//
+// From Phase 3 the project uses `prisma migrate` (versioned SQL), not `db push` (ADR-0003, I-1).
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [citext]
 }
 
-/// Temporary Phase 0 model so `prisma generate` emits a client and `prisma db push` proves the
-/// database connection end to end. Removed when the real schema replaces it in Phase 3.
-model HealthCheck {
-  id        Int      @id @default(autoincrement())
-  checkedAt DateTime @default(now())
+// ---------- Enums ----------
+
+enum UserRole {
+  ADMIN
+  STUDIO
+  EDITOR
+  // CLIENT is intentionally absent: clients never log in and reach records via tokens (OQ-009, §5).
+}
+
+enum CrewRole {
+  PHOTOGRAPHER
+  VIDEOGRAPHER
+  SECOND_SHOOTER
+}
+
+enum EnquiryStatus {
+  NEW
+  CONTACTED
+  QUOTED
+  WON
+  LOST
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  SUPERSEDED
+}
+
+enum BookingStatus {
+  PENDING_BOOKING_FEE
+  CONFIRMED
+  DELIVERED
+  CLOSED
+  CANCELLED
+}
+
+enum DeliverableType {
+  SNEAK_PEEK
+  PHOTO_GALLERY
+  VIDEO_FILM
+  ALBUM
+  FILM_SCANS
+  PORTRAIT_GALLERY
+  RAW_FOOTAGE
+}
+
+enum DeliverableStatus {
+  PENDING
+  IN_PROGRESS
+  DELIVERED
+  CLOSED
+}
+
+enum InvoiceType {
+  BOOKING_FEE
+  BALANCE
+  ADDITIONAL
+}
+
+enum InvoiceStatus {
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CARD
+  CASH
+  OTHER
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  CANCELLED
+  FAILED
+}
+
+enum ActorType {
+  SYSTEM
+  STAFF
+  CLIENT
+}
+
+enum SourceType {
+  PACKAGE
+  ADDON
+  RULE
+  MANUAL
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+}
+
+// ---------- Identity and access ----------
+
+model User {
+  id                 String    @id @default(cuid())
+  email              String    @unique @db.Citext
+  passwordHash       String
+  passwordAlgo       String // algorithm identifier so parameters can be upgraded (SEC-P01, SEC-P05)
+  role               UserRole
+  name               String
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(false)
+  lastLoginAt        DateTime?
+  failedAttempts     Int       @default(0) // SEC-S04 lockout counter
+  lockedUntil        DateTime? // SEC-S04
+  passwordChangedAt  DateTime?
+  createdAt          DateTime  @default(now())
+
+  passwordResets    PasswordReset[]
+  sessions          Session[]
+  crewMember        CrewMember?
+  activityLogs      ActivityLog[]
+  securityEvents    SecurityEvent[]
+  notifications     Notification[]
+  payments          Payment[]
+  changeRequests    ChangeRequest[]
+  assignedEnquiries Enquiry[]       @relation("EnquiryAssignee")
+  createdQuotations Quotation[]     @relation("QuotationCreatedBy")
+
+  @@index([role])
+}
+
+model PasswordReset {
+  id          String    @id @default(cuid())
+  userId      String
+  tokenHash   String // SHA-256 hash only (SEC-R02)
+  expiresAt   DateTime
+  usedAt      DateTime?
+  requestedIp String
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+model Session {
+  id                String    @id @default(cuid())
+  userId            String
+  tokenHash         String // stored hashed (SEC-S01)
+  expiresAt         DateTime // idle timeout (SEC-S02)
+  absoluteExpiresAt DateTime // absolute timeout (SEC-S02)
+  lastActiveAt      DateTime  @default(now())
+  userAgent         String?
+  ipAddress         String?
+  revokedAt         DateTime?
+  createdAt         DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+model CrewMember {
+  id           String   @id @default(cuid())
+  name         String
+  email        String?  @db.Citext
+  crewRole     CrewRole
+  userId       String?  @unique
+  isContractor Boolean  @default(false)
+  isActive     Boolean  @default(true)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  leadPhotographerBookings Booking[]     @relation("LeadPhotographer")
+  leadVideographerBookings Booking[]     @relation("LeadVideographer")
+  secondShooterBookings    Booking[]     @relation("SecondShooter")
+  deliverables             Deliverable[]
+}
+
+// ---------- Client and enquiry ----------
+
+model Client {
+  id               String    @id @default(cuid())
+  primaryName      String
+  partnerName      String?
+  email            String    @unique @db.Citext // BR-E03: dedupe by email, never duplicate
+  phone            String?
+  suburb           String?
+  state            String?
+  postcode         String?
+  marketingConsent Boolean   @default(false) // PRIV-02: defaults false, captured explicitly
+  consentUpdatedAt DateTime?
+  anonymisedAt     DateTime? // PRIV-03
+  createdAt        DateTime  @default(now())
+
+  enquiries     Enquiry[]
+  bookings      Booking[]
+  activityLogs  ActivityLog[]
+  notifications Notification[]
+
+  @@index([email])
+}
+
+model Enquiry {
+  id               String        @id @default(cuid())
+  clientId         String
+  enquiryType      String // wedding | portrait | ... (fixed list in app)
+  eventDate        DateTime
+  venueName        String?
+  venueSuburb      String?
+  venueDistanceKm  Decimal?      @db.Decimal(6, 1) // BR-P09 travel check
+  guestCount       Int?
+  budgetIndication Decimal?      @db.Decimal(10, 2)
+  source           String? // OQ: fixed source taxonomy (I-6)
+  message          String?
+  status           EnquiryStatus @default(NEW)
+  assignedUserId   String?
+  firstRespondedAt DateTime? // BR-E06: set once on first CONTACTED, never overwritten
+  lostReason       String? // BR-E10: from a fixed list
+  createdAt        DateTime      @default(now())
+
+  client       Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  assignedUser User?            @relation("EnquiryAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  packages     EnquiryPackage[]
+  quotations   Quotation[]
+
+  @@index([clientId])
+  @@index([status])
+  @@index([eventDate])
+}
+
+model EnquiryPackage {
+  enquiryId String
+  packageId String
+
+  enquiry Enquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  package Package @relation(fields: [packageId], references: [id], onDelete: Restrict)
+
+  @@id([enquiryId, packageId])
+}
+
+// ---------- Catalogue and pricing ----------
+
+model Package {
+  id               String  @id @default(cuid())
+  code             String  @unique
+  name             String
+  description      String
+  priceGross       Decimal @db.Decimal(10, 2) // BR-P01 GST-inclusive
+  includedHours    Int
+  includedTravelKm Int
+  maxExtraHours    Int
+  isActive         Boolean @default(true)
+  displayOrder     Int     @default(0)
+
+  enquiryPackages EnquiryPackage[]
+
+  @@index([isActive, displayOrder])
+}
+
+model AddOn {
+  id               String   @id @default(cuid())
+  code             String   @unique
+  name             String
+  description      String
+  priceGrossBefore Decimal  @db.Decimal(10, 2) // BR-P05
+  priceGrossAfter  Decimal? @db.Decimal(10, 2) // BR-P05 (ALBUM after shoot date)
+  isActive         Boolean  @default(true)
+  displayOrder     Int      @default(0)
+
+  rules AddOnRule[]
+
+  @@index([isActive, displayOrder])
+}
+
+model AddOnRule {
+  id                   String   @id @default(cuid())
+  addOnId              String
+  requiresAnyPackageId String[] // BR-P04 — package codes/ids; validated server-side, not FK arrays
+  excludesPackageId    String[]
+
+  addOn AddOn @relation(fields: [addOnId], references: [id], onDelete: Cascade)
+
+  @@index([addOnId])
+}
+
+model PricingRule {
+  id                   String       @id @default(cuid())
+  code                 String       @unique
+  name                 String
+  ruleType             String // BUNDLE | CONDITIONAL
+  requiresAllPackageId String[] // BR-P07/P08 conditions (validated server-side)
+  excludesPackageId    String[]
+  appliesToTargetId    String? // e.g. the PRE-WED package the discount targets
+  discountType         DiscountType
+  discountValue        Decimal      @db.Decimal(10, 2) // percentage value or fixed AUD amount
+  evaluationOrder      Int          @default(0) // BR-P06
+  validFrom            DateTime?
+  validTo              DateTime?
+  isActive             Boolean      @default(true)
+
+  @@index([isActive, evaluationOrder])
+}
+
+model Quotation {
+  id                         String          @id @default(cuid())
+  enquiryId                  String
+  version                    Int             @default(1) // BR-P11 versioning
+  status                     QuotationStatus @default(DRAFT)
+  viewToken                  String          @unique // BR-T01 (plaintext, multi-use, read-only)
+  totalGross                 Decimal         @db.Decimal(10, 2)
+  gstAmount                  Decimal         @db.Decimal(10, 2) // BR-P02 = round(total/11, 2)
+  validUntil                 DateTime? // BR-P12 sentAt + 14 days
+  requiresManualPricing      Boolean         @default(false) // BR-P09
+  cancellationPolicySnapshot String // BR-P15 rendered verbatim
+  sentAt                     DateTime?
+  firstViewedAt              DateTime?
+  respondedAt                DateTime?
+  supersededById             String?         @unique
+  termsAcknowledgedAt        DateTime? // BR-P16
+  termsAcknowledgedIp        String? // BR-P16
+  createdBy                  String
+  createdAt                  DateTime        @default(now())
+
+  enquiry        Enquiry           @relation(fields: [enquiryId], references: [id], onDelete: Restrict)
+  supersededBy   Quotation?        @relation("QuotationVersions", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes     Quotation?        @relation("QuotationVersions")
+  creator        User              @relation("QuotationCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  lines          QuotationLine[]
+  actions        QuotationAction[]
+  booking        Booking?
+  changeRequests ChangeRequest[]
+  // NOTE: "at most one ACCEPTED quotation per enquiry" (BR-P14) is a partial unique index added in
+  // raw SQL in the migration: UNIQUE (enquiryId) WHERE status = 'ACCEPTED'.
+
+  @@index([enquiryId])
+  @@index([status])
+}
+
+model QuotationAction {
+  id          String    @id @default(cuid())
+  quotationId String
+  tokenHash   String // BR-T02 SHA-256 hash, single-use
+  action      String // ACCEPT | DECLINE
+  expiresAt   DateTime // BR-T02 15 minutes
+  usedAt      DateTime? // BR-T03 consumed by atomic conditional UPDATE
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId])
+  @@index([tokenHash])
+}
+
+model QuotationLine {
+  id             String     @id @default(cuid())
+  quotationId    String
+  sourceType     SourceType
+  sourceId       String? // Package/AddOn id when applicable
+  description    String // BR-P10 snapshot
+  unitPriceGross Decimal    @db.Decimal(10, 2)
+  quantity       Int        @default(1)
+  lineTotalGross Decimal    @db.Decimal(10, 2)
+  appliedRuleId  String? // set on discount lines
+  displayOrder   Int        @default(0)
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId])
+}
+
+// ---------- Booking and delivery ----------
+
+model Booking {
+  id                 String        @id @default(cuid())
+  quotationId        String        @unique // BR-B01 one booking per accepted quotation
+  clientId           String
+  status             BookingStatus @default(PENDING_BOOKING_FEE) // derived cache (ADR-0004)
+  shootDate          DateTime
+  startTime          DateTime?
+  endTime            DateTime?
+  venueName          String?
+  venueAddress       String?
+  coverageHours      Int // BR-B07 <= includedHours + maxExtraHours
+  leadPhotographerId String?
+  leadVideographerId String?
+  secondShooterId    String?
+  dateLockedAt       DateTime? // BR-B04 set at CONFIRMED
+  cancelledAt        DateTime?
+  cancellationReason String?
+  createdAt          DateTime      @default(now())
+
+  quotation        Quotation           @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  client           Client              @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  leadPhotographer CrewMember?         @relation("LeadPhotographer", fields: [leadPhotographerId], references: [id], onDelete: SetNull)
+  leadVideographer CrewMember?         @relation("LeadVideographer", fields: [leadVideographerId], references: [id], onDelete: SetNull)
+  secondShooter    CrewMember?         @relation("SecondShooter", fields: [secondShooterId], references: [id], onDelete: SetNull)
+  dateChanges      BookingDateChange[]
+  deliverables     Deliverable[]
+  invoices         Invoice[]
+  changeRequests   ChangeRequest[]
+  // NOTE: "no crew member holds two CONFIRMED bookings on the same date" (BR-B05) is enforced by
+  // partial unique indexes in raw SQL in the migration, one per crew slot, WHERE status='CONFIRMED'.
+
+  @@index([clientId])
+  @@index([status])
+  @@index([shootDate])
+}
+
+model BookingDateChange {
+  id           String   @id @default(cuid())
+  bookingId    String
+  previousDate DateTime
+  newDate      DateTime
+  reason       String // BR-B08
+  changedBy    String
+  changedAt    DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+}
+
+model Deliverable {
+  id                   String            @id @default(cuid())
+  bookingId            String
+  type                 DeliverableType
+  status               DeliverableStatus @default(PENDING)
+  dueDate              DateTime // BR-D02/D03
+  assignedCrewId       String?
+  galleryUrl           String?
+  galleryPasswordHash  String? // SEC-A10 hashed, never plaintext
+  deliveredAt          DateTime?
+  galleryExpiresAt     DateTime? // BR-D04 deliveredAt + 365
+  backupExpiresAt      DateTime? // BR-D05 deliveredAt + 180
+  clientAcknowledgedAt DateTime? // BR-D08 closes deliverable
+
+  booking      Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  assignedCrew CrewMember? @relation(fields: [assignedCrewId], references: [id], onDelete: SetNull)
+
+  @@index([bookingId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+// ---------- Invoicing ----------
+
+model Invoice {
+  id            String        @id @default(cuid())
+  bookingId     String
+  invoiceNumber String        @unique // BR-I03 sequential, gapless, generated in-transaction
+  type          InvoiceType
+  issueDate     DateTime
+  dueDate       DateTime // BR-I02 shootDate - 7 for BALANCE
+  totalGross    Decimal       @db.Decimal(10, 2)
+  gstAmount     Decimal       @db.Decimal(10, 2)
+  amountPaid    Decimal       @default(0) @db.Decimal(10, 2)
+  status        InvoiceStatus @default(ISSUED)
+  buyerName     String // BR-I05
+  supplierAbn   String // BR-I05 (OQ-007 placeholder until confirmed)
+  voidedAt      DateTime? // BR-I04
+  voidReason    String?
+
+  booking  Booking   @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  payments Payment[]
+
+  @@index([bookingId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  invoiceId         String
+  amountGross       Decimal       @db.Decimal(10, 2)
+  method            PaymentMethod
+  receivedDate      DateTime
+  reference         String?
+  recordedByUserId  String
+  reversesPaymentId String?       @unique // BR-I07 reversing record, never a delete
+  createdAt         DateTime      @default(now())
+
+  invoice    Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  recordedBy User     @relation(fields: [recordedByUserId], references: [id], onDelete: Restrict)
+  reverses   Payment? @relation("PaymentReversal", fields: [reversesPaymentId], references: [id], onDelete: SetNull)
+  reversedBy Payment? @relation("PaymentReversal")
+
+  @@index([invoiceId])
+}
+
+model ChangeRequest {
+  id                   String    @id @default(cuid())
+  bookingId            String
+  requestedByType      ActorType
+  requestType          String // EXTRA_HOURS | DATE_CHANGE | ADD_ON | ...
+  description          String
+  priceImpactGross     Decimal?  @db.Decimal(10, 2)
+  status               String // PENDING | APPROVED | DECLINED
+  resultingQuotationId String?
+  decidedByUserId      String?
+  decidedAt            DateTime?
+  createdAt            DateTime  @default(now())
+
+  booking            Booking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  resultingQuotation Quotation? @relation(fields: [resultingQuotationId], references: [id], onDelete: SetNull)
+  decidedBy          User?      @relation(fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([bookingId])
+  @@index([status])
+}
+
+// ---------- Audit and messaging ----------
+
+model ActivityLog {
+  id              String    @id @default(cuid())
+  clientId        String? // attached to the Client; filterable per job via relatedType/relatedId (D2)
+  relatedType     String
+  relatedId       String
+  actorType       ActorType
+  actorUserId     String?
+  action          String
+  detailJson      Json // BR-L02 structured payload (never secrets/tokens — BR-L04)
+  ipAddress       String?
+  visibleToClient Boolean   @default(false) // BR-L05
+  createdAt       DateTime  @default(now())
+
+  client Client? @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  actor  User?   @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  // INSERT-ONLY: update/delete blocked by a DB trigger + a Prisma extension (ADR-0003, BR-L01).
+
+  @@index([clientId])
+  @@index([relatedType, relatedId])
+  @@index([createdAt])
+}
+
+model SecurityEvent {
+  id             String   @id @default(cuid())
+  eventType      String
+  userId         String?
+  emailAttempted String?  @db.Citext
+  ipAddress      String
+  userAgent      String?
+  outcome        String // SUCCESS | FAILURE
+  createdAt      DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  // INSERT-ONLY: update/delete blocked by a DB trigger + a Prisma extension (ADR-0003).
+
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+model Notification {
+  id              String              @id @default(cuid())
+  clientId        String?
+  userId          String?
+  channel         NotificationChannel
+  templateKey     String
+  recipient       String
+  subject         String?
+  bodyText        String
+  status          NotificationStatus  @default(QUEUED)
+  scheduledFor    DateTime
+  sentAt          DateTime?
+  cancelledReason String? // BR-F03
+  relatedType     String
+  relatedId       String
+  createdAt       DateTime            @default(now())
+
+  client Client? @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([status, scheduledFor])
+  @@index([relatedType, relatedId])
+  @@index([clientId])
 }
