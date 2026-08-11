@@ -1,0 +1,23 @@
+// Prisma schema — MINIMAL Phase 0 shape.
+// The full data model (§6: User, Client, Enquiry, Quotation, Booking, ...) lands in Phase 3.
+//
+// datasource uses url + directUrl so the same schema runs on local Homebrew Postgres (both URLs
+// identical) and on Neon in production (url = pooled, directUrl = direct for migrations). See
+// DECISIONS.md D-002 / D-003.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// Temporary Phase 0 model so `prisma generate` emits a client and `prisma db push` proves the
+/// database connection end to end. Removed when the real schema replaces it in Phase 3.
+model HealthCheck {
+  id        Int      @id @default(autoincrement())
+  checkedAt DateTime @default(now())
+}

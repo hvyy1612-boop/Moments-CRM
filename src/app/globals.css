@@ -1,0 +1,65 @@
+@import 'tailwindcss';
+
+/*
+ * DESIGN TOKENS — the single source of truth (§10.1).
+ *
+ * No colour, spacing, or radius literal may appear anywhere else in the codebase.
+ * scripts/check-design-tokens.mjs (§12.8) enforces this and allowlists ONLY this file.
+ *
+ * Typefaces here are provisional system stacks so nothing looks broken in Phase 0; the final
+ * serif/sans pairing is chosen and justified in Phase 4 (design system), per §10.3 and DECISIONS.md.
+ */
+@theme {
+  /* Colour — the nine permitted tokens (§10.1). No colour outside this set (§10.2). */
+  --color-ink: #1a1a18;
+  --color-ink-muted: #6b6862;
+  --color-paper: #faf8f5;
+  --color-surface: #ffffff;
+  --color-line: #e4dfd7;
+  --color-accent: #8a6f4e;
+  --color-ok: #3f6b4f;
+  --color-warn: #a8702a;
+  --color-danger: #9b3b34;
+
+  /* Radius — 2px and 4px only (§10.1; §10.2 bans anything above 4px). */
+  --radius-sm: 2px;
+  --radius: 4px;
+
+  /* Type scale — 12 / 14 / 15 / 18 / 24 / 32 (§10.1). Base UI text is 15px. */
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 15px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+
+  /* Typefaces — provisional; final pairing decided in Phase 4. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-serif: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+}
+
+/*
+ * Spacing (§10.1: 4, 8, 12, 16, 24, 32, 48, 64px) is Tailwind's default 4px step, so
+ * p-1=4 p-2=8 p-3=12 p-4=16 p-6=24 p-8=32 p-12=48 p-16=64. The design system (Phase 4)
+ * documents the permitted steps; off-scale values are rejected in review.
+ */
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-serif);
+}
