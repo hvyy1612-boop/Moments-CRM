@@ -41,9 +41,13 @@
     "prettier": "^3.4.0",
     "prisma": "^6.1.0",
     "tailwindcss": "^4.0.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.18.0",
     "vitest": "^4.1.0"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "overrides": {
     "postcss": "^8.5.26",

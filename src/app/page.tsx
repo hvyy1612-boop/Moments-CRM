@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 export default function HomePage() {
   return (
     <main className="mx-auto max-w-2xl p-8">
@@ -6,11 +8,17 @@ export default function HomePage() {
         Internal system for Moments Photography and Film. The public enquiry experience and the
         staff console are built in the slices that follow this foundation.
       </p>
-      <p className="mt-4">
-        <a className="text-ink underline" href="/api/health">
+      <nav className="mt-4 flex flex-wrap gap-x-5 gap-y-2">
+        <Link className="text-ink underline underline-offset-2" href="/packages">
+          Packages
+        </Link>
+        <Link className="text-ink underline underline-offset-2" href="/styleguide">
+          Design system
+        </Link>
+        <a className="text-ink underline underline-offset-2" href="/api/health">
           Service health
         </a>
-      </p>
+      </nav>
     </main>
   )
 }
