@@ -22,5 +22,6 @@ export type RoutePermission =
  */
 export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/': { public: true },
+  '/styleguide': { public: true },
   '/api/health': { public: true },
 }
