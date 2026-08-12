@@ -7,9 +7,10 @@ import { systemClock, type Clock } from '@/lib/time'
  *
  * The token is 32 random bytes from a CSPRNG. Only its SHA-256 hash is stored; the plaintext is
  * returned once for the httpOnly, secure, sameSite=strict cookie set by the caller. Idle timeout is
- * 30 minutes and the absolute timeout is 8 hours (SEC-S02); the "stay signed in for 7 days" option
- * (§8.5) widens both to 7 days. The session id rotates on login by creating a new row and revoking
- * the old one (SEC-S03), handled at the call site.
+ * 30 minutes and the absolute timeout is 8 hours (SEC-S02). "Stay signed in for 7 days" extends
+ * ONLY the absolute lifetime to 7 days; the idle timeout never widens (BR-G10). The session id
+ * rotates on login by creating a new row and revoking the old one (SEC-S03), handled at the call
+ * site.
  */
 export const IDLE_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes
 export const ABSOLUTE_TIMEOUT_MS = 8 * 60 * 60 * 1000 // 8 hours
@@ -30,14 +31,14 @@ export type SessionWindow = { expiresAt: Date; absoluteExpiresAt: Date }
 
 /**
  * Pure computation of a session's idle and absolute expiry from the current time (SEC-S02). The idle
- * expiry is never later than the absolute expiry. Kept separate from the database so it can be
- * tested directly with an injected time.
+ * expiry is never later than the absolute expiry. "Stay signed in" affects only the absolute
+ * lifetime (BR-G10: it does not extend the idle timeout). Kept separate from the database so it can
+ * be tested directly with an injected time.
  */
 export function sessionWindow(now: Date, remember: boolean): SessionWindow {
   const absoluteMs = remember ? REMEMBER_TIMEOUT_MS : ABSOLUTE_TIMEOUT_MS
-  const idleMs = remember ? REMEMBER_TIMEOUT_MS : IDLE_TIMEOUT_MS
   const absoluteExpiresAt = new Date(now.getTime() + absoluteMs)
-  const expiresAt = new Date(Math.min(now.getTime() + idleMs, absoluteExpiresAt.getTime()))
+  const expiresAt = new Date(Math.min(now.getTime() + IDLE_TIMEOUT_MS, absoluteExpiresAt.getTime()))
   return { expiresAt, absoluteExpiresAt }
 }
 
@@ -92,6 +93,14 @@ export async function validateSession(
 export async function revokeSession(sessionId: string, clock: Clock = systemClock): Promise<void> {
   await prisma.session.updateMany({
     where: { id: sessionId, revokedAt: null },
+    data: { revokedAt: clock.now() },
+  })
+}
+
+/** Revoke whatever session a cookie token points at, valid or not (SEC-S03 rotation on login). */
+export async function revokeSessionByToken(token: string, clock: Clock = systemClock): Promise<void> {
+  await prisma.session.updateMany({
+    where: { tokenHash: hashToken(token), revokedAt: null },
     data: { revokedAt: clock.now() },
   })
 }

@@ -27,4 +27,11 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/enquire': { public: true },
   '/styleguide': { public: true },
   '/api/health': { public: true },
+  // Staff entrance and account recovery (§8.5, §8.2). Public by necessity: you cannot be signed in
+  // yet. The reset page is authorised by possession of the emailed token, not a session.
+  '/login': { public: true },
+  '/forgot-password': { public: true },
+  '/reset-password/[token]': { public: true },
+  // The staff app (Slice 2 onward). Enforced server-side by requireRole (SEC-A01).
+  '/dashboard': { roles: ['ADMIN', 'STUDIO', 'EDITOR'] },
 }

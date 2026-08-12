@@ -15,10 +15,10 @@ describe('session window (SEC-S02)', () => {
     expect(absoluteExpiresAt.getTime() - now.getTime()).toBe(ABSOLUTE_TIMEOUT_MS)
   })
 
-  it('stay-signed-in widens both windows to 7 days (§8.5)', () => {
+  it('BR-G10 stay-signed-in extends the absolute lifetime to 7 days and never the idle timeout', () => {
     const { expiresAt, absoluteExpiresAt } = sessionWindow(now, true)
-    expect(expiresAt.getTime() - now.getTime()).toBe(REMEMBER_TIMEOUT_MS)
     expect(absoluteExpiresAt.getTime() - now.getTime()).toBe(REMEMBER_TIMEOUT_MS)
+    expect(expiresAt.getTime() - now.getTime()).toBe(IDLE_TIMEOUT_MS)
   })
 
   it('the idle expiry is never later than the absolute expiry', () => {

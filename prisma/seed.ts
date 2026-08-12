@@ -1,6 +1,18 @@
 import { Prisma, PrismaClient } from '@prisma/client'
+import { hashPassword } from '../src/lib/auth/password'
 
 const prisma = new PrismaClient()
+
+// §13: known development passwords, printed with a warning. Development and test only — real
+// accounts are created by admin invitation and never ship with a seeded password.
+const users = [
+  { email: 'owner@moments.test', name: 'Studio Owner', role: 'ADMIN', password: 'owner-dev-2026-moments' },
+  { email: 'photographer@moments.test', name: 'Photographer', role: 'STUDIO', password: 'photo-dev-2026-moments' },
+  { email: 'videographer@moments.test', name: 'Videographer', role: 'STUDIO', password: 'video-dev-2026-moments' },
+  { email: 'editor@moments.test', name: 'Editor', role: 'EDITOR', password: 'editor-dev-2026-moments' },
+  // e2e fixture for the SEC-S04 lockout test; nothing else signs in with it.
+  { email: 'lockout@moments.test', name: 'Lockout test account (dev only)', role: 'EDITOR', password: 'lockout-dev-2026-moments' },
+] as const
 
 // Placeholder for add-ons the studio has not published a price for yet (OQ-001, OQ-002, OQ-003).
 // The catalogue shows "Price on enquiry" for these until the studio confirms a figure. We never
@@ -137,6 +149,40 @@ async function main() {
     await prisma.addOn.upsert({ where: { code: a.code }, create: a, update: a })
   }
   console.log(`Seeded ${packages.length} packages and ${addOns.length} add-ons.`)
+
+  // Users are re-hashed and their auth state reset on every run, so repeated e2e runs start from
+  // a known state (SEC-S04 counters cleared, passwords back to the printed values).
+  for (const u of users) {
+    const hashed = await hashPassword(u.password)
+    const data = {
+      email: u.email,
+      name: u.name,
+      role: u.role,
+      passwordHash: hashed.hash,
+      passwordAlgo: hashed.algo,
+      isActive: true,
+      mustChangePassword: false,
+      failedAttempts: 0,
+      lockedUntil: null,
+    }
+    await prisma.user.upsert({ where: { email: u.email }, create: data, update: data })
+  }
+
+  // Test artefacts from earlier e2e runs: reset tokens and queued mail for the .test accounts.
+  // (SecurityEvent is insert-only by design and is left alone; e2e uses per-run addresses instead.)
+  const testUsers = await prisma.user.findMany({
+    where: { email: { endsWith: '@moments.test' } },
+    select: { id: true },
+  })
+  const ids = testUsers.map((u) => u.id)
+  await prisma.passwordReset.deleteMany({ where: { userId: { in: ids } } })
+  await prisma.notification.deleteMany({ where: { recipient: { endsWith: '@moments.test' } } })
+
+  console.log('')
+  console.log('Development sign-ins (DEVELOPMENT ONLY — never use these in production):')
+  for (const u of users) {
+    console.log(`  ${u.role.padEnd(6)} ${u.email.padEnd(28)} ${u.password}`)
+  }
 }
 
 main()
