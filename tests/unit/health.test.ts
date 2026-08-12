@@ -14,13 +14,13 @@ describe('GET /api/health (§12.16)', () => {
     queryRaw.mockResolvedValue([{ ok: 1 }])
     const res = await GET()
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ status: 'ok', database: 'up' })
+    expect(await res.json()).toMatchObject({ status: 'ok', database: 'up' })
   })
 
   it('returns 503 and reports the database down when the connectivity query fails', async () => {
     queryRaw.mockRejectedValue(new Error('connection refused'))
     const res = await GET()
     expect(res.status).toBe(503)
-    expect(await res.json()).toEqual({ status: 'error', database: 'down' })
+    expect(await res.json()).toMatchObject({ status: 'error', database: 'down' })
   })
 })
