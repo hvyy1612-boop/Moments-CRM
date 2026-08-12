@@ -1,11 +1,10 @@
-// Full data model — Phase 3, implementing BRIEF §6 exactly.
+// Full data model. Implements BRIEF §6 with the §6.2 schema rules.
 //
-// Money is Decimal(10,2) / Prisma.Decimal (ADR-0001, D6). Email uses citext (case-insensitive).
-// Partial unique indexes (one CONFIRMED booking per crew per date; one ACCEPTED quotation per
-// enquiry) and the insert-only triggers for ActivityLog / SecurityEvent cannot be expressed in the
-// Prisma schema — they are added as raw SQL in the migration (ADR-0003, §6).
-//
-// From Phase 3 the project uses `prisma migrate` (versioned SQL), not `db push` (ADR-0003, I-1).
+// Money is Decimal(10,2) / Prisma.Decimal (ADR-0001, D6, BR-S09). Email uses citext.
+// Every table carries createdAt; mutable tables also carry updatedAt (BR-S05). ActivityLog and
+// SecurityEvent carry createdAt only. Enumerable values are database enums (BR-S08).
+// Partial unique indexes (BR-P14, BR-B05) and the insert-only triggers (ActivityLog, SecurityEvent)
+// are raw SQL in the migrations (ADR-0003). Uses `prisma migrate`, not `db push`.
 
 generator client {
   provider        = "prisma-client-js"
@@ -32,6 +31,12 @@ enum CrewRole {
   PHOTOGRAPHER
   VIDEOGRAPHER
   SECOND_SHOOTER
+}
+
+enum EnquiryType {
+  WEDDING
+  MICRO
+  PORTRAIT
 }
 
 enum EnquiryStatus {
@@ -104,6 +109,11 @@ enum NotificationStatus {
   FAILED
 }
 
+enum NotificationChannel {
+  EMAIL
+  SMS
+}
+
 enum ActorType {
   SYSTEM
   STAFF
@@ -122,9 +132,20 @@ enum DiscountType {
   FIXED
 }
 
-enum NotificationChannel {
-  EMAIL
-  SMS
+enum PricingRuleType {
+  BUNDLE
+  CONDITIONAL
+}
+
+enum ChangeRequestStatus {
+  PENDING
+  APPROVED
+  DECLINED
+}
+
+enum SecurityOutcome {
+  SUCCESS
+  FAILURE
 }
 
 // ---------- Identity and access ----------
@@ -143,6 +164,7 @@ model User {
   lockedUntil        DateTime? // SEC-S04
   passwordChangedAt  DateTime?
   createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now()) @updatedAt
 
   passwordResets    PasswordReset[]
   sessions          Session[]
@@ -166,6 +188,7 @@ model PasswordReset {
   usedAt      DateTime?
   requestedIp String
   createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -184,6 +207,7 @@ model Session {
   ipAddress         String?
   revokedAt         DateTime?
   createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now()) @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -199,6 +223,8 @@ model CrewMember {
   userId       String?  @unique
   isContractor Boolean  @default(false)
   isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
@@ -223,6 +249,7 @@ model Client {
   consentUpdatedAt DateTime?
   anonymisedAt     DateTime? // PRIV-03
   createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now()) @updatedAt
 
   enquiries     Enquiry[]
   bookings      Booking[]
@@ -235,7 +262,7 @@ model Client {
 model Enquiry {
   id               String        @id @default(cuid())
   clientId         String
-  enquiryType      String // wedding | portrait | ... (fixed list in app)
+  enquiryType      EnquiryType // BR-S08
   eventDate        DateTime
   venueName        String?
   venueSuburb      String?
@@ -249,6 +276,7 @@ model Enquiry {
   firstRespondedAt DateTime? // BR-E06: set once on first CONTACTED, never overwritten
   lostReason       String? // BR-E10: from a fixed list
   createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @default(now()) @updatedAt
 
   client       Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
   assignedUser User?            @relation("EnquiryAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
@@ -263,6 +291,7 @@ model Enquiry {
 model EnquiryPackage {
   enquiryId String
   packageId String
+  createdAt DateTime @default(now())
 
   enquiry Enquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
   package Package @relation(fields: [packageId], references: [id], onDelete: Restrict)
@@ -273,16 +302,18 @@ model EnquiryPackage {
 // ---------- Catalogue and pricing ----------
 
 model Package {
-  id               String  @id @default(cuid())
-  code             String  @unique
+  id               String   @id @default(cuid())
+  code             String   @unique
   name             String
   description      String
-  priceGross       Decimal @db.Decimal(10, 2) // BR-P01 GST-inclusive
+  priceGross       Decimal  @db.Decimal(10, 2) // BR-P01 GST-inclusive
   includedHours    Int
   includedTravelKm Int
   maxExtraHours    Int
-  isActive         Boolean @default(true)
-  displayOrder     Int     @default(0)
+  isActive         Boolean  @default(true)
+  displayOrder     Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now()) @updatedAt
 
   enquiryPackages EnquiryPackage[]
 
@@ -298,6 +329,8 @@ model AddOn {
   priceGrossAfter  Decimal? @db.Decimal(10, 2) // BR-P05 (ALBUM after shoot date)
   isActive         Boolean  @default(true)
   displayOrder     Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now()) @updatedAt
 
   rules AddOnRule[]
 
@@ -309,6 +342,8 @@ model AddOnRule {
   addOnId              String
   requiresAnyPackageId String[] // BR-P04 — package codes/ids; validated server-side, not FK arrays
   excludesPackageId    String[]
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @default(now()) @updatedAt
 
   addOn AddOn @relation(fields: [addOnId], references: [id], onDelete: Cascade)
 
@@ -316,19 +351,21 @@ model AddOnRule {
 }
 
 model PricingRule {
-  id                   String       @id @default(cuid())
-  code                 String       @unique
+  id                   String          @id @default(cuid())
+  code                 String          @unique
   name                 String
-  ruleType             String // BUNDLE | CONDITIONAL
+  ruleType             PricingRuleType // BR-S08
   requiresAllPackageId String[] // BR-P07/P08 conditions (validated server-side)
   excludesPackageId    String[]
   appliesToTargetId    String? // e.g. the PRE-WED package the discount targets
   discountType         DiscountType
-  discountValue        Decimal      @db.Decimal(10, 2) // percentage value or fixed AUD amount
-  evaluationOrder      Int          @default(0) // BR-P06
+  discountValue        Decimal         @db.Decimal(10, 2) // percentage value or fixed AUD amount
+  evaluationOrder      Int             @default(0) // BR-P06
   validFrom            DateTime?
   validTo              DateTime?
-  isActive             Boolean      @default(true)
+  isActive             Boolean         @default(true)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @default(now()) @updatedAt
 
   @@index([isActive, evaluationOrder])
 }
@@ -352,6 +389,7 @@ model Quotation {
   termsAcknowledgedIp        String? // BR-P16
   createdBy                  String
   createdAt                  DateTime        @default(now())
+  updatedAt                  DateTime        @default(now()) @updatedAt
 
   enquiry        Enquiry           @relation(fields: [enquiryId], references: [id], onDelete: Restrict)
   supersededBy   Quotation?        @relation("QuotationVersions", fields: [supersededById], references: [id], onDelete: SetNull)
@@ -375,6 +413,8 @@ model QuotationAction {
   action      String // ACCEPT | DECLINE
   expiresAt   DateTime // BR-T02 15 minutes
   usedAt      DateTime? // BR-T03 consumed by atomic conditional UPDATE
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
 
   quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 
@@ -393,6 +433,7 @@ model QuotationLine {
   lineTotalGross Decimal    @db.Decimal(10, 2)
   appliedRuleId  String? // set on discount lines
   displayOrder   Int        @default(0)
+  createdAt      DateTime   @default(now())
 
   quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
 
@@ -419,6 +460,7 @@ model Booking {
   cancelledAt        DateTime?
   cancellationReason String?
   createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @default(now()) @updatedAt
 
   quotation        Quotation           @relation(fields: [quotationId], references: [id], onDelete: Restrict)
   client           Client              @relation(fields: [clientId], references: [id], onDelete: Restrict)
@@ -430,7 +472,7 @@ model Booking {
   invoices         Invoice[]
   changeRequests   ChangeRequest[]
   // NOTE: "no crew member holds two CONFIRMED bookings on the same date" (BR-B05) is enforced by
-  // partial unique indexes in raw SQL in the migration, one per crew slot, WHERE status='CONFIRMED'.
+  // a trigger in the migration (crew spans three columns, D-013).
 
   @@index([clientId])
   @@index([status])
@@ -444,7 +486,7 @@ model BookingDateChange {
   newDate      DateTime
   reason       String // BR-B08
   changedBy    String
-  changedAt    DateTime @default(now())
+  changedAt    DateTime @default(now()) // this record's creation time (BR-S05); the row is immutable
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
@@ -464,6 +506,8 @@ model Deliverable {
   galleryExpiresAt     DateTime? // BR-D04 deliveredAt + 365
   backupExpiresAt      DateTime? // BR-D05 deliveredAt + 180
   clientAcknowledgedAt DateTime? // BR-D08 closes deliverable
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @default(now()) @updatedAt
 
   booking      Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   assignedCrew CrewMember? @relation(fields: [assignedCrewId], references: [id], onDelete: SetNull)
@@ -478,7 +522,7 @@ model Deliverable {
 model Invoice {
   id            String        @id @default(cuid())
   bookingId     String
-  invoiceNumber String        @unique // BR-I03 sequential, gapless, generated in-transaction
+  invoiceNumber String        @unique // BR-I03/BR-X04: unique, monotonic, not gapless, in-transaction
   type          InvoiceType
   issueDate     DateTime
   dueDate       DateTime // BR-I02 shootDate - 7 for BALANCE
@@ -490,6 +534,8 @@ model Invoice {
   supplierAbn   String // BR-I05 (OQ-007 placeholder until confirmed)
   voidedAt      DateTime? // BR-I04
   voidReason    String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @default(now()) @updatedAt
 
   booking  Booking   @relation(fields: [bookingId], references: [id], onDelete: Restrict)
   payments Payment[]
@@ -519,17 +565,18 @@ model Payment {
 }
 
 model ChangeRequest {
-  id                   String    @id @default(cuid())
+  id                   String              @id @default(cuid())
   bookingId            String
   requestedByType      ActorType
-  requestType          String // EXTRA_HOURS | DATE_CHANGE | ADD_ON | ...
+  requestType          String // EXTRA_HOURS | DATE_CHANGE | ADD_ON | ... (open, app-validated)
   description          String
-  priceImpactGross     Decimal?  @db.Decimal(10, 2)
-  status               String // PENDING | APPROVED | DECLINED
+  priceImpactGross     Decimal?            @db.Decimal(10, 2)
+  status               ChangeRequestStatus @default(PENDING) // BR-S08
   resultingQuotationId String?
   decidedByUserId      String?
   decidedAt            DateTime?
-  createdAt            DateTime  @default(now())
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @default(now()) @updatedAt
 
   booking            Booking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   resultingQuotation Quotation? @relation(fields: [resultingQuotationId], references: [id], onDelete: SetNull)
@@ -552,7 +599,7 @@ model ActivityLog {
   detailJson      Json // BR-L02 structured payload (never secrets/tokens — BR-L04)
   ipAddress       String?
   visibleToClient Boolean   @default(false) // BR-L05
-  createdAt       DateTime  @default(now())
+  createdAt       DateTime  @default(now()) // insert-only, no updatedAt (BR-S05)
 
   client Client? @relation(fields: [clientId], references: [id], onDelete: Restrict)
   actor  User?   @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
@@ -564,14 +611,14 @@ model ActivityLog {
 }
 
 model SecurityEvent {
-  id             String   @id @default(cuid())
+  id             String          @id @default(cuid())
   eventType      String
   userId         String?
-  emailAttempted String?  @db.Citext
+  emailAttempted String?         @db.Citext
   ipAddress      String
   userAgent      String?
-  outcome        String // SUCCESS | FAILURE
-  createdAt      DateTime @default(now())
+  outcome        SecurityOutcome // BR-S08
+  createdAt      DateTime        @default(now()) // insert-only, no updatedAt (BR-S05)
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
   // INSERT-ONLY: update/delete blocked by a DB trigger + a Prisma extension (ADR-0003).
@@ -597,6 +644,7 @@ model Notification {
   relatedType     String
   relatedId       String
   createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @default(now()) @updatedAt
 
   client Client? @relation(fields: [clientId], references: [id], onDelete: Restrict)
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
