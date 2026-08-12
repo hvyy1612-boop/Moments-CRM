@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import { SESSION_COOKIE, validateSession } from './session'
 import { ROUTE_PERMISSIONS, type Role } from './permissions'
@@ -26,6 +26,7 @@ export async function requireRole(routeId: string): Promise<SessionUser> {
     throw new Error(`Route ${routeId} has no role declaration (SEC-A01)`)
   }
   const user = await getSessionUser()
-  if (!user || !permission.roles.includes(user.role)) redirect('/login')
+  if (!user) redirect('/login')
+  if (!permission.roles.includes(user.role)) notFound()
   return user
 }

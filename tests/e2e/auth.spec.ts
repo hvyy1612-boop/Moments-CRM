@@ -51,7 +51,7 @@ test.describe('password login', () => {
     await page.getByRole('button', { name: 'Sign in' }).click()
 
     await expect(page).toHaveURL(/\/dashboard$/)
-    await expect(page.getByText('Signed in as Studio Owner')).toBeVisible()
+    await expect(page.getByText('Studio Owner · ADMIN')).toBeVisible()
 
     const session = (await context.cookies()).find((c) => c.name === 'moments_session')
     expect(session).toBeDefined()
@@ -121,7 +121,7 @@ test.describe('password reset', () => {
   }) => {
 
     await page.goto('/forgot-password')
-    await page.getByLabel('Email').fill('editor@moments.test')
+    await page.getByLabel('Email').fill('reset@moments.test')
     await page.getByRole('button', { name: 'Send reset link' }).click()
     const confirmation = page.getByText('If that email matches an account')
     await expect(confirmation).toBeVisible()
@@ -133,7 +133,7 @@ test.describe('password reset', () => {
 
     const prisma = new PrismaClient()
     const notification = await prisma.notification.findFirst({
-      where: { recipient: 'editor@moments.test', templateKey: 'auth.password-reset' },
+      where: { recipient: 'reset@moments.test', templateKey: 'auth.password-reset' },
       orderBy: { createdAt: 'desc' },
     })
     await prisma.$disconnect()
@@ -142,8 +142,8 @@ test.describe('password reset', () => {
     expect(match).not.toBeNull()
 
     await page.goto(match![0])
-    await page.getByLabel('New password', { exact: true }).fill('editor-reset-2026-moments')
-    await page.getByLabel('Confirm new password').fill('editor-reset-2026-moments')
+    await page.getByLabel('New password', { exact: true }).fill('reset-updated-2026-moments')
+    await page.getByLabel('Confirm new password').fill('reset-updated-2026-moments')
     await page.getByRole('button', { name: 'Set new password' }).click()
     await expect(page).toHaveURL(/\/login\?reset=done$/)
     await expect(page.getByText('Your password has been updated')).toBeVisible()
@@ -155,11 +155,11 @@ test.describe('password reset', () => {
     await expect(page.getByText('This reset link is no longer valid.')).toBeVisible()
 
     await page.goto('/login')
-    await page.getByLabel('Email').fill('editor@moments.test')
-    await page.getByLabel('Password', { exact: true }).fill('editor-reset-2026-moments')
+    await page.getByLabel('Email').fill('reset@moments.test')
+    await page.getByLabel('Password', { exact: true }).fill('reset-updated-2026-moments')
     await page.getByRole('button', { name: 'Sign in' }).click()
     await expect(page).toHaveURL(/\/dashboard$/)
-    await expect(page.getByText('Signed in as Editor')).toBeVisible()
+    await expect(page.getByText('Reset test account (dev only) · EDITOR')).toBeVisible()
   })
 
   test('SEC-P04 a reset to a short password is refused with a field error', async ({ page }) => {

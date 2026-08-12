@@ -20,4 +20,7 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/reset-password/[token]': { public: true },
 
   '/dashboard': { roles: ['ADMIN', 'STUDIO', 'EDITOR'] },
+
+  '/enquiries': { roles: ['ADMIN', 'STUDIO'] },
+  '/enquiries/[id]': { roles: ['ADMIN', 'STUDIO'] },
 }

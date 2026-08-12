@@ -1,9 +1,10 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHmac, timingSafeEqual } from 'node:crypto'
 
 export const CSRF_COOKIE = 'moments_csrf'
 export const CSRF_FIELD = 'csrf'
 
-const secret = process.env.SESSION_SECRET ?? randomBytes(32).toString('hex')
+const DEV_FALLBACK_KEY = 'development-only-csrf-key-never-used-in-production'
+const secret = process.env.SESSION_SECRET ?? DEV_FALLBACK_KEY
 
 export function csrfFieldValue(cookieValue: string): string {
   return createHmac('sha256', secret).update(cookieValue).digest('hex')
