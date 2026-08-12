@@ -235,6 +235,44 @@ async function main() {
     await prisma.user.upsert({ where: { email: u.email }, create: data, update: data })
   }
 
+  // Purge anything the e2e suite created on a previous run. A test that fails part way cannot be
+  // relied on to clean up after itself, and leftovers poison the next run: a stale CONFIRMED
+  // booking holding a crew member on a future date makes the BR-B05 trigger refuse a fresh one.
+  // The seed is what promises a known state, so the purge belongs here.
+  await purgeClients({ emailContains: ['clash-', 'future-'] })
+
+  // Crew (§6). The studio's own two are linked to their user accounts; the rest are contractors
+  // who never sign in, which is what a CrewMember without a userId means (A07).
+  const crewSeed = [
+    { name: 'Studio photographer', crewRole: 'PHOTOGRAPHER', userEmail: 'photographer@moments.test', isContractor: false },
+    { name: 'Studio videographer', crewRole: 'VIDEOGRAPHER', userEmail: 'videographer@moments.test', isContractor: false },
+    { name: 'Contract second shooter', crewRole: 'SECOND_SHOOTER', userEmail: null, isContractor: true },
+    { name: 'Contract videographer', crewRole: 'VIDEOGRAPHER', userEmail: null, isContractor: true },
+  ] as const
+
+  for (const member of crewSeed) {
+    const user = member.userEmail
+      ? await prisma.user.findUnique({ where: { email: member.userEmail }, select: { id: true } })
+      : null
+    const existing = await prisma.crewMember.findFirst({
+      where: { name: member.name },
+      select: { id: true },
+    })
+    const data = {
+      name: member.name,
+      crewRole: member.crewRole,
+      isContractor: member.isContractor,
+      isActive: true,
+      userId: user?.id ?? null,
+    }
+    if (existing) {
+      await prisma.crewMember.update({ where: { id: existing.id }, data })
+    } else {
+      await prisma.crewMember.create({ data })
+    }
+  }
+  console.log(`Seeded ${crewSeed.length} crew members.`)
+
   // Demo enquiries (§13, DEMO-02): at least one record in every state a demo needs, including the
   // two BR-E07 breaches. Ages are relative to the seed run so the response clock is always
   // meaningful. Rebuilt on every run so demos and e2e start from the same picture.
@@ -447,6 +485,48 @@ async function main() {
   for (const u of users) {
     console.log(`  ${u.role.padEnd(6)} ${u.email.padEnd(28)} ${u.password}`)
   }
+}
+
+/**
+ * Delete clients whose email contains any of the given fragments, with everything hanging off
+ * them, in foreign key order. Used to clear e2e fixtures; the Restrict keys that protect financial
+ * records in the application are exactly why this has to be explicit.
+ */
+async function purgeClients(match: { emailContains: string[] }): Promise<void> {
+  const clients = await prisma.client.findMany({
+    where: { OR: match.emailContains.map((fragment) => ({ email: { contains: fragment } })) },
+    select: { id: true },
+  })
+  if (clients.length === 0) return
+  const clientIds = clients.map((c) => c.id)
+
+  const enquiries = await prisma.enquiry.findMany({
+    where: { clientId: { in: clientIds } },
+    select: { id: true },
+  })
+  const quotations = await prisma.quotation.findMany({
+    where: { enquiryId: { in: enquiries.map((e) => e.id) } },
+    select: { id: true },
+  })
+  const bookings = await prisma.booking.findMany({
+    where: { quotationId: { in: quotations.map((q) => q.id) } },
+    select: { id: true },
+  })
+  const bookingIds = bookings.map((b) => b.id)
+
+  await prisma.payment.deleteMany({ where: { invoice: { bookingId: { in: bookingIds } } } })
+  await prisma.invoice.deleteMany({ where: { bookingId: { in: bookingIds } } })
+  await prisma.booking.deleteMany({ where: { id: { in: bookingIds } } })
+  await prisma.quotation.updateMany({
+    where: { id: { in: quotations.map((q) => q.id) } },
+    data: { supersededById: null },
+  })
+  await prisma.quotation.deleteMany({ where: { id: { in: quotations.map((q) => q.id) } } })
+  await prisma.enquiry.deleteMany({ where: { id: { in: enquiries.map((e) => e.id) } } })
+  await prisma.notification.deleteMany({ where: { clientId: { in: clientIds } } })
+  // ActivityLog is insert-only and holds a Restrict key to Client, so those clients stay. Their
+  // rows are inert once the job records are gone, and the log is meant to outlive them (BR-I09).
+  console.log(`Purged ${clientIds.length} e2e fixture client(s).`)
 }
 
 export const DEMO_PORTAL_TOKEN = 'demo-portal-token-development-only-0000'

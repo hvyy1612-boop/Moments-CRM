@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
-import { recordPayment, setDeliverableStatus } from '@/lib/domain/booking'
+import { assignCrew, recordPayment, setDeliverableStatus, type CrewSlot } from '@/lib/domain/booking'
 import { requestMeta } from '@/lib/http'
 
 export type BookingActionState = { status: 'idle' } | { status: 'error'; message: string }
@@ -67,6 +67,60 @@ export async function recordPaymentAction(
 
   revalidatePath('/bookings')
   revalidatePath('/dashboard')
+  return { status: 'idle' }
+}
+
+const SLOTS: CrewSlot[] = ['leadPhotographerId', 'leadVideographerId', 'secondShooterId']
+
+const crewSchema = z.object({
+  bookingId: z.string().min(1),
+  leadPhotographerId: z.string().max(64),
+  leadVideographerId: z.string().max(64),
+  secondShooterId: z.string().max(64),
+})
+
+/**
+ * Save all three crew slots. Each is applied separately so the database trigger (BR-B05) can
+ * refuse one clash without discarding the other two choices.
+ */
+export async function assignCrewAction(
+  _prev: BookingActionState,
+  formData: FormData,
+): Promise<BookingActionState> {
+  const cookieStore = await cookies()
+  if (!verifyCsrf(cookieStore.get(CSRF_COOKIE)?.value, formData.get('csrf'))) {
+    return { status: 'error', message: GENERIC }
+  }
+  const user = await requireRole('/bookings/[id]') // SEC-A01
+
+  const parsed = crewSchema.safeParse({
+    bookingId: formData.get('bookingId'),
+    leadPhotographerId: formData.get('leadPhotographerId') ?? '',
+    leadVideographerId: formData.get('leadVideographerId') ?? '',
+    secondShooterId: formData.get('secondShooterId') ?? '',
+  })
+  if (!parsed.success) return { status: 'error', message: GENERIC }
+
+  const meta = await requestMeta()
+  for (const slot of SLOTS) {
+    const value = parsed.data[slot]
+    const result = await assignCrew(
+      { bookingId: parsed.data.bookingId, slot, crewMemberId: value === '' ? null : value },
+      { userId: user.id },
+      meta,
+    )
+    if (!result.ok) {
+      const message =
+        result.reason === 'double_booked'
+          ? 'That crew member already holds a confirmed booking on this date, so they cannot take this one as well.'
+          : result.reason === 'inactive'
+            ? 'That crew member is no longer active.'
+            : GENERIC
+      return { status: 'error', message }
+    }
+  }
+
+  revalidatePath('/bookings')
   return { status: 'idle' }
 }
 

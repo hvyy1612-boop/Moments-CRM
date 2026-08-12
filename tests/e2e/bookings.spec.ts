@@ -52,11 +52,11 @@ test.describe('staff bookings', () => {
     await page.goto('/bookings')
     await page.getByRole('link', { name: /Ana Silva and Chris Whitmore/ }).click()
 
-    // The wedding film has no link yet.
-    const filmRow = page.locator('div').filter({ hasText: /^Wedding film/ }).first()
-    await filmRow.getByRole('button', { name: 'Update' }).click()
+    // The wedding film has no link yet. Each Update button names its deliverable, so this reaches
+    // exactly one row.
+    await page.getByRole('button', { name: 'Update Wedding film' }).click()
     await page.getByLabel('Status for Wedding film').selectOption('DELIVERED')
-    await page.getByRole('button', { name: 'Save' }).click()
+    await page.getByRole('button', { name: 'Save Wedding film' }).click()
 
     await expect(page.getByText('Add the gallery link before marking this delivered')).toBeVisible()
   })

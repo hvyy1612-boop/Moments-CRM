@@ -400,6 +400,82 @@ function addDays(from: Date, days: number): Date {
   return out
 }
 
+export type CrewSlot = 'leadPhotographerId' | 'leadVideographerId' | 'secondShooterId'
+
+export type CrewResult =
+  | { ok: true }
+  | { ok: false; reason: 'not_found' | 'double_booked' | 'inactive' }
+
+/** Crew who can be put on a booking, with the role they normally cover. */
+export async function listCrew() {
+  return prisma.crewMember.findMany({
+    where: { isActive: true },
+    select: { id: true, name: true, crewRole: true, isContractor: true },
+    orderBy: { name: 'asc' },
+  })
+}
+
+/**
+ * Put a crew member in one of the three slots, or clear it.
+ *
+ * BR-B05 is enforced by a database trigger across all three columns (D-013), because a crew member
+ * can be the photographer on one booking and the second shooter on another and that is still a
+ * clash. The trigger is the guarantee; this function turns its error into a sentence a person can
+ * act on rather than letting a raw database message reach the screen (SEC-A07).
+ */
+export async function assignCrew(
+  input: { bookingId: string; slot: CrewSlot; crewMemberId: string | null },
+  actor: { userId: string },
+  meta: { ipAddress?: string | null },
+): Promise<CrewResult> {
+  const booking = await prisma.booking.findUnique({
+    where: { id: input.bookingId },
+    select: { id: true, clientId: true, shootDate: true },
+  })
+  if (!booking) return { ok: false, reason: 'not_found' }
+
+  let name = 'nobody'
+  if (input.crewMemberId) {
+    const crew = await prisma.crewMember.findFirst({
+      where: { id: input.crewMemberId, isActive: true },
+      select: { id: true, name: true },
+    })
+    if (!crew) return { ok: false, reason: 'inactive' }
+    name = crew.name
+  }
+
+  try {
+    await prisma.booking.update({
+      where: { id: booking.id },
+      data: { [input.slot]: input.crewMemberId },
+    })
+  } catch (error) {
+    // The trigger raises with ERRCODE unique_violation, which Prisma surfaces as P2002 and
+    // rewrites, losing the original wording. So both are checked: the code, and the rule id in
+    // case a future Prisma passes the message through. No other unique constraint on Booking can
+    // be touched by writing a crew slot, so P2002 here is always the crew clash.
+    const message = error instanceof Error ? error.message : ''
+    const isUniqueViolation =
+      error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
+    if (isUniqueViolation || message.includes('BR-B05')) {
+      return { ok: false, reason: 'double_booked' }
+    }
+    throw error
+  }
+
+  await logActivity({
+    clientId: booking.clientId,
+    relatedType: 'Booking',
+    relatedId: booking.id,
+    actorType: 'STAFF',
+    actorUserId: actor.userId,
+    action: input.crewMemberId ? 'booking.crewAssigned' : 'booking.crewCleared', // BR-L03
+    detail: { slot: input.slot, crew: name },
+    ipAddress: meta.ipAddress,
+  })
+  return { ok: true }
+}
+
 /** BR-D07: full resolution access unlocks only when every invoice on the booking is paid. */
 export function fullResolutionUnlocked(
   invoices: { status: string }[],

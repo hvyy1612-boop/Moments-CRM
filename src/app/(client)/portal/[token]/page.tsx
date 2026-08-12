@@ -6,6 +6,8 @@ import { fullResolutionUnlocked, outstandingFor } from '@/lib/domain/booking'
 import { DELIVERABLE_LABEL } from '@/lib/domain/deliverables'
 import { formatAud } from '@/lib/money'
 import { daysUntil, formatSydneyDate, systemClock } from '@/lib/time'
+import { answersFrom } from '@/lib/validation/questionnaire'
+import { Questionnaire } from './Questionnaire'
 
 export const runtime = 'nodejs'
 
@@ -74,7 +76,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
           galleryExpiresAt: true,
         },
       },
-      questionnaire: { select: { status: true, submittedAt: true } },
+      questionnaire: { select: { status: true, submittedAt: true, responses: true } },
     },
   })
   if (!booking) notFound() // BR-CP05: an unknown token looks like any missing page
@@ -256,6 +258,25 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
           </p>
         ) : null}
       </section>
+
+      {/* BR-QN01: the questionnaire exists from CONFIRMED, and is the couple's part to fill in. */}
+      {booking.questionnaire && !cancelled ? (
+        <section className="mt-8">
+          <h2 className="text-lg">Planning your day</h2>
+          <div className="mt-3">
+            <Questionnaire
+              token={token}
+              answers={answersFrom(booking.questionnaire.responses)}
+              submittedAt={
+                booking.questionnaire.submittedAt
+                  ? formatSydneyDate(booking.questionnaire.submittedAt)
+                  : null
+              }
+              editable={now.getTime() <= booking.shootDate.getTime()}
+            />
+          </div>
+        </section>
+      ) : null}
 
       {booking.agreement ? (
         <section className="mt-8">

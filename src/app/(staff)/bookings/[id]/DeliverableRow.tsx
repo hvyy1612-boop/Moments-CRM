@@ -48,7 +48,15 @@ export function DeliverableRow({
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-ink">{STATUS_LABEL[status] ?? status}</span>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setEditing((value) => !value)}>
+          {/* The accessible name names the deliverable, so a screen reader user knows which row
+              this button belongs to rather than hearing "Update" four times. */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={`${editing ? 'Cancel editing' : 'Update'} ${label}`}
+            onClick={() => setEditing((value) => !value)}
+          >
             {editing ? 'Cancel' : 'Update'}
           </Button>
         </div>
@@ -73,7 +81,7 @@ export function DeliverableRow({
               aria-label={`Gallery link for ${label}`}
             />
           </div>
-          <Button type="submit" size="sm" loading={pending}>
+          <Button type="submit" size="sm" loading={pending} aria-label={`Save ${label}`}>
             Save
           </Button>
         </form>
