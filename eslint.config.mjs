@@ -9,6 +9,8 @@ const config = [
     ignores: [
       'node_modules/**',
       '.next/**',
+
+      '.next-e2e/**',
       'coverage/**',
       'playwright-report/**',
       'test-results/**',

@@ -1,5 +1,7 @@
 import { defineConfig } from '@playwright/test'
 
+const E2E_PORT = 3100
+
 export default defineConfig({
   testDir: './tests/e2e',
   globalSetup: './tests/e2e/global-setup.ts',
@@ -10,17 +12,21 @@ export default defineConfig({
 
   expect: { timeout: 15_000 },
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: `http://localhost:${E2E_PORT}`,
     trace: 'on-first-retry',
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
   },
   webServer: {
     command: 'npm run build && npm run start',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
+    url: `http://localhost:${E2E_PORT}`,
+
+    reuseExistingServer: false,
     timeout: 180_000,
     env: {
+      PORT: String(E2E_PORT),
+
+      NEXT_DIST_DIR: '.next-e2e',
 
       SESSION_SECRET:
         process.env.SESSION_SECRET ?? 'e2e-test-session-secret-not-for-production-use-0123456789',

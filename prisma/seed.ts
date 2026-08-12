@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto'
 import { Prisma, PrismaClient } from '@prisma/client'
 import { hashPassword } from '../src/lib/auth/password'
+import { CANCELLATION_POLICY, SUPPLIER_ABN } from '../src/lib/domain/quotation'
 
 const prisma = new PrismaClient()
 
@@ -137,6 +139,42 @@ const addOns: Prisma.AddOnCreateInput[] = [
   },
 ]
 
+const addOnRules: Record<string, { requiresAny?: string[]; excludes?: string[] }> = {
+
+  'FILM-35': { requiresAny: ['WED-PHOTO', 'MICRO-PHOTO'] },
+  'FILM-120': { requiresAny: ['WED-PHOTO', 'MICRO-PHOTO'] },
+  SUPER8: { requiresAny: ['WED-VIDEO', 'MICRO-VIDEO', 'WED-PHOTO'] },
+  ALBUM: { requiresAny: ['WED-PHOTO', 'MICRO-PHOTO'] },
+  'ALBUM-PAR': { requiresAny: ['WED-PHOTO', 'MICRO-PHOTO'] }, // and the main album, checked in the builder
+  'EXTRA-HR': { requiresAny: ['WED-PHOTO', 'WED-VIDEO'] },
+  'SECOND-SH': { requiresAny: ['WED-PHOTO', 'WED-VIDEO'] },
+  'RAW-FOOT': { requiresAny: ['WED-VIDEO', 'MICRO-VIDEO'] },
+}
+
+const pricingRules: Prisma.PricingRuleCreateInput[] = [
+  {
+    code: 'BUNDLE-PV',
+    name: 'Photo and video bundle',
+    ruleType: 'BUNDLE',
+    requiresAllPackageId: ['WED-PHOTO', 'WED-VIDEO'],
+    excludesPackageId: [],
+    discountType: 'FIXED',
+    discountValue: '150.00',
+    evaluationOrder: 1,
+  },
+  {
+    code: 'COND-PREWED',
+    name: 'Engagement session discount',
+    ruleType: 'CONDITIONAL',
+    requiresAllPackageId: ['WED-PHOTO'],
+    excludesPackageId: ['MICRO-PHOTO'],
+    appliesToTargetId: 'PRE-WED',
+    discountType: 'PERCENTAGE',
+    discountValue: '20.00',
+    evaluationOrder: 2,
+  },
+]
+
 async function main() {
   for (const p of packages) {
     await prisma.package.upsert({ where: { code: p.code }, create: p, update: p })
@@ -144,7 +182,27 @@ async function main() {
   for (const a of addOns) {
     await prisma.addOn.upsert({ where: { code: a.code }, create: a, update: a })
   }
-  console.log(`Seeded ${packages.length} packages and ${addOns.length} add-ons.`)
+
+  for (const [code, rule] of Object.entries(addOnRules)) {
+    const addOn = await prisma.addOn.findUnique({ where: { code }, select: { id: true } })
+    if (!addOn) continue
+    await prisma.addOnRule.deleteMany({ where: { addOnId: addOn.id } })
+    await prisma.addOnRule.create({
+      data: {
+        addOnId: addOn.id,
+        requiresAnyPackageId: rule.requiresAny ?? [],
+        excludesPackageId: rule.excludes ?? [],
+      },
+    })
+  }
+
+  for (const rule of pricingRules) {
+    await prisma.pricingRule.upsert({ where: { code: rule.code }, create: rule, update: rule })
+  }
+
+  console.log(
+    `Seeded ${packages.length} packages, ${addOns.length} add-ons, ${Object.keys(addOnRules).length} add-on rules and ${pricingRules.length} pricing rules.`,
+  )
 
   for (const u of users) {
     const hashed = await hashPassword(u.password)
@@ -276,7 +334,35 @@ async function main() {
       update: {},
     })
 
-    await prisma.enquiry.deleteMany({ where: { clientId: client.id } })
+    const priorEnquiries = await prisma.enquiry.findMany({
+      where: { clientId: client.id },
+      select: { id: true },
+    })
+    const priorEnquiryIds = priorEnquiries.map((e) => e.id)
+    if (priorEnquiryIds.length > 0) {
+      const priorQuotations = await prisma.quotation.findMany({
+        where: { enquiryId: { in: priorEnquiryIds } },
+        select: { id: true },
+      })
+      const priorQuotationIds = priorQuotations.map((q) => q.id)
+      const priorBookings = await prisma.booking.findMany({
+        where: { quotationId: { in: priorQuotationIds } },
+        select: { id: true },
+      })
+      const priorBookingIds = priorBookings.map((b) => b.id)
+
+      await prisma.payment.deleteMany({ where: { invoice: { bookingId: { in: priorBookingIds } } } })
+      await prisma.invoice.deleteMany({ where: { bookingId: { in: priorBookingIds } } })
+
+      await prisma.booking.deleteMany({ where: { id: { in: priorBookingIds } } })
+
+      await prisma.quotation.updateMany({
+        where: { id: { in: priorQuotationIds } },
+        data: { supersededById: null },
+      })
+      await prisma.quotation.deleteMany({ where: { id: { in: priorQuotationIds } } })
+      await prisma.enquiry.deleteMany({ where: { id: { in: priorEnquiryIds } } })
+    }
 
     const createdAt = new Date(seededAt - demo.ageMs)
     const enquiry = await prisma.enquiry.create({
@@ -318,6 +404,8 @@ async function main() {
   }
   console.log(`Seeded ${demoEnquiries.length} demo enquiries.`)
 
+  await seedWorkedExample(seededAt, DAY, packageIdByCode)
+
   const testUsers = await prisma.user.findMany({
     where: { email: { endsWith: '@moments.test' } },
     select: { id: true },
@@ -331,6 +419,229 @@ async function main() {
   for (const u of users) {
     console.log(`  ${u.role.padEnd(6)} ${u.email.padEnd(28)} ${u.password}`)
   }
+}
+
+export const DEMO_PORTAL_TOKEN = 'demo-portal-token-development-only-0000'
+const DEMO_VIEW_TOKEN = 'demo-quote-token-development-only-0000'
+
+async function seedWorkedExample(
+  seededAt: number,
+  DAY: number,
+  packageIdByCode: Map<string, string>,
+): Promise<void> {
+  const email = 'ana.demo@moments.test'
+  const client = await prisma.client.upsert({
+    where: { email },
+    create: {
+      primaryName: 'Ana Silva',
+      partnerName: 'Chris Whitmore',
+      email,
+      phone: '0412 000 999',
+      suburb: 'Glebe',
+      state: 'NSW',
+      marketingConsent: true,
+      consentUpdatedAt: new Date(seededAt),
+    },
+    update: {},
+  })
+
+  const priorEnquiries = await prisma.enquiry.findMany({
+    where: { clientId: client.id },
+    select: { id: true },
+  })
+  const ids = priorEnquiries.map((e) => e.id)
+  if (ids.length > 0) {
+    const quotes = await prisma.quotation.findMany({
+      where: { enquiryId: { in: ids } },
+      select: { id: true },
+    })
+    const quoteIds = quotes.map((q) => q.id)
+    const bookings = await prisma.booking.findMany({
+      where: { quotationId: { in: quoteIds } },
+      select: { id: true },
+    })
+    const bookingIds = bookings.map((b) => b.id)
+    await prisma.payment.deleteMany({ where: { invoice: { bookingId: { in: bookingIds } } } })
+    await prisma.invoice.deleteMany({ where: { bookingId: { in: bookingIds } } })
+    await prisma.booking.deleteMany({ where: { id: { in: bookingIds } } })
+    await prisma.quotation.deleteMany({ where: { id: { in: quoteIds } } })
+    await prisma.enquiry.deleteMany({ where: { id: { in: ids } } })
+  }
+
+  const shootDate = new Date(seededAt - 40 * DAY)
+  const enquiredAt = new Date(seededAt - 200 * DAY)
+  const acceptedAt = new Date(seededAt - 180 * DAY)
+
+  const enquiry = await prisma.enquiry.create({
+    data: {
+      clientId: client.id,
+      enquiryType: 'WEDDING',
+      eventDate: shootDate,
+      venueName: 'Sergeants Mess',
+      venueSuburb: 'Chowder Bay',
+      guestCount: 80,
+      message: 'We want both photos and a film, and the engagement session as well.',
+      source: 'Website enquiry form',
+      status: 'WON',
+      createdAt: enquiredAt,
+      firstRespondedAt: new Date(enquiredAt.getTime() + 2 * 60 * 60 * 1000),
+    },
+  })
+
+  const total = new Prisma.Decimal('8530.00')
+  const quotation = await prisma.quotation.create({
+    data: {
+      enquiryId: enquiry.id,
+      version: 1,
+      status: 'ACCEPTED',
+      viewToken: DEMO_VIEW_TOKEN,
+      totalGross: total,
+      gstAmount: new Prisma.Decimal('775.45'), // 8530 / 11, half up
+      validUntil: new Date(acceptedAt.getTime() + 14 * DAY),
+      sentAt: new Date(acceptedAt.getTime() - 3 * DAY),
+      firstViewedAt: new Date(acceptedAt.getTime() - 2 * DAY),
+      respondedAt: acceptedAt,
+      termsAcknowledgedAt: acceptedAt,
+      termsAcknowledgedIp: '203.0.113.10',
+      cancellationPolicySnapshot: CANCELLATION_POLICY,
+      createdBy: (await prisma.user.findUniqueOrThrow({ where: { email: 'owner@moments.test' }, select: { id: true } })).id,
+      createdAt: new Date(acceptedAt.getTime() - 3 * DAY),
+      lines: {
+        create: [
+          { sourceType: 'PACKAGE', sourceId: packageIdByCode.get('WED-PHOTO') ?? null, description: 'Wedding Photography', unitPriceGross: '3500.00', lineTotalGross: '3500.00', displayOrder: 0 },
+          { sourceType: 'PACKAGE', sourceId: packageIdByCode.get('WED-VIDEO') ?? null, description: 'Wedding Videography', unitPriceGross: '4500.00', lineTotalGross: '4500.00', displayOrder: 1 },
+          { sourceType: 'PACKAGE', sourceId: packageIdByCode.get('PRE-WED') ?? null, description: 'Engagement session', unitPriceGross: '850.00', lineTotalGross: '850.00', displayOrder: 2 },
+          { sourceType: 'RULE', description: 'Photo and video bundle', unitPriceGross: '-150.00', lineTotalGross: '-150.00', displayOrder: 3 },
+          { sourceType: 'RULE', description: 'Engagement session discount', unitPriceGross: '-170.00', lineTotalGross: '-170.00', displayOrder: 4 },
+        ],
+      },
+    },
+  })
+
+  const booking = await prisma.booking.create({
+    data: {
+      quotationId: quotation.id,
+      clientId: client.id,
+      status: 'CONFIRMED',
+      shootDate,
+      venueName: 'Sergeants Mess',
+      venueAddress: 'Chowder Bay Road, Mosman',
+      coverageHours: 6,
+      dateLockedAt: new Date(acceptedAt.getTime() + 2 * DAY),
+      portalToken: DEMO_PORTAL_TOKEN,
+      portalTokenIssuedAt: acceptedAt,
+      createdAt: acceptedAt,
+    },
+  })
+
+  await prisma.agreement.create({
+    data: {
+      bookingId: booking.id,
+      quotationId: quotation.id,
+      clientId: client.id,
+      quotationVersion: 1,
+      totalGross: total,
+      termsText: CANCELLATION_POLICY,
+      acceptedName: 'Ana Silva',
+      acceptedAt,
+      acceptedIp: '203.0.113.10',
+      contentHash: createHash('sha256').update(`v1|${total.toFixed(2)}|${CANCELLATION_POLICY}`).digest('hex'),
+      createdAt: acceptedAt,
+    },
+  })
+
+  const buyerName = 'Ana Silva and Chris Whitmore'
+  const fee = new Prisma.Decimal('1706.00')
+  const feeInvoice = await prisma.invoice.create({
+    data: {
+      bookingId: booking.id,
+      invoiceNumber: 'INV-2026-9001',
+      type: 'BOOKING_FEE',
+      issueDate: acceptedAt,
+      dueDate: acceptedAt,
+      totalGross: fee,
+      gstAmount: new Prisma.Decimal('155.09'), // 1706 / 11
+      amountPaid: fee,
+      status: 'PAID',
+      buyerName,
+      supplierAbn: SUPPLIER_ABN,
+      createdAt: acceptedAt,
+    },
+  })
+
+  await prisma.payment.create({
+    data: {
+      invoiceId: feeInvoice.id,
+      amountGross: fee,
+      method: 'BANK_TRANSFER',
+      provider: 'MANUAL',
+      receivedDate: new Date(acceptedAt.getTime() + 2 * DAY),
+      reference: 'Silva booking fee',
+      recordedByUserId: (await prisma.user.findUniqueOrThrow({ where: { email: 'owner@moments.test' }, select: { id: true } })).id,
+      createdAt: new Date(acceptedAt.getTime() + 2 * DAY),
+    },
+  })
+
+  const balance = new Prisma.Decimal('6824.00')
+  await prisma.invoice.create({
+    data: {
+      bookingId: booking.id,
+      invoiceNumber: 'INV-2026-9002',
+      type: 'BALANCE',
+      issueDate: new Date(acceptedAt.getTime() + 2 * DAY),
+      dueDate: new Date(shootDate.getTime() - 7 * DAY),
+      totalGross: balance,
+      gstAmount: new Prisma.Decimal('620.36'), // 6824 / 11
+      amountPaid: balance,
+      status: 'PAID',
+      buyerName,
+      supplierAbn: SUPPLIER_ABN,
+      createdAt: new Date(acceptedAt.getTime() + 2 * DAY),
+      payments: {
+        create: {
+          amountGross: balance,
+          method: 'BANK_TRANSFER',
+          provider: 'MANUAL',
+          receivedDate: new Date(shootDate.getTime() - 9 * DAY),
+          reference: 'Silva balance',
+          recordedByUserId: (await prisma.user.findUniqueOrThrow({ where: { email: 'owner@moments.test' }, select: { id: true } })).id,
+        },
+      },
+    },
+  })
+
+  const deliveredAt = new Date(shootDate.getTime() + 3 * DAY)
+  await prisma.deliverable.createMany({
+    data: [
+      {
+        bookingId: booking.id,
+        type: 'SNEAK_PEEK',
+        status: 'DELIVERED',
+        dueDate: new Date(shootDate.getTime() + 3 * DAY),
+        galleryUrl: 'https://gallery.momentsphotography.com.au/silva-sneak-peek',
+        deliveredAt,
+        galleryExpiresAt: new Date(deliveredAt.getTime() + 365 * DAY),
+        backupExpiresAt: new Date(deliveredAt.getTime() + 180 * DAY),
+      },
+      { bookingId: booking.id, type: 'PHOTO_GALLERY', status: 'IN_PROGRESS', dueDate: new Date(shootDate.getTime() + 120 * DAY) },
+      { bookingId: booking.id, type: 'VIDEO_FILM', status: 'PENDING', dueDate: new Date(shootDate.getTime() + 240 * DAY) },
+      { bookingId: booking.id, type: 'PORTRAIT_GALLERY', status: 'DELIVERED', dueDate: new Date(shootDate.getTime() - 60 * DAY), galleryUrl: 'https://gallery.momentsphotography.com.au/silva-engagement', deliveredAt: new Date(shootDate.getTime() - 65 * DAY), galleryExpiresAt: new Date(shootDate.getTime() + 300 * DAY), backupExpiresAt: new Date(shootDate.getTime() + 115 * DAY) },
+    ],
+  })
+
+  await prisma.planningQuestionnaire.create({
+    data: { bookingId: booking.id, status: 'SUBMITTED', submittedAt: new Date(shootDate.getTime() - 55 * DAY), responses: { ceremonyVenue: 'Sergeants Mess', ceremonyTime: '3:30pm', mustHaveShots: 'Both grandmothers together' } },
+  })
+
+  await prisma.activityLog.createMany({
+    data: [
+      { clientId: client.id, relatedType: 'Enquiry', relatedId: enquiry.id, actorType: 'SYSTEM', action: 'enquiry.created', detailJson: { enquiryType: 'WEDDING' }, visibleToClient: true, createdAt: enquiredAt },
+      { clientId: client.id, relatedType: 'Quotation', relatedId: quotation.id, actorType: 'CLIENT', action: 'quotation.accepted', detailJson: { totalGross: '8530.00' }, visibleToClient: true, createdAt: acceptedAt },
+      { clientId: client.id, relatedType: 'Booking', relatedId: booking.id, actorType: 'SYSTEM', action: 'booking.confirmed', detailJson: { from: 'PENDING_BOOKING_FEE', to: 'CONFIRMED' }, visibleToClient: true, createdAt: new Date(acceptedAt.getTime() + 2 * DAY) },
+    ],
+  })
+
+  console.log(`Seeded a worked example booking. Client portal: /portal/${DEMO_PORTAL_TOKEN}`)
 }
 
 main()

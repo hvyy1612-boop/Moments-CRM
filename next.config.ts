@@ -3,6 +3,8 @@ import type { NextConfig } from 'next'
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+
+  distDir: process.env.NEXT_DIST_DIR ?? '.next',
   eslint: {
     // The verify pipeline runs ESLint as its own dedicated step (§12.2), so `next build` does not
 

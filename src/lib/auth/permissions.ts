@@ -23,4 +23,18 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
 
   '/enquiries': { roles: ['ADMIN', 'STUDIO'] },
   '/enquiries/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  '/enquiries/[id]/quote': { roles: ['ADMIN', 'STUDIO'] },
+  '/quotations/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  '/bookings': { roles: ['ADMIN', 'STUDIO'] },
+  '/bookings/[id]': { roles: ['ADMIN', 'STUDIO'] },
+
+  '/invoices': { roles: ['ADMIN', 'STUDIO'] },
+  '/invoices/[id]': { roles: ['ADMIN', 'STUDIO'] },
+
+  '/outbox': { roles: ['ADMIN', 'STUDIO', 'EDITOR'] },
+
+  '/deliverables': { roles: ['ADMIN', 'STUDIO', 'EDITOR'] },
+
+  '/quote/[token]': { token: true },
+  '/portal/[token]': { token: true },
 }

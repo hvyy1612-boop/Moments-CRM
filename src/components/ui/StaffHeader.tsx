@@ -18,13 +18,27 @@ export function StaffHeader({ user, csrf }: { user: SessionUser; csrf: string })
               Dashboard
             </Link>
             {canSeeEnquiries ? (
-              <Link
-                href="/enquiries"
-                className="text-ink-muted transition-colors duration-150 hover:text-ink"
-              >
-                Enquiries
-              </Link>
+              <>
+                <Link
+                  href="/enquiries"
+                  className="text-ink-muted transition-colors duration-150 hover:text-ink"
+                >
+                  Enquiries
+                </Link>
+                <Link
+                  href="/bookings"
+                  className="text-ink-muted transition-colors duration-150 hover:text-ink"
+                >
+                  Bookings
+                </Link>
+              </>
             ) : null}
+            <Link
+              href="/outbox"
+              className="text-ink-muted transition-colors duration-150 hover:text-ink"
+            >
+              Outbox
+            </Link>
           </nav>
         </div>
         <div className="flex items-center gap-3">

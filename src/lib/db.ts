@@ -23,6 +23,15 @@ function createPrisma() {
           return query(args)
         },
       },
+      agreement: {
+        $allOperations({ operation, args, query }) {
+
+          if (MUTATIONS.has(operation)) {
+            throw new Error('Agreement is insert-only (BR-AG05)')
+          }
+          return query(args)
+        },
+      },
     },
   })
 }

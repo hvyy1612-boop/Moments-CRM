@@ -18,3 +18,6 @@ build/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# e2e production build output (playwright.config.ts NEXT_DIST_DIR)
+.next-e2e/

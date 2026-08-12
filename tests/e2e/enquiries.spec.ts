@@ -33,7 +33,10 @@ test.describe('enquiry list', () => {
     await expect(page.getByRole('link', { name: /Harper Nguyen/ })).toHaveCount(0)
 
     await page.goto('/enquiries?status=WON')
-    await expect(page.getByText('No won enquiries')).toBeVisible()
+    await expect(page.getByRole('link', { name: /Ana Silva/ })).toBeVisible()
+
+    await page.goto('/enquiries?status=QUOTED')
+    await expect(page.getByText('No quoted enquiries')).toBeVisible()
   })
 
   test('the dashboard leads with what needs attention today (§10.4)', async ({ page }) => {
