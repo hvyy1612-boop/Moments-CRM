@@ -1,0 +1,35 @@
+name: nightly
+
+# The scheduled job that queues reminders and expires quotations (D-014, obligation C of §2.0).
+# GitHub Actions rather than Vercel Cron, because Hobby cron is limited to daily granularity.
+#
+# Set two repository secrets before enabling: APP_URL (the deployed origin) and CRON_SECRET (the
+# same value the deployment has). Without them the job is skipped rather than failing noisily.
+on:
+  schedule:
+    # 19:00 UTC is 05:00 or 06:00 in Sydney depending on daylight saving, so the studio wakes to a
+    # queue that is already up to date.
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run the daily job
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL or CRON_SECRET is not set, so there is nothing to call yet. Skipping."
+            exit 0
+          fi
+          # The endpoint is idempotent (BR-X08), so a retry after a network blip is safe.
+          status=$(curl --silent --show-error --fail-with-body \
+            --retry 3 --retry-delay 30 \
+            --output response.json --write-out '%{http_code}' \
+            --request POST "$APP_URL/api/cron/daily" \
+            --header "Authorization: Bearer $CRON_SECRET")
+          echo "HTTP $status"
+          cat response.json

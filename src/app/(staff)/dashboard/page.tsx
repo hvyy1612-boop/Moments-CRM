@@ -1,13 +1,14 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
+import type { ReactNode } from 'react'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StaffHeader } from '@/components/ui/StaffHeader'
-import { StatusPill } from '@/components/ui/StatusPill'
+import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
-import { listNewEnquiries } from '@/lib/domain/enquiry-workflow'
-import { enquirySlaLevel, slaLabel } from '@/lib/domain/enquiry-sla'
+import { loadAttention } from '@/lib/domain/attention'
+import { slaLabel } from '@/lib/domain/enquiry-sla'
 import { formatSydneyDate, systemClock } from '@/lib/time'
 
 export const runtime = 'nodejs'
@@ -15,25 +16,44 @@ export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Dashboard — Moments' }
 
 /**
- * §10.4: the dashboard answers one question first, what needs attention today. Right now that is
- * the enquiry response clock (BR-E07). Quotations about to expire, unpaid invoices and overdue
- * deliverables join it as those slices land.
+ * §10.4: the dashboard answers one question first, what needs attention today. Four lists, each
+ * one something a person must act on: unanswered enquiries, quotations about to lapse, money that
+ * is late, and work that should already have been handed over.
  *
- * An editor sees the page but not enquiry content (§5), so the section is role gated here as well
- * as by the route permission on /enquiries.
+ * An editor sees none of this (§5), so the page shows them their own work instead.
  */
 export default async function DashboardPage() {
   const user = await requireRole('/dashboard') // SEC-A01
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
-  const canSeeEnquiries = user.role === 'ADMIN' || user.role === 'STUDIO'
-
   const now = systemClock.now()
-  const newEnquiries = canSeeEnquiries ? await listNewEnquiries() : []
-  const waiting = newEnquiries
-    .map((enquiry) => ({ enquiry, level: enquirySlaLevel(enquiry, now) }))
-    .sort((a, b) => a.enquiry.createdAt.getTime() - b.enquiry.createdAt.getTime())
-  const overdue = waiting.filter((row) => row.level !== 'within')
+
+  if (user.role === 'EDITOR') {
+    return (
+      <>
+        <StaffHeader user={user} csrf={csrf} />
+        <main className="mx-auto w-full max-w-5xl px-4 py-8">
+          <h1 className="text-xl">What needs attention today</h1>
+          <p className="mt-1 text-sm text-ink-muted">{formatSydneyDate(now)}</p>
+          <section className="mt-6 rounded border border-line bg-surface p-5">
+            <h2 className="text-lg">Your deliverables</h2>
+            <p className="mt-2 text-sm text-ink-muted">
+              Galleries and films assigned to you will appear here. Enquiries, quotations and
+              invoices are not part of your role.
+            </p>
+          </section>
+        </main>
+      </>
+    )
+  }
+
+  const attention = await loadAttention()
+  const overdueEnquiries = attention.enquiries.filter((row) => row.level !== 'within')
+  const nothingToDo =
+    attention.enquiries.length === 0 &&
+    attention.quotations.length === 0 &&
+    attention.invoices.length === 0 &&
+    attention.deliverables.length === 0
 
   return (
     <>
@@ -42,72 +62,167 @@ export default async function DashboardPage() {
         <h1 className="text-xl">What needs attention today</h1>
         <p className="mt-1 text-sm text-ink-muted">{formatSydneyDate(now)}</p>
 
-        {canSeeEnquiries ? (
-          <section className="mt-6 rounded border border-line bg-surface p-5">
-            <div className="flex flex-wrap items-baseline justify-between gap-3">
-              <h2 className="text-lg">Enquiries waiting for a reply</h2>
-              <Link
-                href="/enquiries"
-                className="text-sm text-ink underline underline-offset-2 transition-colors duration-150 hover:text-accent"
-              >
-                All enquiries
-              </Link>
-            </div>
-            <p className="mt-1 text-sm text-ink-muted">
-              {overdue.length > 0
-                ? `${overdue.length} past the 24 hour commitment.`
-                : 'All inside the 24 hour commitment.'}
-            </p>
-
-            <div className="mt-4">
-              {waiting.length === 0 ? (
-                <EmptyState
-                  title="Nothing waiting"
-                  description="Every enquiry has been answered. New submissions from the website will appear here straight away."
-                />
-              ) : (
-                <ul className="flex flex-col">
-                  {waiting.map(({ enquiry, level }) => {
-                    const sla = slaLabel(level)
-                    return (
-                      <li
-                        key={enquiry.id}
-                        className="flex flex-wrap items-baseline justify-between gap-3 border-b border-line py-3 last:border-b-0"
-                      >
-                        <div>
-                          <Link
-                            href={`/enquiries/${enquiry.id}`}
-                            className="text-base text-ink underline underline-offset-2 transition-colors duration-150 hover:text-accent"
-                          >
-                            {enquiry.client.primaryName}
-                            {enquiry.client.partnerName ? ` and ${enquiry.client.partnerName}` : ''}
-                          </Link>
-                          <p className="text-xs text-ink-muted">
-                            Event {formatSydneyDate(enquiry.eventDate)} · enquired{' '}
-                            {formatSydneyDate(enquiry.createdAt)}
-                          </p>
-                        </div>
-                        {sla ? (
-                          <StatusPill tone={level === 'escalate' ? 'bad' : 'warn'}>{sla}</StatusPill>
-                        ) : (
-                          <StatusPill tone="info">Within 24 hours</StatusPill>
-                        )}
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
-          </section>
+        {nothingToDo ? (
+          <div className="mt-6">
+            <EmptyState
+              title="Nothing is waiting"
+              description="Every enquiry has been answered, no quotation is about to lapse, no invoice is late and nothing is overdue for delivery. This page fills itself as work arrives."
+            />
+          </div>
         ) : (
-          <section className="mt-6 rounded border border-line bg-surface p-5">
-            <h2 className="text-lg">Your deliverables</h2>
-            <p className="mt-2 text-sm text-ink-muted">
-              Assigned galleries and films will appear here once the delivery screens are built.
-            </p>
-          </section>
+          <div className="mt-6 grid gap-6 md:grid-cols-2">
+            <Panel
+              title="Enquiries waiting for a reply"
+              summary={
+                attention.enquiries.length === 0
+                  ? 'None waiting.'
+                  : overdueEnquiries.length > 0
+                    ? `${overdueEnquiries.length} past the 24 hour commitment.`
+                    : 'All inside the 24 hour commitment.'
+              }
+              href="/enquiries?status=NEW"
+              linkLabel="All enquiries"
+            >
+              {attention.enquiries.map((row) => (
+                <Row
+                  key={row.id}
+                  href={`/enquiries/${row.id}`}
+                  title={row.name}
+                  detail={`Enquired ${formatSydneyDate(row.createdAt)} · event ${formatSydneyDate(row.eventDate)}`}
+                  pill={slaLabel(row.level) ?? 'Within 24 hours'}
+                  tone={row.level === 'escalate' ? 'bad' : row.level === 'alert' ? 'warn' : 'info'}
+                />
+              ))}
+            </Panel>
+
+            <Panel
+              title="Quotations about to lapse"
+              summary={
+                attention.quotations.length === 0
+                  ? 'None close to expiring.'
+                  : 'These run out within three days.'
+              }
+              href="/enquiries?status=QUOTED"
+              linkLabel="Quoted enquiries"
+            >
+              {attention.quotations.map((row) => (
+                <Row
+                  key={row.id}
+                  href={`/quotations/${row.id}`}
+                  title={row.name}
+                  detail={`Valid until ${formatSydneyDate(row.validUntil)}`}
+                  pill={row.daysLeft <= 0 ? 'Expires today' : `${row.daysLeft} days left`}
+                  tone="warn"
+                />
+              ))}
+            </Panel>
+
+            <Panel
+              title="Invoices past due"
+              summary={
+                attention.invoices.length === 0 ? 'Nothing overdue.' : 'Money that has not arrived.'
+              }
+              href="/bookings"
+              linkLabel="All bookings"
+            >
+              {attention.invoices.map((row) => (
+                <Row
+                  key={row.id}
+                  href={`/bookings/${row.bookingId}`}
+                  title={row.name}
+                  detail={`${row.number} · $${row.outstanding} outstanding`}
+                  pill={`${row.daysLate} days late`}
+                  tone="bad"
+                />
+              ))}
+            </Panel>
+
+            <Panel
+              title="Deliverables past due"
+              summary={
+                attention.deliverables.length === 0
+                  ? 'Nothing overdue.'
+                  : 'Work the client is already expecting.'
+              }
+              href="/bookings"
+              linkLabel="All bookings"
+            >
+              {attention.deliverables.map((row) => (
+                <Row
+                  key={row.id}
+                  href={`/bookings/${row.bookingId}`}
+                  title={`${row.label} for ${row.name}`}
+                  detail={`Was due ${formatSydneyDate(row.dueDate)}`}
+                  pill={`${row.daysLate} days late`}
+                  tone="warn"
+                />
+              ))}
+            </Panel>
+          </div>
         )}
       </main>
     </>
+  )
+}
+
+function Panel({
+  title,
+  summary,
+  href,
+  linkLabel,
+  children,
+}: {
+  title: string
+  summary: string
+  href: string
+  linkLabel: string
+  children: ReactNode
+}) {
+  const rows = Array.isArray(children) ? children : [children]
+  const empty = rows.flat().filter(Boolean).length === 0
+
+  return (
+    <section className="rounded border border-line bg-surface p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h2 className="text-lg">{title}</h2>
+        <Link
+          href={href}
+          className="text-sm text-ink underline underline-offset-2 transition-colors duration-150 hover:text-accent"
+        >
+          {linkLabel}
+        </Link>
+      </div>
+      <p className="mt-1 text-sm text-ink-muted">{summary}</p>
+      {empty ? null : <ul className="mt-3 flex flex-col">{children}</ul>}
+    </section>
+  )
+}
+
+function Row({
+  href,
+  title,
+  detail,
+  pill,
+  tone,
+}: {
+  href: string
+  title: string
+  detail: string
+  pill: string
+  tone: Tone
+}) {
+  return (
+    <li className="flex flex-wrap items-baseline justify-between gap-3 border-b border-line py-3 last:border-b-0">
+      <div>
+        <Link
+          href={href}
+          className="text-base text-ink underline underline-offset-2 transition-colors duration-150 hover:text-accent"
+        >
+          {title}
+        </Link>
+        <p className="text-xs text-ink-muted">{detail}</p>
+      </div>
+      <StatusPill tone={tone}>{pill}</StatusPill>
+    </li>
   )
 }

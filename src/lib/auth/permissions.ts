@@ -15,6 +15,8 @@ export type RoutePermission =
   | { public: true }
   | { roles: Role[] }
   | { token: true }
+  /** Machine to machine: a shared secret in the Authorization header, no session (D-014). */
+  | { secret: true }
 
 /**
  * The single declaration surface. Keys are route ids (URL paths); dynamic segments use the
@@ -52,4 +54,6 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   // Client-facing, reached by token only. No session, no account (§8.5, BR-T01, BR-CP01).
   '/quote/[token]': { token: true },
   '/portal/[token]': { token: true },
+  // The nightly job, called by GitHub Actions cron. Closed without CRON_SECRET (SEC-A06, BR-X08).
+  '/api/cron/daily': { secret: true },
 }

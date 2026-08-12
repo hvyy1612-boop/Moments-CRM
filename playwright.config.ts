@@ -43,6 +43,8 @@ export default defineConfig({
       // their own. Playwright merges this over process.env, so a CI-provided value still wins.
       SESSION_SECRET:
         process.env.SESSION_SECRET ?? 'e2e-test-session-secret-not-for-production-use-0123456789',
+      // The cron endpoint is closed without this (SEC-A06), so the suite supplies its own.
+      CRON_SECRET: process.env.CRON_SECRET ?? 'e2e-cron-secret-not-for-production-use',
     },
   },
 })
