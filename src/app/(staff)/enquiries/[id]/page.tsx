@@ -138,6 +138,37 @@ export default async function EnquiryDetailPage({ params }: { params: Promise<{ 
             </section>
 
             <section className="rounded border border-line bg-surface p-5">
+              <h2 className="text-lg">Quotations</h2>
+              {enquiry.quotations.length === 0 ? (
+                <p className="mt-2 text-sm text-ink-muted">None yet.</p>
+              ) : (
+                <ul className="mt-2 flex flex-col gap-2">
+                  {enquiry.quotations.map((quotation) => (
+                    <li key={quotation.id} className="flex items-baseline justify-between gap-3">
+                      <Link
+                        href={`/quotations/${quotation.id}`}
+                        className="text-sm text-ink underline underline-offset-2 transition-colors duration-150 hover:text-accent"
+                      >
+                        Version {quotation.version}
+                      </Link>
+                      <span className="text-xs text-ink-muted">
+                        {quotation.status.charAt(0) + quotation.status.slice(1).toLowerCase()}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {enquiry.status !== 'WON' && enquiry.status !== 'LOST' ? (
+                <Link
+                  href={`/enquiries/${enquiry.id}/quote`}
+                  className="mt-3 inline-flex h-10 w-full items-center justify-center rounded bg-accent px-4 text-base font-medium text-surface transition-colors duration-150 hover:brightness-95"
+                >
+                  {enquiry.quotations.length === 0 ? 'Build a quotation' : 'Build a new version'}
+                </Link>
+              ) : null}
+            </section>
+
+            <section className="rounded border border-line bg-surface p-5">
               <h2 className="text-lg">Actions</h2>
               <div className="mt-3">
                 <EnquiryActions

@@ -143,6 +143,48 @@ const addOns: Prisma.AddOnCreateInput[] = [
   },
 ]
 
+/**
+ * Which packages each add-on needs or refuses (BR-P04). Stored as codes, validated on the server by
+ * the pricing engine. An add-on with no entry here is unconditional.
+ */
+const addOnRules: Record<string, { requiresAny?: string[]; excludes?: string[] }> = {
+  // The film, Super 8 and coverage add-ons attach to a shoot, so they need a package on the
+  // quotation. §2.2 sells them alongside the wedding and micro packages.
+  'FILM-35': { requiresAny: ['WED-PHOTO', 'MICRO-PHOTO'] },
+  'FILM-120': { requiresAny: ['WED-PHOTO', 'MICRO-PHOTO'] },
+  SUPER8: { requiresAny: ['WED-VIDEO', 'MICRO-VIDEO', 'WED-PHOTO'] },
+  ALBUM: { requiresAny: ['WED-PHOTO', 'MICRO-PHOTO'] },
+  'ALBUM-PAR': { requiresAny: ['WED-PHOTO', 'MICRO-PHOTO'] }, // and the main album, checked in the builder
+  'EXTRA-HR': { requiresAny: ['WED-PHOTO', 'WED-VIDEO'] },
+  'SECOND-SH': { requiresAny: ['WED-PHOTO', 'WED-VIDEO'] },
+  'RAW-FOOT': { requiresAny: ['WED-VIDEO', 'MICRO-VIDEO'] },
+}
+
+/** BR-P07 and BR-P08. Both reference packages by code; evaluationOrder decides which runs first. */
+const pricingRules: Prisma.PricingRuleCreateInput[] = [
+  {
+    code: 'BUNDLE-PV',
+    name: 'Photo and video bundle',
+    ruleType: 'BUNDLE',
+    requiresAllPackageId: ['WED-PHOTO', 'WED-VIDEO'],
+    excludesPackageId: [],
+    discountType: 'FIXED',
+    discountValue: '150.00',
+    evaluationOrder: 1,
+  },
+  {
+    code: 'COND-PREWED',
+    name: 'Engagement session discount',
+    ruleType: 'CONDITIONAL',
+    requiresAllPackageId: ['WED-PHOTO'],
+    excludesPackageId: ['MICRO-PHOTO'],
+    appliesToTargetId: 'PRE-WED',
+    discountType: 'PERCENTAGE',
+    discountValue: '20.00',
+    evaluationOrder: 2,
+  },
+]
+
 async function main() {
   for (const p of packages) {
     await prisma.package.upsert({ where: { code: p.code }, create: p, update: p })
@@ -150,7 +192,28 @@ async function main() {
   for (const a of addOns) {
     await prisma.addOn.upsert({ where: { code: a.code }, create: a, update: a })
   }
-  console.log(`Seeded ${packages.length} packages and ${addOns.length} add-ons.`)
+
+  // Rebuild the add-on rules each run so the codes above stay the single source of truth.
+  for (const [code, rule] of Object.entries(addOnRules)) {
+    const addOn = await prisma.addOn.findUnique({ where: { code }, select: { id: true } })
+    if (!addOn) continue
+    await prisma.addOnRule.deleteMany({ where: { addOnId: addOn.id } })
+    await prisma.addOnRule.create({
+      data: {
+        addOnId: addOn.id,
+        requiresAnyPackageId: rule.requiresAny ?? [],
+        excludesPackageId: rule.excludes ?? [],
+      },
+    })
+  }
+
+  for (const rule of pricingRules) {
+    await prisma.pricingRule.upsert({ where: { code: rule.code }, create: rule, update: rule })
+  }
+
+  console.log(
+    `Seeded ${packages.length} packages, ${addOns.length} add-ons, ${Object.keys(addOnRules).length} add-on rules and ${pricingRules.length} pricing rules.`,
+  )
 
   // Users are re-hashed and their auth state reset on every run, so repeated e2e runs start from
   // a known state (SEC-S04 counters cleared, passwords back to the printed values).

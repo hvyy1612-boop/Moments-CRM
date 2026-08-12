@@ -38,4 +38,18 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   // assigned deliverables, so an editor reaching these routes is denied like any signed-out visitor.
   '/enquiries': { roles: ['ADMIN', 'STUDIO'] },
   '/enquiries/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  '/enquiries/[id]/quote': { roles: ['ADMIN', 'STUDIO'] },
+  '/quotations/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  '/bookings': { roles: ['ADMIN', 'STUDIO'] },
+  '/bookings/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  // Money is closed to EDITOR entirely (§5: "cannot see financial data at all").
+  '/invoices': { roles: ['ADMIN', 'STUDIO'] },
+  '/invoices/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  // The outbox shows queued client messages, which every staff role may need to check.
+  '/outbox': { roles: ['ADMIN', 'STUDIO', 'EDITOR'] },
+  // Editors work their assigned deliverables here.
+  '/deliverables': { roles: ['ADMIN', 'STUDIO', 'EDITOR'] },
+  // Client-facing, reached by token only. No session, no account (§8.5, BR-T01, BR-CP01).
+  '/quote/[token]': { token: true },
+  '/portal/[token]': { token: true },
 }

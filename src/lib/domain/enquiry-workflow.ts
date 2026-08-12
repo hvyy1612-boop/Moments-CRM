@@ -80,6 +80,10 @@ export async function getEnquiry(id: string) {
         },
       },
       packages: { select: { package: { select: { code: true, name: true } } } },
+      quotations: {
+        select: { id: true, version: true, status: true },
+        orderBy: { version: 'desc' },
+      },
     },
   })
 }
