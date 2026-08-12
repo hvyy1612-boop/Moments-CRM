@@ -370,6 +370,70 @@ function addDays(from: Date, days: number): Date {
   return out
 }
 
+export type CrewSlot = 'leadPhotographerId' | 'leadVideographerId' | 'secondShooterId'
+
+export type CrewResult =
+  | { ok: true }
+  | { ok: false; reason: 'not_found' | 'double_booked' | 'inactive' }
+
+export async function listCrew() {
+  return prisma.crewMember.findMany({
+    where: { isActive: true },
+    select: { id: true, name: true, crewRole: true, isContractor: true },
+    orderBy: { name: 'asc' },
+  })
+}
+
+export async function assignCrew(
+  input: { bookingId: string; slot: CrewSlot; crewMemberId: string | null },
+  actor: { userId: string },
+  meta: { ipAddress?: string | null },
+): Promise<CrewResult> {
+  const booking = await prisma.booking.findUnique({
+    where: { id: input.bookingId },
+    select: { id: true, clientId: true, shootDate: true },
+  })
+  if (!booking) return { ok: false, reason: 'not_found' }
+
+  let name = 'nobody'
+  if (input.crewMemberId) {
+    const crew = await prisma.crewMember.findFirst({
+      where: { id: input.crewMemberId, isActive: true },
+      select: { id: true, name: true },
+    })
+    if (!crew) return { ok: false, reason: 'inactive' }
+    name = crew.name
+  }
+
+  try {
+    await prisma.booking.update({
+      where: { id: booking.id },
+      data: { [input.slot]: input.crewMemberId },
+    })
+  } catch (error) {
+
+    const message = error instanceof Error ? error.message : ''
+    const isUniqueViolation =
+      error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
+    if (isUniqueViolation || message.includes('BR-B05')) {
+      return { ok: false, reason: 'double_booked' }
+    }
+    throw error
+  }
+
+  await logActivity({
+    clientId: booking.clientId,
+    relatedType: 'Booking',
+    relatedId: booking.id,
+    actorType: 'STAFF',
+    actorUserId: actor.userId,
+    action: input.crewMemberId ? 'booking.crewAssigned' : 'booking.crewCleared', // BR-L03
+    detail: { slot: input.slot, crew: name },
+    ipAddress: meta.ipAddress,
+  })
+  return { ok: true }
+}
+
 export function fullResolutionUnlocked(
   invoices: { status: string }[],
 ): boolean {

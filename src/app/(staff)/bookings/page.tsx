@@ -3,32 +3,17 @@ import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StaffHeader } from '@/components/ui/StaffHeader'
-import { StatusPill, type Tone } from '@/components/ui/StatusPill'
+import { StatusPill } from '@/components/ui/StatusPill'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { listBookings } from '@/lib/domain/booking'
 import { formatAud } from '@/lib/money'
 import { daysUntil, formatSydneyDate, systemClock } from '@/lib/time'
+import { BOOKING_LABEL, BOOKING_TONE } from './labels'
 
 export const runtime = 'nodejs'
 
 export const metadata: Metadata = { title: 'Bookings — Moments' }
-
-export const BOOKING_TONE: Record<string, Tone> = {
-  PENDING_BOOKING_FEE: 'warn',
-  CONFIRMED: 'good',
-  DELIVERED: 'info',
-  CLOSED: 'neutral',
-  CANCELLED: 'bad',
-}
-
-export const BOOKING_LABEL: Record<string, string> = {
-  PENDING_BOOKING_FEE: 'Awaiting booking fee',
-  CONFIRMED: 'Confirmed',
-  DELIVERED: 'Delivered',
-  CLOSED: 'Closed',
-  CANCELLED: 'Cancelled',
-}
 
 export default async function BookingsPage() {
   const user = await requireRole('/bookings')

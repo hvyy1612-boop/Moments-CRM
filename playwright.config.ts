@@ -30,6 +30,8 @@ export default defineConfig({
 
       SESSION_SECRET:
         process.env.SESSION_SECRET ?? 'e2e-test-session-secret-not-for-production-use-0123456789',
+
+      CRON_SECRET: process.env.CRON_SECRET ?? 'e2e-cron-secret-not-for-production-use',
     },
   },
 })

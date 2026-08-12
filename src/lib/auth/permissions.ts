@@ -6,6 +6,8 @@ export type RoutePermission =
   | { public: true }
   | { roles: Role[] }
   | { token: true }
+  /** Machine to machine: a shared secret in the Authorization header, no session (D-014). */
+  | { secret: true }
 
 export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/': { public: true },
@@ -37,4 +39,6 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
 
   '/quote/[token]': { token: true },
   '/portal/[token]': { token: true },
+
+  '/api/cron/daily': { secret: true },
 }

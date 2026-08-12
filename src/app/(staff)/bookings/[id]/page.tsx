@@ -6,12 +6,14 @@ import { StaffHeader } from '@/components/ui/StaffHeader'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
-import { getBooking, outstandingFor } from '@/lib/domain/booking'
+import { getBooking, listCrew, outstandingFor } from '@/lib/domain/booking'
+import { answersFrom, QUESTIONS } from '@/lib/validation/questionnaire'
+import { AssignCrew } from './AssignCrew'
 import { DELIVERABLE_LABEL } from '@/lib/domain/deliverables'
 import { env } from '@/lib/env'
 import { formatAud } from '@/lib/money'
 import { daysUntil, formatSydneyDate, systemClock } from '@/lib/time'
-import { BOOKING_LABEL, BOOKING_TONE } from '../page'
+import { BOOKING_LABEL, BOOKING_TONE } from '../labels'
 import { DeliverableRow } from './DeliverableRow'
 import { RecordPayment } from './RecordPayment'
 
@@ -25,6 +27,8 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
 
   const booking = await getBooking(id)
   if (!booking) notFound()
+
+  const crew = await listCrew()
 
   const now = systemClock.now()
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
@@ -167,6 +171,55 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
                 />
               </div>
             </section>
+
+            <section className="rounded border border-line bg-surface p-5">
+              <h2 className="text-lg">Crew</h2>
+              <div className="mt-3">
+                <AssignCrew
+                  bookingId={booking.id}
+                  crew={crew}
+                  current={{
+                    leadPhotographerId: booking.leadPhotographer?.id ?? null,
+                    leadVideographerId: booking.leadVideographer?.id ?? null,
+                    secondShooterId: booking.secondShooter?.id ?? null,
+                  }}
+                  csrf={csrf}
+                />
+              </div>
+            </section>
+
+            {booking.questionnaire ? (
+              <section className="rounded border border-line bg-surface p-5">
+                <h2 className="text-lg">Planning answers</h2>
+                {booking.questionnaire.status === 'SUBMITTED' ? (
+                  <>
+                    <p className="mt-1 text-xs text-ink-muted">
+                      Sent{' '}
+                      {booking.questionnaire.submittedAt
+                        ? formatSydneyDate(booking.questionnaire.submittedAt)
+                        : 'recently'}
+                      .
+                    </p>
+                    <dl className="mt-3 flex flex-col gap-3">
+                      {QUESTIONS.filter(
+                        (question) => answersFrom(booking.questionnaire?.responses)[question.key],
+                      ).map((question) => (
+                        <div key={question.key}>
+                          <dt className="text-xs text-ink-muted">{question.label}</dt>
+                          <dd className="text-sm whitespace-pre-line text-ink">
+                            {answersFrom(booking.questionnaire?.responses)[question.key]}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </>
+                ) : (
+                  <p className="mt-2 text-sm text-ink-muted">
+                    Not filled in yet. The couple are reminded 60 days before the shoot.
+                  </p>
+                )}
+              </section>
+            ) : null}
 
             {booking.agreement ? (
               <section className="rounded border border-line bg-surface p-5">
