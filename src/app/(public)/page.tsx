@@ -33,26 +33,6 @@ export default async function HomePage() {
 
   return (
     <>
-      <header className="border-b border-line">
-        <div className="mx-auto flex w-full max-w-3xl flex-wrap items-baseline justify-between gap-4 px-4 py-5">
-          <p className="text-base font-medium text-ink">Moments Photography and Film</p>
-          <nav className="flex gap-5 text-sm">
-            <Link
-              href="/packages"
-              className="text-ink-muted transition-colors duration-150 hover:text-ink"
-            >
-              Packages
-            </Link>
-            <Link
-              href="/enquire"
-              className="text-ink-muted transition-colors duration-150 hover:text-ink"
-            >
-              Enquire
-            </Link>
-          </nav>
-        </div>
-      </header>
-
       <main className="mx-auto w-full max-w-3xl px-4">
         <section className="border-b border-line py-16">
           <h1 className="max-w-prose text-2xl leading-tight">
@@ -214,15 +194,6 @@ export default async function HomePage() {
           </Link>
         </section>
       </main>
-
-      <footer className="border-t border-line">
-        <div className="mx-auto w-full max-w-3xl px-4 py-6">
-          <p className="text-sm text-ink">Moments Photography and Film</p>
-          <p className="mt-1 text-xs text-ink-muted">
-            Sydney, New South Wales. Travel beyond the city is quoted for each job.
-          </p>
-        </div>
-      </footer>
     </>
   )
 }

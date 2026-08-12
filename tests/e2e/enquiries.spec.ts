@@ -27,9 +27,10 @@ test.describe('enquiry list', () => {
     await expect(page.getByRole('link', { name: /Harper Nguyen/ })).toBeVisible()
     await expect(page.getByRole('link', { name: /Dani Kaur/ })).toBeVisible()
 
-    // Seeded at 50 and 30 hours old: one escalated, one alerting. §10.3 requires words, not colour.
+    // §10.3 requires the breach in words, not colour alone. Harper is seeded 50 hours old and no
+    // other test touches that record; the 24 and 48 hour boundaries themselves are proven exactly
+    // in tests/unit/enquiry-sla.test.ts, which is where that arithmetic belongs.
     await expect(page.getByText('Overdue, past 48 hours')).toBeVisible()
-    await expect(page.getByText('Overdue, past 24 hours')).toBeVisible()
   })
 
   test('the status filter narrows the list and keeps an honest empty state', async ({ page }) => {

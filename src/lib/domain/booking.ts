@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import type { BookingStatus, DeliverableStatus, PaymentMethod } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { env } from '@/lib/env'
 import { systemClock, type Clock } from '@/lib/time'
 import { logActivity } from './activity-log'
 import { queueNotification } from './notification'
@@ -193,6 +194,7 @@ export async function refreshBookingStatus(bookingId: string, clock: Clock = sys
       clientId: true,
       shootDate: true,
       dateLockedAt: true,
+      portalToken: true,
       quotation: { select: { totalGross: true } },
       invoices: { select: { id: true, type: true, status: true, totalGross: true, amountPaid: true } },
       deliverables: { select: { status: true } },
@@ -261,6 +263,9 @@ export async function refreshBookingStatus(bookingId: string, clock: Clock = sys
         'Your booking fee has been received and your date is now confirmed. The studio has it locked in.',
         '',
         'The balance invoice is on its way and falls due seven days before the shoot. Closer to the day the studio will send a planning questionnaire and confirm the schedule with you.',
+        '',
+        'Your booking page, which shows everything as it happens:',
+        `${env.NEXT_PUBLIC_APP_URL}/portal/${booking.portalToken ?? ''}`,
       ].join('\n'),
       relatedType: 'Booking',
       relatedId: booking.id,

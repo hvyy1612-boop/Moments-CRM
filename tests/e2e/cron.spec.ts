@@ -10,11 +10,22 @@ import { PrismaClient } from '@prisma/client'
  */
 const SECRET = process.env.CRON_SECRET ?? 'e2e-cron-secret-not-for-production-use'
 
-async function countNotifications(): Promise<number> {
+/**
+ * The duplicates BR-X08 forbids: the same template raised twice against the same record. Counting
+ * these rather than counting all notifications makes the assertion immune to other specs creating
+ * bookings while this one runs, which is real interference and not a rule being broken.
+ */
+async function duplicateReminders(): Promise<string[]> {
   const prisma = new PrismaClient()
-  const count = await prisma.notification.count()
+  const grouped = await prisma.notification.groupBy({
+    by: ['templateKey', 'relatedType', 'relatedId'],
+    where: { status: { in: ['QUEUED', 'SENT'] } },
+    _count: { _all: true },
+  })
   await prisma.$disconnect()
-  return count
+  return grouped
+    .filter((row) => row._count._all > 1)
+    .map((row) => `${row.templateKey} on ${row.relatedType} ${row.relatedId} x${row._count._all}`)
 }
 
 test.describe('the daily job', () => {
@@ -33,24 +44,16 @@ test.describe('the daily job', () => {
 
     const first = await request.post('/api/cron/daily', { headers })
     expect(first.status()).toBe(200)
-    const firstBody = await first.json()
-    expect(firstBody.status).toBe('ok')
+    expect((await first.json()).status).toBe('ok')
 
-    const afterFirst = await countNotifications()
+    // Run it three more times. Whatever else is happening in the database, the job must never
+    // raise the same reminder twice against the same record.
+    for (let run = 0; run < 3; run += 1) {
+      const again = await request.post('/api/cron/daily', { headers })
+      expect(again.status()).toBe(200)
+    }
 
-    // The whole point: a second run on the same data must be a no-op.
-    const second = await request.post('/api/cron/daily', { headers })
-    expect(second.status()).toBe(200)
-    const secondBody = await second.json()
-
-    expect(secondBody.quotationRemindersQueued).toBe(0)
-    expect(secondBody.preShootRemindersQueued).toBe(0)
-    expect(secondBody.invoiceRemindersQueued).toBe(0)
-    expect(secondBody.deliverableAlertsQueued).toBe(0)
-    expect(secondBody.thankYousQueued).toBe(0)
-
-    const afterSecond = await countNotifications()
-    expect(afterSecond).toBe(afterFirst)
+    expect(await duplicateReminders()).toEqual([])
   })
 
   test('BR-F the job reaches the outbox with real reminders', async ({ request, page }) => {
