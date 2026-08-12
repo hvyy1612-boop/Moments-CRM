@@ -138,6 +138,16 @@ enum SecurityOutcome {
   FAILURE
 }
 
+enum PaymentProvider {
+  MANUAL
+  STRIPE
+}
+
+enum QuestionnaireStatus {
+  PENDING
+  SUBMITTED
+}
+
 model User {
   id                 String    @id @default(cuid())
   email              String    @unique @db.Citext
@@ -239,6 +249,7 @@ model Client {
 
   enquiries     Enquiry[]
   bookings      Booking[]
+  agreements    Agreement[]
   activityLogs  ActivityLog[]
   notifications Notification[]
 
@@ -382,6 +393,7 @@ model Quotation {
   lines          QuotationLine[]
   actions        QuotationAction[]
   booking        Booking?
+  agreement      Agreement?
   changeRequests ChangeRequest[]
 
   @@index([enquiryId])
@@ -423,34 +435,38 @@ model QuotationLine {
 }
 
 model Booking {
-  id                 String        @id @default(cuid())
-  quotationId        String        @unique
-  clientId           String
-  status             BookingStatus @default(PENDING_BOOKING_FEE)
-  shootDate          DateTime
-  startTime          DateTime?
-  endTime            DateTime?
-  venueName          String?
-  venueAddress       String?
-  coverageHours      Int
-  leadPhotographerId String?
-  leadVideographerId String?
-  secondShooterId    String?
-  dateLockedAt       DateTime?
-  cancelledAt        DateTime?
-  cancellationReason String?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @default(now()) @updatedAt
+  id                  String        @id @default(cuid())
+  quotationId         String        @unique
+  clientId            String
+  status              BookingStatus @default(PENDING_BOOKING_FEE)
+  shootDate           DateTime
+  startTime           DateTime?
+  endTime             DateTime?
+  venueName           String?
+  venueAddress        String?
+  coverageHours       Int
+  leadPhotographerId  String?
+  leadVideographerId  String?
+  secondShooterId     String?
+  dateLockedAt        DateTime?
+  cancelledAt         DateTime?
+  cancellationReason  String?
+  portalToken         String?       @unique
+  portalTokenIssuedAt DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @default(now()) @updatedAt
 
-  quotation        Quotation           @relation(fields: [quotationId], references: [id], onDelete: Restrict)
-  client           Client              @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  leadPhotographer CrewMember?         @relation("LeadPhotographer", fields: [leadPhotographerId], references: [id], onDelete: SetNull)
-  leadVideographer CrewMember?         @relation("LeadVideographer", fields: [leadVideographerId], references: [id], onDelete: SetNull)
-  secondShooter    CrewMember?         @relation("SecondShooter", fields: [secondShooterId], references: [id], onDelete: SetNull)
+  quotation        Quotation              @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  client           Client                 @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  leadPhotographer CrewMember?            @relation("LeadPhotographer", fields: [leadPhotographerId], references: [id], onDelete: SetNull)
+  leadVideographer CrewMember?            @relation("LeadVideographer", fields: [leadVideographerId], references: [id], onDelete: SetNull)
+  secondShooter    CrewMember?            @relation("SecondShooter", fields: [secondShooterId], references: [id], onDelete: SetNull)
   dateChanges      BookingDateChange[]
   deliverables     Deliverable[]
   invoices         Invoice[]
   changeRequests   ChangeRequest[]
+  agreement        Agreement?
+  questionnaire    PlanningQuestionnaire?
 
   @@index([clientId])
   @@index([status])
@@ -522,18 +538,24 @@ model Invoice {
 }
 
 model Payment {
-  id                String        @id @default(cuid())
-  invoiceId         String
-  amountGross       Decimal       @db.Decimal(10, 2)
-  method            PaymentMethod
-  receivedDate      DateTime
-  reference         String?
-  recordedByUserId  String
-  reversesPaymentId String?       @unique
-  createdAt         DateTime      @default(now())
+  id                    String          @id @default(cuid())
+  invoiceId             String
+  amountGross           Decimal         @db.Decimal(10, 2)
+  method                PaymentMethod
+  provider              PaymentProvider @default(MANUAL)
+  receivedDate          DateTime
+  reference             String?
+  recordedByUserId      String?
+  reversesPaymentId     String?         @unique
+  stripePaymentIntentId String?         @unique
+  stripeChargeId        String?
+  cardBrand             String?
+  cardLast4             String?
+  receiptUrl            String?
+  createdAt             DateTime        @default(now())
 
   invoice    Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
-  recordedBy User     @relation(fields: [recordedByUserId], references: [id], onDelete: Restrict)
+  recordedBy User?    @relation(fields: [recordedByUserId], references: [id], onDelete: Restrict)
   reverses   Payment? @relation("PaymentReversal", fields: [reversesPaymentId], references: [id], onDelete: SetNull)
   reversedBy Payment? @relation("PaymentReversal")
 
@@ -560,6 +582,46 @@ model ChangeRequest {
 
   @@index([bookingId])
   @@index([status])
+}
+
+model Agreement {
+  id               String   @id @default(cuid())
+  bookingId        String   @unique
+  quotationId      String   @unique
+  clientId         String
+  quotationVersion Int
+  totalGross       Decimal  @db.Decimal(10, 2)
+  termsText        String
+  acceptedName     String
+  acceptedAt       DateTime
+  acceptedIp       String
+  contentHash      String
+  createdAt        DateTime @default(now())
+
+  booking   Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  client    Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+
+  @@index([clientId])
+}
+
+model PlanningQuestionnaire {
+  id             String              @id @default(cuid())
+  bookingId      String              @unique
+  status         QuestionnaireStatus @default(PENDING)
+  responses      Json?
+  submittedAt    DateTime?
+  reminderSentAt DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @default(now()) @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model StripeEvent {
+  id          String   @id
+  type        String
+  processedAt DateTime @default(now())
 }
 
 model ActivityLog {
