@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { CSRF_COOKIE, csrfFieldValue, verifyCsrf } from '@/lib/auth/csrf'
 
 describe('CSRF double-submit token (SEC-A04)', () => {
@@ -23,6 +23,16 @@ describe('CSRF double-submit token (SEC-A04)', () => {
     expect(verifyCsrf(cookie, '')).toBe(false)
     expect(verifyCsrf(cookie, null)).toBe(false)
     expect(verifyCsrf(cookie, 'zz-not-hex-at-all')).toBe(false)
+  })
+
+  it('SEC-A04 a field minted by one module instance verifies in another', async () => {
+    // Regression: Next.js loads server modules more than once (page layer and server-action layer
+    // are separate instances). With a per-process random fallback key the page minted a field the
+    // action could not verify, so every auth form failed in development. The key must be stable.
+    const field = csrfFieldValue(cookie)
+    vi.resetModules()
+    const fresh = await import('@/lib/auth/csrf')
+    expect(fresh.verifyCsrf(cookie, field)).toBe(true)
   })
 
   it('keeps the cookie name in sync with the middleware duplicate', () => {

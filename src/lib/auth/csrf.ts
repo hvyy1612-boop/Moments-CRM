@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHmac, timingSafeEqual } from 'node:crypto'
 
 /**
  * CSRF protection for state-changing form posts (SEC-A04), double-submit style.
@@ -8,15 +8,18 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
  * server actions additionally enforce a same-origin check; this layer makes the control explicit
  * and testable, as the brief requires.
  *
- * The HMAC key is SESSION_SECRET (validated at boot in production, SEC-A08). In development and
- * test, where env.ts allows it to be absent, a per-process random key keeps the mechanism working;
- * forms just stop validating across a dev-server restart. Read from process.env directly so unit
- * tests can exercise this module without a database configuration.
+ * The HMAC key is SESSION_SECRET, which env.ts requires in production (SEC-A08). Development and
+ * test may run without it, so a FIXED development key is used there. It must be fixed, not random:
+ * Next.js loads server modules more than once (the page layer and the server-action layer are
+ * separate instances), so a per-process random key would make the page mint a field the action
+ * cannot verify, and every form would fail. This key is not a secret and never applies in
+ * production. Read from process.env directly so unit tests need no database configuration.
  */
 export const CSRF_COOKIE = 'moments_csrf'
 export const CSRF_FIELD = 'csrf'
 
-const secret = process.env.SESSION_SECRET ?? randomBytes(32).toString('hex')
+const DEV_FALLBACK_KEY = 'development-only-csrf-key-never-used-in-production'
+const secret = process.env.SESSION_SECRET ?? DEV_FALLBACK_KEY
 
 /** The hidden-field value for a given CSRF cookie value. */
 export function csrfFieldValue(cookieValue: string): string {
