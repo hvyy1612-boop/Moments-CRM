@@ -148,6 +148,16 @@ enum SecurityOutcome {
   FAILURE
 }
 
+enum PaymentProvider {
+  MANUAL // recorded by staff: bank transfer, cash, or an offline card entry
+  STRIPE // created only from a signature-verified Stripe webhook (hosted Checkout)
+}
+
+enum QuestionnaireStatus {
+  PENDING
+  SUBMITTED
+}
+
 // ---------- Identity and access ----------
 
 model User {
@@ -253,6 +263,7 @@ model Client {
 
   enquiries     Enquiry[]
   bookings      Booking[]
+  agreements    Agreement[]
   activityLogs  ActivityLog[]
   notifications Notification[]
 
@@ -398,6 +409,7 @@ model Quotation {
   lines          QuotationLine[]
   actions        QuotationAction[]
   booking        Booking?
+  agreement      Agreement?
   changeRequests ChangeRequest[]
   // NOTE: "at most one ACCEPTED quotation per enquiry" (BR-P14) is a partial unique index added in
   // raw SQL in the migration: UNIQUE (enquiryId) WHERE status = 'ACCEPTED'.
@@ -443,34 +455,38 @@ model QuotationLine {
 // ---------- Booking and delivery ----------
 
 model Booking {
-  id                 String        @id @default(cuid())
-  quotationId        String        @unique // BR-B01 one booking per accepted quotation
-  clientId           String
-  status             BookingStatus @default(PENDING_BOOKING_FEE) // derived cache (ADR-0004)
-  shootDate          DateTime
-  startTime          DateTime?
-  endTime            DateTime?
-  venueName          String?
-  venueAddress       String?
-  coverageHours      Int // BR-B07 <= includedHours + maxExtraHours
-  leadPhotographerId String?
-  leadVideographerId String?
-  secondShooterId    String?
-  dateLockedAt       DateTime? // BR-B04 set at CONFIRMED
-  cancelledAt        DateTime?
-  cancellationReason String?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @default(now()) @updatedAt
+  id                  String        @id @default(cuid())
+  quotationId         String        @unique // BR-B01 one booking per accepted quotation
+  clientId            String
+  status              BookingStatus @default(PENDING_BOOKING_FEE) // derived cache (ADR-0004)
+  shootDate           DateTime
+  startTime           DateTime?
+  endTime             DateTime?
+  venueName           String?
+  venueAddress        String?
+  coverageHours       Int // BR-B07 <= includedHours + maxExtraHours
+  leadPhotographerId  String?
+  leadVideographerId  String?
+  secondShooterId     String?
+  dateLockedAt        DateTime? // BR-B04 set at CONFIRMED
+  cancelledAt         DateTime?
+  cancellationReason  String?
+  portalToken         String?       @unique // BR-CP01 client portal link, plaintext, multi-use, read scope
+  portalTokenIssuedAt DateTime? // BR-CP01 minted when the booking is created from an accepted quotation
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @default(now()) @updatedAt
 
-  quotation        Quotation           @relation(fields: [quotationId], references: [id], onDelete: Restrict)
-  client           Client              @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  leadPhotographer CrewMember?         @relation("LeadPhotographer", fields: [leadPhotographerId], references: [id], onDelete: SetNull)
-  leadVideographer CrewMember?         @relation("LeadVideographer", fields: [leadVideographerId], references: [id], onDelete: SetNull)
-  secondShooter    CrewMember?         @relation("SecondShooter", fields: [secondShooterId], references: [id], onDelete: SetNull)
+  quotation        Quotation              @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  client           Client                 @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  leadPhotographer CrewMember?            @relation("LeadPhotographer", fields: [leadPhotographerId], references: [id], onDelete: SetNull)
+  leadVideographer CrewMember?            @relation("LeadVideographer", fields: [leadVideographerId], references: [id], onDelete: SetNull)
+  secondShooter    CrewMember?            @relation("SecondShooter", fields: [secondShooterId], references: [id], onDelete: SetNull)
   dateChanges      BookingDateChange[]
   deliverables     Deliverable[]
   invoices         Invoice[]
   changeRequests   ChangeRequest[]
+  agreement        Agreement?
+  questionnaire    PlanningQuestionnaire?
   // NOTE: "no crew member holds two CONFIRMED bookings on the same date" (BR-B05) is enforced by
   // a trigger in the migration (crew spans three columns, D-013).
 
@@ -546,18 +562,25 @@ model Invoice {
 }
 
 model Payment {
-  id                String        @id @default(cuid())
-  invoiceId         String
-  amountGross       Decimal       @db.Decimal(10, 2)
-  method            PaymentMethod
-  receivedDate      DateTime
-  reference         String?
-  recordedByUserId  String
-  reversesPaymentId String?       @unique // BR-I07 reversing record, never a delete
-  createdAt         DateTime      @default(now())
+  id                    String          @id @default(cuid())
+  invoiceId             String
+  amountGross           Decimal         @db.Decimal(10, 2)
+  method                PaymentMethod
+  provider              PaymentProvider @default(MANUAL) // BR-OP01 MANUAL (staff) or STRIPE (webhook)
+  receivedDate          DateTime
+  reference             String?
+  recordedByUserId      String? // nullable: Stripe payments are system-recorded, no staff actor (BR-OP02)
+  reversesPaymentId     String?         @unique // BR-I07 reversing record, never a delete
+  // Stripe metadata only — never a card number or full PAN (PRIV-01, BR-OP03)
+  stripePaymentIntentId String?         @unique // BR-OP04 idempotent link to the Stripe PaymentIntent
+  stripeChargeId        String?
+  cardBrand             String? // e.g. "visa" — brand only
+  cardLast4             String? // last four digits only
+  receiptUrl            String? // Stripe-hosted receipt link
+  createdAt             DateTime        @default(now())
 
   invoice    Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
-  recordedBy User     @relation(fields: [recordedByUserId], references: [id], onDelete: Restrict)
+  recordedBy User?    @relation(fields: [recordedByUserId], references: [id], onDelete: Restrict)
   reverses   Payment? @relation("PaymentReversal", fields: [reversesPaymentId], references: [id], onDelete: SetNull)
   reversedBy Payment? @relation("PaymentReversal")
 
@@ -584,6 +607,49 @@ model ChangeRequest {
 
   @@index([bookingId])
   @@index([status])
+}
+
+// ---------- Agreement, questionnaire, online payment ----------
+
+model Agreement {
+  id               String   @id @default(cuid())
+  bookingId        String   @unique
+  quotationId      String   @unique
+  clientId         String
+  quotationVersion Int // BR-AG02 the accepted quotation version, snapshotted
+  totalGross       Decimal  @db.Decimal(10, 2) // BR-AG02 snapshot of the accepted total
+  termsText        String // BR-AG02 verbatim cancellation policy + terms at the moment of acceptance
+  acceptedName     String // BR-AG03 the name the client typed to accept
+  acceptedAt       DateTime // BR-AG03 mirrors Quotation.termsAcknowledgedAt
+  acceptedIp       String // BR-AG03 mirrors Quotation.termsAcknowledgedIp
+  contentHash      String // BR-AG04 SHA-256 of the rendered agreement, tamper evidence
+  createdAt        DateTime @default(now()) // insert-only, no updatedAt (BR-AG05)
+
+  booking   Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  client    Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  // INSERT-ONLY: update/delete blocked by a DB trigger + the Prisma extension (BR-AG05, mirrors ActivityLog).
+
+  @@index([clientId])
+}
+
+model PlanningQuestionnaire {
+  id             String              @id @default(cuid())
+  bookingId      String              @unique
+  status         QuestionnaireStatus @default(PENDING) // BR-QN01
+  responses      Json? // BR-QN02 fixed question set, validated server-side by Zod; null until submitted
+  submittedAt    DateTime? // BR-QN03
+  reminderSentAt DateTime? // BR-QN04 links to the 60-day planning reminder (BR-F)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @default(now()) @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model StripeEvent {
+  id          String   @id // the Stripe event id (evt_...); the PK gives webhook idempotency (BR-OP04, BR-X08)
+  type        String
+  processedAt DateTime @default(now())
 }
 
 // ---------- Audit and messaging ----------
