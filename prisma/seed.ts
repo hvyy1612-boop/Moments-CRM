@@ -1,6 +1,16 @@
 import { Prisma, PrismaClient } from '@prisma/client'
+import { hashPassword } from '../src/lib/auth/password'
 
 const prisma = new PrismaClient()
+
+const users = [
+  { email: 'owner@moments.test', name: 'Studio Owner', role: 'ADMIN', password: 'owner-dev-2026-moments' },
+  { email: 'photographer@moments.test', name: 'Photographer', role: 'STUDIO', password: 'photo-dev-2026-moments' },
+  { email: 'videographer@moments.test', name: 'Videographer', role: 'STUDIO', password: 'video-dev-2026-moments' },
+  { email: 'editor@moments.test', name: 'Editor', role: 'EDITOR', password: 'editor-dev-2026-moments' },
+
+  { email: 'lockout@moments.test', name: 'Lockout test account (dev only)', role: 'EDITOR', password: 'lockout-dev-2026-moments' },
+] as const
 
 const PLACEHOLDER = '0.00'
 
@@ -134,6 +144,36 @@ async function main() {
     await prisma.addOn.upsert({ where: { code: a.code }, create: a, update: a })
   }
   console.log(`Seeded ${packages.length} packages and ${addOns.length} add-ons.`)
+
+  for (const u of users) {
+    const hashed = await hashPassword(u.password)
+    const data = {
+      email: u.email,
+      name: u.name,
+      role: u.role,
+      passwordHash: hashed.hash,
+      passwordAlgo: hashed.algo,
+      isActive: true,
+      mustChangePassword: false,
+      failedAttempts: 0,
+      lockedUntil: null,
+    }
+    await prisma.user.upsert({ where: { email: u.email }, create: data, update: data })
+  }
+
+  const testUsers = await prisma.user.findMany({
+    where: { email: { endsWith: '@moments.test' } },
+    select: { id: true },
+  })
+  const ids = testUsers.map((u) => u.id)
+  await prisma.passwordReset.deleteMany({ where: { userId: { in: ids } } })
+  await prisma.notification.deleteMany({ where: { recipient: { endsWith: '@moments.test' } } })
+
+  console.log('')
+  console.log('Development sign-ins (DEVELOPMENT ONLY — never use these in production):')
+  for (const u of users) {
+    console.log(`  ${u.role.padEnd(6)} ${u.email.padEnd(28)} ${u.password}`)
+  }
 }
 
 main()

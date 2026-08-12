@@ -11,6 +11,61 @@ Next.js 15 (App Router) · TypeScript (strict) · PostgreSQL · Prisma · Tailwi
 Vitest · Playwright. Authentication is implemented directly (no hosted identity provider). Deploys
 to Vercel with a Neon Postgres database.
 
+## Project structure
+
+Folder names follow two conventions that cannot be renamed: `src/app/` paths ARE the URLs
+(Next.js App Router). Everything
+else is named for its purpose. Folders in `(brackets)` are route groups: they organise files
+by audience and never appear in the URL.
+
+```
+moments-cms/
+├── README.md                    this file: setup, structure, verification
+│
+├── prisma/
+│   ├── schema.prisma            the full data model: 26 entities, every enum
+│   ├── migrations/              versioned SQL, including triggers and partial unique indexes
+│   └── seed.ts                  idempotent seed (§13): packages, add-ons, demo records
+│
+├── scripts/                     the verify gate, one check per file
+│   ├── audit-routes.mjs         every route must declare a permission (SEC-A01)
+│   ├── check-passwordhash.mjs   no handler may serialise passwordHash (SEC-P03)
+│   ├── check-design-tokens.mjs  no colour/spacing/radius literal outside globals.css (§10.1)
+│   └── check-money-number.mjs   the number type is banned for money (D6)
+│
+├── src/
+│   ├── app/                     routes: folder path = URL
+│   │   ├── (public)/            the website, no sign-in: home, packages, enquire, styleguide
+│   │   ├── (staff)/             the studio app, sign-in required   [Slice 2+: login,
+│   │   │                        dashboard, enquiries, quotations, bookings, invoices, outbox]
+│   │   ├── (client)/            token-link pages, no account       [Slice 3+: quotation
+│   │   │                        view/accept, portal, questionnaire]
+│   │   ├── api/                 health, auth callbacks, Stripe webhook, cron endpoints
+│   │   ├── globals.css          ALL design tokens live here and only here (§10.1)
+│   │   └── layout.tsx …         root layout, error and not-found boundaries, favicon
+│   │
+│   ├── components/              shared UI built at Slice 2+: fields, buttons, status text,
+│   │                            the four list/form states (loading, empty, error, populated)
+│   │
+│   ├── lib/                     everything that is not a route
+│   │   ├── auth/                password (Argon2id), sessions, permissions registry, Google
+│   │   ├── domain/              business logic, one file per area: enquiry, catalogue,
+│   │   │                        quotation, booking, invoice, payment, notification, log
+│   │   ├── validation/          Zod schemas, one file per form or endpoint
+│   │   ├── email/               EmailAdapter: console (default) and SMTP     [Slice 6]
+│   │   ├── db.ts                Prisma singleton; blocks writes to the audit tables
+│   │   ├── env.ts               validates environment at boot; refuses to start if broken
+│   │   ├── time.ts              Sydney timezone, injectable clock, peak season
+│   │   ├── money.ts             AUD formatting; Decimal only
+│   │   └── logger.ts            structured JSON logs with correlation ids
+│   │
+│   └── middleware.ts            security headers + session gate               [Slice 2]
+│
+└── tests/
+    ├── unit/                    Vitest; file and test names carry the BR-xx / SEC-xx they prove
+    └── e2e/                     Playwright against a production build; happy + failure paths
+```
+
 ## Prerequisites
 
 - **Node.js 22** (`.nvmrc` pins it; Node 20+ works). Run `nvm use` if you use nvm.
