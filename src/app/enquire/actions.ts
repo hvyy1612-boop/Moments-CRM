@@ -3,6 +3,7 @@
 import { headers } from 'next/headers'
 import { createEnquiry } from '@/lib/domain/enquiry'
 import { enquiryInputSchema } from '@/lib/validation/enquiry'
+import { correlationId, logger } from '@/lib/logger'
 
 export type EnquiryFormState =
   | { status: 'idle' }
@@ -50,8 +51,12 @@ export async function submitEnquiry(
     const ipAddress = forwarded ? (forwarded.split(',')[0]?.trim() ?? null) : null
     const result = await createEnquiry(parsed.data, { ipAddress })
     return { status: 'success', merged: result.merged, farFutureWarning: result.farFutureWarning }
-  } catch {
-    // Never leak internals to the couple (SEC-A07).
+  } catch (error) {
+    // Log server-side with a correlation id; never leak internals to the couple (SEC-A07, §17.3).
+    logger.error('enquiry.submit failed', {
+      correlationId: correlationId(),
+      cause: error instanceof Error ? error.message : String(error),
+    })
     return { status: 'error', errors: {}, message: 'Something went wrong. Please try again.' }
   }
 }

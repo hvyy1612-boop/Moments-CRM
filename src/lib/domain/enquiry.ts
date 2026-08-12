@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db'
 import type { EnquiryInput } from '@/lib/validation/enquiry'
 import { logActivity } from './activity-log'
 import { queueNotification } from './notification'
+import { systemClock, type Clock } from '@/lib/time'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -34,8 +35,10 @@ export type CreateEnquiryResult = {
 export async function createEnquiry(
   input: EnquiryInput,
   meta: { ipAddress?: string | null },
+  clock: Clock = systemClock,
 ): Promise<CreateEnquiryResult> {
-  const eighteenMonths = new Date()
+  const now = clock.now()
+  const eighteenMonths = new Date(now)
   eighteenMonths.setMonth(eighteenMonths.getMonth() + 18)
   const farFutureWarning = input.eventDate.getTime() > eighteenMonths.getTime()
 
@@ -48,13 +51,13 @@ export async function createEnquiry(
       email: input.email,
       phone: input.phone ?? null,
       marketingConsent: input.marketingConsent,
-      consentUpdatedAt: input.marketingConsent ? new Date() : null,
+      consentUpdatedAt: input.marketingConsent ? now : null,
     },
     update: {},
   })
 
   // BR-E09: same client and same event date within the last 24 hours merges rather than duplicates.
-  const since = new Date(Date.now() - DAY_MS)
+  const since = new Date(now.getTime() - DAY_MS)
   const recent = await prisma.enquiry.findFirst({
     where: { clientId: client.id, eventDate: input.eventDate, createdAt: { gte: since } },
     orderBy: { createdAt: 'desc' },

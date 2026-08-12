@@ -7,11 +7,13 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET(): Promise<NextResponse> {
+  // The running commit, so a deployed instance can be identified (§17.3).
+  const commit = process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GIT_COMMIT ?? 'dev'
   try {
     await prisma.$queryRaw`SELECT 1`
-    return NextResponse.json({ status: 'ok', database: 'up' }, { status: 200 })
+    return NextResponse.json({ status: 'ok', database: 'up', commit }, { status: 200 })
   } catch {
     // Never leak the underlying error to the caller (SEC-A07).
-    return NextResponse.json({ status: 'error', database: 'down' }, { status: 503 })
+    return NextResponse.json({ status: 'error', database: 'down', commit }, { status: 503 })
   }
 }
