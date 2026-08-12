@@ -34,4 +34,8 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/reset-password/[token]': { public: true },
   // The staff app (Slice 2 onward). Enforced server-side by requireRole (SEC-A01).
   '/dashboard': { roles: ['ADMIN', 'STUDIO', 'EDITOR'] },
+  // Enquiries belong to ADMIN and STUDIO. EDITOR is deliberately absent: §5 limits that role to
+  // assigned deliverables, so an editor reaching these routes is denied like any signed-out visitor.
+  '/enquiries': { roles: ['ADMIN', 'STUDIO'] },
+  '/enquiries/[id]': { roles: ['ADMIN', 'STUDIO'] },
 }

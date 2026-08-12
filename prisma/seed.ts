@@ -10,8 +10,10 @@ const users = [
   { email: 'photographer@moments.test', name: 'Photographer', role: 'STUDIO', password: 'photo-dev-2026-moments' },
   { email: 'videographer@moments.test', name: 'Videographer', role: 'STUDIO', password: 'video-dev-2026-moments' },
   { email: 'editor@moments.test', name: 'Editor', role: 'EDITOR', password: 'editor-dev-2026-moments' },
-  // e2e fixture for the SEC-S04 lockout test; nothing else signs in with it.
+  // e2e fixtures. Each test that MUTATES an account gets its own, so a parallel run cannot change
+  // the password another test is signing in with.
   { email: 'lockout@moments.test', name: 'Lockout test account (dev only)', role: 'EDITOR', password: 'lockout-dev-2026-moments' },
+  { email: 'reset@moments.test', name: 'Reset test account (dev only)', role: 'EDITOR', password: 'reset-dev-2026-moments' },
 ] as const
 
 // Placeholder for add-ons the studio has not published a price for yet (OQ-001, OQ-002, OQ-003).
@@ -167,6 +169,167 @@ async function main() {
     }
     await prisma.user.upsert({ where: { email: u.email }, create: data, update: data })
   }
+
+  // Demo enquiries (§13, DEMO-02): at least one record in every state a demo needs, including the
+  // two BR-E07 breaches. Ages are relative to the seed run so the response clock is always
+  // meaningful. Rebuilt on every run so demos and e2e start from the same picture.
+  const HOUR = 60 * 60 * 1000
+  const DAY = 24 * HOUR
+  const seededAt = Date.now()
+  const demoEnquiries = [
+    {
+      email: 'harper.demo@moments.test',
+      primaryName: 'Harper Nguyen',
+      partnerName: 'Tom Reilly',
+      phone: '0412 000 111',
+      suburb: 'Marrickville',
+      marketingConsent: true,
+      enquiryType: 'WEDDING',
+      status: 'NEW',
+      ageMs: 50 * HOUR, // BR-E07 escalated, past 48 hours
+      eventInDays: 300,
+      venueName: 'Gunners Barracks',
+      venueSuburb: 'Mosman',
+      guestCount: 90,
+      message: 'We found you through a friend’s wedding. We would love both photo and video if it fits our budget.',
+      packageCodes: ['WED-PHOTO', 'WED-VIDEO'],
+    },
+    {
+      email: 'sione.demo@moments.test',
+      primaryName: 'Sione Faletau',
+      partnerName: 'Mele Vaka',
+      phone: '0412 000 222',
+      suburb: 'Liverpool',
+      marketingConsent: false,
+      enquiryType: 'WEDDING',
+      status: 'NEW',
+      ageMs: 30 * HOUR, // BR-E07 alert, past 24 hours
+      eventInDays: 210,
+      venueName: 'Curzon Hall',
+      venueSuburb: 'Marsfield',
+      guestCount: 150,
+      message: 'Saturday in March. Is a second shooter available for the church?',
+      packageCodes: ['WED-PHOTO'],
+    },
+    {
+      email: 'dani.demo@moments.test',
+      primaryName: 'Dani Kaur',
+      partnerName: null,
+      phone: '0412 000 333',
+      suburb: 'Newtown',
+      marketingConsent: false,
+      enquiryType: 'PORTRAIT',
+      status: 'NEW',
+      ageMs: 3 * HOUR, // still inside the commitment
+      eventInDays: 45,
+      venueName: null,
+      venueSuburb: null,
+      guestCount: null,
+      message: 'Looking for family portraits before my parents fly home.',
+      packageCodes: [],
+    },
+    {
+      email: 'alex.demo@moments.test',
+      primaryName: 'Alex Romano',
+      partnerName: 'Jesse Lim',
+      phone: '0412 000 444',
+      suburb: 'Bondi',
+      marketingConsent: true,
+      enquiryType: 'MICRO',
+      status: 'CONTACTED',
+      respondedAfterMs: 4 * HOUR,
+      ageMs: 6 * DAY,
+      eventInDays: 120,
+      venueName: 'Watsons Bay',
+      venueSuburb: 'Watsons Bay',
+      guestCount: 20,
+      message: 'Just the two of us and our parents.',
+      packageCodes: ['MICRO-PHOTO'],
+    },
+    {
+      email: 'priya.demo@moments.test',
+      primaryName: 'Priya Sharma',
+      partnerName: 'Ravi Sharma',
+      phone: '0412 000 555',
+      suburb: 'Parramatta',
+      marketingConsent: false,
+      enquiryType: 'WEDDING',
+      status: 'LOST',
+      lostReason: 'Date unavailable',
+      respondedAfterMs: 2 * HOUR,
+      ageMs: 30 * DAY,
+      eventInDays: 90,
+      venueName: 'Oatlands House',
+      venueSuburb: 'Oatlands',
+      guestCount: 200,
+      message: 'Our date is a Saturday in October.',
+      packageCodes: ['WED-PHOTO'],
+    },
+  ] as const
+
+  const packageIdByCode = new Map(
+    (await prisma.package.findMany({ select: { id: true, code: true } })).map((p) => [p.code, p.id]),
+  )
+
+  for (const demo of demoEnquiries) {
+    const client = await prisma.client.upsert({
+      where: { email: demo.email },
+      create: {
+        primaryName: demo.primaryName,
+        partnerName: demo.partnerName ?? null,
+        email: demo.email,
+        phone: demo.phone,
+        suburb: demo.suburb,
+        state: 'NSW',
+        marketingConsent: demo.marketingConsent,
+        consentUpdatedAt: demo.marketingConsent ? new Date() : null,
+      },
+      update: {},
+    })
+
+    // Rebuild this client's enquiries so re-running the seed does not stack duplicates.
+    await prisma.enquiry.deleteMany({ where: { clientId: client.id } })
+
+    const createdAt = new Date(seededAt - demo.ageMs)
+    const enquiry = await prisma.enquiry.create({
+      data: {
+        clientId: client.id,
+        enquiryType: demo.enquiryType,
+        eventDate: new Date(seededAt + demo.eventInDays * DAY),
+        venueName: demo.venueName ?? null,
+        venueSuburb: demo.venueSuburb ?? null,
+        guestCount: demo.guestCount ?? null,
+        message: demo.message,
+        source: 'Website enquiry form',
+        status: demo.status,
+        lostReason: 'lostReason' in demo ? demo.lostReason : null,
+        createdAt,
+        firstRespondedAt:
+          'respondedAfterMs' in demo ? new Date(createdAt.getTime() + demo.respondedAfterMs) : null,
+        packages: {
+          create: demo.packageCodes
+            .map((code) => packageIdByCode.get(code))
+            .filter((id): id is string => Boolean(id))
+            .map((packageId) => ({ packageId })),
+        },
+      },
+    })
+
+    // One timeline row so the detail screen shows a real history (BR-L03).
+    await prisma.activityLog.create({
+      data: {
+        clientId: client.id,
+        relatedType: 'Enquiry',
+        relatedId: enquiry.id,
+        actorType: 'SYSTEM',
+        action: 'enquiry.created',
+        detailJson: { enquiryType: demo.enquiryType },
+        visibleToClient: true,
+        createdAt,
+      },
+    })
+  }
+  console.log(`Seeded ${demoEnquiries.length} demo enquiries.`)
 
   // Test artefacts from earlier e2e runs: reset tokens and queued mail for the .test accounts.
   // (SecurityEvent is insert-only by design and is left alone; e2e uses per-run addresses instead.)

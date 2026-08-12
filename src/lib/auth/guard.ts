@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { prisma } from '@/lib/db'
 import { SESSION_COOKIE, validateSession } from './session'
 import { ROUTE_PERMISSIONS, type Role } from './permissions'
@@ -28,8 +28,13 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
 /**
  * Deny-by-default gate for a staff route (SEC-A01). The route must be declared with a roles list
- * in ROUTE_PERMISSIONS and the signed-in user's role must be in it; anything else goes to /login
- * without an explanation that could leak account state (SEC-S05, SEC-A07).
+ * in ROUTE_PERMISSIONS and the signed-in user's role must be in it.
+ *
+ * The two failures are deliberately different (D-024):
+ * - Nobody signed in: go to /login, because signing in is what the visitor needs to do.
+ * - Signed in but the wrong role: 404, not a redirect. Bouncing an authenticated user back to
+ *   /login would loop straight to the dashboard and say nothing, and confirming "this exists but
+ *   is not yours" tells a signed-in user which areas exist (SEC-A07).
  */
 export async function requireRole(routeId: string): Promise<SessionUser> {
   const permission = ROUTE_PERMISSIONS[routeId]
@@ -38,6 +43,7 @@ export async function requireRole(routeId: string): Promise<SessionUser> {
     throw new Error(`Route ${routeId} has no role declaration (SEC-A01)`)
   }
   const user = await getSessionUser()
-  if (!user || !permission.roles.includes(user.role)) redirect('/login')
+  if (!user) redirect('/login')
+  if (!permission.roles.includes(user.role)) notFound()
   return user
 }
