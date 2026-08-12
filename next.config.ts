@@ -10,6 +10,10 @@ import type { NextConfig } from 'next'
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // The e2e suite builds for production while `npm run dev` may be running. Sharing .next means
+  // the build overwrites the chunks the dev server is serving and both break, so the suite gets
+  // its own output directory via NEXT_DIST_DIR (playwright.config.ts sets it).
+  distDir: process.env.NEXT_DIST_DIR ?? '.next',
   eslint: {
     // The verify pipeline runs ESLint as its own dedicated step (§12.2), so `next build` does not
     // re-run it. This also avoids a flat-config plugin-detection warning during the build.

@@ -36,6 +36,8 @@ export default defineConfig({
     timeout: 180_000,
     env: {
       PORT: String(E2E_PORT),
+      // Its own build output, so a verify run cannot overwrite what `npm run dev` is serving.
+      NEXT_DIST_DIR: '.next-e2e',
       // The e2e server runs a production build, where SESSION_SECRET is required (SEC-A08, env.ts).
       // Provide a throwaway secret so the server boots in local and CI runs; real deployments set
       // their own. Playwright merges this over process.env, so a CI-provided value still wins.

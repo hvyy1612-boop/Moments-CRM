@@ -9,6 +9,8 @@ const config = [
     ignores: [
       'node_modules/**',
       '.next/**',
+      // The e2e production build output (playwright.config.ts NEXT_DIST_DIR).
+      '.next-e2e/**',
       'coverage/**',
       'playwright-report/**',
       'test-results/**',
