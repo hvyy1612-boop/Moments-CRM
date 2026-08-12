@@ -1,19 +1,43 @@
 import { PrismaClient } from '@prisma/client'
 
 /**
- * Prisma client singleton.
- *
- * Next.js hot-reload in development would otherwise create a new client on every reload and
- * exhaust database connections, so the instance is cached on globalThis outside production.
- * All database access goes through Prisma's query builder — no raw SQL concatenation (SEC-A03).
+ * Prisma client singleton with an application layer guard that makes ActivityLog and SecurityEvent
+ * insert-only (BR-L01, ADR-0003). The database triggers are the real guarantee; this stops a
+ * mutation earlier with a clearer error. All access goes through Prisma, never raw SQL string
+ * building (SEC-A03).
  */
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient }
+const MUTATIONS = new Set(['update', 'updateMany', 'delete', 'deleteMany', 'upsert'])
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
+function createPrisma() {
+  return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+  }).$extends({
+    query: {
+      activityLog: {
+        $allOperations({ operation, args, query }) {
+          if (MUTATIONS.has(operation)) {
+            throw new Error('ActivityLog is insert-only (BR-L01, ADR-0003)')
+          }
+          return query(args)
+        },
+      },
+      securityEvent: {
+        $allOperations({ operation, args, query }) {
+          if (MUTATIONS.has(operation)) {
+            throw new Error('SecurityEvent is insert-only (BR-L01, ADR-0003)')
+          }
+          return query(args)
+        },
+      },
+    },
   })
+}
+
+type ExtendedPrisma = ReturnType<typeof createPrisma>
+
+const globalForPrisma = globalThis as unknown as { prisma?: ExtendedPrisma }
+
+export const prisma: ExtendedPrisma = globalForPrisma.prisma ?? createPrisma()
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma
