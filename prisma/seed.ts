@@ -350,8 +350,39 @@ async function main() {
       update: {},
     })
 
-    // Rebuild this client's enquiries so re-running the seed does not stack duplicates.
-    await prisma.enquiry.deleteMany({ where: { clientId: client.id } })
+    // Rebuild this client's enquiries so re-running the seed does not stack duplicates. Everything
+    // downstream has to go first: the foreign keys are Restrict on purpose, so financial records
+    // can never be orphaned by a careless delete (BR-I09). Order matters.
+    const priorEnquiries = await prisma.enquiry.findMany({
+      where: { clientId: client.id },
+      select: { id: true },
+    })
+    const priorEnquiryIds = priorEnquiries.map((e) => e.id)
+    if (priorEnquiryIds.length > 0) {
+      const priorQuotations = await prisma.quotation.findMany({
+        where: { enquiryId: { in: priorEnquiryIds } },
+        select: { id: true },
+      })
+      const priorQuotationIds = priorQuotations.map((q) => q.id)
+      const priorBookings = await prisma.booking.findMany({
+        where: { quotationId: { in: priorQuotationIds } },
+        select: { id: true },
+      })
+      const priorBookingIds = priorBookings.map((b) => b.id)
+
+      // Payments hold Restrict on Invoice, invoices hold Restrict on Booking.
+      await prisma.payment.deleteMany({ where: { invoice: { bookingId: { in: priorBookingIds } } } })
+      await prisma.invoice.deleteMany({ where: { bookingId: { in: priorBookingIds } } })
+      // Deleting the booking cascades the agreement, deliverables, questionnaire and change requests.
+      await prisma.booking.deleteMany({ where: { id: { in: priorBookingIds } } })
+      // Superseded links point quotation to quotation, so clear them before deleting.
+      await prisma.quotation.updateMany({
+        where: { id: { in: priorQuotationIds } },
+        data: { supersededById: null },
+      })
+      await prisma.quotation.deleteMany({ where: { id: { in: priorQuotationIds } } })
+      await prisma.enquiry.deleteMany({ where: { id: { in: priorEnquiryIds } } })
+    }
 
     const createdAt = new Date(seededAt - demo.ageMs)
     const enquiry = await prisma.enquiry.create({

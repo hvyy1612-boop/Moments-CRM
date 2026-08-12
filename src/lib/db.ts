@@ -29,6 +29,17 @@ function createPrisma() {
           return query(args)
         },
       },
+      agreement: {
+        $allOperations({ operation, args, query }) {
+          // BR-AG05: what the client agreed to is never edited. A correction supersedes the
+          // quotation and produces a new agreement. Removal happens only by cascade when the
+          // booking itself goes, which the application never does.
+          if (MUTATIONS.has(operation)) {
+            throw new Error('Agreement is insert-only (BR-AG05)')
+          }
+          return query(args)
+        },
+      },
     },
   })
 }

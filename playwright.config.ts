@@ -5,6 +5,9 @@ import { defineConfig } from '@playwright/test'
  * app and keeps the console clean for the "no console errors" smoke test (§12.14). A local Postgres
  * must be running for the /api/health check to pass.
  */
+/** The e2e production server gets its own port so it never collides with `npm run dev` on 3000. */
+const E2E_PORT = 3100
+
 export default defineConfig({
   testDir: './tests/e2e',
   globalSetup: './tests/e2e/global-setup.ts',
@@ -18,17 +21,21 @@ export default defineConfig({
   // it is widened rather than papered over with retries, which would hide real flakiness.
   expect: { timeout: 15_000 },
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: `http://localhost:${E2E_PORT}`,
     trace: 'on-first-retry',
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
   },
   webServer: {
     command: 'npm run build && npm run start',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
+    url: `http://localhost:${E2E_PORT}`,
+    // Never reuse whatever is already listening. The dev server runs on 3000, and reusing it meant
+    // the suite silently tested a development build instead of the production one it is supposed
+    // to prove. Its own port keeps the two apart so both can run at once.
+    reuseExistingServer: false,
     timeout: 180_000,
     env: {
+      PORT: String(E2E_PORT),
       // The e2e server runs a production build, where SESSION_SECRET is required (SEC-A08, env.ts).
       // Provide a throwaway secret so the server boots in local and CI runs; real deployments set
       // their own. Playwright merges this over process.env, so a CI-provided value still wins.
