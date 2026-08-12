@@ -28,6 +28,8 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/moments_cms?schema=public
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/moments_cms?schema=public
       NEXT_PUBLIC_APP_URL: http://localhost:3000
+      # Throwaway secret so the production-mode e2e server boots (SEC-A08). Not a real deployment key.
+      SESSION_SECRET: ci-test-session-secret-not-for-production-use-0123456789
 
     steps:
       - uses: actions/checkout@v4

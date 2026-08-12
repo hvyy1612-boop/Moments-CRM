@@ -22,6 +22,7 @@
     "verify": "npm run typecheck && npm run lint && npm run test && npm run check:routes && npm run check:passwordhash && npm run check:tokens && npm run check:money && npm run e2e && npm run audit:high"
   },
   "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
     "@prisma/client": "^6.1.0",
     "next": "^15.1.0",
     "react": "^19.0.0",

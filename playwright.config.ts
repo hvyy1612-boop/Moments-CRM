@@ -20,5 +20,12 @@ export default defineConfig({
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
+    env: {
+      // The e2e server runs a production build, where SESSION_SECRET is required (SEC-A08, env.ts).
+      // Provide a throwaway secret so the server boots in local and CI runs; real deployments set
+      // their own. Playwright merges this over process.env, so a CI-provided value still wins.
+      SESSION_SECRET:
+        process.env.SESSION_SECRET ?? 'e2e-test-session-secret-not-for-production-use-0123456789',
+    },
   },
 })
