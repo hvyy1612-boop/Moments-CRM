@@ -143,6 +143,7 @@ export default async function EnquiryDetailPage({ params }: { params: Promise<{ 
                 <EnquiryActions
                   enquiryId={enquiry.id}
                   status={enquiry.status}
+                  lostReason={enquiry.lostReason}
                   assignedUserId={enquiry.assignedUser?.id ?? null}
                   assignable={assignable}
                   csrf={csrf}

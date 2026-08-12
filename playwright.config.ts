@@ -12,9 +12,16 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: 'list',
+  // Sign-in is deliberately expensive: Argon2id at 19 MiB per verification (SEC-P01), plus a
+  // second dummy verification on failure so unknown accounts take the same time (SEC-S05). With
+  // several workers signing in at once the default 5s assertion window is genuinely too tight, so
+  // it is widened rather than papered over with retries, which would hide real flakiness.
+  expect: { timeout: 15_000 },
   use: {
     baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
   },
   webServer: {
     command: 'npm run build && npm run start',

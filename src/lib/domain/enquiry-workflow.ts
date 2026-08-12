@@ -204,6 +204,82 @@ export async function markLost(
   return { ok: true }
 }
 
+/**
+ * Correct a mistaken LOST: put the enquiry back into the working list and clear the reason.
+ *
+ * The status it returns to is reconstructed from what actually happened, never guessed: an enquiry
+ * that was answered goes back to CONTACTED, one that was never answered goes back to NEW so the
+ * BR-E07 response clock resumes from its original createdAt. firstRespondedAt is left untouched
+ * either way, because BR-E06 says it is never overwritten.
+ *
+ * Nothing is erased: the log keeps both the mistake and the correction (BR-L01 insert-only).
+ * WON is deliberately not reversible here, because by then a booking exists (BR-B01) and undoing
+ * that is a cancellation with its own rules, not a status edit.
+ */
+export async function reopenEnquiry(
+  enquiryId: string,
+  actor: { userId: string },
+  meta: { ipAddress?: string | null },
+): Promise<WorkflowResult> {
+  const enquiry = await prisma.enquiry.findUnique({
+    where: { id: enquiryId },
+    select: { id: true, clientId: true, status: true, lostReason: true, firstRespondedAt: true },
+  })
+  if (!enquiry) return { ok: false, reason: 'not_found' }
+  if (enquiry.status !== 'LOST') return { ok: false, reason: 'wrong_status' }
+
+  const restored: EnquiryStatus = enquiry.firstRespondedAt ? 'CONTACTED' : 'NEW'
+  const updated = await prisma.enquiry.updateMany({
+    where: { id: enquiryId, status: 'LOST' },
+    data: { status: restored, lostReason: null },
+  })
+  if (updated.count !== 1) return { ok: false, reason: 'wrong_status' }
+
+  await logActivity({
+    clientId: enquiry.clientId,
+    relatedType: 'Enquiry',
+    relatedId: enquiryId,
+    actorType: 'STAFF',
+    actorUserId: actor.userId,
+    action: 'enquiry.reopened', // BR-L03: every status change
+    detail: { from: 'LOST', to: restored, clearedReason: enquiry.lostReason },
+    ipAddress: meta.ipAddress,
+  })
+  return { ok: true }
+}
+
+/** Correct the reason on an enquiry that is already LOST. Both values go to the log. */
+export async function changeLostReason(
+  enquiryId: string,
+  reason: LostReason,
+  actor: { userId: string },
+  meta: { ipAddress?: string | null },
+): Promise<WorkflowResult> {
+  const enquiry = await prisma.enquiry.findUnique({
+    where: { id: enquiryId },
+    select: { id: true, clientId: true, status: true, lostReason: true },
+  })
+  if (!enquiry) return { ok: false, reason: 'not_found' }
+  if (enquiry.status !== 'LOST') return { ok: false, reason: 'wrong_status' }
+  if (enquiry.lostReason === reason) return { ok: true } // nothing changed, nothing to log
+
+  await prisma.enquiry.updateMany({
+    where: { id: enquiryId, status: 'LOST' },
+    data: { lostReason: reason },
+  })
+  await logActivity({
+    clientId: enquiry.clientId,
+    relatedType: 'Enquiry',
+    relatedId: enquiryId,
+    actorType: 'STAFF',
+    actorUserId: actor.userId,
+    action: 'enquiry.lostReasonChanged',
+    detail: { from: enquiry.lostReason, to: reason },
+    ipAddress: meta.ipAddress,
+  })
+  return { ok: true }
+}
+
 /** Assign or unassign an enquiry. An empty userId clears the assignment. */
 export async function assignEnquiry(
   enquiryId: string,

@@ -4,7 +4,13 @@ import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
-import { assignEnquiry, markContacted, markLost } from '@/lib/domain/enquiry-workflow'
+import {
+  assignEnquiry,
+  changeLostReason,
+  markContacted,
+  markLost,
+  reopenEnquiry,
+} from '@/lib/domain/enquiry-workflow'
 import { requestMeta } from '@/lib/http'
 import { assignEnquirySchema, markLostSchema } from '@/lib/validation/enquiry-workflow'
 
@@ -69,6 +75,62 @@ export async function loseEnquiry(
       message:
         result.reason === 'wrong_status'
           ? 'This enquiry is already closed.'
+          : GENERIC_ERROR,
+    }
+  }
+  revalidatePath(`/enquiries/${enquiryId}`)
+  revalidatePath('/enquiries')
+  return { status: 'idle' }
+}
+
+/** Undo a mistaken LOST. The enquiry returns to the working list; the log keeps both entries. */
+export async function reopenLostEnquiry(
+  _prev: EnquiryActionState,
+  formData: FormData,
+): Promise<EnquiryActionState> {
+  const user = await authorise(formData)
+  const enquiryId = enquiryIdFrom(formData)
+  if (!user || !enquiryId) return { status: 'error', message: GENERIC_ERROR }
+
+  const result = await reopenEnquiry(enquiryId, { userId: user.id }, await requestMeta())
+  if (!result.ok) {
+    return {
+      status: 'error',
+      message:
+        result.reason === 'wrong_status'
+          ? 'This enquiry is not marked as lost, so there is nothing to reopen.'
+          : GENERIC_ERROR,
+    }
+  }
+  revalidatePath(`/enquiries/${enquiryId}`)
+  revalidatePath('/enquiries')
+  return { status: 'idle' }
+}
+
+/** Correct the reason on an enquiry that is already lost (BR-E10 list still applies). */
+export async function updateLostReason(
+  _prev: EnquiryActionState,
+  formData: FormData,
+): Promise<EnquiryActionState> {
+  const user = await authorise(formData)
+  const enquiryId = enquiryIdFrom(formData)
+  if (!user || !enquiryId) return { status: 'error', message: GENERIC_ERROR }
+
+  const parsed = markLostSchema.safeParse({ reason: formData.get('reason') })
+  if (!parsed.success) return { status: 'error', message: 'Choose a reason from the list.' }
+
+  const result = await changeLostReason(
+    enquiryId,
+    parsed.data.reason,
+    { userId: user.id },
+    await requestMeta(),
+  )
+  if (!result.ok) {
+    return {
+      status: 'error',
+      message:
+        result.reason === 'wrong_status'
+          ? 'This enquiry is not marked as lost.'
           : GENERIC_ERROR,
     }
   }

@@ -21,6 +21,8 @@ const WORDING: Record<string, string> = {
   'enquiry.merged': 'A second enquiry for the same date was merged into this one',
   'enquiry.contacted': 'Marked as contacted',
   'enquiry.lost': 'Marked as lost',
+  'enquiry.reopened': 'Reopened after being marked lost',
+  'enquiry.lostReasonChanged': 'Reason lost changed',
   'enquiry.assigned': 'Assigned',
   'enquiry.unassigned': 'Assignment cleared',
   'client.viewed': 'Client record opened',
@@ -39,6 +41,11 @@ function extra(entry: TimelineEntry): string | null {
   const record = detail as Record<string, unknown>
   if (typeof record.reason === 'string') return record.reason
   if (typeof record.assignedTo === 'string') return `to ${record.assignedTo}`
+  // A correction reads as "from X to Y" so both values stay visible in the story.
+  if (typeof record.from === 'string' && typeof record.to === 'string') {
+    if (entry.action === 'enquiry.lostReasonChanged') return `${record.from} to ${record.to}`
+    if (entry.action === 'enquiry.reopened') return `back to ${record.to.toLowerCase()}`
+  }
   return null
 }
 

@@ -78,7 +78,7 @@ test.describe('enquiry detail and workflow', () => {
     await expect(page.getByText('Overdue, past 24 hours')).toHaveCount(0)
   })
 
-  test('BR-E10 marking lost requires a reason from the fixed list and records it', async ({
+  test('BR-E10 marking lost asks first, takes a reason from the fixed list, and records it', async ({
     page,
   }) => {
     await signIn(page, 'owner@moments.test', 'owner-dev-2026-moments')
@@ -89,13 +89,41 @@ test.describe('enquiry detail and workflow', () => {
     await expect(reason).toBeVisible()
     // A closed set: the control offers only the fixed list, never free text.
     await expect(reason.locator('option')).toHaveCount(6)
-
     await reason.selectOption('Budget')
+
+    // One click does not close the enquiry: it asks, and cancelling leaves the status alone.
     await page.getByRole('button', { name: 'Mark as lost' }).click()
+    await expect(page.getByText('Mark this enquiry as lost?')).toBeVisible()
+    await page.getByRole('button', { name: 'Cancel' }).click()
+    await expect(page.getByText('Mark this enquiry as lost?')).toHaveCount(0)
+    await expect(page.getByText('Lost', { exact: true })).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'Mark as lost' }).click()
+    await page.getByRole('button', { name: 'Yes, mark as lost' }).click()
 
     await expect(page.getByText('Lost', { exact: true })).toBeVisible()
     await expect(page.getByText('Marked as lost: Budget')).toBeVisible()
-    await expect(page.getByText('This enquiry is closed as lost.')).toBeVisible()
+  })
+
+  test('a lost enquiry can have its reason corrected and can be reopened', async ({ page }) => {
+    await signIn(page, 'owner@moments.test', 'owner-dev-2026-moments')
+    await page.goto('/enquiries?status=LOST')
+    await page.getByRole('link', { name: /Priya Sharma/ }).click()
+
+    // The reason is correctable in place, and both values reach the timeline.
+    await expect(page.getByText('Reason: Date unavailable.')).toBeVisible()
+    await page.getByLabel('Change reason').selectOption('Budget')
+    await page.getByRole('button', { name: 'Save reason' }).click()
+    await expect(page.getByText('Reason lost changed: Date unavailable to Budget')).toBeVisible()
+
+    // Reopening returns it to the working list. This enquiry was answered, so it goes back to
+    // CONTACTED, and nothing is erased: the earlier correction is still in the timeline
+    // (BR-L01 insert-only).
+    await page.getByRole('button', { name: 'Reopen enquiry' }).click()
+    await expect(page.getByText('Contacted', { exact: true })).toBeVisible()
+    await expect(page.getByText('Reopened after being marked lost: back to contacted')).toBeVisible()
+    await expect(page.getByText('Reason lost changed: Date unavailable to Budget')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Reopen enquiry' })).toHaveCount(0)
   })
 
   test('assigning an enquiry names the assignee on the list and in the timeline', async ({ page }) => {
