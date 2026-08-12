@@ -55,7 +55,7 @@ export default function StyleguidePage() {
             </nav>
           </div>
           <span className="inline-flex h-8 items-center rounded-full border border-line px-3 text-sm text-ink-muted">
-            Shyani
+            Studio Owner
           </span>
         </div>
       </header>
