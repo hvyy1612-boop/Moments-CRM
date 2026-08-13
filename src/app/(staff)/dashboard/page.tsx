@@ -62,6 +62,33 @@ export default async function DashboardPage() {
         <h1 className="text-xl">What needs attention today</h1>
         <p className="mt-1 text-sm text-ink-muted">{formatSydneyDate(now)}</p>
 
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Stat
+            label="Enquiries waiting"
+            value={attention.enquiries.length}
+            note={overdueEnquiries.length > 0 ? `${overdueEnquiries.length} overdue` : 'on track'}
+            tone={overdueEnquiries.length > 0 ? 'warn' : 'good'}
+          />
+          <Stat
+            label="Quotations lapsing"
+            value={attention.quotations.length}
+            note={attention.quotations.length > 0 ? 'within three days' : 'clear'}
+            tone={attention.quotations.length > 0 ? 'warn' : 'good'}
+          />
+          <Stat
+            label="Invoices past due"
+            value={attention.invoices.length}
+            note={attention.invoices.length > 0 ? 'money is late' : 'all paid'}
+            tone={attention.invoices.length > 0 ? 'bad' : 'good'}
+          />
+          <Stat
+            label="Deliverables past due"
+            value={attention.deliverables.length}
+            note={attention.deliverables.length > 0 ? 'client is waiting' : 'nothing late'}
+            tone={attention.deliverables.length > 0 ? 'warn' : 'good'}
+          />
+        </div>
+
         {nothingToDo ? (
           <div className="mt-6">
             <EmptyState
@@ -162,6 +189,28 @@ export default async function DashboardPage() {
         )}
       </main>
     </>
+  )
+}
+
+function Stat({
+  label,
+  value,
+  note,
+  tone,
+}: {
+  label: string
+  value: number
+  note: string
+  tone: Tone
+}) {
+  return (
+    <div className="rounded border border-line bg-surface p-4">
+      <p className="text-sm text-ink-muted">{label}</p>
+      <p className="mt-1 text-3xl font-medium tabular-nums text-ink">{value}</p>
+      <p className="mt-2">
+        <StatusPill tone={tone}>{note}</StatusPill>
+      </p>
+    </div>
   )
 }
 
