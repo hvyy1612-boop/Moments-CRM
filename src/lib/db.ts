@@ -13,10 +13,12 @@ function createPrisma() {
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
   }).$extends({
     query: {
-      activityLog: {
+      // Application-layer guard mirroring the database triggers: these tables are insert-only.
+      // The DB triggers are the real guarantee; this stops a mutation earlier with a clearer error.
+      auditLog: {
         $allOperations({ operation, args, query }) {
           if (MUTATIONS.has(operation)) {
-            throw new Error('ActivityLog is insert-only (BR-L01, ADR-0003)')
+            throw new Error('AuditLog is insert-only')
           }
           return query(args)
         },
@@ -24,18 +26,7 @@ function createPrisma() {
       securityEvent: {
         $allOperations({ operation, args, query }) {
           if (MUTATIONS.has(operation)) {
-            throw new Error('SecurityEvent is insert-only (BR-L01, ADR-0003)')
-          }
-          return query(args)
-        },
-      },
-      agreement: {
-        $allOperations({ operation, args, query }) {
-          // BR-AG05: what the client agreed to is never edited. A correction supersedes the
-          // quotation and produces a new agreement. Removal happens only by cascade when the
-          // booking itself goes, which the application never does.
-          if (MUTATIONS.has(operation)) {
-            throw new Error('Agreement is insert-only (BR-AG05)')
+            throw new Error('SecurityEvent is insert-only')
           }
           return query(args)
         },

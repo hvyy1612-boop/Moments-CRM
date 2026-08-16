@@ -23,7 +23,7 @@ export default async function LoginPage({
   searchParams: Promise<{ reset?: string }>
 }) {
   const user = await getSessionUser()
-  if (user) redirect('/dashboard')
+  if (user) redirect('/projects')
 
   const { reset } = await searchParams
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''

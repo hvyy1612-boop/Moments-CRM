@@ -1,10 +1,12 @@
-// Full data model. Implements BRIEF §6 with the §6.2 schema rules.
+// Moments — Prisma schema. Project-centric (Database Blueprint v2 final).
+// Slice 1 subset: Company, auth (User/Session/PasswordReset/SecurityEvent), Client,
+// Project, Quote/QuoteVersion/QuoteLine, AuditLog, OutboxEvent.
+// Later slices add: contracts, bookings/resources, finance, workflow/work_items,
+// production/deliverables/galleries, notifications, policies, change_requests, etc.
 //
-// Money is Decimal(10,2) / Prisma.Decimal (ADR-0001, D6, BR-S09). Email uses citext.
-// Every table carries createdAt; mutable tables also carry updatedAt (BR-S05). ActivityLog and
-// SecurityEvent carry createdAt only. Enumerable values are database enums (BR-S08).
-// Partial unique indexes (BR-P14, BR-B05) and the insert-only triggers (ActivityLog, SecurityEvent)
-// are raw SQL in the migrations (ADR-0003). Uses `prisma migrate`, not `db push`.
+// Locked decisions: single-tenant (one Company row; company_id là reserved field, không RLS),
+// project bắt đầu từ enquiry, không leads, work_items canonical (chưa dựng ở slice 1),
+// CUID id, money Decimal, timestamptz. Con số business = TBD (không hard-code).
 
 generator client {
   provider        = "prisma-client-js"
@@ -24,123 +26,6 @@ enum UserRole {
   ADMIN
   STUDIO
   EDITOR
-  // CLIENT is intentionally absent: clients never log in and reach records via tokens (OQ-009, §5).
-}
-
-enum CrewRole {
-  PHOTOGRAPHER
-  VIDEOGRAPHER
-  SECOND_SHOOTER
-}
-
-enum EnquiryType {
-  WEDDING
-  MICRO
-  PORTRAIT
-}
-
-enum EnquiryStatus {
-  NEW
-  CONTACTED
-  QUOTED
-  WON
-  LOST
-}
-
-enum QuotationStatus {
-  DRAFT
-  SENT
-  ACCEPTED
-  DECLINED
-  EXPIRED
-  SUPERSEDED
-}
-
-enum BookingStatus {
-  PENDING_BOOKING_FEE
-  CONFIRMED
-  DELIVERED
-  CLOSED
-  CANCELLED
-}
-
-enum DeliverableType {
-  SNEAK_PEEK
-  PHOTO_GALLERY
-  VIDEO_FILM
-  ALBUM
-  FILM_SCANS
-  PORTRAIT_GALLERY
-  RAW_FOOTAGE
-}
-
-enum DeliverableStatus {
-  PENDING
-  IN_PROGRESS
-  DELIVERED
-  CLOSED
-}
-
-enum InvoiceType {
-  BOOKING_FEE
-  BALANCE
-  ADDITIONAL
-}
-
-enum InvoiceStatus {
-  ISSUED
-  PARTIALLY_PAID
-  PAID
-  OVERDUE
-  VOID
-}
-
-enum PaymentMethod {
-  BANK_TRANSFER
-  CARD
-  CASH
-  OTHER
-}
-
-enum NotificationStatus {
-  QUEUED
-  SENT
-  CANCELLED
-  FAILED
-}
-
-enum NotificationChannel {
-  EMAIL
-  SMS
-}
-
-enum ActorType {
-  SYSTEM
-  STAFF
-  CLIENT
-}
-
-enum SourceType {
-  PACKAGE
-  ADDON
-  RULE
-  MANUAL
-}
-
-enum DiscountType {
-  PERCENTAGE
-  FIXED
-}
-
-enum PricingRuleType {
-  BUNDLE
-  CONDITIONAL
-}
-
-enum ChangeRequestStatus {
-  PENDING
-  APPROVED
-  DECLINED
 }
 
 enum SecurityOutcome {
@@ -148,57 +33,113 @@ enum SecurityOutcome {
   FAILURE
 }
 
-enum PaymentProvider {
-  MANUAL // recorded by staff: bank transfer, cash, or an offline card entry
-  STRIPE // created only from a signature-verified Stripe webhook (hosted Checkout)
+enum ClientType {
+  INDIVIDUAL
+  BUSINESS
 }
 
-enum QuestionnaireStatus {
+enum ClientStatus {
+  PROSPECT
+  ACTIVE
+  ARCHIVED
+}
+
+// Coarse business stage of a Project (P2: gọn, không nhét scheduling/production vào đây).
+enum ProjectLifecycle {
+  ENQUIRY
+  QUALIFYING
+  QUOTING
+  AWAITING_DECISION
+  CONFIRMED
+  IN_PRODUCTION
+  COMPLETED
+  CANCELLED
+}
+
+// Derived dimension. Slice 1 dùng lifecycle + commercial; các chiều khác thêm ở slice sau.
+enum CommercialStatus {
+  UNQUOTED
+  QUOTED
+  ACCEPTED
+  DEPOSIT_PAID
+  PAID
+  CANCELLED
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  VIEWED
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  SUPERSEDED
+}
+
+enum OutboxStatus {
   PENDING
-  SUBMITTED
+  PROCESSING
+  PROCESSED
+  FAILED
 }
 
-// ---------- Identity and access ----------
+// ---------- Company (single tenant) ----------
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  abn       String? // OQ-007 placeholder cho tới khi xác nhận
+  timezone  String   @default("Australia/Sydney")
+  currency  String   @default("AUD")
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz
+
+  users    User[]
+  clients  Client[]
+  projects Project[]
+}
+
+// ---------- Identity / auth (giữ nguyên hình dạng để code auth tái dùng) ----------
 
 model User {
   id                 String    @id @default(cuid())
+  companyId          String
   email              String    @unique @db.Citext
   passwordHash       String
-  passwordAlgo       String // algorithm identifier so parameters can be upgraded (SEC-P01, SEC-P05)
+  passwordAlgo       String
   role               UserRole
   name               String
   isActive           Boolean   @default(true)
   mustChangePassword Boolean   @default(false)
-  lastLoginAt        DateTime?
-  failedAttempts     Int       @default(0) // SEC-S04 lockout counter
-  lockedUntil        DateTime? // SEC-S04
-  passwordChangedAt  DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @default(now()) @updatedAt
+  lastLoginAt        DateTime? @db.Timestamptz
+  failedAttempts     Int       @default(0)
+  lockedUntil        DateTime? @db.Timestamptz
+  passwordChangedAt  DateTime? @db.Timestamptz
+  createdAt          DateTime  @default(now()) @db.Timestamptz
+  updatedAt          DateTime  @default(now()) @updatedAt @db.Timestamptz
 
-  passwordResets    PasswordReset[]
-  sessions          Session[]
-  crewMember        CrewMember?
-  activityLogs      ActivityLog[]
-  securityEvents    SecurityEvent[]
-  notifications     Notification[]
-  payments          Payment[]
-  changeRequests    ChangeRequest[]
-  assignedEnquiries Enquiry[]       @relation("EnquiryAssignee")
-  createdQuotations Quotation[]     @relation("QuotationCreatedBy")
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  passwordResets PasswordReset[]
+  sessions       Session[]
+  securityEvents SecurityEvent[]
+  auditLogs      AuditLog[]
+  ownedProjects  Project[]       @relation("ProjectOwner")
+  createdQuoteVersions QuoteVersion[] @relation("QuoteVersionCreatedBy")
 
+  @@index([companyId])
   @@index([role])
 }
 
 model PasswordReset {
   id          String    @id @default(cuid())
   userId      String
-  tokenHash   String // SHA-256 hash only (SEC-R02)
-  expiresAt   DateTime
-  usedAt      DateTime?
+  tokenHash   String
+  expiresAt   DateTime  @db.Timestamptz
+  usedAt      DateTime? @db.Timestamptz
   requestedIp String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @default(now()) @updatedAt
+  createdAt   DateTime  @default(now()) @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -209,471 +150,20 @@ model PasswordReset {
 model Session {
   id                String    @id @default(cuid())
   userId            String
-  tokenHash         String // stored hashed (SEC-S01)
-  expiresAt         DateTime // idle timeout (SEC-S02)
-  absoluteExpiresAt DateTime // absolute timeout (SEC-S02)
-  lastActiveAt      DateTime  @default(now())
+  tokenHash         String
+  expiresAt         DateTime  @db.Timestamptz
+  absoluteExpiresAt DateTime  @db.Timestamptz
+  lastActiveAt      DateTime  @default(now()) @db.Timestamptz
   userAgent         String?
   ipAddress         String?
-  revokedAt         DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @default(now()) @updatedAt
+  revokedAt         DateTime? @db.Timestamptz
+  createdAt         DateTime  @default(now()) @db.Timestamptz
+  updatedAt         DateTime  @default(now()) @updatedAt @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([tokenHash])
-}
-
-model CrewMember {
-  id           String   @id @default(cuid())
-  name         String
-  email        String?  @db.Citext
-  crewRole     CrewRole
-  userId       String?  @unique
-  isContractor Boolean  @default(false)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @default(now()) @updatedAt
-
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  leadPhotographerBookings Booking[]     @relation("LeadPhotographer")
-  leadVideographerBookings Booking[]     @relation("LeadVideographer")
-  secondShooterBookings    Booking[]     @relation("SecondShooter")
-  deliverables             Deliverable[]
-}
-
-// ---------- Client and enquiry ----------
-
-model Client {
-  id               String    @id @default(cuid())
-  primaryName      String
-  partnerName      String?
-  email            String    @unique @db.Citext // BR-E03: dedupe by email, never duplicate
-  phone            String?
-  suburb           String?
-  state            String?
-  postcode         String?
-  marketingConsent Boolean   @default(false) // PRIV-02: defaults false, captured explicitly
-  consentUpdatedAt DateTime?
-  anonymisedAt     DateTime? // PRIV-03
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @default(now()) @updatedAt
-
-  enquiries     Enquiry[]
-  bookings      Booking[]
-  agreements    Agreement[]
-  activityLogs  ActivityLog[]
-  notifications Notification[]
-
-  @@index([email])
-}
-
-model Enquiry {
-  id               String        @id @default(cuid())
-  clientId         String
-  enquiryType      EnquiryType // BR-S08
-  eventDate        DateTime
-  venueName        String?
-  venueSuburb      String?
-  venueDistanceKm  Decimal?      @db.Decimal(6, 1) // BR-P09 travel check
-  guestCount       Int?
-  budgetIndication Decimal?      @db.Decimal(10, 2)
-  source           String? // OQ: fixed source taxonomy (I-6)
-  message          String?
-  status           EnquiryStatus @default(NEW)
-  assignedUserId   String?
-  firstRespondedAt DateTime? // BR-E06: set once on first CONTACTED, never overwritten
-  lostReason       String? // BR-E10: from a fixed list
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @default(now()) @updatedAt
-
-  client       Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  assignedUser User?            @relation("EnquiryAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
-  packages     EnquiryPackage[]
-  quotations   Quotation[]
-
-  @@index([clientId])
-  @@index([status])
-  @@index([eventDate])
-}
-
-model EnquiryPackage {
-  enquiryId String
-  packageId String
-  createdAt DateTime @default(now())
-
-  enquiry Enquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
-  package Package @relation(fields: [packageId], references: [id], onDelete: Restrict)
-
-  @@id([enquiryId, packageId])
-}
-
-// ---------- Catalogue and pricing ----------
-
-model Package {
-  id               String   @id @default(cuid())
-  code             String   @unique
-  name             String
-  description      String
-  priceGross       Decimal  @db.Decimal(10, 2) // BR-P01 GST-inclusive
-  includedHours    Int
-  includedTravelKm Int
-  maxExtraHours    Int
-  isActive         Boolean  @default(true)
-  displayOrder     Int      @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @default(now()) @updatedAt
-
-  enquiryPackages EnquiryPackage[]
-
-  @@index([isActive, displayOrder])
-}
-
-model AddOn {
-  id               String   @id @default(cuid())
-  code             String   @unique
-  name             String
-  description      String
-  priceGrossBefore Decimal  @db.Decimal(10, 2) // BR-P05
-  priceGrossAfter  Decimal? @db.Decimal(10, 2) // BR-P05 (ALBUM after shoot date)
-  isActive         Boolean  @default(true)
-  displayOrder     Int      @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @default(now()) @updatedAt
-
-  rules AddOnRule[]
-
-  @@index([isActive, displayOrder])
-}
-
-model AddOnRule {
-  id                   String   @id @default(cuid())
-  addOnId              String
-  requiresAnyPackageId String[] // BR-P04 — package codes/ids; validated server-side, not FK arrays
-  excludesPackageId    String[]
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @default(now()) @updatedAt
-
-  addOn AddOn @relation(fields: [addOnId], references: [id], onDelete: Cascade)
-
-  @@index([addOnId])
-}
-
-model PricingRule {
-  id                   String          @id @default(cuid())
-  code                 String          @unique
-  name                 String
-  ruleType             PricingRuleType // BR-S08
-  requiresAllPackageId String[] // BR-P07/P08 conditions (validated server-side)
-  excludesPackageId    String[]
-  appliesToTargetId    String? // e.g. the PRE-WED package the discount targets
-  discountType         DiscountType
-  discountValue        Decimal         @db.Decimal(10, 2) // percentage value or fixed AUD amount
-  evaluationOrder      Int             @default(0) // BR-P06
-  validFrom            DateTime?
-  validTo              DateTime?
-  isActive             Boolean         @default(true)
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @default(now()) @updatedAt
-
-  @@index([isActive, evaluationOrder])
-}
-
-model Quotation {
-  id                         String          @id @default(cuid())
-  enquiryId                  String
-  version                    Int             @default(1) // BR-P11 versioning
-  status                     QuotationStatus @default(DRAFT)
-  viewToken                  String          @unique // BR-T01 (plaintext, multi-use, read-only)
-  totalGross                 Decimal         @db.Decimal(10, 2)
-  gstAmount                  Decimal         @db.Decimal(10, 2) // BR-P02 = round(total/11, 2)
-  validUntil                 DateTime? // BR-P12 sentAt + 14 days
-  requiresManualPricing      Boolean         @default(false) // BR-P09
-  cancellationPolicySnapshot String // BR-P15 rendered verbatim
-  sentAt                     DateTime?
-  firstViewedAt              DateTime?
-  respondedAt                DateTime?
-  supersededById             String?         @unique
-  termsAcknowledgedAt        DateTime? // BR-P16
-  termsAcknowledgedIp        String? // BR-P16
-  createdBy                  String
-  createdAt                  DateTime        @default(now())
-  updatedAt                  DateTime        @default(now()) @updatedAt
-
-  enquiry        Enquiry           @relation(fields: [enquiryId], references: [id], onDelete: Restrict)
-  supersededBy   Quotation?        @relation("QuotationVersions", fields: [supersededById], references: [id], onDelete: SetNull)
-  supersedes     Quotation?        @relation("QuotationVersions")
-  creator        User              @relation("QuotationCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
-  lines          QuotationLine[]
-  actions        QuotationAction[]
-  booking        Booking?
-  agreement      Agreement?
-  changeRequests ChangeRequest[]
-  // NOTE: "at most one ACCEPTED quotation per enquiry" (BR-P14) is a partial unique index added in
-  // raw SQL in the migration: UNIQUE (enquiryId) WHERE status = 'ACCEPTED'.
-
-  @@index([enquiryId])
-  @@index([status])
-}
-
-model QuotationAction {
-  id          String    @id @default(cuid())
-  quotationId String
-  tokenHash   String // BR-T02 SHA-256 hash, single-use
-  action      String // ACCEPT | DECLINE
-  expiresAt   DateTime // BR-T02 15 minutes
-  usedAt      DateTime? // BR-T03 consumed by atomic conditional UPDATE
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @default(now()) @updatedAt
-
-  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-
-  @@index([quotationId])
-  @@index([tokenHash])
-}
-
-model QuotationLine {
-  id             String     @id @default(cuid())
-  quotationId    String
-  sourceType     SourceType
-  sourceId       String? // Package/AddOn id when applicable
-  description    String // BR-P10 snapshot
-  unitPriceGross Decimal    @db.Decimal(10, 2)
-  quantity       Int        @default(1)
-  lineTotalGross Decimal    @db.Decimal(10, 2)
-  appliedRuleId  String? // set on discount lines
-  displayOrder   Int        @default(0)
-  createdAt      DateTime   @default(now())
-
-  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-
-  @@index([quotationId])
-}
-
-// ---------- Booking and delivery ----------
-
-model Booking {
-  id                  String        @id @default(cuid())
-  quotationId         String        @unique // BR-B01 one booking per accepted quotation
-  clientId            String
-  status              BookingStatus @default(PENDING_BOOKING_FEE) // derived cache (ADR-0004)
-  shootDate           DateTime
-  startTime           DateTime?
-  endTime             DateTime?
-  venueName           String?
-  venueAddress        String?
-  coverageHours       Int // BR-B07 <= includedHours + maxExtraHours
-  leadPhotographerId  String?
-  leadVideographerId  String?
-  secondShooterId     String?
-  dateLockedAt        DateTime? // BR-B04 set at CONFIRMED
-  cancelledAt         DateTime?
-  cancellationReason  String?
-  portalToken         String?       @unique // BR-CP01 client portal link, plaintext, multi-use, read scope
-  portalTokenIssuedAt DateTime? // BR-CP01 minted when the booking is created from an accepted quotation
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @default(now()) @updatedAt
-
-  quotation        Quotation              @relation(fields: [quotationId], references: [id], onDelete: Restrict)
-  client           Client                 @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  leadPhotographer CrewMember?            @relation("LeadPhotographer", fields: [leadPhotographerId], references: [id], onDelete: SetNull)
-  leadVideographer CrewMember?            @relation("LeadVideographer", fields: [leadVideographerId], references: [id], onDelete: SetNull)
-  secondShooter    CrewMember?            @relation("SecondShooter", fields: [secondShooterId], references: [id], onDelete: SetNull)
-  dateChanges      BookingDateChange[]
-  deliverables     Deliverable[]
-  invoices         Invoice[]
-  changeRequests   ChangeRequest[]
-  agreement        Agreement?
-  questionnaire    PlanningQuestionnaire?
-  // NOTE: "no crew member holds two CONFIRMED bookings on the same date" (BR-B05) is enforced by
-  // a trigger in the migration (crew spans three columns, D-013).
-
-  @@index([clientId])
-  @@index([status])
-  @@index([shootDate])
-}
-
-model BookingDateChange {
-  id           String   @id @default(cuid())
-  bookingId    String
-  previousDate DateTime
-  newDate      DateTime
-  reason       String // BR-B08
-  changedBy    String
-  changedAt    DateTime @default(now()) // this record's creation time (BR-S05); the row is immutable
-
-  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-
-  @@index([bookingId])
-}
-
-model Deliverable {
-  id                   String            @id @default(cuid())
-  bookingId            String
-  type                 DeliverableType
-  status               DeliverableStatus @default(PENDING)
-  dueDate              DateTime // BR-D02/D03
-  assignedCrewId       String?
-  galleryUrl           String?
-  galleryPasswordHash  String? // SEC-A10 hashed, never plaintext
-  deliveredAt          DateTime?
-  galleryExpiresAt     DateTime? // BR-D04 deliveredAt + 365
-  backupExpiresAt      DateTime? // BR-D05 deliveredAt + 180
-  clientAcknowledgedAt DateTime? // BR-D08 closes deliverable
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @default(now()) @updatedAt
-
-  booking      Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  assignedCrew CrewMember? @relation(fields: [assignedCrewId], references: [id], onDelete: SetNull)
-
-  @@index([bookingId])
-  @@index([status])
-  @@index([dueDate])
-}
-
-// ---------- Invoicing ----------
-
-model Invoice {
-  id            String        @id @default(cuid())
-  bookingId     String
-  invoiceNumber String        @unique // BR-I03/BR-X04: unique, monotonic, not gapless, in-transaction
-  type          InvoiceType
-  issueDate     DateTime
-  dueDate       DateTime // BR-I02 shootDate - 7 for BALANCE
-  totalGross    Decimal       @db.Decimal(10, 2)
-  gstAmount     Decimal       @db.Decimal(10, 2)
-  amountPaid    Decimal       @default(0) @db.Decimal(10, 2)
-  status        InvoiceStatus @default(ISSUED)
-  buyerName     String // BR-I05
-  supplierAbn   String // BR-I05 (OQ-007 placeholder until confirmed)
-  voidedAt      DateTime? // BR-I04
-  voidReason    String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @default(now()) @updatedAt
-
-  booking  Booking   @relation(fields: [bookingId], references: [id], onDelete: Restrict)
-  payments Payment[]
-
-  @@index([bookingId])
-  @@index([status])
-  @@index([dueDate])
-}
-
-model Payment {
-  id                    String          @id @default(cuid())
-  invoiceId             String
-  amountGross           Decimal         @db.Decimal(10, 2)
-  method                PaymentMethod
-  provider              PaymentProvider @default(MANUAL) // BR-OP01 MANUAL (staff) or STRIPE (webhook)
-  receivedDate          DateTime
-  reference             String?
-  recordedByUserId      String? // nullable: Stripe payments are system-recorded, no staff actor (BR-OP02)
-  reversesPaymentId     String?         @unique // BR-I07 reversing record, never a delete
-  // Stripe metadata only — never a card number or full PAN (PRIV-01, BR-OP03)
-  stripePaymentIntentId String?         @unique // BR-OP04 idempotent link to the Stripe PaymentIntent
-  stripeChargeId        String?
-  cardBrand             String? // e.g. "visa" — brand only
-  cardLast4             String? // last four digits only
-  receiptUrl            String? // Stripe-hosted receipt link
-  createdAt             DateTime        @default(now())
-
-  invoice    Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
-  recordedBy User?    @relation(fields: [recordedByUserId], references: [id], onDelete: Restrict)
-  reverses   Payment? @relation("PaymentReversal", fields: [reversesPaymentId], references: [id], onDelete: SetNull)
-  reversedBy Payment? @relation("PaymentReversal")
-
-  @@index([invoiceId])
-}
-
-model ChangeRequest {
-  id                   String              @id @default(cuid())
-  bookingId            String
-  requestedByType      ActorType
-  requestType          String // EXTRA_HOURS | DATE_CHANGE | ADD_ON | ... (open, app-validated)
-  description          String
-  priceImpactGross     Decimal?            @db.Decimal(10, 2)
-  status               ChangeRequestStatus @default(PENDING) // BR-S08
-  resultingQuotationId String?
-  decidedByUserId      String?
-  decidedAt            DateTime?
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @default(now()) @updatedAt
-
-  booking            Booking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  resultingQuotation Quotation? @relation(fields: [resultingQuotationId], references: [id], onDelete: SetNull)
-  decidedBy          User?      @relation(fields: [decidedByUserId], references: [id], onDelete: SetNull)
-
-  @@index([bookingId])
-  @@index([status])
-}
-
-// ---------- Agreement, questionnaire, online payment ----------
-
-model Agreement {
-  id               String   @id @default(cuid())
-  bookingId        String   @unique
-  quotationId      String   @unique
-  clientId         String
-  quotationVersion Int // BR-AG02 the accepted quotation version, snapshotted
-  totalGross       Decimal  @db.Decimal(10, 2) // BR-AG02 snapshot of the accepted total
-  termsText        String // BR-AG02 verbatim cancellation policy + terms at the moment of acceptance
-  acceptedName     String // BR-AG03 the name the client typed to accept
-  acceptedAt       DateTime // BR-AG03 mirrors Quotation.termsAcknowledgedAt
-  acceptedIp       String // BR-AG03 mirrors Quotation.termsAcknowledgedIp
-  contentHash      String // BR-AG04 SHA-256 of the rendered agreement, tamper evidence
-  createdAt        DateTime @default(now()) // insert-only, no updatedAt (BR-AG05)
-
-  booking   Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Restrict)
-  client    Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  // INSERT-ONLY: update/delete blocked by a DB trigger + the Prisma extension (BR-AG05, mirrors ActivityLog).
-
-  @@index([clientId])
-}
-
-model PlanningQuestionnaire {
-  id             String              @id @default(cuid())
-  bookingId      String              @unique
-  status         QuestionnaireStatus @default(PENDING) // BR-QN01
-  responses      Json? // BR-QN02 fixed question set, validated server-side by Zod; null until submitted
-  submittedAt    DateTime? // BR-QN03
-  reminderSentAt DateTime? // BR-QN04 links to the 60-day planning reminder (BR-F)
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @default(now()) @updatedAt
-
-  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-}
-
-model StripeEvent {
-  id          String   @id // the Stripe event id (evt_...); the PK gives webhook idempotency (BR-OP04, BR-X08)
-  type        String
-  processedAt DateTime @default(now())
-}
-
-// ---------- Audit and messaging ----------
-
-model ActivityLog {
-  id              String    @id @default(cuid())
-  clientId        String? // attached to the Client; filterable per job via relatedType/relatedId (D2)
-  relatedType     String
-  relatedId       String
-  actorType       ActorType
-  actorUserId     String?
-  action          String
-  detailJson      Json // BR-L02 structured payload (never secrets/tokens — BR-L04)
-  ipAddress       String?
-  visibleToClient Boolean   @default(false) // BR-L05
-  createdAt       DateTime  @default(now()) // insert-only, no updatedAt (BR-S05)
-
-  client Client? @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  actor  User?   @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
-  // INSERT-ONLY: update/delete blocked by a DB trigger + a Prisma extension (ADR-0003, BR-L01).
-
-  @@index([clientId])
-  @@index([relatedType, relatedId])
-  @@index([createdAt])
 }
 
 model SecurityEvent {
@@ -683,39 +173,182 @@ model SecurityEvent {
   emailAttempted String?         @db.Citext
   ipAddress      String
   userAgent      String?
-  outcome        SecurityOutcome // BR-S08
-  createdAt      DateTime        @default(now()) // insert-only, no updatedAt (BR-S05)
+  outcome        SecurityOutcome
+  createdAt      DateTime        @default(now()) @db.Timestamptz
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-  // INSERT-ONLY: update/delete blocked by a DB trigger + a Prisma extension (ADR-0003).
+  // INSERT-ONLY (trigger trong migration).
 
   @@index([userId])
   @@index([eventType])
   @@index([createdAt])
 }
 
-model Notification {
-  id              String              @id @default(cuid())
-  clientId        String?
-  userId          String?
-  channel         NotificationChannel
-  templateKey     String
-  recipient       String
-  subject         String?
-  bodyText        String
-  status          NotificationStatus  @default(QUEUED)
-  scheduledFor    DateTime
-  sentAt          DateTime?
-  cancelledReason String? // BR-F03
-  relatedType     String
-  relatedId       String
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @default(now()) @updatedAt
+// ---------- CRM ----------
 
-  client Client? @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+model Client {
+  id               String       @id @default(cuid())
+  companyId        String
+  type             ClientType   @default(INDIVIDUAL)
+  status           ClientStatus @default(PROSPECT)
+  displayName      String
+  legalName        String?
+  email            String       @unique @db.Citext // dedupe tại enquiry (P1)
+  phone            String?
+  suburb           String?
+  state            String?
+  postcode         String?
+  marketingConsent Boolean      @default(false)
+  consentUpdatedAt DateTime?    @db.Timestamptz
+  anonymisedAt     DateTime?    @db.Timestamptz
+  notes            String?
+  createdAt        DateTime     @default(now()) @db.Timestamptz
+  updatedAt        DateTime     @default(now()) @updatedAt @db.Timestamptz
+  archivedAt       DateTime?    @db.Timestamptz
 
-  @@index([status, scheduledFor])
-  @@index([relatedType, relatedId])
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  projects Project[]
+
+  @@index([companyId])
+  @@index([status])
+}
+
+// ---------- Project (operational case, bắt đầu từ enquiry) ----------
+
+model Project {
+  id               String           @id @default(cuid())
+  companyId        String
+  clientId         String
+  code             String           @unique
+  name             String
+  ownerUserId      String?
+  lifecycleStatus  ProjectLifecycle @default(ENQUIRY)
+  commercialStatus CommercialStatus @default(UNQUOTED) // derived
+  source           String? // nguồn enquiry (I-6 taxonomy, TBD)
+  sourceDetail     String?
+  enquiryReceivedAt DateTime        @default(now()) @db.Timestamptz
+  enquiryNotes     String?
+  firstRespondedAt DateTime?        @db.Timestamptz // SLA
+  createdAt        DateTime         @default(now()) @db.Timestamptz
+  updatedAt        DateTime         @default(now()) @updatedAt @db.Timestamptz
+  archivedAt       DateTime?        @db.Timestamptz
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  client  Client  @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  owner   User?   @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  quotes  Quote[]
+
+  @@index([companyId])
   @@index([clientId])
+  @@index([lifecycleStatus])
+  @@index([enquiryReceivedAt])
+}
+
+// ---------- Commercial: Quote ----------
+
+model Quote {
+  id               String   @id @default(cuid())
+  projectId        String
+  viewToken        String   @unique // client xem quote qua link, đọc current version
+  status           QuoteStatus @default(DRAFT) // cache của current version
+  currentVersionId String?  @unique
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  updatedAt        DateTime @default(now()) @updatedAt @db.Timestamptz
+
+  project        Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  currentVersion QuoteVersion?  @relation("QuoteCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions       QuoteVersion[] @relation("QuoteVersions")
+
+  @@index([projectId])
+}
+
+model QuoteVersion {
+  id            String      @id @default(cuid())
+  quoteId       String
+  versionNumber Int
+  status        QuoteStatus @default(DRAFT)
+  currency      String      @default("AUD")
+  subtotal      Decimal     @default(0) @db.Decimal(12, 2)
+  discountTotal Decimal     @default(0) @db.Decimal(12, 2)
+  taxTotal      Decimal     @default(0) @db.Decimal(12, 2)
+  total         Decimal     @default(0) @db.Decimal(12, 2)
+  validUntil    DateTime?   @db.Timestamptz
+  createdById   String?
+  sentAt        DateTime?   @db.Timestamptz
+  viewedAt      DateTime?   @db.Timestamptz
+  acceptedAt    DateTime?   @db.Timestamptz
+  acceptedName  String? // tên khách gõ khi accept
+  acceptedIp    String?
+  createdAt     DateTime    @default(now()) @db.Timestamptz
+  updatedAt     DateTime    @default(now()) @updatedAt @db.Timestamptz
+
+  quote     Quote       @relation("QuoteVersions", fields: [quoteId], references: [id], onDelete: Cascade)
+  createdBy User?       @relation("QuoteVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  currentOf Quote?      @relation("QuoteCurrentVersion")
+  lines     QuoteLine[]
+  // Invariant: tối đa một version ACCEPTED / quote (partial unique index trong migration).
+  // Accepted version immutable (app + rule).
+
+  @@unique([quoteId, versionNumber])
+  @@index([quoteId])
+  @@index([status])
+}
+
+model QuoteLine {
+  id             String  @id @default(cuid())
+  quoteVersionId String
+  lineType       String  @default("custom") // custom | package | addon (slice 1: custom)
+  referenceId    String?
+  description    String
+  quantity       Int     @default(1)
+  unitPrice      Decimal @default(0) @db.Decimal(12, 2)
+  discount       Decimal @default(0) @db.Decimal(12, 2)
+  tax            Decimal @default(0) @db.Decimal(12, 2)
+  lineTotal      Decimal @default(0) @db.Decimal(12, 2)
+  sortOrder      Int     @default(0)
+  createdAt      DateTime @default(now()) @db.Timestamptz
+
+  quoteVersion QuoteVersion @relation(fields: [quoteVersionId], references: [id], onDelete: Cascade)
+
+  @@index([quoteVersionId])
+}
+
+// ---------- Governance / Reliability ----------
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  companyId   String?
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String
+  beforeData  Json?
+  afterData   Json?
+  reason      String?
+  source      String?
+  metadata    Json?
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  // INSERT-ONLY (trigger trong migration).
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model OutboxEvent {
+  id            String       @id @default(cuid())
+  eventType     String
+  aggregateType String
+  aggregateId   String
+  correlationId String?
+  causationId   String?
+  payload       Json
+  status        OutboxStatus @default(PENDING)
+  attemptCount  Int          @default(0)
+  availableAt   DateTime     @default(now()) @db.Timestamptz
+  processedAt   DateTime?    @db.Timestamptz
+  createdAt     DateTime     @default(now()) @db.Timestamptz
+
+  @@index([status, availableAt])
 }

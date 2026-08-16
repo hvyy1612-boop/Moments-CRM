@@ -66,5 +66,5 @@ export async function signIn(_prev: LoginFormState, formData: FormData): Promise
     ...(parsed.data.remember === 'on' ? { maxAge: REMEMBER_TIMEOUT_MS / 1000 } : {}),
   })
 
-  redirect('/dashboard')
+  redirect('/projects')
 }
