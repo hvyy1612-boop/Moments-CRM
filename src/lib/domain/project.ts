@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
 import type { EnquiryInput } from '@/lib/validation/enquiry'
@@ -30,6 +31,21 @@ async function nextProjectCode(tx: Tx, year: number): Promise<string> {
  */
 export async function createProjectFromEnquiry(input: EnquiryInput) {
   const now = systemClock.now()
+  // The per-year code and the client email are unique; two enquiries landing at once can collide.
+  // Retry a few times on a unique violation so concurrency never surfaces as a user error.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await runCreateProjectFromEnquiry(input, now)
+    } catch (error) {
+      const isUnique =
+        error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
+      if (isUnique && attempt < 4) continue
+      throw error
+    }
+  }
+}
+
+async function runCreateProjectFromEnquiry(input: EnquiryInput, now: Date) {
   return prisma.$transaction(async (tx) => {
     const company = await requireCompany(tx)
 
