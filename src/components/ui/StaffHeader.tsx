@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
+import { StaffNavLinks } from '@/components/ui/StaffNavLinks'
 import type { SessionUser } from '@/lib/auth/guard'
 import { signOut } from '@/app/(staff)/dashboard/actions'
 
@@ -13,33 +14,7 @@ export function StaffHeader({ user, csrf }: { user: SessionUser; csrf: string })
           <Link href="/dashboard" className="text-base font-medium text-ink">
             Moments
           </Link>
-          <nav className="flex gap-4 text-sm">
-            <Link href="/dashboard" className="text-ink-muted transition-colors duration-150 hover:text-ink">
-              Dashboard
-            </Link>
-            {canSeeEnquiries ? (
-              <>
-                <Link
-                  href="/enquiries"
-                  className="text-ink-muted transition-colors duration-150 hover:text-ink"
-                >
-                  Enquiries
-                </Link>
-                <Link
-                  href="/bookings"
-                  className="text-ink-muted transition-colors duration-150 hover:text-ink"
-                >
-                  Bookings
-                </Link>
-              </>
-            ) : null}
-            <Link
-              href="/outbox"
-              className="text-ink-muted transition-colors duration-150 hover:text-ink"
-            >
-              Outbox
-            </Link>
-          </nav>
+          <StaffNavLinks canSeeEnquiries={canSeeEnquiries} />
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-ink-muted">

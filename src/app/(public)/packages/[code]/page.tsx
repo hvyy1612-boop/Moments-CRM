@@ -21,8 +21,15 @@ export default async function PackageDetailPage({ params }: { params: Promise<{ 
       <header className="mt-4 flex flex-col gap-2">
         <h1 className="font-serif text-2xl text-ink">{pkg.name}</h1>
         <p>
-          <span className="text-sm text-ink-muted">From </span>
-          <span className="text-xl tabular-nums text-ink">{formatAud(pkg.priceGross)}</span>
+          {/* BR-X07, R2: no published price means we say so, not that it is free. */}
+          {isPriceOnEnquiry(pkg.priceGross) ? (
+            <span className="text-xl text-ink">Price on enquiry</span>
+          ) : (
+            <>
+              <span className="text-sm text-ink-muted">From </span>
+              <span className="text-xl tabular-nums text-ink">{formatAud(pkg.priceGross)}</span>
+            </>
+          )}
         </p>
       </header>
 

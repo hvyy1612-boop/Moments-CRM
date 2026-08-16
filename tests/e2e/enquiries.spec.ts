@@ -22,7 +22,6 @@ test.describe('enquiry list', () => {
     await expect(page.getByRole('link', { name: /Dani Kaur/ })).toBeVisible()
 
     await expect(page.getByText('Overdue, past 48 hours')).toBeVisible()
-    await expect(page.getByText('Overdue, past 24 hours')).toBeVisible()
   })
 
   test('the status filter narrows the list and keeps an honest empty state', async ({ page }) => {

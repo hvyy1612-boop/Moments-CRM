@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db'
+import { env } from '@/lib/env'
 import { systemClock, type Clock } from '@/lib/time'
 import { logActivity } from './activity-log'
 
@@ -13,6 +14,11 @@ export type JobResult = {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
+
+function portalLine(portalToken: string | null): string {
+  if (!portalToken) return ''
+  return `\n\nYour booking page:\n${env.NEXT_PUBLIC_APP_URL}/portal/${portalToken}`
+}
 
 function daysBetween(from: Date, to: Date): number {
   return Math.floor((to.getTime() - from.getTime()) / DAY_MS)
@@ -142,6 +148,7 @@ async function remindPreShoot(now: Date): Promise<number> {
       id: true,
       shootDate: true,
       clientId: true,
+      portalToken: true,
       client: { select: { email: true, primaryName: true } },
       questionnaire: { select: { status: true } },
     },
@@ -189,7 +196,7 @@ async function remindPreShoot(now: Date): Promise<number> {
         templateKey: step.key,
         recipient: booking.client.email,
         subject: step.subject,
-        bodyText: `Hello ${booking.client.primaryName},\n\n${step.body}`,
+        bodyText: `Hello ${booking.client.primaryName},\n\n${step.body}${portalLine(booking.portalToken)}`,
         relatedType: 'Booking',
         relatedId: booking.id,
         scheduledFor: now,
@@ -210,7 +217,11 @@ async function remindInvoices(now: Date): Promise<number> {
       totalGross: true,
       amountPaid: true,
       booking: {
-        select: { clientId: true, client: { select: { email: true, primaryName: true } } },
+        select: {
+          clientId: true,
+          portalToken: true,
+          client: { select: { email: true, primaryName: true } },
+        },
       },
     },
   })
@@ -233,7 +244,7 @@ async function remindInvoices(now: Date): Promise<number> {
         `Invoice ${invoice.invoiceNumber} has ${owing.toFixed(2)} AUD outstanding and passed its due date ${late} days ago.`,
         '',
         'If it has already been paid, ignore this and the studio will match it up.',
-      ].join('\n'),
+      ].join('\n') + portalLine(invoice.booking.portalToken),
       relatedType: 'Invoice',
       relatedId: invoice.id,
       scheduledFor: now,
@@ -289,6 +300,7 @@ async function thankAfterDelivery(now: Date): Promise<number> {
     select: {
       id: true,
       clientId: true,
+      portalToken: true,
       client: { select: { email: true, primaryName: true } },
       deliverables: { select: { deliveredAt: true } },
     },
@@ -313,7 +325,7 @@ async function thankAfterDelivery(now: Date): Promise<number> {
         'Everything from your day is now with you. It was a privilege to photograph it.',
         '',
         'If you have a moment, a short review helps other couples find the studio. And if anything is not right, say so and it will be fixed.',
-      ].join('\n'),
+      ].join('\n') + portalLine(booking.portalToken),
       relatedType: 'Booking',
       relatedId: booking.id,
       scheduledFor: now,
