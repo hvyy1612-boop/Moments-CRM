@@ -7,7 +7,7 @@ import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
-import { StaffHeader } from '../StaffHeader'
+import { AppShell } from '../AppShell'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Projects — Moments' }
@@ -38,9 +38,8 @@ export default async function ProjectsPage() {
   })
 
   return (
-    <>
-      <StaffHeader user={user} csrf={csrf} />
-      <main className="mx-auto w-full max-w-5xl px-4 py-8">
+    <AppShell user={user} csrf={csrf} active="projects">
+      <div>
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div>
             <h1 className="text-xl">Projects</h1>
@@ -86,7 +85,7 @@ export default async function ProjectsPage() {
             ))}
           </ul>
         )}
-      </main>
-    </>
+      </div>
+    </AppShell>
   )
 }

@@ -28,7 +28,8 @@ test('full lifecycle: quote, contract, booking (no double-booking), deposit paid
   await page.getByLabel('Email').fill(ADMIN_EMAIL)
   await page.getByLabel('Password', { exact: true }).fill(ADMIN_PASSWORD)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/projects$/)
+  await expect(page).toHaveURL(/\/dashboard$/)
+  await page.goto('/projects')
 
   await page.getByRole('link', { name: 'E2E Quote Client' }).first().click()
   await expect(page).toHaveURL(/\/projects\/[a-z0-9]+$/)
@@ -122,12 +123,26 @@ test('the app opens straight to the staff sign-in', async ({ page }) => {
   await expect(page).toHaveURL(/\/login$/)
 })
 
+test('an admin can see the sign-in and activity log', async ({ page }) => {
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(ADMIN_EMAIL)
+  await page.getByLabel('Password', { exact: true }).fill(ADMIN_PASSWORD)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page).toHaveURL(/\/dashboard$/)
+
+  await page.getByRole('link', { name: 'Activity' }).click()
+  await expect(page).toHaveURL(/\/activity$/)
+  await expect(page.getByRole('heading', { name: 'Sign-in activity' })).toBeVisible()
+  await expect(page.getByText(ADMIN_EMAIL).first()).toBeVisible()
+})
+
 test('staff log a new enquiry from inside the workspace', async ({ page }) => {
   await page.goto('/login')
   await page.getByLabel('Email').fill(ADMIN_EMAIL)
   await page.getByLabel('Password', { exact: true }).fill(ADMIN_PASSWORD)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/projects$/)
+  await expect(page).toHaveURL(/\/dashboard$/)
+  await page.goto('/projects')
 
   await page.getByRole('link', { name: 'New enquiry' }).click()
   await expect(page).toHaveURL(/\/projects\/new$/)
