@@ -7,11 +7,14 @@ import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
-import { formatSydneyDate } from '@/lib/time'
+import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
 import { StaffHeader } from '../../StaffHeader'
 import { createContractAction, createQuoteAction } from '../actions'
 import { ContractSend } from './ContractSend'
+import { Delivery } from './Delivery'
+import { Finance } from './Finance'
 import { QuoteBuilder } from './QuoteBuilder'
+import { Scheduling } from './Scheduling'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Project — Moments' }
@@ -56,6 +59,30 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         orderBy: { createdAt: 'desc' },
         include: { currentVersion: true },
       },
+      bookings: {
+        orderBy: { startsAt: 'asc' },
+        include: {
+          assignments: {
+            where: { status: 'ACTIVE' },
+            include: { resource: { select: { name: true } } },
+          },
+        },
+      },
+      invoices: {
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          invoiceNumber: true,
+          type: true,
+          status: true,
+          total: true,
+          amountPaid: true,
+        },
+      },
+      galleries: {
+        orderBy: { createdAt: 'desc' },
+        include: { items: { orderBy: { sortOrder: 'asc' } } },
+      },
     },
   })
   if (!project) notFound()
@@ -65,6 +92,58 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const contract = project.contracts[0]
   const contractVersion = contract?.currentVersion ?? null
   const quoteAccepted = version?.status === 'ACCEPTED'
+  const isConfirmed = (['CONFIRMED', 'IN_PRODUCTION', 'COMPLETED'] as const).some(
+    (s) => s === project.lifecycleStatus,
+  )
+
+  const resources = isConfirmed
+    ? await prisma.resource.findMany({
+        where: { companyId: project.companyId, status: 'active' },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, resourceType: true },
+      })
+    : []
+
+  const bookingViews = project.bookings.map((booking) => ({
+    id: booking.id,
+    title: booking.title,
+    timeLabel: `${formatSydneyDateTime(booking.startsAt)} – ${formatSydneyDateTime(booking.endsAt)}`,
+    location: booking.location,
+    status: booking.status,
+    assignments: booking.assignments.map((assignment) => ({
+      id: assignment.id,
+      resourceName: assignment.resource.name,
+      role: assignment.role,
+    })),
+  }))
+
+  const invoiceViews = project.invoices.map((invoice) => ({
+    id: invoice.id,
+    number: invoice.invoiceNumber,
+    typeLabel: invoice.type.toLowerCase(),
+    status: invoice.status,
+    totalLabel: formatAud(invoice.total),
+    paidLabel: formatAud(invoice.amountPaid),
+    remainingLabel: formatAud(invoice.total.sub(invoice.amountPaid)),
+    isDraft: invoice.status === 'DRAFT',
+    canPay: invoice.status !== 'DRAFT' && invoice.status !== 'PAID' && invoice.status !== 'VOID',
+  }))
+
+  const gallery = project.galleries[0]
+  const galleryView = gallery
+    ? {
+        id: gallery.id,
+        title: gallery.title,
+        status: gallery.status,
+        accessToken: gallery.accessToken,
+        publishedLabel: gallery.publishedAt ? formatSydneyDate(gallery.publishedAt) : null,
+        items: gallery.items.map((item) => ({
+          id: item.id,
+          caption: item.caption,
+          url: item.url,
+        })),
+      }
+    : null
 
   return (
     <>
@@ -200,6 +279,32 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 </p>
               </div>
             )}
+          </section>
+        ) : null}
+
+        {isConfirmed ? (
+          <section className="mt-6 rounded border border-line bg-surface p-5">
+            <h2 className="text-lg">Scheduling</h2>
+            <Scheduling
+              csrf={csrf}
+              projectId={project.id}
+              bookings={bookingViews}
+              resources={resources}
+            />
+          </section>
+        ) : null}
+
+        {isConfirmed ? (
+          <section className="mt-6 rounded border border-line bg-surface p-5">
+            <h2 className="text-lg">Invoices &amp; payments</h2>
+            <Finance csrf={csrf} projectId={project.id} invoices={invoiceViews} />
+          </section>
+        ) : null}
+
+        {isConfirmed ? (
+          <section className="mt-6 rounded border border-line bg-surface p-5">
+            <h2 className="text-lg">Delivery</h2>
+            <Delivery csrf={csrf} projectId={project.id} gallery={galleryView} />
           </section>
         ) : null}
       </main>

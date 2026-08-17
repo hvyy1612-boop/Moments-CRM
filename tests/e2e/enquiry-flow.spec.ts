@@ -13,7 +13,9 @@ test('a website enquiry becomes a project', async ({ page }) => {
   await expect(page.getByText('Thank you, your enquiry is in')).toBeVisible()
 })
 
-test('staff quote a project, the client accepts, then signs the contract', async ({ page }) => {
+test('full lifecycle: quote, contract, booking (no double-booking), deposit paid, gallery delivered', async ({
+  page,
+}) => {
 
   await page.goto('/enquire')
   await page.getByLabel('Your name').fill('E2E Quote Client')
@@ -66,4 +68,51 @@ test('staff quote a project, the client accepts, then signs the contract', async
   await page.getByLabel('Type your full name to sign').fill('Client Name')
   await page.getByRole('button', { name: 'Sign contract' }).click()
   await expect(page.getByText('Thank you, your contract is signed')).toBeVisible()
+
+  await page.goto(projectUrl)
+  await page.getByLabel('What is this shoot?').fill('Wedding day')
+  await page.getByLabel('Starts').fill('2026-11-14T14:00')
+  await page.getByLabel('Ends').fill('2026-11-14T18:00')
+  await page.getByRole('button', { name: 'Schedule shoot' }).click()
+  await expect(page.getByText('Wedding day')).toBeVisible()
+
+  await page.getByLabel('Resource').first().selectOption({ label: 'Lead Photographer' })
+  await page.getByRole('button', { name: 'Assign' }).first().click()
+  await expect(page.getByText('No crew assigned yet')).toHaveCount(0)
+
+  await page.getByLabel('What is this shoot?').fill('Reception')
+  await page.getByLabel('Starts').fill('2026-11-14T16:00')
+  await page.getByLabel('Ends').fill('2026-11-14T20:00')
+  await page.getByRole('button', { name: 'Schedule shoot' }).click()
+  await expect(page.getByText('Reception')).toBeVisible()
+
+  await page.getByLabel('Resource').nth(1).selectOption({ label: 'Lead Photographer' })
+  await page.getByRole('button', { name: 'Assign' }).nth(1).click()
+  await expect(page.getByText('already booked for an overlapping time')).toBeVisible()
+
+  await page.getByLabel('Amount (incl. GST)').fill('700')
+  await page.getByLabel('Description').fill('Booking deposit')
+  await page.getByRole('button', { name: 'Raise invoice' }).click()
+  await page.getByRole('button', { name: 'Issue invoice' }).click()
+
+  await page.getByLabel('Payment amount').fill('700')
+  await page.getByRole('button', { name: 'Record' }).click()
+  await expect(page.getByText('paid', { exact: true })).toBeVisible()
+
+  await page.getByLabel('Gallery title').fill('Wedding gallery')
+  await page.getByRole('button', { name: 'Start gallery' }).click()
+  await page.getByLabel('Item caption').fill('Full album')
+  await page.getByLabel('Item link').fill('https://example.com/album')
+  await page.getByRole('button', { name: 'Add item' }).click()
+  await expect(page.getByText('Full album')).toBeVisible()
+  await page.getByRole('button', { name: 'Publish to client' }).click()
+
+  const galleryLinkText = await page.getByText(/\/gallery\//).first().innerText()
+  const galleryMatch = galleryLinkText.match(/\/gallery\/([A-Za-z0-9_-]+)/)
+  expect(galleryMatch).not.toBeNull()
+  const galleryToken = galleryMatch![1]
+
+  await page.goto(`/gallery/${galleryToken}`)
+  await expect(page.getByRole('heading', { name: 'Wedding gallery' })).toBeVisible()
+  await expect(page.getByText('Full album')).toBeVisible()
 })

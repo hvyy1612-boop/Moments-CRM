@@ -5,9 +5,15 @@ import { revalidatePath } from 'next/cache'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { assignResource, createBooking } from '@/lib/domain/booking'
 import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/contract'
+import { addGalleryItem, createGallery, publishGallery } from '@/lib/domain/delivery'
+import { createInvoice, issueInvoice, recordPayment } from '@/lib/domain/finance'
 import { createQuote, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 import { sendContractEmail, sendQuoteEmail } from '@/lib/email'
+import { assignResourceSchema, createBookingSchema } from '@/lib/validation/booking'
+import { addGalleryItemSchema, createGallerySchema } from '@/lib/validation/delivery'
+import { createInvoiceSchema, recordPaymentSchema } from '@/lib/validation/finance'
 import { saveQuoteSchema } from '@/lib/validation/quote'
 
 export type QuoteActionState =
@@ -153,4 +159,201 @@ export async function sendContractAction(
   }
   revalidatePath(`/projects/${projectId}`)
   return { status: 'success' }
+}
+
+export async function createBookingAction(
+  _prev: QuoteActionState,
+  formData: FormData,
+): Promise<QuoteActionState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+
+  const parsed = createBookingSchema.safeParse({
+    title: formData.get('title') ?? '',
+    startsAt: formData.get('startsAt') ?? '',
+    endsAt: formData.get('endsAt') ?? '',
+    location: formData.get('location') ?? '',
+    notes: formData.get('notes') ?? '',
+  })
+  if (!parsed.success) {
+    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the booking.' }
+  }
+  try {
+    await createBooking(projectId, parsed.data, user.id)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not schedule.' }
+  }
+  revalidatePath(`/projects/${projectId}`)
+  return { status: 'success' }
+}
+
+export async function assignResourceAction(
+  _prev: QuoteActionState,
+  formData: FormData,
+): Promise<QuoteActionState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const bookingId = String(formData.get('bookingId') ?? '')
+
+  const parsed = assignResourceSchema.safeParse({
+    resourceId: formData.get('resourceId') ?? '',
+    role: formData.get('role') ?? '',
+  })
+  if (!parsed.success) {
+    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please pick a resource.' }
+  }
+  try {
+    await assignResource(bookingId, parsed.data, user.id)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not assign.' }
+  }
+  revalidatePath(`/projects/${projectId}`)
+  return { status: 'success' }
+}
+
+export async function createInvoiceAction(
+  _prev: QuoteActionState,
+  formData: FormData,
+): Promise<QuoteActionState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+
+  const parsed = createInvoiceSchema.safeParse({
+    type: formData.get('type') ?? '',
+    description: formData.get('description') ?? '',
+    amount: formData.get('amount') ?? '',
+  })
+  if (!parsed.success) {
+    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the invoice.' }
+  }
+  try {
+    await createInvoice(projectId, parsed.data, user.id)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not raise the invoice.' }
+  }
+  revalidatePath(`/projects/${projectId}`)
+  return { status: 'success' }
+}
+
+export async function issueInvoiceAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const invoiceId = String(formData.get('invoiceId') ?? '')
+  if (!invoiceId) return
+  try {
+    await issueInvoice(invoiceId, user.id)
+  } catch {
+    // A double submit ("already issued") is a no-op here; the re-render shows the real state.
+  }
+  revalidatePath(`/projects/${projectId}`)
+}
+
+export async function recordPaymentAction(
+  _prev: QuoteActionState,
+  formData: FormData,
+): Promise<QuoteActionState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const invoiceId = String(formData.get('invoiceId') ?? '')
+
+  const parsed = recordPaymentSchema.safeParse({
+    paymentMethod: formData.get('paymentMethod') ?? '',
+    amount: formData.get('amount') ?? '',
+    reference: formData.get('reference') ?? '',
+  })
+  if (!parsed.success) {
+    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the payment.' }
+  }
+  try {
+    await recordPayment(invoiceId, parsed.data, user.id)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not record the payment.' }
+  }
+  revalidatePath(`/projects/${projectId}`)
+  return { status: 'success' }
+}
+
+export async function createGalleryAction(
+  _prev: QuoteActionState,
+  formData: FormData,
+): Promise<QuoteActionState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+
+  const parsed = createGallerySchema.safeParse({ title: formData.get('title') ?? '' })
+  if (!parsed.success) {
+    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the gallery.' }
+  }
+  try {
+    await createGallery(projectId, parsed.data, user.id)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not create the gallery.' }
+  }
+  revalidatePath(`/projects/${projectId}`)
+  return { status: 'success' }
+}
+
+export async function addGalleryItemAction(
+  _prev: QuoteActionState,
+  formData: FormData,
+): Promise<QuoteActionState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const galleryId = String(formData.get('galleryId') ?? '')
+
+  const parsed = addGalleryItemSchema.safeParse({
+    caption: formData.get('caption') ?? '',
+    url: formData.get('url') ?? '',
+  })
+  if (!parsed.success) {
+    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the item.' }
+  }
+  try {
+    await addGalleryItem(galleryId, parsed.data, user.id)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not add the item.' }
+  }
+  revalidatePath(`/projects/${projectId}`)
+  return { status: 'success' }
+}
+
+export async function publishGalleryAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const galleryId = String(formData.get('galleryId') ?? '')
+  if (!galleryId) return
+  try {
+    await publishGallery(galleryId, user.id)
+  } catch {
+    // The button only shows on a draft with items; a double submit is a no-op here.
+  }
+  revalidatePath(`/projects/${projectId}`)
 }

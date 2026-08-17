@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, ResourceType } from '@prisma/client'
 import { hashPassword } from '../src/lib/auth/password'
 
 const prisma = new PrismaClient()
@@ -30,6 +30,19 @@ async function main() {
       name: 'Studio Owner',
     },
   })
+
+  const resources: { id: string; resourceType: ResourceType; name: string }[] = [
+    { id: 'res_lead_photographer', resourceType: ResourceType.PHOTOGRAPHER, name: 'Lead Photographer' },
+    { id: 'res_second_shooter', resourceType: ResourceType.SECOND_SHOOTER, name: 'Second Shooter' },
+    { id: 'res_videographer', resourceType: ResourceType.VIDEOGRAPHER, name: 'Videographer' },
+  ]
+  for (const resource of resources) {
+    await prisma.resource.upsert({
+      where: { id: resource.id },
+      update: {},
+      create: { companyId: company.id, ...resource },
+    })
+  }
 
   const client = await prisma.client.upsert({
     where: { email: 'demo.client@moments.test' },

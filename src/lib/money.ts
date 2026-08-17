@@ -14,3 +14,14 @@ export function formatAud(value: Prisma.Decimal): string {
 export function isPriceOnEnquiry(value: Prisma.Decimal): boolean {
   return value.isZero()
 }
+
+const GST_DIVISOR = new Prisma.Decimal(11)
+const ROUND_HALF_UP = 4
+
+export function splitGstInclusive(total: Prisma.Decimal): {
+  subtotal: Prisma.Decimal
+  taxTotal: Prisma.Decimal
+} {
+  const taxTotal = total.div(GST_DIVISOR).toDecimalPlaces(2, ROUND_HALF_UP)
+  return { subtotal: total.sub(taxTotal), taxTotal }
+}

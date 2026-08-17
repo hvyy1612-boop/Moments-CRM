@@ -15,6 +15,46 @@ export function formatSydneyDate(date: Date): string {
   }).format(date)
 }
 
+export function formatSydneyDateTime(date: Date): string {
+  return new Intl.DateTimeFormat('en-AU', {
+    timeZone: SYDNEY,
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(date)
+}
+
+function zoneOffsetMs(timeZone: string, instant: Date): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(instant)
+  const at: Record<string, number> = {}
+  for (const part of parts) if (part.type !== 'literal') at[part.type] = Number(part.value)
+  const wall = Date.UTC(at.year!, at.month! - 1, at.day!, at.hour!, at.minute!, at.second!)
+  return wall - instant.getTime()
+}
+
+export function sydneyLocalToUtc(local: string): Date {
+  const withSeconds = local.length === 16 ? `${local}:00` : local
+  const naive = new Date(`${withSeconds}Z`)
+  const guess = new Date(naive.getTime() - zoneOffsetMs(SYDNEY, naive))
+  return new Date(naive.getTime() - zoneOffsetMs(SYDNEY, guess))
+}
+
+export function rangesOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
+  return aStart < bEnd && bStart < aEnd
+}
+
 export function sydneyMonth(date: Date): number {
   const part = new Intl.DateTimeFormat('en-AU', { timeZone: SYDNEY, month: 'numeric' })
     .formatToParts(date)
