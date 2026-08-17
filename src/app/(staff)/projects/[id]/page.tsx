@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
@@ -8,7 +9,7 @@ import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
-import { StaffHeader } from '../../StaffHeader'
+import { AppShell } from '../../AppShell'
 import { createContractAction, createQuoteAction } from '../actions'
 import { ContractSend } from './ContractSend'
 import { Delivery } from './Delivery'
@@ -146,10 +147,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     : null
 
   return (
-    <>
-      <StaffHeader user={user} csrf={csrf} />
-      <main className="mx-auto w-full max-w-3xl px-4 py-8">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
+    <AppShell user={user} csrf={csrf} active="projects">
+      <div className="mx-auto w-full max-w-3xl">
+        <Link href="/projects" className="text-sm text-ink-muted transition-colors hover:text-accent">
+          ← Projects
+        </Link>
+        <div className="mt-3 flex flex-wrap items-baseline justify-between gap-3">
           <div>
             <h1 className="text-xl">{project.client.displayName}</h1>
             <p className="mt-1 text-sm text-ink-muted">
@@ -307,7 +310,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             <Delivery csrf={csrf} projectId={project.id} gallery={galleryView} />
           </section>
         ) : null}
-      </main>
-    </>
+      </div>
+    </AppShell>
   )
 }

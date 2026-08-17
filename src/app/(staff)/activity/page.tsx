@@ -5,7 +5,7 @@ import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatSydneyDateTime } from '@/lib/time'
-import { StaffHeader } from '../StaffHeader'
+import { AppShell } from '../AppShell'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Activity — Moments' }
@@ -49,10 +49,9 @@ export default async function ActivityPage() {
   ])
 
   return (
-    <>
-      <StaffHeader user={user} csrf={csrf} />
-      <main className="mx-auto w-full max-w-5xl px-4 py-8">
-        <h1 className="text-xl">Activity</h1>
+    <AppShell user={user} csrf={csrf} active="activity">
+      <div>
+        <h1 className="font-serif text-2xl text-ink">Activity</h1>
         <p className="mt-1 text-sm text-ink-muted">
           Sign-in history and a record of what happened. Read-only — nothing here can be changed.
         </p>
@@ -134,7 +133,7 @@ export default async function ActivityPage() {
             </table>
           </div>
         </section>
-      </main>
-    </>
+      </div>
+    </AppShell>
   )
 }
