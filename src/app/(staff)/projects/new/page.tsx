@@ -1,0 +1,32 @@
+import type { Metadata } from 'next'
+import { cookies } from 'next/headers'
+import Link from 'next/link'
+import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
+import { requireRole } from '@/lib/auth/guard'
+import { StaffHeader } from '../../StaffHeader'
+import { StaffEnquiryForm } from './StaffEnquiryForm'
+
+export const runtime = 'nodejs'
+export const metadata: Metadata = { title: 'New enquiry — Moments' }
+
+export default async function NewEnquiryPage() {
+  const user = await requireRole('/projects/new')
+  const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
+  const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
+
+  return (
+    <>
+      <StaffHeader user={user} csrf={csrf} />
+      <main className="mx-auto w-full max-w-lg px-4 py-8">
+        <Link href="/projects" className="text-sm text-ink-muted transition-colors hover:text-accent">
+          ← Projects
+        </Link>
+        <h1 className="mt-2 text-xl">New enquiry</h1>
+        <p className="mt-1 text-sm text-ink-muted">
+          Log an enquiry that arrived by phone, email, or the company website.
+        </p>
+        <StaffEnquiryForm csrf={csrf} />
+      </main>
+    </>
+  )
+}

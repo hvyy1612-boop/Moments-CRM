@@ -19,8 +19,9 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/api/health': { public: true },
   // Staff entrance and account recovery: public by necessity (not signed in yet / token-authorised).
   '/login': { public: true },
-  // Staff workspace (Slice 1): projects and the quote builder inside a project.
+  // Staff workspace: projects, logging a new enquiry, and the project detail.
   '/projects': { roles: ['ADMIN', 'STUDIO'] },
+  '/projects/new': { roles: ['ADMIN', 'STUDIO'] },
   '/projects/[id]': { roles: ['ADMIN', 'STUDIO'] },
   // Client-facing, reached by a token only. No session, no account.
   '/quote/[token]': { token: true },

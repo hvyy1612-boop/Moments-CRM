@@ -2,10 +2,13 @@
 
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { assignResource, createBooking } from '@/lib/domain/booking'
+import { createProjectFromEnquiry } from '@/lib/domain/project'
+import { enquirySchema } from '@/lib/validation/enquiry'
 import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/contract'
 import { addGalleryItem, createGallery, publishGallery } from '@/lib/domain/delivery'
 import { createInvoice, issueInvoice, recordPayment } from '@/lib/domain/finance'
@@ -369,4 +372,54 @@ export async function publishGalleryAction(formData: FormData): Promise<void> {
     // The button only shows on a draft with items; a double submit is a no-op here.
   }
   revalidatePath(`/projects/${projectId}`)
+}
+
+export type StaffEnquiryState =
+  | { status: 'idle' }
+  | {
+      status: 'error'
+      message?: string
+      errors?: { name?: string; email?: string; phone?: string; message?: string }
+    }
+
+/** Staff log an enquiry that arrived by phone, email, or the company website, then open the project. */
+export async function createStaffEnquiryAction(
+  _prev: StaffEnquiryState,
+  formData: FormData,
+): Promise<StaffEnquiryState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  await requireStaff()
+
+  const parsed = enquirySchema.safeParse({
+    name: formData.get('name'),
+    email: formData.get('email'),
+    phone: formData.get('phone') ?? '',
+    eventType: formData.get('eventType') ?? '',
+    message: formData.get('message') ?? '',
+    source: 'staff',
+  })
+  if (!parsed.success) {
+    const fields = parsed.error.flatten().fieldErrors
+    return {
+      status: 'error',
+      errors: {
+        name: fields.name?.[0],
+        email: fields.email?.[0],
+        phone: fields.phone?.[0],
+        message: fields.message?.[0],
+      },
+    }
+  }
+
+  let projectId: string
+  try {
+    const project = await createProjectFromEnquiry(parsed.data)
+    projectId = project.id
+  } catch {
+    return { status: 'error', message: 'Could not create the project. Please try again.' }
+  }
+  redirect(`/projects/${projectId}`)
 }

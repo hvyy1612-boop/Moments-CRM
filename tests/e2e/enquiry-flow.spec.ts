@@ -129,3 +129,26 @@ test('full lifecycle: quote, contract, booking (no double-booking), deposit paid
   await expect(page.getByRole('heading', { name: 'Wedding gallery' })).toBeVisible()
   await expect(page.getByText('Full album')).toBeVisible()
 })
+
+test('the app opens straight to the staff sign-in', async ({ page }) => {
+  await page.goto('/')
+  await expect(page).toHaveURL(/\/login$/)
+})
+
+test('staff log a new enquiry from inside the workspace', async ({ page }) => {
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(ADMIN_EMAIL)
+  await page.getByLabel('Password', { exact: true }).fill(ADMIN_PASSWORD)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page).toHaveURL(/\/projects$/)
+
+  await page.getByRole('link', { name: 'New enquiry' }).click()
+  await expect(page).toHaveURL(/\/projects\/new$/)
+  await page.getByLabel('Client name').fill('Phoned-in Client')
+  await page.getByLabel('Email').fill('phoned-in@moments.test')
+  await page.getByLabel('Notes').fill('Called about a spring wedding at Centennial Park.')
+  await page.getByRole('button', { name: 'Create project' }).click()
+
+  await expect(page).toHaveURL(/\/projects\/[a-z0-9]+$/)
+  await expect(page.getByText('Phoned-in Client')).toBeVisible()
+})
