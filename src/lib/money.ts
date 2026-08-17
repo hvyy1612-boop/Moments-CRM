@@ -20,3 +20,18 @@ export function formatAud(value: Prisma.Decimal): string {
 export function isPriceOnEnquiry(value: Prisma.Decimal): boolean {
   return value.isZero()
 }
+
+const GST_DIVISOR = new Prisma.Decimal(11)
+const ROUND_HALF_UP = 4 // Decimal.js rounding mode
+
+/**
+ * Split a GST-inclusive total into its GST component and the ex-GST subtotal (BR-P01/P02). The total
+ * is what the client pays; GST is total / 11, rounded half up. Used by quotes and invoices alike.
+ */
+export function splitGstInclusive(total: Prisma.Decimal): {
+  subtotal: Prisma.Decimal
+  taxTotal: Prisma.Decimal
+} {
+  const taxTotal = total.div(GST_DIVISOR).toDecimalPlaces(2, ROUND_HALF_UP)
+  return { subtotal: total.sub(taxTotal), taxTotal }
+}

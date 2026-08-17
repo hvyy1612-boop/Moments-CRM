@@ -11,6 +11,7 @@ import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
 import { StaffHeader } from '../../StaffHeader'
 import { createContractAction, createQuoteAction } from '../actions'
 import { ContractSend } from './ContractSend'
+import { Finance } from './Finance'
 import { QuoteBuilder } from './QuoteBuilder'
 import { Scheduling } from './Scheduling'
 
@@ -66,6 +67,17 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           },
         },
       },
+      invoices: {
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          invoiceNumber: true,
+          type: true,
+          status: true,
+          total: true,
+          amountPaid: true,
+        },
+      },
     },
   })
   if (!project) notFound()
@@ -97,6 +109,18 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       resourceName: assignment.resource.name,
       role: assignment.role,
     })),
+  }))
+
+  const invoiceViews = project.invoices.map((invoice) => ({
+    id: invoice.id,
+    number: invoice.invoiceNumber,
+    typeLabel: invoice.type.toLowerCase(),
+    status: invoice.status,
+    totalLabel: formatAud(invoice.total),
+    paidLabel: formatAud(invoice.amountPaid),
+    remainingLabel: formatAud(invoice.total.sub(invoice.amountPaid)),
+    isDraft: invoice.status === 'DRAFT',
+    canPay: invoice.status !== 'DRAFT' && invoice.status !== 'PAID' && invoice.status !== 'VOID',
   }))
 
   return (
@@ -245,6 +269,13 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               bookings={bookingViews}
               resources={resources}
             />
+          </section>
+        ) : null}
+
+        {isConfirmed ? (
+          <section className="mt-6 rounded border border-line bg-surface p-5">
+            <h2 className="text-lg">Invoices &amp; payments</h2>
+            <Finance csrf={csrf} projectId={project.id} invoices={invoiceViews} />
           </section>
         ) : null}
       </main>

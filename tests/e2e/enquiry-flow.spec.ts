@@ -13,7 +13,7 @@ test('a website enquiry becomes a project', async ({ page }) => {
   await expect(page.getByText('Thank you, your enquiry is in')).toBeVisible()
 })
 
-test('full lifecycle: quote accepted, contract signed, shoot booked, double-booking blocked', async ({
+test('full lifecycle: quote, contract, booking, double-booking blocked, deposit invoiced and paid', async ({
   page,
 }) => {
   // Start from a fresh enquiry so this project has no quote yet.
@@ -99,4 +99,14 @@ test('full lifecycle: quote accepted, contract signed, shoot booked, double-book
   await page.getByLabel('Resource').nth(1).selectOption({ label: 'Lead Photographer' })
   await page.getByRole('button', { name: 'Assign' }).nth(1).click()
   await expect(page.getByText('already booked for an overlapping time')).toBeVisible()
+
+  // Raise a deposit invoice, issue it, and record the payment in full.
+  await page.getByLabel('Amount (incl. GST)').fill('700')
+  await page.getByLabel('Description').fill('Booking deposit')
+  await page.getByRole('button', { name: 'Raise invoice' }).click()
+  await page.getByRole('button', { name: 'Issue invoice' }).click()
+
+  await page.getByLabel('Payment amount').fill('700')
+  await page.getByRole('button', { name: 'Record' }).click()
+  await expect(page.getByText('paid', { exact: true })).toBeVisible()
 })
