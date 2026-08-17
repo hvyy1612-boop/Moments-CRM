@@ -7,11 +7,12 @@ import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
-import { formatSydneyDate } from '@/lib/time'
+import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
 import { StaffHeader } from '../../StaffHeader'
 import { createContractAction, createQuoteAction } from '../actions'
 import { ContractSend } from './ContractSend'
 import { QuoteBuilder } from './QuoteBuilder'
+import { Scheduling } from './Scheduling'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Project — Moments' }
@@ -56,6 +57,15 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         orderBy: { createdAt: 'desc' },
         include: { currentVersion: true },
       },
+      bookings: {
+        orderBy: { startsAt: 'asc' },
+        include: {
+          assignments: {
+            where: { status: 'ACTIVE' },
+            include: { resource: { select: { name: true } } },
+          },
+        },
+      },
     },
   })
   if (!project) notFound()
@@ -65,6 +75,29 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const contract = project.contracts[0]
   const contractVersion = contract?.currentVersion ?? null
   const quoteAccepted = version?.status === 'ACCEPTED'
+  const isConfirmed =
+    project.lifecycleStatus === 'CONFIRMED' || project.lifecycleStatus === 'IN_PRODUCTION'
+
+  const resources = isConfirmed
+    ? await prisma.resource.findMany({
+        where: { companyId: project.companyId, status: 'active' },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, resourceType: true },
+      })
+    : []
+
+  const bookingViews = project.bookings.map((booking) => ({
+    id: booking.id,
+    title: booking.title,
+    timeLabel: `${formatSydneyDateTime(booking.startsAt)} – ${formatSydneyDateTime(booking.endsAt)}`,
+    location: booking.location,
+    status: booking.status,
+    assignments: booking.assignments.map((assignment) => ({
+      id: assignment.id,
+      resourceName: assignment.resource.name,
+      role: assignment.role,
+    })),
+  }))
 
   return (
     <>
@@ -200,6 +233,18 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 </p>
               </div>
             )}
+          </section>
+        ) : null}
+
+        {isConfirmed ? (
+          <section className="mt-6 rounded border border-line bg-surface p-5">
+            <h2 className="text-lg">Scheduling</h2>
+            <Scheduling
+              csrf={csrf}
+              projectId={project.id}
+              bookings={bookingViews}
+              resources={resources}
+            />
           </section>
         ) : null}
       </main>

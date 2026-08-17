@@ -1,8 +1,9 @@
 // Moments — Prisma schema. Project-centric (Database Blueprint v2 final).
-// Slices 1-2: Company, auth (User/Session/PasswordReset/SecurityEvent), Client, Project,
-// Quote/QuoteVersion/QuoteLine, Contract/ContractVersion, AuditLog, OutboxEvent.
-// Later slices add: bookings/resources, finance, workflow/work_items,
-// production/deliverables/galleries, notifications, policies, change_requests, etc.
+// Slices 1-3: Company, auth (User/Session/PasswordReset/SecurityEvent), Client, Project,
+// Quote/QuoteVersion/QuoteLine, Contract/ContractVersion, Booking/Resource/ResourceAssignment,
+// AuditLog, OutboxEvent.
+// Later slices add: finance, workflow/work_items, production/deliverables/galleries,
+// notifications, policies, change_requests, etc.
 //
 // Locked decisions: single-tenant (one Company row; company_id là reserved field, không RLS),
 // project bắt đầu từ enquiry, không leads, work_items canonical (chưa dựng ở slice 1),
@@ -17,7 +18,8 @@ datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
   directUrl  = env("DIRECT_URL")
-  extensions = [citext]
+  // btree_gist: cho phép EXCLUDE constraint chống một resource nhận hai assignment chồng giờ.
+  extensions = [citext, btree_gist]
 }
 
 // ---------- Enums ----------
@@ -84,6 +86,27 @@ enum ContractStatus {
   VOID
 }
 
+enum BookingStatus {
+  TENTATIVE
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum ResourceType {
+  PHOTOGRAPHER
+  VIDEOGRAPHER
+  SECOND_SHOOTER
+  EDITOR
+  STUDIO
+  EQUIPMENT
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  CANCELLED
+}
+
 enum OutboxStatus {
   PENDING
   PROCESSING
@@ -103,9 +126,11 @@ model Company {
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz
 
-  users    User[]
-  clients  Client[]
-  projects Project[]
+  users     User[]
+  clients   Client[]
+  projects  Project[]
+  bookings  Booking[]
+  resources Resource[]
 }
 
 // ---------- Identity / auth (giữ nguyên hình dạng để code auth tái dùng) ----------
@@ -133,8 +158,10 @@ model User {
   securityEvents SecurityEvent[]
   auditLogs      AuditLog[]
   ownedProjects  Project[]       @relation("ProjectOwner")
-  createdQuoteVersions    QuoteVersion[]    @relation("QuoteVersionCreatedBy")
-  createdContractVersions ContractVersion[] @relation("ContractVersionCreatedBy")
+  createdQuoteVersions    QuoteVersion[]       @relation("QuoteVersionCreatedBy")
+  createdContractVersions ContractVersion[]    @relation("ContractVersionCreatedBy")
+  linkedResources         Resource[]           @relation("ResourceUser")
+  assignmentsMade         ResourceAssignment[] @relation("AssignmentAssignedBy")
 
   @@index([companyId])
   @@index([role])
@@ -247,6 +274,7 @@ model Project {
   owner     User?      @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   quotes    Quote[]
   contracts Contract[]
+  bookings  Booking[]
 
   @@index([companyId])
   @@index([clientId])
@@ -367,6 +395,75 @@ model ContractVersion {
   @@unique([contractId, versionNumber])
   @@index([contractId])
   @@index([status])
+}
+
+// ---------- Scheduling (Domain 06) ----------
+// Một dự án CONFIRMED có thể có nhiều buổi chụp (engagement, ngày cưới...). Mỗi buổi gán ekip/thiết
+// bị qua ResourceAssignment; một resource không thể nhận hai assignment ACTIVE chồng thời gian
+// (EXCLUDE USING gist trong migration, cần extension btree_gist).
+
+model Booking {
+  id          String        @id @default(cuid())
+  companyId   String
+  projectId   String
+  title       String?
+  status      BookingStatus @default(TENTATIVE)
+  startsAt    DateTime      @db.Timestamptz
+  endsAt      DateTime      @db.Timestamptz
+  timezone    String        @default("Australia/Sydney")
+  location    String?
+  notes       String?
+  createdAt   DateTime      @default(now()) @db.Timestamptz
+  updatedAt   DateTime      @default(now()) @updatedAt @db.Timestamptz
+  cancelledAt DateTime?     @db.Timestamptz
+
+  company     Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  project     Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  assignments ResourceAssignment[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([startsAt])
+}
+
+model Resource {
+  id           String       @id @default(cuid())
+  companyId    String
+  resourceType ResourceType
+  name         String
+  linkedUserId String? // nếu resource là một nhân sự có tài khoản
+  status       String       @default("active")
+  metadata     Json?
+  createdAt    DateTime     @default(now()) @db.Timestamptz
+  updatedAt    DateTime     @default(now()) @updatedAt @db.Timestamptz
+
+  company     Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  linkedUser  User?                @relation("ResourceUser", fields: [linkedUserId], references: [id], onDelete: SetNull)
+  assignments ResourceAssignment[]
+
+  @@index([companyId, resourceType])
+}
+
+model ResourceAssignment {
+  id           String           @id @default(cuid())
+  bookingId    String
+  resourceId   String
+  role         String?
+  startsAt     DateTime         @db.Timestamptz // = cửa sổ thời gian của booking khi gán
+  endsAt       DateTime         @db.Timestamptz
+  status       AssignmentStatus @default(ACTIVE)
+  assignedById String?
+  createdAt    DateTime         @default(now()) @db.Timestamptz
+  updatedAt    DateTime         @default(now()) @updatedAt @db.Timestamptz
+
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  assignedBy User?    @relation("AssignmentAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+  // Invariant: một resource không nhận hai assignment ACTIVE chồng thời gian
+  // (EXCLUDE USING gist trên (resourceId, tstzrange(startsAt, endsAt)) WHERE status='ACTIVE').
+
+  @@index([resourceId])
+  @@index([bookingId])
 }
 
 // ---------- Governance / Reliability ----------

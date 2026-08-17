@@ -5,9 +5,11 @@ import { revalidatePath } from 'next/cache'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { assignResource, createBooking } from '@/lib/domain/booking'
 import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/contract'
 import { createQuote, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 import { sendContractEmail, sendQuoteEmail } from '@/lib/email'
+import { assignResourceSchema, createBookingSchema } from '@/lib/validation/booking'
 import { saveQuoteSchema } from '@/lib/validation/quote'
 
 export type QuoteActionState =
@@ -155,6 +157,66 @@ export async function sendContractAction(
       clientName: contract.project.client.displayName,
       contractLink: `${base}/contract/${signToken}`,
     })
+  }
+  revalidatePath(`/projects/${projectId}`)
+  return { status: 'success' }
+}
+
+/** Schedule a shoot for a confirmed project. */
+export async function createBookingAction(
+  _prev: QuoteActionState,
+  formData: FormData,
+): Promise<QuoteActionState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+
+  const parsed = createBookingSchema.safeParse({
+    title: formData.get('title') ?? '',
+    startsAt: formData.get('startsAt') ?? '',
+    endsAt: formData.get('endsAt') ?? '',
+    location: formData.get('location') ?? '',
+    notes: formData.get('notes') ?? '',
+  })
+  if (!parsed.success) {
+    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the booking.' }
+  }
+  try {
+    await createBooking(projectId, parsed.data, user.id)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not schedule.' }
+  }
+  revalidatePath(`/projects/${projectId}`)
+  return { status: 'success' }
+}
+
+/** Assign a resource to a booking; blocked if that resource clashes with an overlapping booking. */
+export async function assignResourceAction(
+  _prev: QuoteActionState,
+  formData: FormData,
+): Promise<QuoteActionState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const bookingId = String(formData.get('bookingId') ?? '')
+
+  const parsed = assignResourceSchema.safeParse({
+    resourceId: formData.get('resourceId') ?? '',
+    role: formData.get('role') ?? '',
+  })
+  if (!parsed.success) {
+    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please pick a resource.' }
+  }
+  try {
+    await assignResource(bookingId, parsed.data, user.id)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not assign.' }
   }
   revalidatePath(`/projects/${projectId}`)
   return { status: 'success' }

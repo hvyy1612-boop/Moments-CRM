@@ -13,7 +13,9 @@ test('a website enquiry becomes a project', async ({ page }) => {
   await expect(page.getByText('Thank you, your enquiry is in')).toBeVisible()
 })
 
-test('staff quote a project, the client accepts, then signs the contract', async ({ page }) => {
+test('full lifecycle: quote accepted, contract signed, shoot booked, double-booking blocked', async ({
+  page,
+}) => {
   // Start from a fresh enquiry so this project has no quote yet.
   await page.goto('/enquire')
   await page.getByLabel('Your name').fill('E2E Quote Client')
@@ -74,4 +76,27 @@ test('staff quote a project, the client accepts, then signs the contract', async
   await page.getByLabel('Type your full name to sign').fill('Client Name')
   await page.getByRole('button', { name: 'Sign contract' }).click()
   await expect(page.getByText('Thank you, your contract is signed')).toBeVisible()
+
+  // The project is now CONFIRMED, so scheduling opens. Book a shoot and staff it.
+  await page.goto(projectUrl)
+  await page.getByLabel('What is this shoot?').fill('Wedding day')
+  await page.getByLabel('Starts').fill('2026-11-14T14:00')
+  await page.getByLabel('Ends').fill('2026-11-14T18:00')
+  await page.getByRole('button', { name: 'Schedule shoot' }).click()
+  await expect(page.getByText('Wedding day')).toBeVisible()
+
+  await page.getByLabel('Resource').first().selectOption({ label: 'Lead Photographer' })
+  await page.getByRole('button', { name: 'Assign' }).first().click()
+  await expect(page.getByText('No crew assigned yet')).toHaveCount(0)
+
+  // A second, overlapping shoot: the same photographer must not be double-booked.
+  await page.getByLabel('What is this shoot?').fill('Reception')
+  await page.getByLabel('Starts').fill('2026-11-14T16:00')
+  await page.getByLabel('Ends').fill('2026-11-14T20:00')
+  await page.getByRole('button', { name: 'Schedule shoot' }).click()
+  await expect(page.getByText('Reception')).toBeVisible()
+
+  await page.getByLabel('Resource').nth(1).selectOption({ label: 'Lead Photographer' })
+  await page.getByRole('button', { name: 'Assign' }).nth(1).click()
+  await expect(page.getByText('already booked for an overlapping time')).toBeVisible()
 })

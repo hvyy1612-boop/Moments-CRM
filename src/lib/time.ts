@@ -19,6 +19,54 @@ export function formatSydneyDate(date: Date): string {
   }).format(date)
 }
 
+/** Format an instant as "14 Mar 2027, 2:00 pm" in the Sydney zone. */
+export function formatSydneyDateTime(date: Date): string {
+  return new Intl.DateTimeFormat('en-AU', {
+    timeZone: SYDNEY,
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(date)
+}
+
+/** The offset of a time zone from UTC, in milliseconds, at a given instant (positive east of UTC). */
+function zoneOffsetMs(timeZone: string, instant: Date): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(instant)
+  const at: Record<string, number> = {}
+  for (const part of parts) if (part.type !== 'literal') at[part.type] = Number(part.value)
+  const wall = Date.UTC(at.year!, at.month! - 1, at.day!, at.hour!, at.minute!, at.second!)
+  return wall - instant.getTime()
+}
+
+/**
+ * Convert a "YYYY-MM-DDTHH:mm" wall-clock time in the Sydney zone to a UTC instant. Staff type a
+ * local time in the studio's zone; we store the absolute instant. Two passes make it correct across
+ * daylight-saving transitions (Intl, no timezone library, R3).
+ */
+export function sydneyLocalToUtc(local: string): Date {
+  const withSeconds = local.length === 16 ? `${local}:00` : local
+  const naive = new Date(`${withSeconds}Z`) // the wall time read as if it were UTC
+  const guess = new Date(naive.getTime() - zoneOffsetMs(SYDNEY, naive))
+  return new Date(naive.getTime() - zoneOffsetMs(SYDNEY, guess))
+}
+
+/** Two half-open time ranges overlap when each starts before the other ends. */
+export function rangesOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
+  return aStart < bEnd && bStart < aEnd
+}
+
 /** The calendar month (1 to 12) of an instant in the Sydney zone (BR-X01). */
 export function sydneyMonth(date: Date): number {
   const part = new Intl.DateTimeFormat('en-AU', { timeZone: SYDNEY, month: 'numeric' })
