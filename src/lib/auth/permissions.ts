@@ -23,6 +23,8 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/projects': { roles: ['ADMIN', 'STUDIO'] },
   '/projects/new': { roles: ['ADMIN', 'STUDIO'] },
   '/projects/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  // Security + activity log: ADMIN only (contains IP addresses and login history).
+  '/activity': { roles: ['ADMIN'] },
   // Client-facing, reached by a token only. No session, no account.
   '/quote/[token]': { token: true },
   '/contract/[token]': { token: true },

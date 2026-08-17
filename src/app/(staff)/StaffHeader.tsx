@@ -16,6 +16,11 @@ export function StaffHeader({ user, csrf }: { user: SessionUser; csrf: string })
             <Link href="/projects" className="font-medium text-ink">
               Projects
             </Link>
+            {user.role === 'ADMIN' ? (
+              <Link href="/activity" className="text-ink-muted transition-colors hover:text-ink">
+                Activity
+              </Link>
+            ) : null}
           </nav>
         </div>
         <div className="flex items-center gap-3">
