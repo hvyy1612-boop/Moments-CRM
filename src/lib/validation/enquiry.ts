@@ -1,25 +1,21 @@
 import { z } from 'zod'
 
-export const ENQUIRY_TYPES = ['WEDDING', 'MICRO', 'PORTRAIT'] as const
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => (v ? v : undefined))
 
-export const enquiryInputSchema = z.object({
-  primaryName: z.string().trim().min(1, 'Enter your name.'),
-  partnerName: z.string().trim().optional(),
-  email: z.string().trim().toLowerCase().email('Enter a valid email so the studio can reply.'),
-  phone: z.string().trim().optional(),
-  enquiryType: z.enum(ENQUIRY_TYPES, {
-    errorMap: () => ({ message: 'Choose what the enquiry is for.' }),
-  }),
-  eventDate: z.coerce.date({
-    errorMap: () => ({ message: 'Choose your event date.' }),
-  }),
-  venueName: z.string().trim().optional(),
-  venueSuburb: z.string().trim().optional(),
-  guestCount: z.coerce.number().int().positive().max(100000).optional(),
-  message: z.string().trim().max(4000).optional(),
-  packageCodes: z.array(z.string()).optional(),
-  source: z.string().trim().optional(),
-  marketingConsent: z.boolean().default(false),
+export const enquirySchema = z.object({
+  name: z.string().trim().min(1, 'Enter your name.').max(120),
+  email: z.string().trim().min(1, 'Enter your email.').max(254).email('Enter a valid email.'),
+  phone: optionalText(40),
+  eventType: optionalText(80),
+  message: optionalText(2000),
+  source: optionalText(60),
 })
 
-export type EnquiryInput = z.infer<typeof enquiryInputSchema>
+export type EnquiryInput = z.infer<typeof enquirySchema>

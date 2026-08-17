@@ -1,0 +1,208 @@
+import type { Metadata } from 'next'
+import { cookies } from 'next/headers'
+import { notFound } from 'next/navigation'
+import { Button } from '@/components/ui/Button'
+import { StatusPill, type Tone } from '@/components/ui/StatusPill'
+import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
+import { requireRole } from '@/lib/auth/guard'
+import { prisma } from '@/lib/db'
+import { formatAud } from '@/lib/money'
+import { formatSydneyDate } from '@/lib/time'
+import { StaffHeader } from '../../StaffHeader'
+import { createContractAction, createQuoteAction } from '../actions'
+import { ContractSend } from './ContractSend'
+import { QuoteBuilder } from './QuoteBuilder'
+
+export const runtime = 'nodejs'
+export const metadata: Metadata = { title: 'Project — Moments' }
+
+const QUOTE_TONE: Record<string, Tone> = {
+  DRAFT: 'neutral',
+  SENT: 'info',
+  VIEWED: 'info',
+  ACCEPTED: 'good',
+  DECLINED: 'bad',
+  EXPIRED: 'warn',
+  SUPERSEDED: 'neutral',
+}
+
+const CONTRACT_TONE: Record<string, Tone> = {
+  DRAFT: 'neutral',
+  SENT: 'info',
+  SIGNED: 'good',
+  SUPERSEDED: 'neutral',
+  VOID: 'bad',
+}
+
+function label(value: string): string {
+  return value.toLowerCase().replace(/_/g, ' ')
+}
+
+export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const user = await requireRole('/projects/[id]')
+  const { id } = await params
+  const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
+  const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
+
+  const project = await prisma.project.findUnique({
+    where: { id },
+    include: {
+      client: true,
+      quotes: {
+        orderBy: { createdAt: 'desc' },
+        include: { currentVersion: { include: { lines: { orderBy: { sortOrder: 'asc' } } } } },
+      },
+      contracts: {
+        orderBy: { createdAt: 'desc' },
+        include: { currentVersion: true },
+      },
+    },
+  })
+  if (!project) notFound()
+
+  const quote = project.quotes[0]
+  const version = quote?.currentVersion ?? null
+  const contract = project.contracts[0]
+  const contractVersion = contract?.currentVersion ?? null
+  const quoteAccepted = version?.status === 'ACCEPTED'
+
+  return (
+    <>
+      <StaffHeader user={user} csrf={csrf} />
+      <main className="mx-auto w-full max-w-3xl px-4 py-8">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <div>
+            <h1 className="text-xl">{project.client.displayName}</h1>
+            <p className="mt-1 text-sm text-ink-muted">
+              {project.code} · {project.name} · enquired {formatSydneyDate(project.enquiryReceivedAt)}
+            </p>
+          </div>
+          <StatusPill tone="info">{label(project.lifecycleStatus)}</StatusPill>
+        </div>
+
+        <section className="mt-6 rounded border border-line bg-surface p-5">
+          <h2 className="text-lg">Client</h2>
+          <dl className="mt-2 grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-ink-muted">Email</dt>
+              <dd className="text-ink">{project.client.email}</dd>
+            </div>
+            <div>
+              <dt className="text-ink-muted">Phone</dt>
+              <dd className="text-ink">{project.client.phone ?? 'Not given'}</dd>
+            </div>
+          </dl>
+          {project.enquiryNotes ? (
+            <p className="mt-3 whitespace-pre-line text-sm text-ink">{project.enquiryNotes}</p>
+          ) : null}
+        </section>
+
+        <section className="mt-6 rounded border border-line bg-surface p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="text-lg">Quote</h2>
+            {version ? (
+              <StatusPill tone={QUOTE_TONE[version.status] ?? 'neutral'}>{label(version.status)}</StatusPill>
+            ) : null}
+          </div>
+
+          {!quote || !version ? (
+            <form action={createQuoteAction} className="mt-4">
+              <input type="hidden" name="csrf" value={csrf} />
+              <input type="hidden" name="projectId" value={project.id} />
+              <p className="text-sm text-ink-muted">No quote yet.</p>
+              <Button type="submit" className="mt-3">
+                Create quote
+              </Button>
+            </form>
+          ) : version.status === 'DRAFT' ? (
+            <QuoteBuilder
+              csrf={csrf}
+              projectId={project.id}
+              quoteId={quote.id}
+              versionId={version.id}
+              validUntil={version.validUntil ? version.validUntil.toISOString().slice(0, 10) : ''}
+              initialLines={version.lines.map((line) => ({
+                description: line.description,
+                quantity: line.quantity,
+                unitPrice: line.unitPrice.toString(),
+              }))}
+            />
+          ) : (
+            <div className="mt-4">
+              <ul className="flex flex-col">
+                {version.lines.map((line) => (
+                  <li
+                    key={line.id}
+                    className="flex justify-between gap-3 border-b border-line py-2 text-sm last:border-b-0"
+                  >
+                    <span className="text-ink">
+                      {line.description} <span className="text-ink-muted">× {line.quantity}</span>
+                    </span>
+                    <span className="tabular-nums text-ink">{formatAud(line.lineTotal)}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-3 flex justify-between text-sm">
+                <span className="text-ink-muted">Includes GST</span>
+                <span className="tabular-nums text-ink-muted">{formatAud(version.taxTotal)}</span>
+              </div>
+              <div className="mt-1 flex justify-between text-base font-medium">
+                <span className="text-ink">Total</span>
+                <span className="tabular-nums text-ink">{formatAud(version.total)}</span>
+              </div>
+              <p className="mt-4 text-sm text-ink-muted">
+                Client link:{' '}
+                <span className="text-ink">/quote/{quote.viewToken}</span>
+              </p>
+              {version.acceptedAt ? (
+                <p className="mt-2 text-sm text-ink">
+                  Accepted by {version.acceptedName} on {formatSydneyDate(version.acceptedAt)}.
+                </p>
+              ) : null}
+            </div>
+          )}
+        </section>
+
+        {quoteAccepted ? (
+          <section className="mt-6 rounded border border-line bg-surface p-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <h2 className="text-lg">Contract</h2>
+              {contractVersion ? (
+                <StatusPill tone={CONTRACT_TONE[contractVersion.status] ?? 'neutral'}>
+                  {label(contractVersion.status)}
+                </StatusPill>
+              ) : null}
+            </div>
+
+            {!contract || !contractVersion ? (
+              <form action={createContractAction} className="mt-4">
+                <input type="hidden" name="csrf" value={csrf} />
+                <input type="hidden" name="projectId" value={project.id} />
+                <p className="text-sm text-ink-muted">
+                  The quote is accepted. Generate the booking contract from it.
+                </p>
+                <Button type="submit" className="mt-3">
+                  Create contract
+                </Button>
+              </form>
+            ) : contractVersion.status === 'DRAFT' ? (
+              <ContractSend csrf={csrf} contractId={contract.id} projectId={project.id} />
+            ) : contractVersion.status === 'SIGNED' ? (
+              <p className="mt-4 text-sm text-ink">
+                Signed by {contractVersion.signedName} on{' '}
+                {contractVersion.signedAt ? formatSydneyDate(contractVersion.signedAt) : ''}.
+              </p>
+            ) : (
+              <div className="mt-4">
+                <p className="text-sm text-ink-muted">Waiting for the client to sign.</p>
+                <p className="mt-2 text-sm">
+                  Client link: <span className="text-ink">/contract/{contract.signToken}</span>
+                </p>
+              </div>
+            )}
+          </section>
+        ) : null}
+      </main>
+    </>
+  )
+}

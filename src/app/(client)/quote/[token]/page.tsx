@@ -1,148 +1,86 @@
 import type { Metadata } from 'next'
+import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
+import { Alert } from '@/components/ui/Alert'
+import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
+import { prisma } from '@/lib/db'
+import { markQuoteViewed } from '@/lib/domain/quote'
 import { formatAud } from '@/lib/money'
-import { daysUntil, formatSydneyDate, systemClock } from '@/lib/time'
-import {
-  getQuotationByViewToken,
-  issueActionToken,
-  recordFirstView,
-} from '@/lib/domain/quotation'
-import { requestMeta } from '@/lib/http'
-import { QuoteDecision } from './QuoteDecision'
+import { formatSydneyDate } from '@/lib/time'
+import { QuoteAccept } from './QuoteAccept'
 
 export const runtime = 'nodejs'
-
-export const metadata: Metadata = {
-  title: 'Your quotation — Moments Photography and Film',
-
-  robots: { index: false, follow: false },
-}
+export const metadata: Metadata = { title: 'Your quote — Moments' }
 
 export default async function ClientQuotePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
-  const quotation = await getQuotationByViewToken(token)
-  if (!quotation) notFound()
+  await markQuoteViewed(token)
 
-  const meta = await requestMeta()
-  await recordFirstView(quotation.id, meta)
+  const quote = await prisma.quote.findUnique({
+    where: { viewToken: token },
+    include: {
+      currentVersion: { include: { lines: { orderBy: { sortOrder: 'asc' } } } },
+      project: { include: { client: { select: { displayName: true } } } },
+    },
+  })
+  if (!quote || !quote.currentVersion) notFound()
 
-  const now = systemClock.now()
-  const expired =
-    quotation.status === 'EXPIRED' ||
-    Boolean(quotation.validUntil && now.getTime() > quotation.validUntil.getTime())
-  const open = quotation.status === 'SENT' && !expired
+  const version = quote.currentVersion
+  if (version.status === 'DRAFT') notFound()
 
-  const [acceptToken, declineToken] = open
-    ? await Promise.all([
-        issueActionToken(quotation.id, 'ACCEPT'),
-        issueActionToken(quotation.id, 'DECLINE'),
-      ])
-    : [null, null]
-
-  const couple = quotation.enquiry.client.partnerName
-    ? `${quotation.enquiry.client.primaryName} and ${quotation.enquiry.client.partnerName}`
-    : quotation.enquiry.client.primaryName
+  const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
+  const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
+  const canAccept = version.status === 'SENT' || version.status === 'VIEWED'
 
   return (
-    <main className="mx-auto w-full max-w-2xl px-4 py-12">
-      <header>
-        <p className="text-sm text-ink-muted">Moments Photography and Film</p>
-        <h1 className="mt-1 text-2xl">Your quotation</h1>
-        <p className="mt-2 text-base text-ink">
-          For {couple} · {formatSydneyDate(quotation.enquiry.eventDate)}
-          {quotation.enquiry.venueName ? ` · ${quotation.enquiry.venueName}` : ''}
-        </p>
-      </header>
+    <main className="mx-auto w-full max-w-lg px-4 py-12">
+      <p className="text-sm font-medium uppercase tracking-wide text-accent">Moments Photography and Film</p>
+      <h1 className="mt-2 text-2xl text-ink">Your quote</h1>
+      <p className="mt-1 text-ink-muted">Prepared for {quote.project.client.displayName}.</p>
 
-      {quotation.status === 'ACCEPTED' ? (
-        <p className="mt-6 rounded border border-line bg-surface px-4 py-3 text-base text-ink">
-          You accepted this quotation on {formatSydneyDate(quotation.termsAcknowledgedAt ?? now)}. The
-          studio has your date held and will be in touch about the booking fee.
-        </p>
-      ) : null}
-      {quotation.status === 'DECLINED' ? (
-        <p className="mt-6 rounded border border-line bg-surface px-4 py-3 text-base text-ink">
-          You let the studio know this quotation was not for you. Thank you for taking the time to
-          reply.
-        </p>
-      ) : null}
-      {quotation.status === 'SUPERSEDED' ? (
-        <p className="mt-6 rounded border border-line bg-surface px-4 py-3 text-base text-ink">
-          This version has been replaced by a newer quotation. Please use the most recent link the
-          studio sent you.
-        </p>
-      ) : null}
-      {expired && quotation.status === 'SENT' ? (
-        <p className="mt-6 rounded border border-line bg-surface px-4 py-3 text-base text-ink">
-          This quotation has passed its validity date. Contact the studio and they will send you an
-          updated one.
-        </p>
-      ) : null}
-
-      <section className="mt-8">
-        <h2 className="text-lg">What is included</h2>
-        <table className="mt-3 w-full border-collapse text-left">
-          <caption className="sr-only">The items on your quotation and their prices.</caption>
-          <tbody>
-            {quotation.lines.map((line) => (
-              <tr key={line.id} className="border-b border-line">
-                <td className="py-3 text-base text-ink">
-                  {line.description}
-                  {line.quantity > 1 ? (
-                    <span className="text-sm text-ink-muted"> × {line.quantity}</span>
-                  ) : null}
-                </td>
-                <td className="py-3 text-right text-base text-ink tabular-nums">
-                  {formatAud(line.lineTotalGross)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <th scope="row" className="pt-4 text-left text-lg font-medium text-ink">Total</th>
-              <td className="pt-4 text-right text-lg font-medium text-ink tabular-nums">
-                {formatAud(quotation.totalGross)}
-              </td>
-            </tr>
-            <tr>
-              <th scope="row" className="text-left text-sm font-normal text-ink-muted">
-                Includes GST
-              </th>
-              <td className="text-right text-sm text-ink-muted tabular-nums">
-                {formatAud(quotation.gstAmount)}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-        {quotation.validUntil && open ? (
-          <p className="mt-3 text-sm text-ink-muted">
-            This quotation holds until {formatSydneyDate(quotation.validUntil)},{' '}
-            {daysUntil(quotation.validUntil, now)} days from today.
-          </p>
+      <section className="mt-8 rounded border border-line bg-surface p-5">
+        <ul className="flex flex-col">
+          {version.lines.map((line) => (
+            <li
+              key={line.id}
+              className="flex justify-between gap-3 border-b border-line py-2 text-sm last:border-b-0"
+            >
+              <span className="text-ink">
+                {line.description} <span className="text-ink-muted">× {line.quantity}</span>
+              </span>
+              <span className="tabular-nums text-ink">{formatAud(line.lineTotal)}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-3 flex justify-between text-sm">
+          <span className="text-ink-muted">Includes GST</span>
+          <span className="tabular-nums text-ink-muted">{formatAud(version.taxTotal)}</span>
+        </div>
+        <div className="mt-1 flex justify-between text-base font-medium">
+          <span className="text-ink">Total</span>
+          <span className="tabular-nums text-ink">{formatAud(version.total)}</span>
+        </div>
+        {version.validUntil ? (
+          <p className="mt-3 text-sm text-ink-muted">Valid until {formatSydneyDate(version.validUntil)}.</p>
         ) : null}
       </section>
 
-      <section className="mt-8">
-        <h2 className="text-lg">Booking terms</h2>
-        {/* BR-P15: the snapshot is rendered verbatim, exactly as it stood when the quote was made. */}
-        <p className="mt-3 max-w-prose text-base whitespace-pre-line text-ink">
-          {quotation.cancellationPolicySnapshot}
-        </p>
-      </section>
-
-      {open && acceptToken && declineToken ? (
-        <section className="mt-8 border-t border-line pt-8">
-          <QuoteDecision acceptToken={acceptToken} declineToken={declineToken} viewToken={token} />
-        </section>
-      ) : null}
-
-      <footer className="mt-12 border-t border-line pt-4">
-        <p className="text-xs text-ink-muted">
-          Moments Photography and Film · Sydney. If anything here looks wrong, reply to the email
-          that brought you here and the studio will fix it.
-        </p>
-      </footer>
+      <div className="mt-8">
+        {version.status === 'ACCEPTED' ? (
+          <Alert tone="success" title="This quote has been accepted">
+            Accepted by {version.acceptedName} on{' '}
+            {version.acceptedAt ? formatSydneyDate(version.acceptedAt) : ''}.
+          </Alert>
+        ) : version.status === 'EXPIRED' ? (
+          <Alert tone="warning" title="This quote has expired">
+            Please contact us for an updated quote.
+          </Alert>
+        ) : canAccept ? (
+          <QuoteAccept csrf={csrf} token={token} />
+        ) : (
+          <Alert tone="info" title="This quote is no longer available" />
+        )}
+      </div>
     </main>
   )
 }

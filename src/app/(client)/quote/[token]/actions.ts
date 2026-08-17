@@ -1,63 +1,31 @@
 'use server'
 
-import { redirect } from 'next/navigation'
-import { z } from 'zod'
-import { decideQuotation } from '@/lib/domain/quotation'
+import { cookies } from 'next/headers'
+import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
+import { acceptQuoteByToken } from '@/lib/domain/quote'
 import { requestMeta } from '@/lib/http'
+import { acceptQuoteSchema } from '@/lib/validation/quote'
 
-export type DecisionState = { status: 'idle' } | { status: 'error'; message: string }
+export type AcceptState =
+  | { status: 'idle' }
+  | { status: 'success' }
+  | { status: 'error'; message: string }
 
-const decisionSchema = z.object({
-  intent: z.enum(['accept', 'decline']),
-  acceptToken: z.string().min(1).max(200),
-  declineToken: z.string().min(1).max(200),
-
-  viewToken: z.string().min(1).max(200),
-  acceptedName: z.string().trim().max(120).optional(),
-  acknowledged: z.literal('on').optional(),
-})
-
-export async function decide(_prev: DecisionState, formData: FormData): Promise<DecisionState> {
-  const parsed = decisionSchema.safeParse({
-    intent: formData.get('intent'),
-    acceptToken: formData.get('acceptToken'),
-    declineToken: formData.get('declineToken'),
-    viewToken: formData.get('viewToken'),
-    acceptedName: formData.get('acceptedName') ?? undefined,
-    acknowledged: formData.get('acknowledged') ?? undefined,
-  })
+export async function acceptQuote(_prev: AcceptState, formData: FormData): Promise<AcceptState> {
+  const cookieStore = await cookies()
+  if (!verifyCsrf(cookieStore.get(CSRF_COOKIE)?.value, formData.get('csrf'))) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  const token = String(formData.get('token') ?? '')
+  const parsed = acceptQuoteSchema.safeParse({ acceptedName: formData.get('acceptedName') })
   if (!parsed.success) {
-    return { status: 'error', message: 'Something was missing from that request.' }
+    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Type your name to accept.' }
   }
-
-  const accepting = parsed.data.intent === 'accept'
-
-  if (accepting && parsed.data.acknowledged !== 'on') {
-    return { status: 'error', message: 'Please tick the box to say you have read the terms.' }
-  }
-  if (accepting && !parsed.data.acceptedName) {
-    return { status: 'error', message: 'Please enter your name so it can be recorded.' }
-  }
-
   const meta = await requestMeta()
-  const result = await decideQuotation(
-    {
-      token: accepting ? parsed.data.acceptToken : parsed.data.declineToken,
-      action: accepting ? 'ACCEPT' : 'DECLINE',
-      acceptedName: parsed.data.acceptedName,
-    },
-    { ipAddress: meta.ipAddress },
-  )
-
-  if (!result.ok) {
-    const message =
-      result.reason === 'expired'
-        ? 'This page has been open a while and the link has timed out. Reload it and try again.'
-        : result.reason === 'not_sent'
-          ? 'This quotation is no longer open for a decision.'
-          : 'That link is not valid. Please use the most recent one the studio sent you.'
-    return { status: 'error', message }
+  try {
+    await acceptQuoteByToken(token, parsed.data.acceptedName, meta.ipAddress)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not accept.' }
   }
-
-  redirect(`/quote/${parsed.data.viewToken}`)
+  return { status: 'success' }
 }

@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
@@ -62,12 +61,6 @@ export function LoginForm({ csrf }: { csrf: string }) {
           <input id="remember" name="remember" type="checkbox" className="h-4 w-4 accent-accent" />
           Stay signed in for 7 days
         </label>
-        <Link
-          href="/forgot-password"
-          className="text-sm text-ink underline underline-offset-2 transition-colors duration-150 hover:text-accent"
-        >
-          Forgot password
-        </Link>
       </div>
 
       <Button type="submit" loading={pending} className="w-full">

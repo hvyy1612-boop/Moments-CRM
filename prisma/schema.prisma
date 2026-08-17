@@ -17,139 +17,85 @@ enum UserRole {
   EDITOR
 }
 
-enum CrewRole {
-  PHOTOGRAPHER
-  VIDEOGRAPHER
-  SECOND_SHOOTER
+enum SecurityOutcome {
+  SUCCESS
+  FAILURE
 }
 
-enum EnquiryType {
-  WEDDING
-  MICRO
-  PORTRAIT
+enum ClientType {
+  INDIVIDUAL
+  BUSINESS
 }
 
-enum EnquiryStatus {
-  NEW
-  CONTACTED
+enum ClientStatus {
+  PROSPECT
+  ACTIVE
+  ARCHIVED
+}
+
+enum ProjectLifecycle {
+  ENQUIRY
+  QUALIFYING
+  QUOTING
+  AWAITING_DECISION
+  CONFIRMED
+  IN_PRODUCTION
+  COMPLETED
+  CANCELLED
+}
+
+enum CommercialStatus {
+  UNQUOTED
   QUOTED
-  WON
-  LOST
+  ACCEPTED
+  DEPOSIT_PAID
+  PAID
+  CANCELLED
 }
 
-enum QuotationStatus {
+enum QuoteStatus {
   DRAFT
   SENT
+  VIEWED
   ACCEPTED
   DECLINED
   EXPIRED
   SUPERSEDED
 }
 
-enum BookingStatus {
-  PENDING_BOOKING_FEE
-  CONFIRMED
-  DELIVERED
-  CLOSED
-  CANCELLED
-}
-
-enum DeliverableType {
-  SNEAK_PEEK
-  PHOTO_GALLERY
-  VIDEO_FILM
-  ALBUM
-  FILM_SCANS
-  PORTRAIT_GALLERY
-  RAW_FOOTAGE
-}
-
-enum DeliverableStatus {
-  PENDING
-  IN_PROGRESS
-  DELIVERED
-  CLOSED
-}
-
-enum InvoiceType {
-  BOOKING_FEE
-  BALANCE
-  ADDITIONAL
-}
-
-enum InvoiceStatus {
-  ISSUED
-  PARTIALLY_PAID
-  PAID
-  OVERDUE
+enum ContractStatus {
+  DRAFT
+  SENT
+  SIGNED
+  SUPERSEDED
   VOID
 }
 
-enum PaymentMethod {
-  BANK_TRANSFER
-  CARD
-  CASH
-  OTHER
-}
-
-enum NotificationStatus {
-  QUEUED
-  SENT
-  CANCELLED
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
   FAILED
 }
 
-enum NotificationChannel {
-  EMAIL
-  SMS
-}
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  abn       String?
+  timezone  String   @default("Australia/Sydney")
+  currency  String   @default("AUD")
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz
 
-enum ActorType {
-  SYSTEM
-  STAFF
-  CLIENT
-}
-
-enum SourceType {
-  PACKAGE
-  ADDON
-  RULE
-  MANUAL
-}
-
-enum DiscountType {
-  PERCENTAGE
-  FIXED
-}
-
-enum PricingRuleType {
-  BUNDLE
-  CONDITIONAL
-}
-
-enum ChangeRequestStatus {
-  PENDING
-  APPROVED
-  DECLINED
-}
-
-enum SecurityOutcome {
-  SUCCESS
-  FAILURE
-}
-
-enum PaymentProvider {
-  MANUAL
-  STRIPE
-}
-
-enum QuestionnaireStatus {
-  PENDING
-  SUBMITTED
+  users    User[]
+  clients  Client[]
+  projects Project[]
 }
 
 model User {
   id                 String    @id @default(cuid())
+  companyId          String
   email              String    @unique @db.Citext
   passwordHash       String
   passwordAlgo       String
@@ -157,24 +103,23 @@ model User {
   name               String
   isActive           Boolean   @default(true)
   mustChangePassword Boolean   @default(false)
-  lastLoginAt        DateTime?
+  lastLoginAt        DateTime? @db.Timestamptz
   failedAttempts     Int       @default(0)
-  lockedUntil        DateTime?
-  passwordChangedAt  DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @default(now()) @updatedAt
+  lockedUntil        DateTime? @db.Timestamptz
+  passwordChangedAt  DateTime? @db.Timestamptz
+  createdAt          DateTime  @default(now()) @db.Timestamptz
+  updatedAt          DateTime  @default(now()) @updatedAt @db.Timestamptz
 
-  passwordResets    PasswordReset[]
-  sessions          Session[]
-  crewMember        CrewMember?
-  activityLogs      ActivityLog[]
-  securityEvents    SecurityEvent[]
-  notifications     Notification[]
-  payments          Payment[]
-  changeRequests    ChangeRequest[]
-  assignedEnquiries Enquiry[]       @relation("EnquiryAssignee")
-  createdQuotations Quotation[]     @relation("QuotationCreatedBy")
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  passwordResets PasswordReset[]
+  sessions       Session[]
+  securityEvents SecurityEvent[]
+  auditLogs      AuditLog[]
+  ownedProjects  Project[]       @relation("ProjectOwner")
+  createdQuoteVersions    QuoteVersion[]    @relation("QuoteVersionCreatedBy")
+  createdContractVersions ContractVersion[] @relation("ContractVersionCreatedBy")
 
+  @@index([companyId])
   @@index([role])
 }
 
@@ -182,11 +127,11 @@ model PasswordReset {
   id          String    @id @default(cuid())
   userId      String
   tokenHash   String
-  expiresAt   DateTime
-  usedAt      DateTime?
+  expiresAt   DateTime  @db.Timestamptz
+  usedAt      DateTime? @db.Timestamptz
   requestedIp String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @default(now()) @updatedAt
+  createdAt   DateTime  @default(now()) @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -198,451 +143,19 @@ model Session {
   id                String    @id @default(cuid())
   userId            String
   tokenHash         String
-  expiresAt         DateTime
-  absoluteExpiresAt DateTime
-  lastActiveAt      DateTime  @default(now())
+  expiresAt         DateTime  @db.Timestamptz
+  absoluteExpiresAt DateTime  @db.Timestamptz
+  lastActiveAt      DateTime  @default(now()) @db.Timestamptz
   userAgent         String?
   ipAddress         String?
-  revokedAt         DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @default(now()) @updatedAt
+  revokedAt         DateTime? @db.Timestamptz
+  createdAt         DateTime  @default(now()) @db.Timestamptz
+  updatedAt         DateTime  @default(now()) @updatedAt @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([tokenHash])
-}
-
-model CrewMember {
-  id           String   @id @default(cuid())
-  name         String
-  email        String?  @db.Citext
-  crewRole     CrewRole
-  userId       String?  @unique
-  isContractor Boolean  @default(false)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @default(now()) @updatedAt
-
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  leadPhotographerBookings Booking[]     @relation("LeadPhotographer")
-  leadVideographerBookings Booking[]     @relation("LeadVideographer")
-  secondShooterBookings    Booking[]     @relation("SecondShooter")
-  deliverables             Deliverable[]
-}
-
-model Client {
-  id               String    @id @default(cuid())
-  primaryName      String
-  partnerName      String?
-  email            String    @unique @db.Citext
-  phone            String?
-  suburb           String?
-  state            String?
-  postcode         String?
-  marketingConsent Boolean   @default(false)
-  consentUpdatedAt DateTime?
-  anonymisedAt     DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @default(now()) @updatedAt
-
-  enquiries     Enquiry[]
-  bookings      Booking[]
-  agreements    Agreement[]
-  activityLogs  ActivityLog[]
-  notifications Notification[]
-
-  @@index([email])
-}
-
-model Enquiry {
-  id               String        @id @default(cuid())
-  clientId         String
-  enquiryType      EnquiryType
-  eventDate        DateTime
-  venueName        String?
-  venueSuburb      String?
-  venueDistanceKm  Decimal?      @db.Decimal(6, 1)
-  guestCount       Int?
-  budgetIndication Decimal?      @db.Decimal(10, 2)
-  source           String?
-  message          String?
-  status           EnquiryStatus @default(NEW)
-  assignedUserId   String?
-  firstRespondedAt DateTime?
-  lostReason       String?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @default(now()) @updatedAt
-
-  client       Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  assignedUser User?            @relation("EnquiryAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
-  packages     EnquiryPackage[]
-  quotations   Quotation[]
-
-  @@index([clientId])
-  @@index([status])
-  @@index([eventDate])
-}
-
-model EnquiryPackage {
-  enquiryId String
-  packageId String
-  createdAt DateTime @default(now())
-
-  enquiry Enquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
-  package Package @relation(fields: [packageId], references: [id], onDelete: Restrict)
-
-  @@id([enquiryId, packageId])
-}
-
-model Package {
-  id               String   @id @default(cuid())
-  code             String   @unique
-  name             String
-  description      String
-  priceGross       Decimal  @db.Decimal(10, 2)
-  includedHours    Int
-  includedTravelKm Int
-  maxExtraHours    Int
-  isActive         Boolean  @default(true)
-  displayOrder     Int      @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @default(now()) @updatedAt
-
-  enquiryPackages EnquiryPackage[]
-
-  @@index([isActive, displayOrder])
-}
-
-model AddOn {
-  id               String   @id @default(cuid())
-  code             String   @unique
-  name             String
-  description      String
-  priceGrossBefore Decimal  @db.Decimal(10, 2)
-  priceGrossAfter  Decimal? @db.Decimal(10, 2)
-  isActive         Boolean  @default(true)
-  displayOrder     Int      @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @default(now()) @updatedAt
-
-  rules AddOnRule[]
-
-  @@index([isActive, displayOrder])
-}
-
-model AddOnRule {
-  id                   String   @id @default(cuid())
-  addOnId              String
-  requiresAnyPackageId String[]
-  excludesPackageId    String[]
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @default(now()) @updatedAt
-
-  addOn AddOn @relation(fields: [addOnId], references: [id], onDelete: Cascade)
-
-  @@index([addOnId])
-}
-
-model PricingRule {
-  id                   String          @id @default(cuid())
-  code                 String          @unique
-  name                 String
-  ruleType             PricingRuleType
-  requiresAllPackageId String[]
-  excludesPackageId    String[]
-  appliesToTargetId    String?
-  discountType         DiscountType
-  discountValue        Decimal         @db.Decimal(10, 2)
-  evaluationOrder      Int             @default(0)
-  validFrom            DateTime?
-  validTo              DateTime?
-  isActive             Boolean         @default(true)
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @default(now()) @updatedAt
-
-  @@index([isActive, evaluationOrder])
-}
-
-model Quotation {
-  id                         String          @id @default(cuid())
-  enquiryId                  String
-  version                    Int             @default(1)
-  status                     QuotationStatus @default(DRAFT)
-  viewToken                  String          @unique
-  totalGross                 Decimal         @db.Decimal(10, 2)
-  gstAmount                  Decimal         @db.Decimal(10, 2)
-  validUntil                 DateTime?
-  requiresManualPricing      Boolean         @default(false)
-  cancellationPolicySnapshot String
-  sentAt                     DateTime?
-  firstViewedAt              DateTime?
-  respondedAt                DateTime?
-  supersededById             String?         @unique
-  termsAcknowledgedAt        DateTime?
-  termsAcknowledgedIp        String?
-  createdBy                  String
-  createdAt                  DateTime        @default(now())
-  updatedAt                  DateTime        @default(now()) @updatedAt
-
-  enquiry        Enquiry           @relation(fields: [enquiryId], references: [id], onDelete: Restrict)
-  supersededBy   Quotation?        @relation("QuotationVersions", fields: [supersededById], references: [id], onDelete: SetNull)
-  supersedes     Quotation?        @relation("QuotationVersions")
-  creator        User              @relation("QuotationCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
-  lines          QuotationLine[]
-  actions        QuotationAction[]
-  booking        Booking?
-  agreement      Agreement?
-  changeRequests ChangeRequest[]
-
-  @@index([enquiryId])
-  @@index([status])
-}
-
-model QuotationAction {
-  id          String    @id @default(cuid())
-  quotationId String
-  tokenHash   String
-  action      String
-  expiresAt   DateTime
-  usedAt      DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @default(now()) @updatedAt
-
-  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-
-  @@index([quotationId])
-  @@index([tokenHash])
-}
-
-model QuotationLine {
-  id             String     @id @default(cuid())
-  quotationId    String
-  sourceType     SourceType
-  sourceId       String?
-  description    String
-  unitPriceGross Decimal    @db.Decimal(10, 2)
-  quantity       Int        @default(1)
-  lineTotalGross Decimal    @db.Decimal(10, 2)
-  appliedRuleId  String?
-  displayOrder   Int        @default(0)
-  createdAt      DateTime   @default(now())
-
-  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-
-  @@index([quotationId])
-}
-
-model Booking {
-  id                  String        @id @default(cuid())
-  quotationId         String        @unique
-  clientId            String
-  status              BookingStatus @default(PENDING_BOOKING_FEE)
-  shootDate           DateTime
-  startTime           DateTime?
-  endTime             DateTime?
-  venueName           String?
-  venueAddress        String?
-  coverageHours       Int
-  leadPhotographerId  String?
-  leadVideographerId  String?
-  secondShooterId     String?
-  dateLockedAt        DateTime?
-  cancelledAt         DateTime?
-  cancellationReason  String?
-  portalToken         String?       @unique
-  portalTokenIssuedAt DateTime?
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @default(now()) @updatedAt
-
-  quotation        Quotation              @relation(fields: [quotationId], references: [id], onDelete: Restrict)
-  client           Client                 @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  leadPhotographer CrewMember?            @relation("LeadPhotographer", fields: [leadPhotographerId], references: [id], onDelete: SetNull)
-  leadVideographer CrewMember?            @relation("LeadVideographer", fields: [leadVideographerId], references: [id], onDelete: SetNull)
-  secondShooter    CrewMember?            @relation("SecondShooter", fields: [secondShooterId], references: [id], onDelete: SetNull)
-  dateChanges      BookingDateChange[]
-  deliverables     Deliverable[]
-  invoices         Invoice[]
-  changeRequests   ChangeRequest[]
-  agreement        Agreement?
-  questionnaire    PlanningQuestionnaire?
-
-  @@index([clientId])
-  @@index([status])
-  @@index([shootDate])
-}
-
-model BookingDateChange {
-  id           String   @id @default(cuid())
-  bookingId    String
-  previousDate DateTime
-  newDate      DateTime
-  reason       String
-  changedBy    String
-  changedAt    DateTime @default(now())
-
-  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-
-  @@index([bookingId])
-}
-
-model Deliverable {
-  id                   String            @id @default(cuid())
-  bookingId            String
-  type                 DeliverableType
-  status               DeliverableStatus @default(PENDING)
-  dueDate              DateTime
-  assignedCrewId       String?
-  galleryUrl           String?
-  galleryPasswordHash  String?
-  deliveredAt          DateTime?
-  galleryExpiresAt     DateTime?
-  backupExpiresAt      DateTime?
-  clientAcknowledgedAt DateTime?
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @default(now()) @updatedAt
-
-  booking      Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  assignedCrew CrewMember? @relation(fields: [assignedCrewId], references: [id], onDelete: SetNull)
-
-  @@index([bookingId])
-  @@index([status])
-  @@index([dueDate])
-}
-
-model Invoice {
-  id            String        @id @default(cuid())
-  bookingId     String
-  invoiceNumber String        @unique
-  type          InvoiceType
-  issueDate     DateTime
-  dueDate       DateTime
-  totalGross    Decimal       @db.Decimal(10, 2)
-  gstAmount     Decimal       @db.Decimal(10, 2)
-  amountPaid    Decimal       @default(0) @db.Decimal(10, 2)
-  status        InvoiceStatus @default(ISSUED)
-  buyerName     String
-  supplierAbn   String
-  voidedAt      DateTime?
-  voidReason    String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @default(now()) @updatedAt
-
-  booking  Booking   @relation(fields: [bookingId], references: [id], onDelete: Restrict)
-  payments Payment[]
-
-  @@index([bookingId])
-  @@index([status])
-  @@index([dueDate])
-}
-
-model Payment {
-  id                    String          @id @default(cuid())
-  invoiceId             String
-  amountGross           Decimal         @db.Decimal(10, 2)
-  method                PaymentMethod
-  provider              PaymentProvider @default(MANUAL)
-  receivedDate          DateTime
-  reference             String?
-  recordedByUserId      String?
-  reversesPaymentId     String?         @unique
-  stripePaymentIntentId String?         @unique
-  stripeChargeId        String?
-  cardBrand             String?
-  cardLast4             String?
-  receiptUrl            String?
-  createdAt             DateTime        @default(now())
-
-  invoice    Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
-  recordedBy User?    @relation(fields: [recordedByUserId], references: [id], onDelete: Restrict)
-  reverses   Payment? @relation("PaymentReversal", fields: [reversesPaymentId], references: [id], onDelete: SetNull)
-  reversedBy Payment? @relation("PaymentReversal")
-
-  @@index([invoiceId])
-}
-
-model ChangeRequest {
-  id                   String              @id @default(cuid())
-  bookingId            String
-  requestedByType      ActorType
-  requestType          String
-  description          String
-  priceImpactGross     Decimal?            @db.Decimal(10, 2)
-  status               ChangeRequestStatus @default(PENDING)
-  resultingQuotationId String?
-  decidedByUserId      String?
-  decidedAt            DateTime?
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @default(now()) @updatedAt
-
-  booking            Booking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  resultingQuotation Quotation? @relation(fields: [resultingQuotationId], references: [id], onDelete: SetNull)
-  decidedBy          User?      @relation(fields: [decidedByUserId], references: [id], onDelete: SetNull)
-
-  @@index([bookingId])
-  @@index([status])
-}
-
-model Agreement {
-  id               String   @id @default(cuid())
-  bookingId        String   @unique
-  quotationId      String   @unique
-  clientId         String
-  quotationVersion Int
-  totalGross       Decimal  @db.Decimal(10, 2)
-  termsText        String
-  acceptedName     String
-  acceptedAt       DateTime
-  acceptedIp       String
-  contentHash      String
-  createdAt        DateTime @default(now())
-
-  booking   Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Restrict)
-  client    Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
-
-  @@index([clientId])
-}
-
-model PlanningQuestionnaire {
-  id             String              @id @default(cuid())
-  bookingId      String              @unique
-  status         QuestionnaireStatus @default(PENDING)
-  responses      Json?
-  submittedAt    DateTime?
-  reminderSentAt DateTime?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @default(now()) @updatedAt
-
-  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-}
-
-model StripeEvent {
-  id          String   @id
-  type        String
-  processedAt DateTime @default(now())
-}
-
-model ActivityLog {
-  id              String    @id @default(cuid())
-  clientId        String?
-  relatedType     String
-  relatedId       String
-  actorType       ActorType
-  actorUserId     String?
-  action          String
-  detailJson      Json
-  ipAddress       String?
-  visibleToClient Boolean   @default(false)
-  createdAt       DateTime  @default(now())
-
-  client Client? @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  actor  User?   @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
-
-  @@index([clientId])
-  @@index([relatedType, relatedId])
-  @@index([createdAt])
 }
 
 model SecurityEvent {
@@ -653,7 +166,7 @@ model SecurityEvent {
   ipAddress      String
   userAgent      String?
   outcome        SecurityOutcome
-  createdAt      DateTime        @default(now())
+  createdAt      DateTime        @default(now()) @db.Timestamptz
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
@@ -662,28 +175,201 @@ model SecurityEvent {
   @@index([createdAt])
 }
 
-model Notification {
-  id              String              @id @default(cuid())
-  clientId        String?
-  userId          String?
-  channel         NotificationChannel
-  templateKey     String
-  recipient       String
-  subject         String?
-  bodyText        String
-  status          NotificationStatus  @default(QUEUED)
-  scheduledFor    DateTime
-  sentAt          DateTime?
-  cancelledReason String?
-  relatedType     String
-  relatedId       String
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @default(now()) @updatedAt
+model Client {
+  id               String       @id @default(cuid())
+  companyId        String
+  type             ClientType   @default(INDIVIDUAL)
+  status           ClientStatus @default(PROSPECT)
+  displayName      String
+  legalName        String?
+  email            String       @unique @db.Citext
+  phone            String?
+  suburb           String?
+  state            String?
+  postcode         String?
+  marketingConsent Boolean      @default(false)
+  consentUpdatedAt DateTime?    @db.Timestamptz
+  anonymisedAt     DateTime?    @db.Timestamptz
+  notes            String?
+  createdAt        DateTime     @default(now()) @db.Timestamptz
+  updatedAt        DateTime     @default(now()) @updatedAt @db.Timestamptz
+  archivedAt       DateTime?    @db.Timestamptz
 
-  client Client? @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  projects Project[]
 
-  @@index([status, scheduledFor])
-  @@index([relatedType, relatedId])
+  @@index([companyId])
+  @@index([status])
+}
+
+model Project {
+  id               String           @id @default(cuid())
+  companyId        String
+  clientId         String
+  code             String           @unique
+  name             String
+  ownerUserId      String?
+  lifecycleStatus  ProjectLifecycle @default(ENQUIRY)
+  commercialStatus CommercialStatus @default(UNQUOTED)
+  source           String?
+  sourceDetail     String?
+  enquiryReceivedAt DateTime        @default(now()) @db.Timestamptz
+  enquiryNotes     String?
+  firstRespondedAt DateTime?        @db.Timestamptz
+  createdAt        DateTime         @default(now()) @db.Timestamptz
+  updatedAt        DateTime         @default(now()) @updatedAt @db.Timestamptz
+  archivedAt       DateTime?        @db.Timestamptz
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  client    Client     @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  owner     User?      @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  quotes    Quote[]
+  contracts Contract[]
+
+  @@index([companyId])
   @@index([clientId])
+  @@index([lifecycleStatus])
+  @@index([enquiryReceivedAt])
+}
+
+model Quote {
+  id               String   @id @default(cuid())
+  projectId        String
+  viewToken        String   @unique
+  status           QuoteStatus @default(DRAFT)
+  currentVersionId String?  @unique
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  updatedAt        DateTime @default(now()) @updatedAt @db.Timestamptz
+
+  project        Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  currentVersion QuoteVersion?  @relation("QuoteCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions       QuoteVersion[] @relation("QuoteVersions")
+
+  @@index([projectId])
+}
+
+model QuoteVersion {
+  id            String      @id @default(cuid())
+  quoteId       String
+  versionNumber Int
+  status        QuoteStatus @default(DRAFT)
+  currency      String      @default("AUD")
+  subtotal      Decimal     @default(0) @db.Decimal(12, 2)
+  discountTotal Decimal     @default(0) @db.Decimal(12, 2)
+  taxTotal      Decimal     @default(0) @db.Decimal(12, 2)
+  total         Decimal     @default(0) @db.Decimal(12, 2)
+  validUntil    DateTime?   @db.Timestamptz
+  createdById   String?
+  sentAt        DateTime?   @db.Timestamptz
+  viewedAt      DateTime?   @db.Timestamptz
+  acceptedAt    DateTime?   @db.Timestamptz
+  acceptedName  String?
+  acceptedIp    String?
+  createdAt     DateTime    @default(now()) @db.Timestamptz
+  updatedAt     DateTime    @default(now()) @updatedAt @db.Timestamptz
+
+  quote     Quote       @relation("QuoteVersions", fields: [quoteId], references: [id], onDelete: Cascade)
+  createdBy User?       @relation("QuoteVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  currentOf Quote?      @relation("QuoteCurrentVersion")
+  lines     QuoteLine[]
+
+  @@unique([quoteId, versionNumber])
+  @@index([quoteId])
+  @@index([status])
+}
+
+model QuoteLine {
+  id             String  @id @default(cuid())
+  quoteVersionId String
+  lineType       String  @default("custom")
+  referenceId    String?
+  description    String
+  quantity       Int     @default(1)
+  unitPrice      Decimal @default(0) @db.Decimal(12, 2)
+  discount       Decimal @default(0) @db.Decimal(12, 2)
+  tax            Decimal @default(0) @db.Decimal(12, 2)
+  lineTotal      Decimal @default(0) @db.Decimal(12, 2)
+  sortOrder      Int     @default(0)
+  createdAt      DateTime @default(now()) @db.Timestamptz
+
+  quoteVersion QuoteVersion @relation(fields: [quoteVersionId], references: [id], onDelete: Cascade)
+
+  @@index([quoteVersionId])
+}
+
+model Contract {
+  id               String         @id @default(cuid())
+  projectId        String
+  signToken        String         @unique
+  status           ContractStatus @default(DRAFT)
+  currentVersionId String?        @unique
+  createdAt        DateTime       @default(now()) @db.Timestamptz
+  updatedAt        DateTime       @default(now()) @updatedAt @db.Timestamptz
+
+  project        Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  currentVersion ContractVersion?  @relation("ContractCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions       ContractVersion[] @relation("ContractVersions")
+
+  @@index([projectId])
+}
+
+model ContractVersion {
+  id                String         @id @default(cuid())
+  contractId        String
+  versionNumber     Int
+  status            ContractStatus @default(DRAFT)
+  documentReference String?
+  termsSnapshot     Json
+  contentHash       String?
+  createdById       String?
+  signedName        String?
+  signedAt          DateTime?      @db.Timestamptz
+  signedIp          String?
+  createdAt         DateTime       @default(now()) @db.Timestamptz
+  updatedAt         DateTime       @default(now()) @updatedAt @db.Timestamptz
+
+  contract  Contract  @relation("ContractVersions", fields: [contractId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation("ContractVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  currentOf Contract? @relation("ContractCurrentVersion")
+
+  @@unique([contractId, versionNumber])
+  @@index([contractId])
+  @@index([status])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  companyId   String?
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String
+  beforeData  Json?
+  afterData   Json?
+  reason      String?
+  source      String?
+  metadata    Json?
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model OutboxEvent {
+  id            String       @id @default(cuid())
+  eventType     String
+  aggregateType String
+  aggregateId   String
+  correlationId String?
+  causationId   String?
+  payload       Json
+  status        OutboxStatus @default(PENDING)
+  attemptCount  Int          @default(0)
+  availableAt   DateTime     @default(now()) @db.Timestamptz
+  processedAt   DateTime?    @db.Timestamptz
+  createdAt     DateTime     @default(now()) @db.Timestamptz
+
+  @@index([status, availableAt])
 }

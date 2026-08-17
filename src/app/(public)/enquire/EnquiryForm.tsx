@@ -3,27 +3,23 @@
 import { useActionState } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
-import { Checkbox, Field, Select, Textarea, TextInput } from '@/components/ui/form'
+import { Field, TextInput, Textarea } from '@/components/ui/form'
 import { submitEnquiry, type EnquiryFormState } from './actions'
 
 const INITIAL: EnquiryFormState = { status: 'idle' }
 
-export function EnquiryForm({ defaultPackage }: { defaultPackage?: string }) {
+export function EnquiryForm({ csrf }: { csrf: string }) {
   const [state, action, pending] = useActionState(submitEnquiry, INITIAL)
+  const errors = state.status === 'error' ? (state.errors ?? {}) : {}
 
   if (state.status === 'success') {
     return (
-      <Alert tone="success" title="Thank you, we have your enquiry">
-        Someone from the studio will reply within 24 hours, and we will text you to say a reply is on
-        the way.
-        {state.farFutureWarning
-          ? ' Your date is more than 18 months away, so the studio will confirm availability closer to the time.'
-          : ''}
+      <Alert tone="success" title="Thank you, your enquiry is in">
+        We reply to every enquiry within a day. We will send you a text to say it is on the way, so it
+        does not sit unread in a spam folder.
       </Alert>
     )
   }
-
-  const errors = state.status === 'error' ? state.errors : {}
 
   return (
     <form action={action} className="flex flex-col gap-5">
@@ -31,60 +27,31 @@ export function EnquiryForm({ defaultPackage }: { defaultPackage?: string }) {
         <Alert tone="danger" title={state.message} />
       ) : null}
 
-      <Field label="Your name" htmlFor="primaryName" required error={errors.primaryName}>
-        <TextInput id="primaryName" name="primaryName" hasError={Boolean(errors.primaryName)} />
+      <input type="hidden" name="csrf" value={csrf} />
+
+      <Field label="Your name" htmlFor="name" error={errors.name}>
+        <TextInput id="name" name="name" autoComplete="name" autoFocus hasError={Boolean(errors.name)} />
       </Field>
 
-      <Field label="Partner's name" htmlFor="partnerName">
-        <TextInput id="partnerName" name="partnerName" />
+      <Field label="Email" htmlFor="email" error={errors.email}>
+        <TextInput id="email" name="email" type="email" autoComplete="email" hasError={Boolean(errors.email)} />
       </Field>
 
-      <Field label="Email" htmlFor="email" required error={errors.email}>
-        <TextInput id="email" name="email" type="email" hasError={Boolean(errors.email)} />
+      <Field label="Phone" htmlFor="phone" hint="Optional, for a quick text back." error={errors.phone}>
+        <TextInput id="phone" name="phone" type="tel" autoComplete="tel" hasError={Boolean(errors.phone)} />
       </Field>
 
-      <Field label="Mobile" htmlFor="phone" hint="We send a text, we do not call.">
-        <TextInput id="phone" name="phone" type="tel" />
+      <Field label="What are you after" htmlFor="eventType" hint="Wedding, portrait, or something else.">
+        <TextInput id="eventType" name="eventType" />
       </Field>
 
-      <Field label="What is it for" htmlFor="enquiryType" required error={errors.enquiryType}>
-        <Select
-          id="enquiryType"
-          name="enquiryType"
-          defaultValue="WEDDING"
-          hasError={Boolean(errors.enquiryType)}
-        >
-          <option value="WEDDING">Wedding</option>
-          <option value="MICRO">Micro wedding or elopement</option>
-          <option value="PORTRAIT">Portrait session</option>
-        </Select>
+      <Field label="Tell us about your day" htmlFor="message" error={errors.message}>
+        <Textarea id="message" name="message" hasError={Boolean(errors.message)} />
       </Field>
 
-      <Field label="Event date" htmlFor="eventDate" required error={errors.eventDate}>
-        <TextInput id="eventDate" name="eventDate" type="date" hasError={Boolean(errors.eventDate)} />
-      </Field>
-
-      <Field label="Venue" htmlFor="venueName" hint="If you know it yet.">
-        <TextInput id="venueName" name="venueName" />
-      </Field>
-
-      <Field label="Anything you want to tell the studio" htmlFor="message">
-        <Textarea id="message" name="message" placeholder="Your plans, your style, what matters to you." />
-      </Field>
-
-      {defaultPackage ? <input type="hidden" name="packageCodes" value={defaultPackage} /> : null}
-
-      <Checkbox
-        id="marketingConsent"
-        name="marketingConsent"
-        label="Send me occasional updates from the studio. You can opt out at any time."
-      />
-
-      <div>
-        <Button type="submit" loading={pending}>
-          Send enquiry
-        </Button>
-      </div>
+      <Button type="submit" loading={pending} className="w-full">
+        Send enquiry
+      </Button>
     </form>
   )
 }

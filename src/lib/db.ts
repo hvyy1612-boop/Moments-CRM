@@ -7,10 +7,11 @@ function createPrisma() {
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
   }).$extends({
     query: {
-      activityLog: {
+
+      auditLog: {
         $allOperations({ operation, args, query }) {
           if (MUTATIONS.has(operation)) {
-            throw new Error('ActivityLog is insert-only (BR-L01, ADR-0003)')
+            throw new Error('AuditLog is insert-only')
           }
           return query(args)
         },
@@ -18,16 +19,7 @@ function createPrisma() {
       securityEvent: {
         $allOperations({ operation, args, query }) {
           if (MUTATIONS.has(operation)) {
-            throw new Error('SecurityEvent is insert-only (BR-L01, ADR-0003)')
-          }
-          return query(args)
-        },
-      },
-      agreement: {
-        $allOperations({ operation, args, query }) {
-
-          if (MUTATIONS.has(operation)) {
-            throw new Error('Agreement is insert-only (BR-AG05)')
+            throw new Error('SecurityEvent is insert-only')
           }
           return query(args)
         },
