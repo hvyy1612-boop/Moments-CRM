@@ -9,7 +9,8 @@ import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate } from '@/lib/time'
 import { StaffHeader } from '../../StaffHeader'
-import { createQuoteAction } from '../actions'
+import { createContractAction, createQuoteAction } from '../actions'
+import { ContractSend } from './ContractSend'
 import { QuoteBuilder } from './QuoteBuilder'
 
 export const runtime = 'nodejs'
@@ -23,6 +24,14 @@ const QUOTE_TONE: Record<string, Tone> = {
   DECLINED: 'bad',
   EXPIRED: 'warn',
   SUPERSEDED: 'neutral',
+}
+
+const CONTRACT_TONE: Record<string, Tone> = {
+  DRAFT: 'neutral',
+  SENT: 'info',
+  SIGNED: 'good',
+  SUPERSEDED: 'neutral',
+  VOID: 'bad',
 }
 
 function label(value: string): string {
@@ -43,12 +52,19 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         orderBy: { createdAt: 'desc' },
         include: { currentVersion: { include: { lines: { orderBy: { sortOrder: 'asc' } } } } },
       },
+      contracts: {
+        orderBy: { createdAt: 'desc' },
+        include: { currentVersion: true },
+      },
     },
   })
   if (!project) notFound()
 
   const quote = project.quotes[0]
   const version = quote?.currentVersion ?? null
+  const contract = project.contracts[0]
+  const contractVersion = contract?.currentVersion ?? null
+  const quoteAccepted = version?.status === 'ACCEPTED'
 
   return (
     <>
@@ -146,6 +162,46 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             </div>
           )}
         </section>
+
+        {quoteAccepted ? (
+          <section className="mt-6 rounded border border-line bg-surface p-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <h2 className="text-lg">Contract</h2>
+              {contractVersion ? (
+                <StatusPill tone={CONTRACT_TONE[contractVersion.status] ?? 'neutral'}>
+                  {label(contractVersion.status)}
+                </StatusPill>
+              ) : null}
+            </div>
+
+            {!contract || !contractVersion ? (
+              <form action={createContractAction} className="mt-4">
+                <input type="hidden" name="csrf" value={csrf} />
+                <input type="hidden" name="projectId" value={project.id} />
+                <p className="text-sm text-ink-muted">
+                  The quote is accepted. Generate the booking contract from it.
+                </p>
+                <Button type="submit" className="mt-3">
+                  Create contract
+                </Button>
+              </form>
+            ) : contractVersion.status === 'DRAFT' ? (
+              <ContractSend csrf={csrf} contractId={contract.id} projectId={project.id} />
+            ) : contractVersion.status === 'SIGNED' ? (
+              <p className="mt-4 text-sm text-ink">
+                Signed by {contractVersion.signedName} on{' '}
+                {contractVersion.signedAt ? formatSydneyDate(contractVersion.signedAt) : ''}.
+              </p>
+            ) : (
+              <div className="mt-4">
+                <p className="text-sm text-ink-muted">Waiting for the client to sign.</p>
+                <p className="mt-2 text-sm">
+                  Client link: <span className="text-ink">/contract/{contract.signToken}</span>
+                </p>
+              </div>
+            )}
+          </section>
+        ) : null}
       </main>
     </>
   )

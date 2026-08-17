@@ -13,7 +13,7 @@ test('a website enquiry becomes a project', async ({ page }) => {
   await expect(page.getByText('Thank you, your enquiry is in')).toBeVisible()
 })
 
-test('staff quote a project and the client accepts it', async ({ page }) => {
+test('staff quote a project, the client accepts, then signs the contract', async ({ page }) => {
   // Start from a fresh enquiry so this project has no quote yet.
   await page.goto('/enquire')
   await page.getByLabel('Your name').fill('E2E Quote Client')
@@ -32,6 +32,7 @@ test('staff quote a project and the client accepts it', async ({ page }) => {
   // Open the newest project for this client.
   await page.getByRole('link', { name: 'E2E Quote Client' }).first().click()
   await expect(page).toHaveURL(/\/projects\/[a-z0-9]+$/)
+  const projectUrl = page.url()
 
   // Build and send a quote.
   await page.getByRole('button', { name: 'Create quote' }).click()
@@ -55,4 +56,22 @@ test('staff quote a project and the client accepts it', async ({ page }) => {
   await page.getByLabel('Type your name to accept').fill('Client Name')
   await page.getByRole('button', { name: 'Accept quote' }).click()
   await expect(page.getByText('Thank you, your quote is accepted')).toBeVisible()
+
+  // Staff issue the booking contract from the accepted quote, then send it.
+  await page.goto(projectUrl)
+  await page.getByRole('button', { name: 'Create contract' }).click()
+  await page.getByRole('button', { name: 'Send contract' }).click()
+
+  // The staff page now shows the private contract link.
+  const contractLinkText = await page.getByText(/\/contract\//).first().innerText()
+  const contractMatch = contractLinkText.match(/\/contract\/([A-Za-z0-9_-]+)/)
+  expect(contractMatch).not.toBeNull()
+  const contractToken = contractMatch![1]
+
+  // The client opens the contract and signs it, confirming the booking.
+  await page.goto(`/contract/${contractToken}`)
+  await expect(page.getByText('Your booking contract')).toBeVisible()
+  await page.getByLabel('Type your full name to sign').fill('Client Name')
+  await page.getByRole('button', { name: 'Sign contract' }).click()
+  await expect(page.getByText('Thank you, your contract is signed')).toBeVisible()
 })

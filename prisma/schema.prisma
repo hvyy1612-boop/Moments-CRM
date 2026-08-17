@@ -1,7 +1,7 @@
 // Moments — Prisma schema. Project-centric (Database Blueprint v2 final).
-// Slice 1 subset: Company, auth (User/Session/PasswordReset/SecurityEvent), Client,
-// Project, Quote/QuoteVersion/QuoteLine, AuditLog, OutboxEvent.
-// Later slices add: contracts, bookings/resources, finance, workflow/work_items,
+// Slices 1-2: Company, auth (User/Session/PasswordReset/SecurityEvent), Client, Project,
+// Quote/QuoteVersion/QuoteLine, Contract/ContractVersion, AuditLog, OutboxEvent.
+// Later slices add: bookings/resources, finance, workflow/work_items,
 // production/deliverables/galleries, notifications, policies, change_requests, etc.
 //
 // Locked decisions: single-tenant (one Company row; company_id là reserved field, không RLS),
@@ -76,6 +76,14 @@ enum QuoteStatus {
   SUPERSEDED
 }
 
+enum ContractStatus {
+  DRAFT
+  SENT
+  SIGNED
+  SUPERSEDED
+  VOID
+}
+
 enum OutboxStatus {
   PENDING
   PROCESSING
@@ -125,7 +133,8 @@ model User {
   securityEvents SecurityEvent[]
   auditLogs      AuditLog[]
   ownedProjects  Project[]       @relation("ProjectOwner")
-  createdQuoteVersions QuoteVersion[] @relation("QuoteVersionCreatedBy")
+  createdQuoteVersions    QuoteVersion[]    @relation("QuoteVersionCreatedBy")
+  createdContractVersions ContractVersion[] @relation("ContractVersionCreatedBy")
 
   @@index([companyId])
   @@index([role])
@@ -233,10 +242,11 @@ model Project {
   updatedAt        DateTime         @default(now()) @updatedAt @db.Timestamptz
   archivedAt       DateTime?        @db.Timestamptz
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  client  Client  @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  owner   User?   @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  quotes  Quote[]
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  client    Client     @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  owner     User?      @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  quotes    Quote[]
+  contracts Contract[]
 
   @@index([companyId])
   @@index([clientId])
@@ -311,6 +321,52 @@ model QuoteLine {
   quoteVersion QuoteVersion @relation(fields: [quoteVersionId], references: [id], onDelete: Cascade)
 
   @@index([quoteVersionId])
+}
+
+// ---------- Commercial: Contract ----------
+// Sinh từ quote đã ACCEPTED. Client ký qua signToken (không login). Signed version immutable
+// (partial unique + trigger trong migration). Amendment = version mới, không sửa bản đã ký.
+
+model Contract {
+  id               String         @id @default(cuid())
+  projectId        String
+  signToken        String         @unique // client mở + ký contract qua link, không cần account
+  status           ContractStatus @default(DRAFT) // cache của current version
+  currentVersionId String?        @unique
+  createdAt        DateTime       @default(now()) @db.Timestamptz
+  updatedAt        DateTime       @default(now()) @updatedAt @db.Timestamptz
+
+  project        Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  currentVersion ContractVersion?  @relation("ContractCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions       ContractVersion[] @relation("ContractVersions")
+
+  @@index([projectId])
+}
+
+model ContractVersion {
+  id                String         @id @default(cuid())
+  contractId        String
+  versionNumber     Int
+  status            ContractStatus @default(DRAFT)
+  documentReference String? // link/ref tới bản PDF nếu có (chưa dựng ở slice này)
+  termsSnapshot     Json // ảnh chụp: client, project code, dòng quote + tổng, nội dung điều khoản
+  contentHash       String? // hash của snapshot để chứng minh bản ký không đổi
+  createdById       String?
+  signedName        String? // tên khách gõ khi ký
+  signedAt          DateTime?      @db.Timestamptz
+  signedIp          String?
+  createdAt         DateTime       @default(now()) @db.Timestamptz
+  updatedAt         DateTime       @default(now()) @updatedAt @db.Timestamptz
+
+  contract  Contract  @relation("ContractVersions", fields: [contractId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation("ContractVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  currentOf Contract? @relation("ContractCurrentVersion")
+  // Invariant: tối đa một version SIGNED / contract (partial unique index trong migration).
+  // Signed version immutable (app + trigger).
+
+  @@unique([contractId, versionNumber])
+  @@index([contractId])
+  @@index([status])
 }
 
 // ---------- Governance / Reliability ----------

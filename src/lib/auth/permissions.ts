@@ -22,6 +22,7 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   // Staff workspace (Slice 1): projects and the quote builder inside a project.
   '/projects': { roles: ['ADMIN', 'STUDIO'] },
   '/projects/[id]': { roles: ['ADMIN', 'STUDIO'] },
-  // Client-facing, reached by a quote token only. No session, no account.
+  // Client-facing, reached by a token only. No session, no account.
   '/quote/[token]': { token: true },
+  '/contract/[token]': { token: true },
 }
