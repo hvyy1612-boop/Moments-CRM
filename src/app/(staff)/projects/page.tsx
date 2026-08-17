@@ -41,14 +41,24 @@ export default async function ProjectsPage() {
     <>
       <StaffHeader user={user} csrf={csrf} />
       <main className="mx-auto w-full max-w-5xl px-4 py-8">
-        <h1 className="text-xl">Projects</h1>
-        <p className="mt-1 text-sm text-ink-muted">Every enquiry becomes a project here.</p>
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <div>
+            <h1 className="text-xl">Projects</h1>
+            <p className="mt-1 text-sm text-ink-muted">Every enquiry becomes a project here.</p>
+          </div>
+          <Link
+            href="/projects/new"
+            className="inline-flex items-center rounded bg-accent px-4 py-2 text-sm font-medium text-surface transition-colors duration-150 hover:brightness-95"
+          >
+            New enquiry
+          </Link>
+        </div>
 
         {projects.length === 0 ? (
           <div className="mt-6">
             <EmptyState
               title="No projects yet"
-              description="When someone sends an enquiry from the website, it appears here as a project."
+              description="Log the first enquiry with the New enquiry button above."
             />
           </div>
         ) : (

@@ -16,6 +16,7 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/login': { public: true },
 
   '/projects': { roles: ['ADMIN', 'STUDIO'] },
+  '/projects/new': { roles: ['ADMIN', 'STUDIO'] },
   '/projects/[id]': { roles: ['ADMIN', 'STUDIO'] },
 
   '/quote/[token]': { token: true },
