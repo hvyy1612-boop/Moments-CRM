@@ -25,4 +25,5 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   // Client-facing, reached by a token only. No session, no account.
   '/quote/[token]': { token: true },
   '/contract/[token]': { token: true },
+  '/gallery/[token]': { token: true },
 }

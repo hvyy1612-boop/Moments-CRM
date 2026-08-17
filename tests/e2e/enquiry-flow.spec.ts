@@ -13,7 +13,7 @@ test('a website enquiry becomes a project', async ({ page }) => {
   await expect(page.getByText('Thank you, your enquiry is in')).toBeVisible()
 })
 
-test('full lifecycle: quote, contract, booking, double-booking blocked, deposit invoiced and paid', async ({
+test('full lifecycle: quote, contract, booking (no double-booking), deposit paid, gallery delivered', async ({
   page,
 }) => {
   // Start from a fresh enquiry so this project has no quote yet.
@@ -109,4 +109,23 @@ test('full lifecycle: quote, contract, booking, double-booking blocked, deposit 
   await page.getByLabel('Payment amount').fill('700')
   await page.getByRole('button', { name: 'Record' }).click()
   await expect(page.getByText('paid', { exact: true })).toBeVisible()
+
+  // Deliver the finished work: create a gallery, add an item, and publish it to the client.
+  await page.getByLabel('Gallery title').fill('Wedding gallery')
+  await page.getByRole('button', { name: 'Start gallery' }).click()
+  await page.getByLabel('Item caption').fill('Full album')
+  await page.getByLabel('Item link').fill('https://example.com/album')
+  await page.getByRole('button', { name: 'Add item' }).click()
+  await expect(page.getByText('Full album')).toBeVisible()
+  await page.getByRole('button', { name: 'Publish to client' }).click()
+
+  // The staff page shows the client gallery link; the client opens the published gallery.
+  const galleryLinkText = await page.getByText(/\/gallery\//).first().innerText()
+  const galleryMatch = galleryLinkText.match(/\/gallery\/([A-Za-z0-9_-]+)/)
+  expect(galleryMatch).not.toBeNull()
+  const galleryToken = galleryMatch![1]
+
+  await page.goto(`/gallery/${galleryToken}`)
+  await expect(page.getByRole('heading', { name: 'Wedding gallery' })).toBeVisible()
+  await expect(page.getByText('Full album')).toBeVisible()
 })

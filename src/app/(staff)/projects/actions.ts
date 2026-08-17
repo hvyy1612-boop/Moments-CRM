@@ -7,10 +7,12 @@ import { getSessionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { assignResource, createBooking } from '@/lib/domain/booking'
 import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/contract'
+import { addGalleryItem, createGallery, publishGallery } from '@/lib/domain/delivery'
 import { createInvoice, issueInvoice, recordPayment } from '@/lib/domain/finance'
 import { createQuote, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 import { sendContractEmail, sendQuoteEmail } from '@/lib/email'
 import { assignResourceSchema, createBookingSchema } from '@/lib/validation/booking'
+import { addGalleryItemSchema, createGallerySchema } from '@/lib/validation/delivery'
 import { createInvoiceSchema, recordPaymentSchema } from '@/lib/validation/finance'
 import { saveQuoteSchema } from '@/lib/validation/quote'
 
@@ -297,4 +299,74 @@ export async function recordPaymentAction(
   }
   revalidatePath(`/projects/${projectId}`)
   return { status: 'success' }
+}
+
+/** Start a draft gallery for a confirmed project. */
+export async function createGalleryAction(
+  _prev: QuoteActionState,
+  formData: FormData,
+): Promise<QuoteActionState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+
+  const parsed = createGallerySchema.safeParse({ title: formData.get('title') ?? '' })
+  if (!parsed.success) {
+    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the gallery.' }
+  }
+  try {
+    await createGallery(projectId, parsed.data, user.id)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not create the gallery.' }
+  }
+  revalidatePath(`/projects/${projectId}`)
+  return { status: 'success' }
+}
+
+/** Add an item (caption + link) to a draft gallery. */
+export async function addGalleryItemAction(
+  _prev: QuoteActionState,
+  formData: FormData,
+): Promise<QuoteActionState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const galleryId = String(formData.get('galleryId') ?? '')
+
+  const parsed = addGalleryItemSchema.safeParse({
+    caption: formData.get('caption') ?? '',
+    url: formData.get('url') ?? '',
+  })
+  if (!parsed.success) {
+    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the item.' }
+  }
+  try {
+    await addGalleryItem(galleryId, parsed.data, user.id)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not add the item.' }
+  }
+  revalidatePath(`/projects/${projectId}`)
+  return { status: 'success' }
+}
+
+/** Publish a gallery to the client and complete the project. Plain form action. */
+export async function publishGalleryAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const galleryId = String(formData.get('galleryId') ?? '')
+  if (!galleryId) return
+  try {
+    await publishGallery(galleryId, user.id)
+  } catch {
+    // The button only shows on a draft with items; a double submit is a no-op here.
+  }
+  revalidatePath(`/projects/${projectId}`)
 }

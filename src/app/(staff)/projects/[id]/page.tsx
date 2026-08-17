@@ -11,6 +11,7 @@ import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
 import { StaffHeader } from '../../StaffHeader'
 import { createContractAction, createQuoteAction } from '../actions'
 import { ContractSend } from './ContractSend'
+import { Delivery } from './Delivery'
 import { Finance } from './Finance'
 import { QuoteBuilder } from './QuoteBuilder'
 import { Scheduling } from './Scheduling'
@@ -78,6 +79,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           amountPaid: true,
         },
       },
+      galleries: {
+        orderBy: { createdAt: 'desc' },
+        include: { items: { orderBy: { sortOrder: 'asc' } } },
+      },
     },
   })
   if (!project) notFound()
@@ -87,8 +92,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const contract = project.contracts[0]
   const contractVersion = contract?.currentVersion ?? null
   const quoteAccepted = version?.status === 'ACCEPTED'
-  const isConfirmed =
-    project.lifecycleStatus === 'CONFIRMED' || project.lifecycleStatus === 'IN_PRODUCTION'
+  const isConfirmed = (['CONFIRMED', 'IN_PRODUCTION', 'COMPLETED'] as const).some(
+    (s) => s === project.lifecycleStatus,
+  )
 
   const resources = isConfirmed
     ? await prisma.resource.findMany({
@@ -122,6 +128,22 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     isDraft: invoice.status === 'DRAFT',
     canPay: invoice.status !== 'DRAFT' && invoice.status !== 'PAID' && invoice.status !== 'VOID',
   }))
+
+  const gallery = project.galleries[0]
+  const galleryView = gallery
+    ? {
+        id: gallery.id,
+        title: gallery.title,
+        status: gallery.status,
+        accessToken: gallery.accessToken,
+        publishedLabel: gallery.publishedAt ? formatSydneyDate(gallery.publishedAt) : null,
+        items: gallery.items.map((item) => ({
+          id: item.id,
+          caption: item.caption,
+          url: item.url,
+        })),
+      }
+    : null
 
   return (
     <>
@@ -276,6 +298,13 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <section className="mt-6 rounded border border-line bg-surface p-5">
             <h2 className="text-lg">Invoices &amp; payments</h2>
             <Finance csrf={csrf} projectId={project.id} invoices={invoiceViews} />
+          </section>
+        ) : null}
+
+        {isConfirmed ? (
+          <section className="mt-6 rounded border border-line bg-surface p-5">
+            <h2 className="text-lg">Delivery</h2>
+            <Delivery csrf={csrf} projectId={project.id} gallery={galleryView} />
           </section>
         ) : null}
       </main>

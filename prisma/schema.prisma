@@ -1,9 +1,9 @@
 // Moments — Prisma schema. Project-centric (Database Blueprint v2 final).
-// Slices 1-4: Company, auth (User/Session/PasswordReset/SecurityEvent), Client, Project,
+// Slices 1-5: Company, auth (User/Session/PasswordReset/SecurityEvent), Client, Project,
 // Quote/QuoteVersion/QuoteLine, Contract/ContractVersion, Booking/Resource/ResourceAssignment,
-// Invoice/InvoiceLine/Payment/PaymentTransaction, AuditLog, OutboxEvent.
-// Later slices add: workflow/work_items, production/deliverables/galleries, notifications,
-// policies, change_requests, refunds, Stripe online payment, etc.
+// Invoice/InvoiceLine/Payment/PaymentTransaction, Gallery/GalleryItem, AuditLog, OutboxEvent.
+// Later slices add: workflow/work_items, deliverables/revisions/approvals/assets (object storage),
+// notifications, policies, change_requests, refunds, Stripe online payment, etc.
 //
 // Locked decisions: single-tenant (one Company row; company_id là reserved field, không RLS),
 // project bắt đầu từ enquiry, không leads, work_items canonical (chưa dựng ở slice 1),
@@ -151,6 +151,12 @@ enum TransactionStatus {
   PROCESSING
   SUCCEEDED
   FAILED
+}
+
+enum GalleryStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
 }
 
 enum OutboxStatus {
@@ -324,6 +330,7 @@ model Project {
   bookings  Booking[]
   invoices  Invoice[]
   payments  Payment[]
+  galleries Gallery[]
 
   @@index([companyId])
   @@index([clientId])
@@ -605,6 +612,40 @@ model PaymentTransaction {
   // APPEND-ONLY (trigger). uq(provider, externalTransactionId) khi external id có giá trị (idempotency).
 
   @@index([paymentId])
+}
+
+// ---------- Production / Delivery (Domain 08) ----------
+// Slice 5 subset: giao khách qua Gallery. Client mở gallery bằng accessToken (không login). Publish
+// gallery = đã giao → dự án COMPLETED. Asset/object storage, revisions, approvals để dành slice sau;
+// item hiện lưu URL ngoài (studio host ảnh ở nơi khác) thay vì tự lưu file.
+
+model Gallery {
+  id          String        @id @default(cuid())
+  projectId   String
+  title       String
+  status      GalleryStatus @default(DRAFT)
+  accessToken String        @unique // client xem gallery qua link, không cần account
+  publishedAt DateTime?     @db.Timestamptz
+  createdAt   DateTime      @default(now()) @db.Timestamptz
+  updatedAt   DateTime      @default(now()) @updatedAt @db.Timestamptz
+
+  project Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  items   GalleryItem[]
+
+  @@index([projectId])
+}
+
+model GalleryItem {
+  id        String   @id @default(cuid())
+  galleryId String
+  caption   String
+  url       String // link http/https tới ảnh/tài nguyên (validate ở app; chặn javascript:)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  gallery Gallery @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+
+  @@index([galleryId])
 }
 
 // ---------- Governance / Reliability ----------
