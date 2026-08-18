@@ -236,9 +236,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 Client link:{' '}
                 <span className="text-ink">/quote/{quote.viewToken}</span>
               </p>
-              {version.acceptedAt ? (
+              {version.acceptedByClientAt ? (
                 <p className="mt-2 text-sm text-ink">
-                  Accepted by {version.acceptedName} on {formatSydneyDate(version.acceptedAt)}.
+                  Accepted by {version.acceptedByClientName} on{' '}
+                  {formatSydneyDate(version.acceptedByClientAt)}.
                 </p>
               ) : null}
             </div>
@@ -271,8 +272,11 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               <ContractSend csrf={csrf} contractId={contract.id} projectId={project.id} />
             ) : contractVersion.status === 'SIGNED' ? (
               <p className="mt-4 text-sm text-ink">
-                Signed by {contractVersion.signedName} on{' '}
-                {contractVersion.signedAt ? formatSydneyDate(contractVersion.signedAt) : ''}.
+                Signed by {contractVersion.signedByClientName} on{' '}
+                {contractVersion.signedByClientAt
+                  ? formatSydneyDate(contractVersion.signedByClientAt)
+                  : ''}
+                .
               </p>
             ) : (
               <div className="mt-4">

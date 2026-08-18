@@ -5,6 +5,9 @@
 // Later slices add: workflow/work_items, deliverables/revisions/approvals/assets (object storage),
 // notifications, policies, change_requests, refunds, Stripe online payment, etc.
 //
+// Naming: code = camelCase field + PascalCase model; database = snake_case column + snake_case
+// plural table (via @map / @@map). See docs/17-data-dictionary.md for the full mapping.
+//
 // Locked decisions: single-tenant (one Company row; company_id là reserved field, không RLS),
 // project bắt đầu từ enquiry, không leads, work_items canonical (chưa dựng ở slice 1),
 // CUID id, money Decimal, timestamptz. Con số business = TBD (không hard-code).
@@ -175,41 +178,43 @@ model Company {
   timezone  String   @default("Australia/Sydney")
   currency  String   @default("AUD")
   settings  Json     @default("{}")
-  createdAt DateTime @default(now()) @db.Timestamptz
-  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   users     User[]
   clients   Client[]
   projects  Project[]
   bookings  Booking[]
   resources Resource[]
+
+  @@map("companies")
 }
 
 // ---------- Identity / auth (giữ nguyên hình dạng để code auth tái dùng) ----------
 
 model User {
   id                 String    @id @default(cuid())
-  companyId          String
+  companyId          String    @map("company_id")
   email              String    @unique @db.Citext
-  passwordHash       String
-  passwordAlgo       String
+  passwordHash       String    @map("password_hash")
+  passwordAlgo       String    @map("password_algo")
   role               UserRole
   name               String
-  isActive           Boolean   @default(true)
-  mustChangePassword Boolean   @default(false)
-  lastLoginAt        DateTime? @db.Timestamptz
-  failedAttempts     Int       @default(0)
-  lockedUntil        DateTime? @db.Timestamptz
-  passwordChangedAt  DateTime? @db.Timestamptz
-  createdAt          DateTime  @default(now()) @db.Timestamptz
-  updatedAt          DateTime  @default(now()) @updatedAt @db.Timestamptz
+  isActive           Boolean   @default(true) @map("is_active")
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
+  lastLoginAt        DateTime? @map("last_login_at") @db.Timestamptz
+  failedAttempts     Int       @default(0) @map("failed_attempts")
+  lockedUntil        DateTime? @map("locked_until") @db.Timestamptz
+  passwordChangedAt  DateTime? @map("password_changed_at") @db.Timestamptz
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  company        Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  passwordResets PasswordReset[]
-  sessions       Session[]
-  securityEvents SecurityEvent[]
-  auditLogs      AuditLog[]
-  ownedProjects  Project[]       @relation("ProjectOwner")
+  company                 Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  passwordResets          PasswordReset[]
+  sessions                Session[]
+  securityEvents          SecurityEvent[]
+  auditLogs               AuditLog[]
+  ownedProjects           Project[]            @relation("ProjectOwner")
   createdQuoteVersions    QuoteVersion[]       @relation("QuoteVersionCreatedBy")
   createdContractVersions ContractVersion[]    @relation("ContractVersionCreatedBy")
   linkedResources         Resource[]           @relation("ResourceUser")
@@ -218,52 +223,55 @@ model User {
 
   @@index([companyId])
   @@index([role])
+  @@map("users")
 }
 
 model PasswordReset {
   id          String    @id @default(cuid())
-  userId      String
-  tokenHash   String
-  expiresAt   DateTime  @db.Timestamptz
-  usedAt      DateTime? @db.Timestamptz
-  requestedIp String
-  createdAt   DateTime  @default(now()) @db.Timestamptz
-  updatedAt   DateTime  @default(now()) @updatedAt @db.Timestamptz
+  userId      String    @map("user_id")
+  tokenHash   String    @map("token_hash")
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz
+  usedAt      DateTime? @map("used_at") @db.Timestamptz
+  requestedIp String    @map("requested_ip")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([tokenHash])
+  @@map("password_resets")
 }
 
 model Session {
   id                String    @id @default(cuid())
-  userId            String
-  tokenHash         String
-  expiresAt         DateTime  @db.Timestamptz
-  absoluteExpiresAt DateTime  @db.Timestamptz
-  lastActiveAt      DateTime  @default(now()) @db.Timestamptz
-  userAgent         String?
-  ipAddress         String?
-  revokedAt         DateTime? @db.Timestamptz
-  createdAt         DateTime  @default(now()) @db.Timestamptz
-  updatedAt         DateTime  @default(now()) @updatedAt @db.Timestamptz
+  userId            String    @map("user_id")
+  tokenHash         String    @map("token_hash")
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz
+  absoluteExpiresAt DateTime  @map("absolute_expires_at") @db.Timestamptz
+  lastActiveAt      DateTime  @default(now()) @map("last_active_at") @db.Timestamptz
+  userAgent         String?   @map("user_agent")
+  ipAddress         String?   @map("ip_address")
+  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([tokenHash])
+  @@map("sessions")
 }
 
 model SecurityEvent {
   id             String          @id @default(cuid())
-  eventType      String
-  userId         String?
-  emailAttempted String?         @db.Citext
-  ipAddress      String
-  userAgent      String?
+  eventType      String          @map("event_type")
+  userId         String?         @map("user_id")
+  emailAttempted String?         @map("email_attempted") @db.Citext
+  ipAddress      String          @map("ip_address")
+  userAgent      String?         @map("user_agent")
   outcome        SecurityOutcome
-  createdAt      DateTime        @default(now()) @db.Timestamptz
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
   // INSERT-ONLY (trigger trong migration).
@@ -271,56 +279,58 @@ model SecurityEvent {
   @@index([userId])
   @@index([eventType])
   @@index([createdAt])
+  @@map("security_events")
 }
 
 // ---------- CRM ----------
 
 model Client {
   id               String       @id @default(cuid())
-  companyId        String
+  companyId        String       @map("company_id")
   type             ClientType   @default(INDIVIDUAL)
   status           ClientStatus @default(PROSPECT)
-  displayName      String
-  legalName        String?
+  displayName      String       @map("display_name")
+  legalName        String?      @map("legal_name")
   email            String       @unique @db.Citext // dedupe tại enquiry (P1)
   phone            String?
   suburb           String?
   state            String?
   postcode         String?
-  marketingConsent Boolean      @default(false)
-  consentUpdatedAt DateTime?    @db.Timestamptz
-  anonymisedAt     DateTime?    @db.Timestamptz
+  marketingConsent Boolean      @default(false) @map("marketing_consent")
+  consentUpdatedAt DateTime?    @map("consent_updated_at") @db.Timestamptz
+  anonymisedAt     DateTime?    @map("anonymised_at") @db.Timestamptz
   notes            String?
-  createdAt        DateTime     @default(now()) @db.Timestamptz
-  updatedAt        DateTime     @default(now()) @updatedAt @db.Timestamptz
-  archivedAt       DateTime?    @db.Timestamptz
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  archivedAt       DateTime?    @map("archived_at") @db.Timestamptz
 
   company  Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
   projects Project[]
 
   @@index([companyId])
   @@index([status])
+  @@map("clients")
 }
 
 // ---------- Project (operational case, bắt đầu từ enquiry) ----------
 
 model Project {
-  id               String           @id @default(cuid())
-  companyId        String
-  clientId         String
-  code             String           @unique
-  name             String
-  ownerUserId      String?
-  lifecycleStatus  ProjectLifecycle @default(ENQUIRY)
-  commercialStatus CommercialStatus @default(UNQUOTED) // derived
-  source           String? // nguồn enquiry (I-6 taxonomy, TBD)
-  sourceDetail     String?
-  enquiryReceivedAt DateTime        @default(now()) @db.Timestamptz
-  enquiryNotes     String?
-  firstRespondedAt DateTime?        @db.Timestamptz // SLA
-  createdAt        DateTime         @default(now()) @db.Timestamptz
-  updatedAt        DateTime         @default(now()) @updatedAt @db.Timestamptz
-  archivedAt       DateTime?        @db.Timestamptz
+  id                String           @id @default(cuid())
+  companyId         String           @map("company_id")
+  clientId          String           @map("client_id")
+  code              String           @unique
+  name              String
+  ownerUserId       String?          @map("owner_user_id")
+  lifecycleStatus   ProjectLifecycle @default(ENQUIRY) @map("lifecycle_status")
+  commercialStatus  CommercialStatus @default(UNQUOTED) @map("commercial_status") // derived
+  source            String? // nguồn enquiry (I-6 taxonomy, TBD)
+  sourceDetail      String?          @map("source_detail")
+  enquiryReceivedAt DateTime         @default(now()) @map("enquiry_received_at") @db.Timestamptz
+  enquiryNotes      String?          @map("enquiry_notes")
+  firstRespondedAt  DateTime?        @map("first_responded_at") @db.Timestamptz // SLA
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  archivedAt        DateTime?        @map("archived_at") @db.Timestamptz
 
   company   Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
   client    Client     @relation(fields: [clientId], references: [id], onDelete: Restrict)
@@ -336,48 +346,50 @@ model Project {
   @@index([clientId])
   @@index([lifecycleStatus])
   @@index([enquiryReceivedAt])
+  @@map("projects")
 }
 
 // ---------- Commercial: Quote ----------
 
 model Quote {
-  id               String   @id @default(cuid())
-  projectId        String
-  viewToken        String   @unique // client xem quote qua link, đọc current version
+  id               String      @id @default(cuid())
+  projectId        String      @map("project_id")
+  viewToken        String      @unique @map("view_token") // client xem quote qua link, đọc current version
   status           QuoteStatus @default(DRAFT) // cache của current version
-  currentVersionId String?  @unique
-  createdAt        DateTime @default(now()) @db.Timestamptz
-  updatedAt        DateTime @default(now()) @updatedAt @db.Timestamptz
+  currentVersionId String?     @unique @map("current_version_id")
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   project        Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
   currentVersion QuoteVersion?  @relation("QuoteCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
   versions       QuoteVersion[] @relation("QuoteVersions")
 
   @@index([projectId])
+  @@map("quotes")
 }
 
 model QuoteVersion {
-  id            String      @id @default(cuid())
-  quoteId       String
-  versionNumber Int
-  status        QuoteStatus @default(DRAFT)
-  currency      String      @default("AUD")
-  subtotal      Decimal     @default(0) @db.Decimal(12, 2)
-  discountTotal Decimal     @default(0) @db.Decimal(12, 2)
-  taxTotal      Decimal     @default(0) @db.Decimal(12, 2)
-  total         Decimal     @default(0) @db.Decimal(12, 2)
-  validUntil    DateTime?   @db.Timestamptz
-  createdById   String?
-  sentAt        DateTime?   @db.Timestamptz
-  viewedAt      DateTime?   @db.Timestamptz
-  acceptedAt    DateTime?   @db.Timestamptz
-  acceptedName  String? // tên khách gõ khi accept
-  acceptedIp    String?
-  createdAt     DateTime    @default(now()) @db.Timestamptz
-  updatedAt     DateTime    @default(now()) @updatedAt @db.Timestamptz
+  id                   String      @id @default(cuid())
+  quoteId              String      @map("quote_id")
+  versionNumber        Int         @map("version_number")
+  status               QuoteStatus @default(DRAFT)
+  currency             String      @default("AUD")
+  subtotal             Decimal     @default(0) @db.Decimal(12, 2)
+  discountTotal        Decimal     @default(0) @map("discount_total") @db.Decimal(12, 2)
+  taxTotal             Decimal     @default(0) @map("tax_total") @db.Decimal(12, 2)
+  total                Decimal     @default(0) @db.Decimal(12, 2)
+  validUntil           DateTime?   @map("valid_until") @db.Timestamptz
+  createdByUserId      String?     @map("created_by_user_id")
+  sentToClientAt       DateTime?   @map("sent_to_client_at") @db.Timestamptz
+  viewedByClientAt     DateTime?   @map("viewed_by_client_at") @db.Timestamptz
+  acceptedByClientAt   DateTime?   @map("accepted_by_client_at") @db.Timestamptz
+  acceptedByClientName String?     @map("accepted_by_client_name") // tên khách gõ khi accept
+  acceptedByClientIp   String?     @map("accepted_by_client_ip")
+  createdAt            DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   quote     Quote       @relation("QuoteVersions", fields: [quoteId], references: [id], onDelete: Cascade)
-  createdBy User?       @relation("QuoteVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy User?       @relation("QuoteVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   currentOf Quote?      @relation("QuoteCurrentVersion")
   lines     QuoteLine[]
   // Invariant: tối đa một version ACCEPTED / quote (partial unique index trong migration).
@@ -386,25 +398,27 @@ model QuoteVersion {
   @@unique([quoteId, versionNumber])
   @@index([quoteId])
   @@index([status])
+  @@map("quote_versions")
 }
 
 model QuoteLine {
-  id             String  @id @default(cuid())
-  quoteVersionId String
-  lineType       String  @default("custom") // custom | package | addon (slice 1: custom)
-  referenceId    String?
+  id             String   @id @default(cuid())
+  quoteVersionId String   @map("quote_version_id")
+  lineType       String   @default("custom") @map("line_type") // custom | package | addon (slice 1: custom)
+  referenceId    String?  @map("reference_id")
   description    String
-  quantity       Int     @default(1)
-  unitPrice      Decimal @default(0) @db.Decimal(12, 2)
-  discount       Decimal @default(0) @db.Decimal(12, 2)
-  tax            Decimal @default(0) @db.Decimal(12, 2)
-  lineTotal      Decimal @default(0) @db.Decimal(12, 2)
-  sortOrder      Int     @default(0)
-  createdAt      DateTime @default(now()) @db.Timestamptz
+  quantity       Int      @default(1)
+  unitPrice      Decimal  @default(0) @map("unit_price") @db.Decimal(12, 2)
+  discount       Decimal  @default(0) @db.Decimal(12, 2)
+  tax            Decimal  @default(0) @db.Decimal(12, 2)
+  lineTotal      Decimal  @default(0) @map("line_total") @db.Decimal(12, 2)
+  sortOrder      Int      @default(0) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   quoteVersion QuoteVersion @relation(fields: [quoteVersionId], references: [id], onDelete: Cascade)
 
   @@index([quoteVersionId])
+  @@map("quote_lines")
 }
 
 // ---------- Commercial: Contract ----------
@@ -413,37 +427,38 @@ model QuoteLine {
 
 model Contract {
   id               String         @id @default(cuid())
-  projectId        String
-  signToken        String         @unique // client mở + ký contract qua link, không cần account
+  projectId        String         @map("project_id")
+  signToken        String         @unique @map("sign_token") // client mở + ký contract qua link, không cần account
   status           ContractStatus @default(DRAFT) // cache của current version
-  currentVersionId String?        @unique
-  createdAt        DateTime       @default(now()) @db.Timestamptz
-  updatedAt        DateTime       @default(now()) @updatedAt @db.Timestamptz
+  currentVersionId String?        @unique @map("current_version_id")
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   project        Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
   currentVersion ContractVersion?  @relation("ContractCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
   versions       ContractVersion[] @relation("ContractVersions")
 
   @@index([projectId])
+  @@map("contracts")
 }
 
 model ContractVersion {
-  id                String         @id @default(cuid())
-  contractId        String
-  versionNumber     Int
-  status            ContractStatus @default(DRAFT)
-  documentReference String? // link/ref tới bản PDF nếu có (chưa dựng ở slice này)
-  termsSnapshot     Json // ảnh chụp: client, project code, dòng quote + tổng, nội dung điều khoản
-  contentHash       String? // hash của snapshot để chứng minh bản ký không đổi
-  createdById       String?
-  signedName        String? // tên khách gõ khi ký
-  signedAt          DateTime?      @db.Timestamptz
-  signedIp          String?
-  createdAt         DateTime       @default(now()) @db.Timestamptz
-  updatedAt         DateTime       @default(now()) @updatedAt @db.Timestamptz
+  id                 String         @id @default(cuid())
+  contractId         String         @map("contract_id")
+  versionNumber      Int            @map("version_number")
+  status             ContractStatus @default(DRAFT)
+  documentReference  String?        @map("document_reference") // link/ref tới bản PDF nếu có (chưa dựng ở slice này)
+  termsSnapshot      Json           @map("terms_snapshot") // ảnh chụp: client, project code, dòng quote + tổng, nội dung điều khoản
+  contentHash        String?        @map("content_hash") // hash của snapshot để chứng minh bản ký không đổi
+  createdByUserId    String?        @map("created_by_user_id")
+  signedByClientName String?        @map("signed_by_client_name") // tên khách gõ khi ký
+  signedByClientAt   DateTime?      @map("signed_by_client_at") @db.Timestamptz
+  signedByClientIp   String?        @map("signed_by_client_ip")
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   contract  Contract  @relation("ContractVersions", fields: [contractId], references: [id], onDelete: Cascade)
-  createdBy User?     @relation("ContractVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy User?     @relation("ContractVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   currentOf Contract? @relation("ContractCurrentVersion")
   // Invariant: tối đa một version SIGNED / contract (partial unique index trong migration).
   // Signed version immutable (app + trigger).
@@ -451,6 +466,7 @@ model ContractVersion {
   @@unique([contractId, versionNumber])
   @@index([contractId])
   @@index([status])
+  @@map("contract_versions")
 }
 
 // ---------- Scheduling (Domain 06) ----------
@@ -460,18 +476,18 @@ model ContractVersion {
 
 model Booking {
   id          String        @id @default(cuid())
-  companyId   String
-  projectId   String
+  companyId   String        @map("company_id")
+  projectId   String        @map("project_id")
   title       String?
   status      BookingStatus @default(TENTATIVE)
-  startsAt    DateTime      @db.Timestamptz
-  endsAt      DateTime      @db.Timestamptz
+  startsAt    DateTime      @map("starts_at") @db.Timestamptz
+  endsAt      DateTime      @map("ends_at") @db.Timestamptz
   timezone    String        @default("Australia/Sydney")
   location    String?
   notes       String?
-  createdAt   DateTime      @default(now()) @db.Timestamptz
-  updatedAt   DateTime      @default(now()) @updatedAt @db.Timestamptz
-  cancelledAt DateTime?     @db.Timestamptz
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  cancelledAt DateTime?     @map("cancelled_at") @db.Timestamptz
 
   company     Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
   project     Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
@@ -480,46 +496,49 @@ model Booking {
   @@index([projectId])
   @@index([status])
   @@index([startsAt])
+  @@map("bookings")
 }
 
 model Resource {
   id           String       @id @default(cuid())
-  companyId    String
-  resourceType ResourceType
+  companyId    String       @map("company_id")
+  resourceType ResourceType @map("resource_type")
   name         String
-  linkedUserId String? // nếu resource là một nhân sự có tài khoản
+  linkedUserId String?      @map("linked_user_id") // nếu resource là một nhân sự có tài khoản
   status       String       @default("active")
   metadata     Json?
-  createdAt    DateTime     @default(now()) @db.Timestamptz
-  updatedAt    DateTime     @default(now()) @updatedAt @db.Timestamptz
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   company     Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
   linkedUser  User?                @relation("ResourceUser", fields: [linkedUserId], references: [id], onDelete: SetNull)
   assignments ResourceAssignment[]
 
   @@index([companyId, resourceType])
+  @@map("resources")
 }
 
 model ResourceAssignment {
-  id           String           @id @default(cuid())
-  bookingId    String
-  resourceId   String
-  role         String?
-  startsAt     DateTime         @db.Timestamptz // = cửa sổ thời gian của booking khi gán
-  endsAt       DateTime         @db.Timestamptz
-  status       AssignmentStatus @default(ACTIVE)
-  assignedById String?
-  createdAt    DateTime         @default(now()) @db.Timestamptz
-  updatedAt    DateTime         @default(now()) @updatedAt @db.Timestamptz
+  id               String           @id @default(cuid())
+  bookingId        String           @map("booking_id")
+  resourceId       String           @map("resource_id")
+  role             String?
+  startsAt         DateTime         @map("starts_at") @db.Timestamptz // = cửa sổ thời gian của booking khi gán
+  endsAt           DateTime         @map("ends_at") @db.Timestamptz
+  status           AssignmentStatus @default(ACTIVE)
+  assignedByUserId String?          @map("assigned_by_user_id")
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Restrict)
-  assignedBy User?    @relation("AssignmentAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+  assignedBy User?    @relation("AssignmentAssignedBy", fields: [assignedByUserId], references: [id], onDelete: SetNull)
   // Invariant: một resource không nhận hai assignment ACTIVE chồng thời gian
   // (EXCLUDE USING gist trên (resourceId, tstzrange(startsAt, endsAt)) WHERE status='ACTIVE').
 
   @@index([resourceId])
   @@index([bookingId])
+  @@map("resource_assignments")
 }
 
 // ---------- Finance (Domain 05) ----------
@@ -529,23 +548,23 @@ model ResourceAssignment {
 
 model Invoice {
   id                   String        @id @default(cuid())
-  projectId            String
-  invoiceNumber        String        @unique
+  projectId            String        @map("project_id")
+  invoiceNumber        String        @unique @map("invoice_number")
   type                 InvoiceType
   status               InvoiceStatus @default(DRAFT)
   currency             String        @default("AUD")
   subtotal             Decimal       @default(0) @db.Decimal(12, 2)
-  taxTotal             Decimal       @default(0) @db.Decimal(12, 2)
+  taxTotal             Decimal       @default(0) @map("tax_total") @db.Decimal(12, 2)
   total                Decimal       @default(0) @db.Decimal(12, 2)
-  amountPaid           Decimal       @default(0) @db.Decimal(12, 2) // cache; source of truth = transactions
-  dueAt                DateTime?     @db.Timestamptz
-  issuedAt             DateTime?     @db.Timestamptz
-  billingNameSnapshot  String
-  billingEmailSnapshot String?
-  voidedAt             DateTime?     @db.Timestamptz
-  voidReason           String?
-  createdAt            DateTime      @default(now()) @db.Timestamptz
-  updatedAt            DateTime      @default(now()) @updatedAt @db.Timestamptz
+  amountPaid           Decimal       @default(0) @map("amount_paid") @db.Decimal(12, 2) // cache; source of truth = transactions
+  dueAt                DateTime?     @map("due_at") @db.Timestamptz
+  issuedAt             DateTime?     @map("issued_at") @db.Timestamptz
+  billingNameSnapshot  String        @map("billing_name_snapshot")
+  billingEmailSnapshot String?       @map("billing_email_snapshot")
+  voidedAt             DateTime?     @map("voided_at") @db.Timestamptz
+  voidReason           String?       @map("void_reason")
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   project  Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
   lines    InvoiceLine[]
@@ -554,37 +573,39 @@ model Invoice {
   @@index([projectId])
   @@index([status])
   @@index([dueAt])
+  @@map("invoices")
 }
 
 model InvoiceLine {
   id          String   @id @default(cuid())
-  invoiceId   String
+  invoiceId   String   @map("invoice_id")
   description String
   quantity    Int      @default(1)
-  unitPrice   Decimal  @default(0) @db.Decimal(12, 2)
+  unitPrice   Decimal  @default(0) @map("unit_price") @db.Decimal(12, 2)
   tax         Decimal  @default(0) @db.Decimal(12, 2)
-  lineTotal   Decimal  @default(0) @db.Decimal(12, 2)
-  sortOrder   Int      @default(0)
+  lineTotal   Decimal  @default(0) @map("line_total") @db.Decimal(12, 2)
+  sortOrder   Int      @default(0) @map("sort_order")
   source      String? // vd add_on, extra_revision
-  createdAt   DateTime @default(now()) @db.Timestamptz
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@index([invoiceId])
+  @@map("invoice_lines")
 }
 
 model Payment {
   id               String        @id @default(cuid())
-  invoiceId        String
-  projectId        String
+  invoiceId        String        @map("invoice_id")
+  projectId        String        @map("project_id")
   status           PaymentStatus @default(PENDING) // derived từ transactions
   amount           Decimal       @db.Decimal(12, 2)
   currency         String        @default("AUD")
-  paymentMethod    PaymentMethod
-  receivedAt       DateTime?     @db.Timestamptz
-  recordedByUserId String? // null nếu do gateway
-  createdAt        DateTime      @default(now()) @db.Timestamptz
-  updatedAt        DateTime      @default(now()) @updatedAt @db.Timestamptz
+  paymentMethod    PaymentMethod @map("payment_method")
+  receivedAt       DateTime?     @map("received_at") @db.Timestamptz
+  recordedByUserId String?       @map("recorded_by_user_id") // null nếu do gateway
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   invoice      Invoice              @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
   project      Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
@@ -593,25 +614,27 @@ model Payment {
 
   @@index([invoiceId])
   @@index([projectId])
+  @@map("payments")
 }
 
 model PaymentTransaction {
   id                    String            @id @default(cuid())
-  paymentId             String
+  paymentId             String            @map("payment_id")
   provider              String            @default("manual")
-  externalTransactionId String? // id từ gateway, để idempotent
+  externalTransactionId String?           @map("external_transaction_id") // id từ gateway, để idempotent
   type                  TransactionType
   amount                Decimal           @db.Decimal(12, 2)
   currency              String            @default("AUD")
   status                TransactionStatus @default(SUCCEEDED)
-  processedAt           DateTime?         @db.Timestamptz
+  processedAt           DateTime?         @map("processed_at") @db.Timestamptz
   metadata              Json?
-  createdAt             DateTime          @default(now()) @db.Timestamptz
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz
 
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   // APPEND-ONLY (trigger). uq(provider, externalTransactionId) khi external id có giá trị (idempotency).
 
   @@index([paymentId])
+  @@map("payment_transactions")
 }
 
 // ---------- Production / Delivery (Domain 08) ----------
@@ -621,69 +644,73 @@ model PaymentTransaction {
 
 model Gallery {
   id          String        @id @default(cuid())
-  projectId   String
+  projectId   String        @map("project_id")
   title       String
   status      GalleryStatus @default(DRAFT)
-  accessToken String        @unique // client xem gallery qua link, không cần account
-  publishedAt DateTime?     @db.Timestamptz
-  createdAt   DateTime      @default(now()) @db.Timestamptz
-  updatedAt   DateTime      @default(now()) @updatedAt @db.Timestamptz
+  accessToken String        @unique @map("access_token") // client xem gallery qua link, không cần account
+  publishedAt DateTime?     @map("published_at") @db.Timestamptz
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   project Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
   items   GalleryItem[]
 
   @@index([projectId])
+  @@map("galleries")
 }
 
 model GalleryItem {
   id        String   @id @default(cuid())
-  galleryId String
+  galleryId String   @map("gallery_id")
   caption   String
   url       String // link http/https tới ảnh/tài nguyên (validate ở app; chặn javascript:)
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now()) @db.Timestamptz
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   gallery Gallery @relation(fields: [galleryId], references: [id], onDelete: Cascade)
 
   @@index([galleryId])
+  @@map("gallery_items")
 }
 
 // ---------- Governance / Reliability ----------
 
 model AuditLog {
   id          String   @id @default(cuid())
-  companyId   String?
-  actorUserId String?
+  companyId   String?  @map("company_id")
+  actorUserId String?  @map("actor_user_id")
   action      String
-  entityType  String
-  entityId    String
-  beforeData  Json?
-  afterData   Json?
+  entityType  String   @map("entity_type")
+  entityId    String   @map("entity_id")
+  beforeData  Json?    @map("before_data")
+  afterData   Json?    @map("after_data")
   reason      String?
   source      String?
   metadata    Json?
-  createdAt   DateTime @default(now()) @db.Timestamptz
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
   // INSERT-ONLY (trigger trong migration).
 
   @@index([entityType, entityId])
   @@index([createdAt])
+  @@map("audit_logs")
 }
 
 model OutboxEvent {
   id            String       @id @default(cuid())
-  eventType     String
-  aggregateType String
-  aggregateId   String
-  correlationId String?
-  causationId   String?
+  eventType     String       @map("event_type")
+  aggregateType String       @map("aggregate_type")
+  aggregateId   String       @map("aggregate_id")
+  correlationId String?      @map("correlation_id")
+  causationId   String?      @map("causation_id")
   payload       Json
   status        OutboxStatus @default(PENDING)
-  attemptCount  Int          @default(0)
-  availableAt   DateTime     @default(now()) @db.Timestamptz
-  processedAt   DateTime?    @db.Timestamptz
-  createdAt     DateTime     @default(now()) @db.Timestamptz
+  attemptCount  Int          @default(0) @map("attempt_count")
+  availableAt   DateTime     @default(now()) @map("available_at") @db.Timestamptz
+  processedAt   DateTime?    @map("processed_at") @db.Timestamptz
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz
 
   @@index([status, availableAt])
+  @@map("outbox_events")
 }

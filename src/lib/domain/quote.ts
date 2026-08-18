@@ -27,14 +27,14 @@ function computeTotals(lines: QuoteLineInput[]) {
 }
 
 /** Create a quote for a project with an empty draft version 1, and move the project to QUOTING. */
-export async function createQuote(projectId: string, createdById: string | null) {
+export async function createQuote(projectId: string, createdByUserId: string | null) {
   return prisma.$transaction(async (tx) => {
     const quote = await tx.quote.create({
       data: {
         projectId,
         viewToken: randomBytes(24).toString('base64url'),
         status: 'DRAFT',
-        versions: { create: { versionNumber: 1, status: 'DRAFT', createdById } },
+        versions: { create: { versionNumber: 1, status: 'DRAFT', createdByUserId } },
       },
       include: { versions: true },
     })
@@ -86,7 +86,7 @@ export async function sendQuote(quoteId: string, actorUserId: string | null) {
     if (version.status !== 'DRAFT') throw new Error('This quote has already been sent.')
     if (version.total.lessThanOrEqualTo(0)) throw new Error('Add at least one line before sending.')
 
-    await tx.quoteVersion.update({ where: { id: version.id }, data: { status: 'SENT', sentAt: now } })
+    await tx.quoteVersion.update({ where: { id: version.id }, data: { status: 'SENT', sentToClientAt: now } })
     await tx.quote.update({ where: { id: quoteId }, data: { status: 'SENT' } })
     await tx.project.update({
       where: { id: quote.projectId },
@@ -117,7 +117,7 @@ export async function markQuoteViewed(viewToken: string) {
   if (quote?.currentVersion?.status === 'SENT') {
     await prisma.quoteVersion.update({
       where: { id: quote.currentVersion.id },
-      data: { status: 'VIEWED', viewedAt: now },
+      data: { status: 'VIEWED', viewedByClientAt: now },
     })
   }
 }
@@ -140,7 +140,12 @@ export async function acceptQuoteByToken(viewToken: string, acceptedName: string
 
     await tx.quoteVersion.update({
       where: { id: version.id },
-      data: { status: 'ACCEPTED', acceptedAt: now, acceptedName, acceptedIp: ip },
+      data: {
+        status: 'ACCEPTED',
+        acceptedByClientAt: now,
+        acceptedByClientName: acceptedName,
+        acceptedByClientIp: ip,
+      },
     })
     await tx.quote.update({ where: { id: quote.id }, data: { status: 'ACCEPTED' } })
     await tx.project.update({

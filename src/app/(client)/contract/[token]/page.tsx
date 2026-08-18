@@ -79,8 +79,8 @@ export default async function ClientContractPage({
       <div className="mt-8">
         {version.status === 'SIGNED' ? (
           <Alert tone="success" title="This contract has been signed">
-            Signed by {version.signedName} on{' '}
-            {version.signedAt ? formatSydneyDate(version.signedAt) : ''}.
+            Signed by {version.signedByClientName} on{' '}
+            {version.signedByClientAt ? formatSydneyDate(version.signedByClientAt) : ''}.
           </Alert>
         ) : version.status === 'SENT' ? (
           <ContractSign csrf={csrf} token={token} />
