@@ -6,11 +6,12 @@
 // notifications, policies, change_requests, refunds, Stripe online payment, etc.
 //
 // Naming: code = camelCase field + PascalCase model; database = snake_case column + snake_case
-// plural table (via @map / @@map). See docs/17-data-dictionary.md for the full mapping.
+// plural table (via @map / @@map). Types are explicit per column (varchar(n) with a sensible
+// bound, citext for email, text for free-form notes). See docs/17-data-dictionary.md.
 //
 // Locked decisions: single-tenant (one Company row; company_id là reserved field, không RLS),
 // project bắt đầu từ enquiry, không leads, work_items canonical (chưa dựng ở slice 1),
-// CUID id, money Decimal, timestamptz. Con số business = TBD (không hard-code).
+// CUID id (varchar 30), money Decimal, timestamptz. Con số business = TBD (không hard-code).
 
 generator client {
   provider        = "prisma-client-js"
@@ -172,11 +173,11 @@ enum OutboxStatus {
 // ---------- Company (single tenant) ----------
 
 model Company {
-  id        String   @id @default(cuid())
-  name      String
-  abn       String? // OQ-007 placeholder cho tới khi xác nhận
-  timezone  String   @default("Australia/Sydney")
-  currency  String   @default("AUD")
+  id        String   @id @default(cuid()) @db.VarChar(30)
+  name      String   @db.VarChar(150)
+  abn       String?  @db.VarChar(20) // OQ-007 placeholder cho tới khi xác nhận
+  timezone  String   @default("Australia/Sydney") @db.VarChar(50)
+  currency  String   @default("AUD") @db.VarChar(3)
   settings  Json     @default("{}")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
@@ -193,13 +194,13 @@ model Company {
 // ---------- Identity / auth (giữ nguyên hình dạng để code auth tái dùng) ----------
 
 model User {
-  id                 String    @id @default(cuid())
-  companyId          String    @map("company_id")
+  id                 String    @id @default(cuid()) @db.VarChar(30)
+  companyId          String    @map("company_id") @db.VarChar(30)
   email              String    @unique @db.Citext
-  passwordHash       String    @map("password_hash")
-  passwordAlgo       String    @map("password_algo")
+  passwordHash       String    @map("password_hash") @db.VarChar(255)
+  passwordAlgo       String    @map("password_algo") @db.VarChar(30)
   role               UserRole
-  name               String
+  name               String    @db.VarChar(150)
   isActive           Boolean   @default(true) @map("is_active")
   mustChangePassword Boolean   @default(false) @map("must_change_password")
   lastLoginAt        DateTime? @map("last_login_at") @db.Timestamptz
@@ -227,12 +228,12 @@ model User {
 }
 
 model PasswordReset {
-  id          String    @id @default(cuid())
-  userId      String    @map("user_id")
-  tokenHash   String    @map("token_hash")
+  id          String    @id @default(cuid()) @db.VarChar(30)
+  userId      String    @map("user_id") @db.VarChar(30)
+  tokenHash   String    @map("token_hash") @db.VarChar(64)
   expiresAt   DateTime  @map("expires_at") @db.Timestamptz
   usedAt      DateTime? @map("used_at") @db.Timestamptz
-  requestedIp String    @map("requested_ip")
+  requestedIp String    @map("requested_ip") @db.VarChar(45)
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -244,14 +245,14 @@ model PasswordReset {
 }
 
 model Session {
-  id                String    @id @default(cuid())
-  userId            String    @map("user_id")
-  tokenHash         String    @map("token_hash")
+  id                String    @id @default(cuid()) @db.VarChar(30)
+  userId            String    @map("user_id") @db.VarChar(30)
+  tokenHash         String    @map("token_hash") @db.VarChar(64)
   expiresAt         DateTime  @map("expires_at") @db.Timestamptz
   absoluteExpiresAt DateTime  @map("absolute_expires_at") @db.Timestamptz
   lastActiveAt      DateTime  @default(now()) @map("last_active_at") @db.Timestamptz
-  userAgent         String?   @map("user_agent")
-  ipAddress         String?   @map("ip_address")
+  userAgent         String?   @map("user_agent") @db.VarChar(400)
+  ipAddress         String?   @map("ip_address") @db.VarChar(45)
   revokedAt         DateTime? @map("revoked_at") @db.Timestamptz
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
@@ -264,12 +265,12 @@ model Session {
 }
 
 model SecurityEvent {
-  id             String          @id @default(cuid())
-  eventType      String          @map("event_type")
-  userId         String?         @map("user_id")
+  id             String          @id @default(cuid()) @db.VarChar(30)
+  eventType      String          @map("event_type") @db.VarChar(100)
+  userId         String?         @map("user_id") @db.VarChar(30)
   emailAttempted String?         @map("email_attempted") @db.Citext
-  ipAddress      String          @map("ip_address")
-  userAgent      String?         @map("user_agent")
+  ipAddress      String          @map("ip_address") @db.VarChar(45)
+  userAgent      String?         @map("user_agent") @db.VarChar(400)
   outcome        SecurityOutcome
   createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
 
@@ -285,21 +286,21 @@ model SecurityEvent {
 // ---------- CRM ----------
 
 model Client {
-  id               String       @id @default(cuid())
-  companyId        String       @map("company_id")
+  id               String       @id @default(cuid()) @db.VarChar(30)
+  companyId        String       @map("company_id") @db.VarChar(30)
   type             ClientType   @default(INDIVIDUAL)
   status           ClientStatus @default(PROSPECT)
-  displayName      String       @map("display_name")
-  legalName        String?      @map("legal_name")
+  displayName      String       @map("display_name") @db.VarChar(150)
+  legalName        String?      @map("legal_name") @db.VarChar(150)
   email            String       @unique @db.Citext // dedupe tại enquiry (P1)
-  phone            String?
-  suburb           String?
-  state            String?
-  postcode         String?
+  phone            String?      @db.VarChar(30)
+  suburb           String?      @db.VarChar(100)
+  state            String?      @db.VarChar(100)
+  postcode         String?      @db.VarChar(20)
   marketingConsent Boolean      @default(false) @map("marketing_consent")
   consentUpdatedAt DateTime?    @map("consent_updated_at") @db.Timestamptz
   anonymisedAt     DateTime?    @map("anonymised_at") @db.Timestamptz
-  notes            String?
+  notes            String?      @db.Text // ghi chú tự do, không giới hạn
   createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   archivedAt       DateTime?    @map("archived_at") @db.Timestamptz
@@ -315,18 +316,18 @@ model Client {
 // ---------- Project (operational case, bắt đầu từ enquiry) ----------
 
 model Project {
-  id                String           @id @default(cuid())
-  companyId         String           @map("company_id")
-  clientId          String           @map("client_id")
-  code              String           @unique
-  name              String
-  ownerUserId       String?          @map("owner_user_id")
+  id                String           @id @default(cuid()) @db.VarChar(30)
+  companyId         String           @map("company_id") @db.VarChar(30)
+  clientId          String           @map("client_id") @db.VarChar(30)
+  code              String           @unique @db.VarChar(30)
+  name              String           @db.VarChar(200)
+  ownerUserId       String?          @map("owner_user_id") @db.VarChar(30)
   lifecycleStatus   ProjectLifecycle @default(ENQUIRY) @map("lifecycle_status")
   commercialStatus  CommercialStatus @default(UNQUOTED) @map("commercial_status") // derived
-  source            String? // nguồn enquiry (I-6 taxonomy, TBD)
-  sourceDetail      String?          @map("source_detail")
+  source            String?          @db.VarChar(50) // nguồn enquiry (I-6 taxonomy, TBD)
+  sourceDetail      String?          @map("source_detail") @db.VarChar(255)
   enquiryReceivedAt DateTime         @default(now()) @map("enquiry_received_at") @db.Timestamptz
-  enquiryNotes      String?          @map("enquiry_notes")
+  enquiryNotes      String?          @map("enquiry_notes") @db.Text // ghi chú tự do, không giới hạn
   firstRespondedAt  DateTime?        @map("first_responded_at") @db.Timestamptz // SLA
   createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt         DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
@@ -352,11 +353,11 @@ model Project {
 // ---------- Commercial: Quote ----------
 
 model Quote {
-  id               String      @id @default(cuid())
-  projectId        String      @map("project_id")
-  viewToken        String      @unique @map("view_token") // client xem quote qua link, đọc current version
+  id               String      @id @default(cuid()) @db.VarChar(30)
+  projectId        String      @map("project_id") @db.VarChar(30)
+  viewToken        String      @unique @map("view_token") @db.VarChar(64) // client xem quote qua link
   status           QuoteStatus @default(DRAFT) // cache của current version
-  currentVersionId String?     @unique @map("current_version_id")
+  currentVersionId String?     @unique @map("current_version_id") @db.VarChar(30)
   createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -369,22 +370,22 @@ model Quote {
 }
 
 model QuoteVersion {
-  id                   String      @id @default(cuid())
-  quoteId              String      @map("quote_id")
+  id                   String      @id @default(cuid()) @db.VarChar(30)
+  quoteId              String      @map("quote_id") @db.VarChar(30)
   versionNumber        Int         @map("version_number")
   status               QuoteStatus @default(DRAFT)
-  currency             String      @default("AUD")
+  currency             String      @default("AUD") @db.VarChar(3)
   subtotal             Decimal     @default(0) @db.Decimal(12, 2)
   discountTotal        Decimal     @default(0) @map("discount_total") @db.Decimal(12, 2)
   taxTotal             Decimal     @default(0) @map("tax_total") @db.Decimal(12, 2)
   total                Decimal     @default(0) @db.Decimal(12, 2)
   validUntil           DateTime?   @map("valid_until") @db.Timestamptz
-  createdByUserId      String?     @map("created_by_user_id")
+  createdByUserId      String?     @map("created_by_user_id") @db.VarChar(30)
   sentToClientAt       DateTime?   @map("sent_to_client_at") @db.Timestamptz
   viewedByClientAt     DateTime?   @map("viewed_by_client_at") @db.Timestamptz
   acceptedByClientAt   DateTime?   @map("accepted_by_client_at") @db.Timestamptz
-  acceptedByClientName String?     @map("accepted_by_client_name") // tên khách gõ khi accept
-  acceptedByClientIp   String?     @map("accepted_by_client_ip")
+  acceptedByClientName String?     @map("accepted_by_client_name") @db.VarChar(150) // tên khách gõ khi accept
+  acceptedByClientIp   String?     @map("accepted_by_client_ip") @db.VarChar(45)
   createdAt            DateTime    @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -402,11 +403,11 @@ model QuoteVersion {
 }
 
 model QuoteLine {
-  id             String   @id @default(cuid())
-  quoteVersionId String   @map("quote_version_id")
-  lineType       String   @default("custom") @map("line_type") // custom | package | addon (slice 1: custom)
-  referenceId    String?  @map("reference_id")
-  description    String
+  id             String   @id @default(cuid()) @db.VarChar(30)
+  quoteVersionId String   @map("quote_version_id") @db.VarChar(30)
+  lineType       String   @default("custom") @map("line_type") @db.VarChar(30) // custom | package | addon
+  referenceId    String?  @map("reference_id") @db.VarChar(30)
+  description    String   @db.VarChar(500)
   quantity       Int      @default(1)
   unitPrice      Decimal  @default(0) @map("unit_price") @db.Decimal(12, 2)
   discount       Decimal  @default(0) @db.Decimal(12, 2)
@@ -426,11 +427,11 @@ model QuoteLine {
 // (partial unique + trigger trong migration). Amendment = version mới, không sửa bản đã ký.
 
 model Contract {
-  id               String         @id @default(cuid())
-  projectId        String         @map("project_id")
-  signToken        String         @unique @map("sign_token") // client mở + ký contract qua link, không cần account
+  id               String         @id @default(cuid()) @db.VarChar(30)
+  projectId        String         @map("project_id") @db.VarChar(30)
+  signToken        String         @unique @map("sign_token") @db.VarChar(64) // client mở + ký qua link
   status           ContractStatus @default(DRAFT) // cache của current version
-  currentVersionId String?        @unique @map("current_version_id")
+  currentVersionId String?        @unique @map("current_version_id") @db.VarChar(30)
   createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -443,17 +444,17 @@ model Contract {
 }
 
 model ContractVersion {
-  id                 String         @id @default(cuid())
-  contractId         String         @map("contract_id")
+  id                 String         @id @default(cuid()) @db.VarChar(30)
+  contractId         String         @map("contract_id") @db.VarChar(30)
   versionNumber      Int            @map("version_number")
   status             ContractStatus @default(DRAFT)
-  documentReference  String?        @map("document_reference") // link/ref tới bản PDF nếu có (chưa dựng ở slice này)
-  termsSnapshot      Json           @map("terms_snapshot") // ảnh chụp: client, project code, dòng quote + tổng, nội dung điều khoản
-  contentHash        String?        @map("content_hash") // hash của snapshot để chứng minh bản ký không đổi
-  createdByUserId    String?        @map("created_by_user_id")
-  signedByClientName String?        @map("signed_by_client_name") // tên khách gõ khi ký
+  documentReference  String?        @map("document_reference") @db.VarChar(255) // link/ref tới bản PDF
+  termsSnapshot      Json           @map("terms_snapshot") // ảnh chụp: client, project code, dòng quote + tổng
+  contentHash        String?        @map("content_hash") @db.VarChar(64) // hash snapshot chứng minh bản ký không đổi
+  createdByUserId    String?        @map("created_by_user_id") @db.VarChar(30)
+  signedByClientName String?        @map("signed_by_client_name") @db.VarChar(150) // tên khách gõ khi ký
   signedByClientAt   DateTime?      @map("signed_by_client_at") @db.Timestamptz
-  signedByClientIp   String?        @map("signed_by_client_ip")
+  signedByClientIp   String?        @map("signed_by_client_ip") @db.VarChar(45)
   createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt          DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -475,16 +476,16 @@ model ContractVersion {
 // (EXCLUDE USING gist trong migration, cần extension btree_gist).
 
 model Booking {
-  id          String        @id @default(cuid())
-  companyId   String        @map("company_id")
-  projectId   String        @map("project_id")
-  title       String?
+  id          String        @id @default(cuid()) @db.VarChar(30)
+  companyId   String        @map("company_id") @db.VarChar(30)
+  projectId   String        @map("project_id") @db.VarChar(30)
+  title       String?       @db.VarChar(200)
   status      BookingStatus @default(TENTATIVE)
   startsAt    DateTime      @map("starts_at") @db.Timestamptz
   endsAt      DateTime      @map("ends_at") @db.Timestamptz
-  timezone    String        @default("Australia/Sydney")
-  location    String?
-  notes       String?
+  timezone    String        @default("Australia/Sydney") @db.VarChar(50)
+  location    String?       @db.VarChar(255)
+  notes       String?       @db.Text // ghi chú tự do, không giới hạn
   createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   cancelledAt DateTime?     @map("cancelled_at") @db.Timestamptz
@@ -500,12 +501,12 @@ model Booking {
 }
 
 model Resource {
-  id           String       @id @default(cuid())
-  companyId    String       @map("company_id")
+  id           String       @id @default(cuid()) @db.VarChar(30)
+  companyId    String       @map("company_id") @db.VarChar(30)
   resourceType ResourceType @map("resource_type")
-  name         String
-  linkedUserId String?      @map("linked_user_id") // nếu resource là một nhân sự có tài khoản
-  status       String       @default("active")
+  name         String       @db.VarChar(150)
+  linkedUserId String?      @map("linked_user_id") @db.VarChar(30) // nếu resource là một nhân sự
+  status       String       @default("active") @db.VarChar(30)
   metadata     Json?
   createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
@@ -519,14 +520,14 @@ model Resource {
 }
 
 model ResourceAssignment {
-  id               String           @id @default(cuid())
-  bookingId        String           @map("booking_id")
-  resourceId       String           @map("resource_id")
-  role             String?
-  startsAt         DateTime         @map("starts_at") @db.Timestamptz // = cửa sổ thời gian của booking khi gán
+  id               String           @id @default(cuid()) @db.VarChar(30)
+  bookingId        String           @map("booking_id") @db.VarChar(30)
+  resourceId       String           @map("resource_id") @db.VarChar(30)
+  role             String?          @db.VarChar(50)
+  startsAt         DateTime         @map("starts_at") @db.Timestamptz // = cửa sổ thời gian của booking
   endsAt           DateTime         @map("ends_at") @db.Timestamptz
   status           AssignmentStatus @default(ACTIVE)
-  assignedByUserId String?          @map("assigned_by_user_id")
+  assignedByUserId String?          @map("assigned_by_user_id") @db.VarChar(30)
   createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -547,22 +548,22 @@ model ResourceAssignment {
 // Stripe online để sau (env flag); slice này ghi nhận thanh toán thủ công (provider = manual).
 
 model Invoice {
-  id                   String        @id @default(cuid())
-  projectId            String        @map("project_id")
-  invoiceNumber        String        @unique @map("invoice_number")
+  id                   String        @id @default(cuid()) @db.VarChar(30)
+  projectId            String        @map("project_id") @db.VarChar(30)
+  invoiceNumber        String        @unique @map("invoice_number") @db.VarChar(30)
   type                 InvoiceType
   status               InvoiceStatus @default(DRAFT)
-  currency             String        @default("AUD")
+  currency             String        @default("AUD") @db.VarChar(3)
   subtotal             Decimal       @default(0) @db.Decimal(12, 2)
   taxTotal             Decimal       @default(0) @map("tax_total") @db.Decimal(12, 2)
   total                Decimal       @default(0) @db.Decimal(12, 2)
-  amountPaid           Decimal       @default(0) @map("amount_paid") @db.Decimal(12, 2) // cache; source of truth = transactions
+  amountPaid           Decimal       @default(0) @map("amount_paid") @db.Decimal(12, 2) // cache; nguồn = transactions
   dueAt                DateTime?     @map("due_at") @db.Timestamptz
   issuedAt             DateTime?     @map("issued_at") @db.Timestamptz
-  billingNameSnapshot  String        @map("billing_name_snapshot")
-  billingEmailSnapshot String?       @map("billing_email_snapshot")
+  billingNameSnapshot  String        @map("billing_name_snapshot") @db.VarChar(150)
+  billingEmailSnapshot String?       @map("billing_email_snapshot") @db.VarChar(255)
   voidedAt             DateTime?     @map("voided_at") @db.Timestamptz
-  voidReason           String?       @map("void_reason")
+  voidReason           String?       @map("void_reason") @db.VarChar(500)
   createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -577,15 +578,15 @@ model Invoice {
 }
 
 model InvoiceLine {
-  id          String   @id @default(cuid())
-  invoiceId   String   @map("invoice_id")
-  description String
+  id          String   @id @default(cuid()) @db.VarChar(30)
+  invoiceId   String   @map("invoice_id") @db.VarChar(30)
+  description String   @db.VarChar(500)
   quantity    Int      @default(1)
   unitPrice   Decimal  @default(0) @map("unit_price") @db.Decimal(12, 2)
   tax         Decimal  @default(0) @db.Decimal(12, 2)
   lineTotal   Decimal  @default(0) @map("line_total") @db.Decimal(12, 2)
   sortOrder   Int      @default(0) @map("sort_order")
-  source      String? // vd add_on, extra_revision
+  source      String?  @db.VarChar(50) // vd add_on, extra_revision
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
@@ -595,15 +596,15 @@ model InvoiceLine {
 }
 
 model Payment {
-  id               String        @id @default(cuid())
-  invoiceId        String        @map("invoice_id")
-  projectId        String        @map("project_id")
+  id               String        @id @default(cuid()) @db.VarChar(30)
+  invoiceId        String        @map("invoice_id") @db.VarChar(30)
+  projectId        String        @map("project_id") @db.VarChar(30)
   status           PaymentStatus @default(PENDING) // derived từ transactions
   amount           Decimal       @db.Decimal(12, 2)
-  currency         String        @default("AUD")
+  currency         String        @default("AUD") @db.VarChar(3)
   paymentMethod    PaymentMethod @map("payment_method")
   receivedAt       DateTime?     @map("received_at") @db.Timestamptz
-  recordedByUserId String?       @map("recorded_by_user_id") // null nếu do gateway
+  recordedByUserId String?       @map("recorded_by_user_id") @db.VarChar(30) // null nếu do gateway
   createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -618,13 +619,13 @@ model Payment {
 }
 
 model PaymentTransaction {
-  id                    String            @id @default(cuid())
-  paymentId             String            @map("payment_id")
-  provider              String            @default("manual")
-  externalTransactionId String?           @map("external_transaction_id") // id từ gateway, để idempotent
+  id                    String            @id @default(cuid()) @db.VarChar(30)
+  paymentId             String            @map("payment_id") @db.VarChar(30)
+  provider              String            @default("manual") @db.VarChar(30)
+  externalTransactionId String?           @map("external_transaction_id") @db.VarChar(100) // id từ gateway
   type                  TransactionType
   amount                Decimal           @db.Decimal(12, 2)
-  currency              String            @default("AUD")
+  currency              String            @default("AUD") @db.VarChar(3)
   status                TransactionStatus @default(SUCCEEDED)
   processedAt           DateTime?         @map("processed_at") @db.Timestamptz
   metadata              Json?
@@ -643,11 +644,11 @@ model PaymentTransaction {
 // item hiện lưu URL ngoài (studio host ảnh ở nơi khác) thay vì tự lưu file.
 
 model Gallery {
-  id          String        @id @default(cuid())
-  projectId   String        @map("project_id")
-  title       String
+  id          String        @id @default(cuid()) @db.VarChar(30)
+  projectId   String        @map("project_id") @db.VarChar(30)
+  title       String        @db.VarChar(200)
   status      GalleryStatus @default(DRAFT)
-  accessToken String        @unique @map("access_token") // client xem gallery qua link, không cần account
+  accessToken String        @unique @map("access_token") @db.VarChar(64) // client xem gallery qua link
   publishedAt DateTime?     @map("published_at") @db.Timestamptz
   createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
@@ -660,10 +661,10 @@ model Gallery {
 }
 
 model GalleryItem {
-  id        String   @id @default(cuid())
-  galleryId String   @map("gallery_id")
-  caption   String
-  url       String // link http/https tới ảnh/tài nguyên (validate ở app; chặn javascript:)
+  id        String   @id @default(cuid()) @db.VarChar(30)
+  galleryId String   @map("gallery_id") @db.VarChar(30)
+  caption   String   @db.VarChar(255)
+  url       String   @db.VarChar(2048) // link http/https tới ảnh/tài nguyên (validate ở app)
   sortOrder Int      @default(0) @map("sort_order")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
@@ -676,16 +677,16 @@ model GalleryItem {
 // ---------- Governance / Reliability ----------
 
 model AuditLog {
-  id          String   @id @default(cuid())
-  companyId   String?  @map("company_id")
-  actorUserId String?  @map("actor_user_id")
-  action      String
-  entityType  String   @map("entity_type")
-  entityId    String   @map("entity_id")
+  id          String   @id @default(cuid()) @db.VarChar(30)
+  companyId   String?  @map("company_id") @db.VarChar(30)
+  actorUserId String?  @map("actor_user_id") @db.VarChar(30)
+  action      String   @db.VarChar(100)
+  entityType  String   @map("entity_type") @db.VarChar(50)
+  entityId    String   @map("entity_id") @db.VarChar(30)
   beforeData  Json?    @map("before_data")
   afterData   Json?    @map("after_data")
-  reason      String?
-  source      String?
+  reason      String?  @db.VarChar(500)
+  source      String?  @db.VarChar(50)
   metadata    Json?
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
 
@@ -698,12 +699,12 @@ model AuditLog {
 }
 
 model OutboxEvent {
-  id            String       @id @default(cuid())
-  eventType     String       @map("event_type")
-  aggregateType String       @map("aggregate_type")
-  aggregateId   String       @map("aggregate_id")
-  correlationId String?      @map("correlation_id")
-  causationId   String?      @map("causation_id")
+  id            String       @id @default(cuid()) @db.VarChar(30)
+  eventType     String       @map("event_type") @db.VarChar(100)
+  aggregateType String       @map("aggregate_type") @db.VarChar(50)
+  aggregateId   String       @map("aggregate_id") @db.VarChar(30)
+  correlationId String?      @map("correlation_id") @db.VarChar(30)
+  causationId   String?      @map("causation_id") @db.VarChar(30)
   payload       Json
   status        OutboxStatus @default(PENDING)
   attemptCount  Int          @default(0) @map("attempt_count")
