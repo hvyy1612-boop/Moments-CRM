@@ -68,8 +68,8 @@ export default async function ClientQuotePage({ params }: { params: Promise<{ to
       <div className="mt-8">
         {version.status === 'ACCEPTED' ? (
           <Alert tone="success" title="This quote has been accepted">
-            Accepted by {version.acceptedName} on{' '}
-            {version.acceptedAt ? formatSydneyDate(version.acceptedAt) : ''}.
+            Accepted by {version.acceptedByClientName} on{' '}
+            {version.acceptedByClientAt ? formatSydneyDate(version.acceptedByClientAt) : ''}.
           </Alert>
         ) : version.status === 'EXPIRED' ? (
           <Alert tone="warning" title="This quote has expired">

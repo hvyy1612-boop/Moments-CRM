@@ -93,7 +93,7 @@ export async function assignResource(
           startsAt: booking.startsAt,
           endsAt: booking.endsAt,
           status: 'ACTIVE',
-          assignedById: actorUserId,
+          assignedByUserId: actorUserId,
         },
       })
       await tx.auditLog.create({

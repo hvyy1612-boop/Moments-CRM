@@ -48,7 +48,7 @@ export function contractContentHash(snapshot: ContractTermsSnapshot): string {
   return createHash('sha256').update(JSON.stringify(snapshot)).digest('hex')
 }
 
-export async function createContractFromAcceptedQuote(projectId: string, createdById: string | null) {
+export async function createContractFromAcceptedQuote(projectId: string, createdByUserId: string | null) {
   return prisma.$transaction(async (tx) => {
     const existing = await tx.contract.findFirst({ where: { projectId } })
     if (existing) throw new Error('A contract already exists for this project.')
@@ -88,7 +88,7 @@ export async function createContractFromAcceptedQuote(projectId: string, created
             status: 'DRAFT',
             termsSnapshot: snapshot,
             contentHash: contractContentHash(snapshot),
-            createdById,
+            createdByUserId,
           },
         },
       },
@@ -106,7 +106,7 @@ export async function createContractFromAcceptedQuote(projectId: string, created
         action: 'contract.created',
         entityType: 'Contract',
         entityId: contract.id,
-        actorUserId: createdById,
+        actorUserId: createdByUserId,
         afterData: { projectId, total: snapshot.total },
       },
     })
@@ -169,7 +169,12 @@ export async function signContractByToken(signToken: string, signedName: string,
 
     await tx.contractVersion.update({
       where: { id: version.id },
-      data: { status: 'SIGNED', signedAt: now, signedName, signedIp: ip },
+      data: {
+        status: 'SIGNED',
+        signedByClientAt: now,
+        signedByClientName: signedName,
+        signedByClientIp: ip,
+      },
     })
     await tx.contract.update({ where: { id: contract.id }, data: { status: 'SIGNED' } })
     await tx.project.update({
