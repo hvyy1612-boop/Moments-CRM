@@ -188,8 +188,12 @@ async function runConvertEnquiry(enquiryId: string, actorUserId: string | null, 
     }
     const company = await requireCompany(tx)
 
-    // Dedup tier 1: reuse an existing client with the same email, else create one.
+    // Dedup tier 1: reuse an existing client with the same email, else create one. Follow a merge
+    // pointer so a merged-away duplicate resolves to its survivor instead of being revived (F-ENQ-05).
     let client = await tx.client.findUnique({ where: { email: enquiry.email } })
+    while (client?.mergedIntoClientId) {
+      client = await tx.client.findUnique({ where: { id: client.mergedIntoClientId } })
+    }
     if (!client) {
       client = await tx.client.create({
         data: {
