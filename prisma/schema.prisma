@@ -10,7 +10,7 @@
 // bound, citext for email, text for free-form notes). See docs/17-data-dictionary.md.
 //
 // Locked decisions: single-tenant (one Company row; company_id là reserved field, không RLS),
-// project bắt đầu từ enquiry, không leads, work_items canonical (chưa dựng ở slice 1),
+// enquiry (lead) có bảng riêng `enquiries` → convert ra Client + Project (B2), work_items canonical,
 // CUID id (varchar 30), money Decimal, timestamptz. Con số business = TBD (không hard-code).
 
 generator client {
@@ -170,6 +170,32 @@ enum OutboxStatus {
   FAILED
 }
 
+// B2: acquisition layer — lead (Enquiry) tách khỏi Client. Xem docs/18-crm-flow-reference.md.
+enum EnquiryStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CONVERTED
+  LOST
+  ARCHIVED
+}
+
+enum EnquirySource {
+  WEBSITE
+  REFERRAL
+  INSTAGRAM
+  MANUAL
+  OTHER
+}
+
+enum ClientSource {
+  DIRECT_BOOKING
+  ENQUIRY
+  REFERRAL
+  MANUAL
+  OTHER
+}
+
 // ---------- Company (single tenant) ----------
 
 model Company {
@@ -185,6 +211,7 @@ model Company {
   users     User[]
   clients   Client[]
   projects  Project[]
+  enquiries Enquiry[]
   bookings  Booking[]
   resources Resource[]
 
@@ -221,6 +248,7 @@ model User {
   linkedResources         Resource[]           @relation("ResourceUser")
   assignmentsMade         ResourceAssignment[] @relation("AssignmentAssignedBy")
   recordedPayments        Payment[]            @relation("PaymentRecordedBy")
+  ownedEnquiries          Enquiry[]            @relation("EnquiryOwner")
 
   @@index([companyId])
   @@index([role])
@@ -286,27 +314,32 @@ model SecurityEvent {
 // ---------- CRM ----------
 
 model Client {
-  id               String       @id @default(cuid()) @db.VarChar(30)
-  companyId        String       @map("company_id") @db.VarChar(30)
-  type             ClientType   @default(INDIVIDUAL)
-  status           ClientStatus @default(PROSPECT)
-  displayName      String       @map("display_name") @db.VarChar(150)
-  legalName        String?      @map("legal_name") @db.VarChar(150)
-  email            String       @unique @db.Citext // dedupe tại enquiry (P1)
-  phone            String?      @db.VarChar(30)
-  suburb           String?      @db.VarChar(100)
-  state            String?      @db.VarChar(100)
-  postcode         String?      @db.VarChar(20)
-  marketingConsent Boolean      @default(false) @map("marketing_consent")
-  consentUpdatedAt DateTime?    @map("consent_updated_at") @db.Timestamptz
-  anonymisedAt     DateTime?    @map("anonymised_at") @db.Timestamptz
-  notes            String?      @db.Text // ghi chú tự do, không giới hạn
-  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt        DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  archivedAt       DateTime?    @map("archived_at") @db.Timestamptz
+  id                 String       @id @default(cuid()) @db.VarChar(30)
+  companyId          String       @map("company_id") @db.VarChar(30)
+  type               ClientType   @default(INDIVIDUAL)
+  status             ClientStatus @default(PROSPECT)
+  source             ClientSource @default(MANUAL) // B2: khách đến từ đâu (dashboard)
+  displayName        String       @map("display_name") @db.VarChar(150)
+  legalName          String?      @map("legal_name") @db.VarChar(150)
+  email              String       @unique @db.Citext // dedupe tại enquiry (P1)
+  phone              String?      @db.VarChar(30)
+  suburb             String?      @db.VarChar(100)
+  state              String?      @db.VarChar(100)
+  postcode           String?      @db.VarChar(20)
+  marketingConsent   Boolean      @default(false) @map("marketing_consent")
+  consentUpdatedAt   DateTime?    @map("consent_updated_at") @db.Timestamptz
+  anonymisedAt       DateTime?    @map("anonymised_at") @db.Timestamptz
+  notes              String?      @db.Text // ghi chú tự do, không giới hạn
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  archivedAt         DateTime?    @map("archived_at") @db.Timestamptz
+  mergedIntoClientId String?      @map("merged_into_client_id") @db.VarChar(30) // B2: gộp trùng → bản giữ
 
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  projects Project[]
+  company                Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  projects               Project[]
+  convertedFromEnquiries Enquiry[] @relation("EnquiryConvertedClient")
+  mergedInto             Client?   @relation("ClientMerge", fields: [mergedIntoClientId], references: [id], onDelete: SetNull)
+  mergedFrom             Client[]  @relation("ClientMerge")
 
   @@index([companyId])
   @@index([status])
@@ -333,21 +366,56 @@ model Project {
   updatedAt         DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   archivedAt        DateTime?        @map("archived_at") @db.Timestamptz
 
-  company   Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  client    Client     @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  owner     User?      @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  quotes    Quote[]
-  contracts Contract[]
-  bookings  Booking[]
-  invoices  Invoice[]
-  payments  Payment[]
-  galleries Gallery[]
+  company                Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  client                 Client     @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  owner                  User?      @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  quotes                 Quote[]
+  contracts              Contract[]
+  bookings               Booking[]
+  invoices               Invoice[]
+  payments               Payment[]
+  galleries              Gallery[]
+  convertedFromEnquiries Enquiry[]  @relation("EnquiryConvertedProject")
 
   @@index([companyId])
   @@index([clientId])
   @@index([lifecycleStatus])
   @@index([enquiryReceivedAt])
   @@map("projects")
+}
+
+// ---------- Acquisition: Enquiry (lead, B2) ----------
+// Khách gửi enquiry chưa cam kết sống ở đây — CHƯA tạo Client/Project. Staff lọc; convert khi khách
+// chọn mình → upsert Client theo email + tạo Project, set CONVERTED + link ngược. Không xoá khi LOST;
+// email KHÔNG unique (một người có thể hỏi nhiều lần). Xem docs/18-crm-flow-reference.md.
+model Enquiry {
+  id                 String        @id @default(cuid()) @db.VarChar(30)
+  companyId          String        @map("company_id") @db.VarChar(30)
+  ownerUserId        String?       @map("owner_user_id") @db.VarChar(30)
+  name               String        @db.VarChar(150)
+  email              String        @db.Citext // KHÔNG unique: một người có thể hỏi nhiều lần
+  phone              String?       @db.VarChar(30)
+  eventType          String?       @map("event_type") @db.VarChar(50)
+  eventDate          DateTime?     @map("event_date") @db.Date // chỉ ngày, chưa có giờ
+  message            String?       @db.Text
+  source             EnquirySource @default(WEBSITE)
+  status             EnquiryStatus @default(NEW)
+  lostReason         String?       @map("lost_reason") @db.VarChar(500)
+  convertedClientId  String?       @map("converted_client_id") @db.VarChar(30)
+  convertedProjectId String?       @map("converted_project_id") @db.VarChar(30)
+  convertedAt        DateTime?     @map("converted_at") @db.Timestamptz
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  company          Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  owner            User?    @relation("EnquiryOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  convertedClient  Client?  @relation("EnquiryConvertedClient", fields: [convertedClientId], references: [id], onDelete: SetNull)
+  convertedProject Project? @relation("EnquiryConvertedProject", fields: [convertedProjectId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([status])
+  @@index([email])
+  @@map("enquiries")
 }
 
 // ---------- Commercial: Quote ----------
