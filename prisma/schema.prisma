@@ -182,6 +182,22 @@ enum ClientSource {
   OTHER
 }
 
+enum DeclineReason {
+  PRICE
+  DATE_UNAVAILABLE
+  CHOSE_ANOTHER
+  PACKAGE_UNSUITABLE
+  NO_LONGER_NEED
+  OTHER
+}
+
+enum ContactRole {
+  PRIMARY
+  PARTNER
+  BILLING
+  OTHER
+}
+
 model Company {
   id        String   @id @default(cuid()) @db.VarChar(30)
   name      String   @db.VarChar(150)
@@ -320,10 +336,30 @@ model Client {
   convertedFromEnquiries Enquiry[] @relation("EnquiryConvertedClient")
   mergedInto             Client?   @relation("ClientMerge", fields: [mergedIntoClientId], references: [id], onDelete: SetNull)
   mergedFrom             Client[]  @relation("ClientMerge")
+  contacts               Contact[]
 
   @@index([companyId])
   @@index([status])
   @@map("clients")
+}
+
+model Contact {
+  id              String      @id @default(cuid()) @db.VarChar(30)
+  clientId        String      @map("client_id") @db.VarChar(30)
+  name            String      @db.VarChar(150)
+  email           String?     @db.Citext
+  phone           String?     @db.VarChar(30)
+  role            ContactRole @default(PRIMARY)
+  isPrimary       Boolean     @default(false) @map("is_primary")
+  isBilling       Boolean     @default(false) @map("is_billing")
+  canAccessPortal Boolean     @default(true) @map("can_access_portal")
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@map("contacts")
 }
 
 model Project {
@@ -341,6 +377,8 @@ model Project {
   packagePriceSnapshot Decimal?         @map("package_price_snapshot") @db.Decimal(12, 2)
   confirmToken         String?          @unique @map("confirm_token") @db.VarChar(64)
   confirmedByClientAt  DateTime?        @map("confirmed_by_client_at") @db.Timestamptz
+  lostReason           DeclineReason?   @map("lost_reason")
+  lostAt               DateTime?        @map("lost_at") @db.Timestamptz
   enquiryReceivedAt    DateTime         @default(now()) @map("enquiry_received_at") @db.Timestamptz
   enquiryNotes         String?          @map("enquiry_notes") @db.Text
   firstRespondedAt     DateTime?        @map("first_responded_at") @db.Timestamptz
@@ -435,24 +473,25 @@ model Quote {
 }
 
 model QuoteVersion {
-  id                   String      @id @default(cuid()) @db.VarChar(30)
-  quoteId              String      @map("quote_id") @db.VarChar(30)
-  versionNumber        Int         @map("version_number")
-  status               QuoteStatus @default(DRAFT)
-  currency             String      @default("AUD") @db.VarChar(3)
-  subtotal             Decimal     @default(0) @db.Decimal(12, 2)
-  discountTotal        Decimal     @default(0) @map("discount_total") @db.Decimal(12, 2)
-  taxTotal             Decimal     @default(0) @map("tax_total") @db.Decimal(12, 2)
-  total                Decimal     @default(0) @db.Decimal(12, 2)
-  validUntil           DateTime?   @map("valid_until") @db.Timestamptz
-  createdByUserId      String?     @map("created_by_user_id") @db.VarChar(30)
-  sentToClientAt       DateTime?   @map("sent_to_client_at") @db.Timestamptz
-  viewedByClientAt     DateTime?   @map("viewed_by_client_at") @db.Timestamptz
-  acceptedByClientAt   DateTime?   @map("accepted_by_client_at") @db.Timestamptz
-  acceptedByClientName String?     @map("accepted_by_client_name") @db.VarChar(150)
-  acceptedByClientIp   String?     @map("accepted_by_client_ip") @db.VarChar(45)
-  createdAt            DateTime    @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt            DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  id                   String         @id @default(cuid()) @db.VarChar(30)
+  quoteId              String         @map("quote_id") @db.VarChar(30)
+  versionNumber        Int            @map("version_number")
+  status               QuoteStatus    @default(DRAFT)
+  currency             String         @default("AUD") @db.VarChar(3)
+  subtotal             Decimal        @default(0) @db.Decimal(12, 2)
+  discountTotal        Decimal        @default(0) @map("discount_total") @db.Decimal(12, 2)
+  taxTotal             Decimal        @default(0) @map("tax_total") @db.Decimal(12, 2)
+  total                Decimal        @default(0) @db.Decimal(12, 2)
+  validUntil           DateTime?      @map("valid_until") @db.Timestamptz
+  createdByUserId      String?        @map("created_by_user_id") @db.VarChar(30)
+  sentToClientAt       DateTime?      @map("sent_to_client_at") @db.Timestamptz
+  viewedByClientAt     DateTime?      @map("viewed_by_client_at") @db.Timestamptz
+  acceptedByClientAt   DateTime?      @map("accepted_by_client_at") @db.Timestamptz
+  acceptedByClientName String?        @map("accepted_by_client_name") @db.VarChar(150)
+  acceptedByClientIp   String?        @map("accepted_by_client_ip") @db.VarChar(45)
+  declineReason        DeclineReason? @map("decline_reason")
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   quote     Quote       @relation("QuoteVersions", fields: [quoteId], references: [id], onDelete: Cascade)
   createdBy User?       @relation("QuoteVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)

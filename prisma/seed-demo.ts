@@ -1,13 +1,17 @@
 
 import { prisma } from '../src/lib/db'
 import { assignResource, createBooking } from '../src/lib/domain/booking'
+import { addContact } from '../src/lib/domain/contact'
 import {
   createContractFromAcceptedQuote,
   sendContract,
   signContractByToken,
 } from '../src/lib/domain/contract'
 import { addGalleryItem, createGallery, publishGallery } from '../src/lib/domain/delivery'
+import { confirmBookingByToken, createProjectFromPackage } from '../src/lib/domain/direct-booking'
+import { convertEnquiry, createEnquiry, markEnquiryLost } from '../src/lib/domain/enquiry'
 import { createInvoice, issueInvoice, recordPayment } from '../src/lib/domain/finance'
+import { createPackage } from '../src/lib/domain/package'
 import { createProjectFromEnquiry } from '../src/lib/domain/project'
 import { acceptQuoteByToken, createQuote, saveQuoteDraft, sendQuote } from '../src/lib/domain/quote'
 
@@ -111,7 +115,70 @@ async function main() {
     await publishGallery(gallery.id, adminId)
   }
 
-  console.log('Demo data loaded: 5 projects across enquiry, quoting, awaiting decision, confirmed, and completed.')
+  const weddingPkg = await createPackage(
+    {
+      name: 'Wedding — Full Day',
+      description: '8 hours coverage with two photographers and an edited online gallery.',
+      inclusions: '8 hours coverage\nTwo photographers\nOnline gallery\n60 edited images',
+      durationHours: 8,
+      basePriceInclGst: '3500',
+      sortOrder: 1,
+    },
+    adminId,
+  )
+  await createPackage(
+    {
+      name: 'Portrait Session',
+      description: 'One-hour studio portrait session.',
+      inclusions: '1 hour session\n20 edited images',
+      durationHours: 1,
+      basePriceInclGst: '450',
+      sortOrder: 2,
+    },
+    adminId,
+  )
+
+  await createEnquiry(
+    { name: 'Mia Tran', email: 'mia.tran@demo.moments', eventType: 'Wedding', message: 'Are you free next November?', source: 'WEBSITE' },
+    adminId,
+  )
+  const lostLead = await createEnquiry(
+    { name: 'Tom Baker', email: 'tom.baker@demo.moments', eventType: 'Portrait', message: 'Just checking prices.', source: 'INSTAGRAM' },
+    adminId,
+  )
+  await markEnquiryLost(lostLead.id, 'Budget too low for now', adminId)
+  const qualifiedLead = await createEnquiry(
+    { name: 'Priya and Sam', email: 'priya.sam@demo.moments', eventType: 'Engagement', message: 'Engagement shoot at the botanic gardens.', source: 'REFERRAL' },
+    adminId,
+  )
+  await convertEnquiry(qualifiedLead.id, adminId)
+
+  const directBooking = await createProjectFromPackage({
+    packageId: weddingPkg.id,
+    name: 'Olivia and Ben',
+    email: 'olivia.ben@demo.moments',
+    eventType: 'Wedding',
+    message: 'Chose the full-day package online.',
+  })
+  await confirmBookingByToken(directBooking.confirmToken!)
+
+  const contactClient = await prisma.client.findUnique({ where: { email: 'priya.sam@demo.moments' } })
+  if (contactClient) {
+    await addContact(
+      contactClient.id,
+      { name: 'Priya', email: 'priya@demo.moments', phone: '0412 100 200', role: 'PRIMARY', isBilling: true },
+      adminId,
+    )
+    await addContact(
+      contactClient.id,
+      { name: 'Sam', email: 'sam@demo.moments', phone: '0412 100 201', role: 'PARTNER' },
+      adminId,
+    )
+  }
+
+  console.log(
+    'Demo data loaded: projects across the lifecycle + 2 packages, 3 enquiries (new/lost/converted), a direct booking, and contacts.',
+  )
 }
 
 main()
