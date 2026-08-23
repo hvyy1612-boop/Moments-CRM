@@ -202,6 +202,16 @@ enum ClientSource {
   OTHER
 }
 
+// Lý do khách từ chối báo giá / dự án mất (F-QUOTE-03).
+enum DeclineReason {
+  PRICE
+  DATE_UNAVAILABLE
+  CHOSE_ANOTHER
+  PACKAGE_UNSUITABLE
+  NO_LONGER_NEED
+  OTHER
+}
+
 // ---------- Company (single tenant) ----------
 
 model Company {
@@ -370,6 +380,8 @@ model Project {
   packagePriceSnapshot Decimal?         @map("package_price_snapshot") @db.Decimal(12, 2) // giá gói chốt lúc đặt
   confirmToken         String?          @unique @map("confirm_token") @db.VarChar(64) // link khách xác nhận (thay quote/contract)
   confirmedByClientAt  DateTime?        @map("confirmed_by_client_at") @db.Timestamptz
+  lostReason           DeclineReason?   @map("lost_reason") // vì sao dự án mất (F-QUOTE-03)
+  lostAt               DateTime?        @map("lost_at") @db.Timestamptz
   enquiryReceivedAt    DateTime         @default(now()) @map("enquiry_received_at") @db.Timestamptz
   enquiryNotes         String?          @map("enquiry_notes") @db.Text // ghi chú tự do, không giới hạn
   firstRespondedAt     DateTime?        @map("first_responded_at") @db.Timestamptz // SLA
@@ -473,24 +485,25 @@ model Quote {
 }
 
 model QuoteVersion {
-  id                   String      @id @default(cuid()) @db.VarChar(30)
-  quoteId              String      @map("quote_id") @db.VarChar(30)
-  versionNumber        Int         @map("version_number")
-  status               QuoteStatus @default(DRAFT)
-  currency             String      @default("AUD") @db.VarChar(3)
-  subtotal             Decimal     @default(0) @db.Decimal(12, 2)
-  discountTotal        Decimal     @default(0) @map("discount_total") @db.Decimal(12, 2)
-  taxTotal             Decimal     @default(0) @map("tax_total") @db.Decimal(12, 2)
-  total                Decimal     @default(0) @db.Decimal(12, 2)
-  validUntil           DateTime?   @map("valid_until") @db.Timestamptz
-  createdByUserId      String?     @map("created_by_user_id") @db.VarChar(30)
-  sentToClientAt       DateTime?   @map("sent_to_client_at") @db.Timestamptz
-  viewedByClientAt     DateTime?   @map("viewed_by_client_at") @db.Timestamptz
-  acceptedByClientAt   DateTime?   @map("accepted_by_client_at") @db.Timestamptz
-  acceptedByClientName String?     @map("accepted_by_client_name") @db.VarChar(150) // tên khách gõ khi accept
-  acceptedByClientIp   String?     @map("accepted_by_client_ip") @db.VarChar(45)
-  createdAt            DateTime    @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt            DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  id                   String         @id @default(cuid()) @db.VarChar(30)
+  quoteId              String         @map("quote_id") @db.VarChar(30)
+  versionNumber        Int            @map("version_number")
+  status               QuoteStatus    @default(DRAFT)
+  currency             String         @default("AUD") @db.VarChar(3)
+  subtotal             Decimal        @default(0) @db.Decimal(12, 2)
+  discountTotal        Decimal        @default(0) @map("discount_total") @db.Decimal(12, 2)
+  taxTotal             Decimal        @default(0) @map("tax_total") @db.Decimal(12, 2)
+  total                Decimal        @default(0) @db.Decimal(12, 2)
+  validUntil           DateTime?      @map("valid_until") @db.Timestamptz
+  createdByUserId      String?        @map("created_by_user_id") @db.VarChar(30)
+  sentToClientAt       DateTime?      @map("sent_to_client_at") @db.Timestamptz
+  viewedByClientAt     DateTime?      @map("viewed_by_client_at") @db.Timestamptz
+  acceptedByClientAt   DateTime?      @map("accepted_by_client_at") @db.Timestamptz
+  acceptedByClientName String?        @map("accepted_by_client_name") @db.VarChar(150) // tên khách gõ khi accept
+  acceptedByClientIp   String?        @map("accepted_by_client_ip") @db.VarChar(45)
+  declineReason        DeclineReason? @map("decline_reason") // khi version DECLINED (F-QUOTE-03)
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   quote     Quote       @relation("QuoteVersions", fields: [quoteId], references: [id], onDelete: Cascade)
   createdBy User?       @relation("QuoteVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
