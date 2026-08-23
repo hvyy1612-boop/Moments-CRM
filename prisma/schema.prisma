@@ -38,10 +38,16 @@ enum ProjectLifecycle {
   QUALIFYING
   QUOTING
   AWAITING_DECISION
+  NEGOTIATION
+  BOOKING_REQUESTED
   CONFIRMED
   IN_PRODUCTION
   COMPLETED
   CANCELLED
+  LOST
+  ON_HOLD
+  POSTPONED
+  ARCHIVED
 }
 
 enum CommercialStatus {
@@ -190,6 +196,7 @@ model Company {
   clients   Client[]
   projects  Project[]
   enquiries Enquiry[]
+  packages  Package[]
   bookings  Booking[]
   resources Resource[]
 
@@ -320,26 +327,31 @@ model Client {
 }
 
 model Project {
-  id                String           @id @default(cuid()) @db.VarChar(30)
-  companyId         String           @map("company_id") @db.VarChar(30)
-  clientId          String           @map("client_id") @db.VarChar(30)
-  code              String           @unique @db.VarChar(30)
-  name              String           @db.VarChar(200)
-  ownerUserId       String?          @map("owner_user_id") @db.VarChar(30)
-  lifecycleStatus   ProjectLifecycle @default(ENQUIRY) @map("lifecycle_status")
-  commercialStatus  CommercialStatus @default(UNQUOTED) @map("commercial_status")
-  source            String?          @db.VarChar(50)
-  sourceDetail      String?          @map("source_detail") @db.VarChar(255)
-  enquiryReceivedAt DateTime         @default(now()) @map("enquiry_received_at") @db.Timestamptz
-  enquiryNotes      String?          @map("enquiry_notes") @db.Text
-  firstRespondedAt  DateTime?        @map("first_responded_at") @db.Timestamptz
-  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt         DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  archivedAt        DateTime?        @map("archived_at") @db.Timestamptz
+  id                   String           @id @default(cuid()) @db.VarChar(30)
+  companyId            String           @map("company_id") @db.VarChar(30)
+  clientId             String           @map("client_id") @db.VarChar(30)
+  code                 String           @unique @db.VarChar(30)
+  name                 String           @db.VarChar(200)
+  ownerUserId          String?          @map("owner_user_id") @db.VarChar(30)
+  lifecycleStatus      ProjectLifecycle @default(ENQUIRY) @map("lifecycle_status")
+  commercialStatus     CommercialStatus @default(UNQUOTED) @map("commercial_status")
+  source               String?          @db.VarChar(50)
+  sourceDetail         String?          @map("source_detail") @db.VarChar(255)
+  packageId            String?          @map("package_id") @db.VarChar(30)
+  packagePriceSnapshot Decimal?         @map("package_price_snapshot") @db.Decimal(12, 2)
+  confirmToken         String?          @unique @map("confirm_token") @db.VarChar(64)
+  confirmedByClientAt  DateTime?        @map("confirmed_by_client_at") @db.Timestamptz
+  enquiryReceivedAt    DateTime         @default(now()) @map("enquiry_received_at") @db.Timestamptz
+  enquiryNotes         String?          @map("enquiry_notes") @db.Text
+  firstRespondedAt     DateTime?        @map("first_responded_at") @db.Timestamptz
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  archivedAt           DateTime?        @map("archived_at") @db.Timestamptz
 
   company                Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
   client                 Client     @relation(fields: [clientId], references: [id], onDelete: Restrict)
   owner                  User?      @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  package                Package?   @relation(fields: [packageId], references: [id], onDelete: SetNull)
   quotes                 Quote[]
   contracts              Contract[]
   bookings               Booking[]
@@ -353,6 +365,26 @@ model Project {
   @@index([lifecycleStatus])
   @@index([enquiryReceivedAt])
   @@map("projects")
+}
+
+model Package {
+  id               String   @id @default(cuid()) @db.VarChar(30)
+  companyId        String   @map("company_id") @db.VarChar(30)
+  name             String   @db.VarChar(150)
+  description      String?  @db.Text
+  inclusions       String?  @db.Text
+  durationHours    Int?     @map("duration_hours")
+  basePriceInclGst Decimal  @default(0) @map("base_price_incl_gst") @db.Decimal(12, 2)
+  active           Boolean  @default(true)
+  sortOrder        Int      @default(0) @map("sort_order")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  projects Project[]
+
+  @@index([companyId, active])
+  @@map("packages")
 }
 
 model Enquiry {

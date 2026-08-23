@@ -5,13 +5,13 @@ import type { EnquiryInput } from '@/lib/validation/enquiry'
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
-async function requireCompany(tx: Tx) {
+export async function requireCompany(tx: Tx) {
   const company = await tx.company.findFirst()
   if (!company) throw new Error('No company row exists. Run the seed first.')
   return company
 }
 
-async function nextProjectCode(tx: Tx, year: number): Promise<string> {
+export async function nextProjectCode(tx: Tx, year: number): Promise<string> {
   const prefix = `MPF-${year}-`
   const last = await tx.project.findFirst({
     where: { code: { startsWith: prefix } },
