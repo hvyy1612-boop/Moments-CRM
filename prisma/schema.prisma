@@ -220,6 +220,49 @@ enum ContactRole {
   OTHER
 }
 
+enum CommunicationType {
+  EMAIL
+  NOTE
+  CLIENT_MESSAGE
+  CALL
+}
+
+enum ChangeRequestType {
+  COMMERCIAL
+  OPERATIONAL
+  CLIENT_DATA
+  PRODUCTION
+}
+
+enum ChangeRequestStatus {
+  PENDING
+  IMPACT_ASSESSMENT
+  APPROVED
+  REJECTED
+  APPLIED
+}
+
+enum FileKind {
+  CONTRACT
+  QUESTIONNAIRE
+  RAW
+  EDITED
+  PROOF
+  GALLERY
+  INVOICE
+  OTHER
+}
+
+enum FileVisibility {
+  INTERNAL
+  CLIENT_VISIBLE
+}
+
+enum QuestionnaireStatus {
+  PENDING
+  COMPLETED
+}
+
 // ---------- Company (single tenant) ----------
 
 model Company {
@@ -274,6 +317,10 @@ model User {
   assignmentsMade         ResourceAssignment[] @relation("AssignmentAssignedBy")
   recordedPayments        Payment[]            @relation("PaymentRecordedBy")
   ownedEnquiries          Enquiry[]            @relation("EnquiryOwner")
+  communications          Communication[]
+  uploadedFiles           File[]
+  requestedChanges        ChangeRequest[]      @relation("ChangeRequestedBy")
+  approvedChanges         ChangeRequest[]      @relation("ChangeApprovedBy")
 
   @@index([companyId])
   @@index([role])
@@ -360,12 +407,13 @@ model Client {
   archivedAt         DateTime?    @map("archived_at") @db.Timestamptz
   mergedIntoClientId String?      @map("merged_into_client_id") @db.VarChar(30) // B2: gộp trùng → bản giữ
 
-  company                Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  company                Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
   projects               Project[]
-  convertedFromEnquiries Enquiry[] @relation("EnquiryConvertedClient")
-  mergedInto             Client?   @relation("ClientMerge", fields: [mergedIntoClientId], references: [id], onDelete: SetNull)
-  mergedFrom             Client[]  @relation("ClientMerge")
+  convertedFromEnquiries Enquiry[]       @relation("EnquiryConvertedClient")
+  mergedInto             Client?         @relation("ClientMerge", fields: [mergedIntoClientId], references: [id], onDelete: SetNull)
+  mergedFrom             Client[]        @relation("ClientMerge")
   contacts               Contact[]
+  communications         Communication[]
 
   @@index([companyId])
   @@index([status])
@@ -419,17 +467,21 @@ model Project {
   updatedAt            DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   archivedAt           DateTime?        @map("archived_at") @db.Timestamptz
 
-  company                Company    @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  client                 Client     @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  owner                  User?      @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  package                Package?   @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  company                Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  client                 Client          @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  owner                  User?           @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  package                Package?        @relation(fields: [packageId], references: [id], onDelete: SetNull)
   quotes                 Quote[]
   contracts              Contract[]
   bookings               Booking[]
   invoices               Invoice[]
   payments               Payment[]
   galleries              Gallery[]
-  convertedFromEnquiries Enquiry[]  @relation("EnquiryConvertedProject")
+  convertedFromEnquiries Enquiry[]       @relation("EnquiryConvertedProject")
+  communications         Communication[]
+  files                  File[]
+  questionnaires         Questionnaire[]
+  changeRequests         ChangeRequest[]
 
   @@index([companyId])
   @@index([clientId])
@@ -535,10 +587,11 @@ model QuoteVersion {
   createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  quote     Quote       @relation("QuoteVersions", fields: [quoteId], references: [id], onDelete: Cascade)
-  createdBy User?       @relation("QuoteVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  currentOf Quote?      @relation("QuoteCurrentVersion")
-  lines     QuoteLine[]
+  quote          Quote           @relation("QuoteVersions", fields: [quoteId], references: [id], onDelete: Cascade)
+  createdBy      User?           @relation("QuoteVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  currentOf      Quote?          @relation("QuoteCurrentVersion")
+  lines          QuoteLine[]
+  changeRequests ChangeRequest[]
   // Invariant: tối đa một version ACCEPTED / quote (partial unique index trong migration).
   // Accepted version immutable (app + rule).
 
@@ -622,23 +675,26 @@ model ContractVersion {
 // (EXCLUDE USING gist trong migration, cần extension btree_gist).
 
 model Booking {
-  id          String        @id @default(cuid()) @db.VarChar(30)
-  companyId   String        @map("company_id") @db.VarChar(30)
-  projectId   String        @map("project_id") @db.VarChar(30)
-  title       String?       @db.VarChar(200)
-  status      BookingStatus @default(TENTATIVE)
-  startsAt    DateTime      @map("starts_at") @db.Timestamptz
-  endsAt      DateTime      @map("ends_at") @db.Timestamptz
-  timezone    String        @default("Australia/Sydney") @db.VarChar(50)
-  location    String?       @db.VarChar(255)
-  notes       String?       @db.Text // ghi chú tự do, không giới hạn
-  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  cancelledAt DateTime?     @map("cancelled_at") @db.Timestamptz
+  id                String        @id @default(cuid()) @db.VarChar(30)
+  companyId         String        @map("company_id") @db.VarChar(30)
+  projectId         String        @map("project_id") @db.VarChar(30)
+  title             String?       @db.VarChar(200)
+  status            BookingStatus @default(TENTATIVE)
+  startsAt          DateTime      @map("starts_at") @db.Timestamptz
+  endsAt            DateTime      @map("ends_at") @db.Timestamptz
+  timezone          String        @default("Australia/Sydney") @db.VarChar(50)
+  location          String?       @db.VarChar(255)
+  notes             String?       @db.Text // ghi chú tự do, không giới hạn
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  cancelledAt       DateTime?     @map("cancelled_at") @db.Timestamptz
+  rescheduledFromId String?       @map("rescheduled_from_id") @db.VarChar(30)
 
-  company     Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  project     Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  assignments ResourceAssignment[]
+  company         Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  project         Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  assignments     ResourceAssignment[]
+  rescheduledFrom Booking?             @relation("BookingReschedule", fields: [rescheduledFromId], references: [id], onDelete: SetNull)
+  rescheduledTo   Booking[]            @relation("BookingReschedule")
 
   @@index([projectId])
   @@index([status])
@@ -758,6 +814,7 @@ model Payment {
   project      Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
   recordedBy   User?                @relation("PaymentRecordedBy", fields: [recordedByUserId], references: [id], onDelete: SetNull)
   transactions PaymentTransaction[]
+  refunds      Refund[]
 
   @@index([invoiceId])
   @@index([projectId])
@@ -860,4 +917,128 @@ model OutboxEvent {
 
   @@index([status, availableAt])
   @@map("outbox_events")
+}
+
+// ---------- Backlog: collaboration, changes, finance edges (docs/16 E-J) ----------
+
+// What has been exchanged with the client on a project (call, email, note, message from the portal).
+model Communication {
+  id        String            @id @default(cuid()) @db.VarChar(30)
+  projectId String            @map("project_id") @db.VarChar(30)
+  clientId  String?           @map("client_id") @db.VarChar(30)
+  type      CommunicationType
+  direction String            @db.VarChar(10) // inbound | outbound
+  subject   String?           @db.VarChar(255)
+  body      String            @db.Text
+  byUserId  String?           @map("by_user_id") @db.VarChar(30) // null khi do client/hệ thống
+  channel   String?           @db.VarChar(50)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  client  Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  by      User?   @relation(fields: [byUserId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@map("communications")
+}
+
+// Files on a project. v1 stores an external URL; real object storage is an env-flag later. Clients
+// only ever see CLIENT_VISIBLE files.
+model File {
+  id               String         @id @default(cuid()) @db.VarChar(30)
+  projectId        String         @map("project_id") @db.VarChar(30)
+  kind             FileKind
+  visibility       FileVisibility @default(INTERNAL)
+  name             String         @db.VarChar(255)
+  url              String         @db.VarChar(2048)
+  sizeBytes        Int?           @map("size_bytes")
+  uploadedByUserId String?        @map("uploaded_by_user_id") @db.VarChar(30)
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy User?   @relation(fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, visibility])
+  @@map("files")
+}
+
+// A questionnaire sent to the client to collect event details. The question set is Company config
+// (OQ-016, TBD); this stores whatever questions/answers are used.
+model Questionnaire {
+  id          String              @id @default(cuid()) @db.VarChar(30)
+  projectId   String              @map("project_id") @db.VarChar(30)
+  status      QuestionnaireStatus @default(PENDING)
+  sentAt      DateTime?           @map("sent_at") @db.Timestamptz
+  completedAt DateTime?           @map("completed_at") @db.Timestamptz
+  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  project Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  answers QuestionnaireAnswer[]
+
+  @@index([projectId])
+  @@map("questionnaires")
+}
+
+model QuestionnaireAnswer {
+  id              String   @id @default(cuid()) @db.VarChar(30)
+  questionnaireId String   @map("questionnaire_id") @db.VarChar(30)
+  question        String   @db.VarChar(500)
+  answer          String   @db.Text
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  questionnaire Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
+
+  @@index([questionnaireId])
+  @@map("questionnaire_answers")
+}
+
+// Refund against a captured payment. Total refunds never exceed the captured amount (domain check);
+// the money movement is also written as a REFUND PaymentTransaction (append-only).
+model Refund {
+  id                String            @id @default(cuid()) @db.VarChar(30)
+  paymentId         String            @map("payment_id") @db.VarChar(30)
+  amount            Decimal           @db.Decimal(12, 2)
+  currency          String            @default("AUD") @db.VarChar(3)
+  reason            String?           @db.VarChar(500)
+  status            TransactionStatus @default(PENDING)
+  externalReference String?           @map("external_reference") @db.VarChar(100)
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  processedAt       DateTime?         @map("processed_at") @db.Timestamptz
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([paymentId])
+  @@map("refunds")
+}
+
+// A post-confirmation change request, routed by type. Never edits records in place: a commercial
+// change spawns a new quote version, operational a new booking, data an audited client edit.
+model ChangeRequest {
+  id                      String              @id @default(cuid()) @db.VarChar(30)
+  projectId               String              @map("project_id") @db.VarChar(30)
+  type                    ChangeRequestType
+  status                  ChangeRequestStatus @default(PENDING)
+  requestedByType         String              @map("requested_by_type") @db.VarChar(10) // staff | client
+  requestedByUserId       String?             @map("requested_by_user_id") @db.VarChar(30)
+  description             String              @db.Text
+  reason                  String?             @db.VarChar(500)
+  commercialImpact        Decimal?            @map("commercial_impact") @db.Decimal(12, 2)
+  scheduleImpact          Boolean             @default(false) @map("schedule_impact")
+  resultingQuoteVersionId String?             @map("resulting_quote_version_id") @db.VarChar(30)
+  approvedByUserId        String?             @map("approved_by_user_id") @db.VarChar(30)
+  approvedAt              DateTime?           @map("approved_at") @db.Timestamptz
+  rejectedAt              DateTime?           @map("rejected_at") @db.Timestamptz
+  createdAt               DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt               DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  project               Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requestedBy           User?         @relation("ChangeRequestedBy", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  approvedBy            User?         @relation("ChangeApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  resultingQuoteVersion QuoteVersion? @relation(fields: [resultingQuoteVersionId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([status])
+  @@map("change_requests")
 }
