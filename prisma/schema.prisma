@@ -212,6 +212,14 @@ enum DeclineReason {
   OTHER
 }
 
+// Vai trò liên hệ trong một client (F-CLIENT-02).
+enum ContactRole {
+  PRIMARY
+  PARTNER
+  BILLING
+  OTHER
+}
+
 // ---------- Company (single tenant) ----------
 
 model Company {
@@ -357,10 +365,32 @@ model Client {
   convertedFromEnquiries Enquiry[] @relation("EnquiryConvertedClient")
   mergedInto             Client?   @relation("ClientMerge", fields: [mergedIntoClientId], references: [id], onDelete: SetNull)
   mergedFrom             Client[]  @relation("ClientMerge")
+  contacts               Contact[]
 
   @@index([companyId])
   @@index([status])
   @@map("clients")
+}
+
+// ---------- CRM: Contact (F-CLIENT-02) ----------
+// 1 client ↔ nhiều contact (cặp đôi, người ký, billing...). Mỗi client nên có ≥1 contact PRIMARY.
+model Contact {
+  id              String      @id @default(cuid()) @db.VarChar(30)
+  clientId        String      @map("client_id") @db.VarChar(30)
+  name            String      @db.VarChar(150)
+  email           String?     @db.Citext
+  phone           String?     @db.VarChar(30)
+  role            ContactRole @default(PRIMARY)
+  isPrimary       Boolean     @default(false) @map("is_primary")
+  isBilling       Boolean     @default(false) @map("is_billing")
+  canAccessPortal Boolean     @default(true) @map("can_access_portal")
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@map("contacts")
 }
 
 // ---------- Project (operational case, bắt đầu từ enquiry) ----------
