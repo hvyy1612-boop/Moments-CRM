@@ -1,6 +1,7 @@
 'use server'
 
 import { cookies, headers } from 'next/headers'
+import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
 import { requestPasswordReset } from '@/lib/auth/password-reset'
@@ -26,7 +27,7 @@ export async function generateResetLinkAction(
   formData: FormData,
 ): Promise<ResetLinkState> {
   const user = await getSessionUser()
-  if (!user || user.role !== 'ADMIN') return { status: 'error', message: 'Admins only.' }
+  if (!can(user, 'USER_MANAGE')) return { status: 'error', message: 'You do not have permission to do this.' }
 
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value
   if (!verifyCsrf(cookieValue, formData.get('csrf'))) {

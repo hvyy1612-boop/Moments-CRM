@@ -1,53 +1,27 @@
 import type { Metadata } from 'next'
+import type { ProjectLifecycle } from '@prisma/client'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { StatusTag, type StatusKind } from '@/components/ui/StatusTag'
+import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
+import { CLOSED_STATUSES } from '@/features/projects/lifecycle'
+import { StatusPicker } from '@/features/projects/components/StatusPicker'
 import { AppShell } from '../AppShell'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Projects — Moments' }
-
-const STATUS_KIND: Record<string, StatusKind> = {
-  ENQUIRY: 'enquiry',
-  QUALIFYING: 'enquiry',
-  QUOTING: 'quote',
-  AWAITING_DECISION: 'quote',
-  NEGOTIATION: 'quote',
-  BOOKING_REQUESTED: 'booked',
-  CONFIRMED: 'booked',
-  IN_PRODUCTION: 'editing',
-  COMPLETED: 'delivered',
-  CANCELLED: 'lost',
-  LOST: 'lost',
-  ON_HOLD: 'hold',
-  POSTPONED: 'hold',
-  ARCHIVED: 'hold',
-}
-const CLOSED = new Set(['COMPLETED', 'CANCELLED', 'LOST', 'ARCHIVED'])
-
-function statusKind(status: string): StatusKind {
-  return STATUS_KIND[status] ?? 'hold'
-}
-function statusLabel(status: string): string {
-  return status
-    .toLowerCase()
-    .split('_')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ')
-}
 
 type Row = {
   id: string
   code: string
   name: string
   client: string
-  status: string
+  status: ProjectLifecycle
   enquiredAt: Date
 }
 
@@ -55,10 +29,14 @@ function Group({
   title,
   spine,
   rows,
+  csrf,
+  canEdit,
 }: {
   title: string
   spine: string
   rows: Row[]
+  csrf: string
+  canEdit: boolean
 }) {
   if (rows.length === 0) return null
   return (
@@ -101,9 +79,12 @@ function Group({
                   {formatSydneyDate(row.enquiredAt)}
                 </td>
                 <td className="border-b border-line p-0">
-                  <StatusTag kind={statusKind(row.status)} block>
-                    {statusLabel(row.status)}
-                  </StatusTag>
+                  <StatusPicker
+                    projectId={row.id}
+                    current={row.status}
+                    csrf={csrf}
+                    canEdit={canEdit}
+                  />
                 </td>
               </tr>
             ))}
@@ -140,8 +121,9 @@ export default async function ProjectsPage() {
     status: p.lifecycleStatus,
     enquiredAt: p.enquiryReceivedAt,
   }))
-  const active = rows.filter((r) => !CLOSED.has(r.status))
-  const closed = rows.filter((r) => CLOSED.has(r.status))
+  const active = rows.filter((r) => !CLOSED_STATUSES.has(r.status))
+  const closed = rows.filter((r) => CLOSED_STATUSES.has(r.status))
+  const canEdit = can(user, 'PROJECT_EDIT')
 
   const action = (
     <Link href="/projects/new">
@@ -169,8 +151,8 @@ export default async function ProjectsPage() {
         </div>
       ) : (
         <div className="mt-5">
-          <Group title="Active projects" spine="border-l-delivered-ink" rows={active} />
-          <Group title="Closed" spine="border-l-line-strong" rows={closed} />
+          <Group title="Active projects" spine="border-l-delivered-ink" rows={active} csrf={csrf} canEdit={canEdit} />
+          <Group title="Closed" spine="border-l-line-strong" rows={closed} csrf={csrf} canEdit={canEdit} />
         </div>
       )}
     </AppShell>
