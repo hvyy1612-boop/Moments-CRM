@@ -19,6 +19,8 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/api/health': { public: true },
   // Staff entrance and account recovery: public by necessity (not signed in yet / token-authorised).
   '/login': { public: true },
+  '/forgot': { public: true },
+  '/reset/[token]': { public: true },
   // Staff workspace: the dashboard, enquiries, projects, and the project detail.
   '/dashboard': { roles: ['ADMIN', 'STUDIO'] },
   '/enquiries': { roles: ['ADMIN', 'STUDIO'] },
