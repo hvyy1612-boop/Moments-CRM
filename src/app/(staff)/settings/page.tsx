@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
+import { ResetLinkGenerator } from '@/features/settings/components/ResetLinkGenerator'
 import { AppShell } from '../AppShell'
 
 export const runtime = 'nodejs'
@@ -22,6 +23,12 @@ export default async function SettingsPage() {
 
   return (
     <AppShell user={user} csrf={csrf} active="settings">
+      {user.role === 'ADMIN' ? (
+        <div className="mb-4">
+          <ResetLinkGenerator csrf={csrf} />
+        </div>
+      ) : null}
+
       <p className="mb-5 text-base text-ink-muted">
         These sections are placeholders for now. The controls arrive as each area is built out.
       </p>
