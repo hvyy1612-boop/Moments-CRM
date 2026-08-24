@@ -18,12 +18,6 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
           </Link>
           <nav className="flex gap-5 text-sm">
             <Link
-              href="/packages"
-              className="text-ink-muted transition-colors duration-150 hover:text-ink"
-            >
-              Packages
-            </Link>
-            <Link
               href="/enquire"
               className="text-ink-muted transition-colors duration-150 hover:text-ink"
             >
