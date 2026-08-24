@@ -24,7 +24,7 @@ export default async function ActivityPage() {
   // Read-only. Both tables are append-only at the database level (insert-only triggers), so nothing
   // here can be edited or erased. We never select the password hash or session token.
   const [logins, actions] = await Promise.all([
-    prisma.securityEvent.findMany({
+    prisma.signInLog.findMany({
       orderBy: { createdAt: 'desc' },
       take: 50,
       select: {

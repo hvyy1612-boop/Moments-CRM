@@ -6,10 +6,10 @@ import { createSession, type CreatedSession } from './session'
 /**
  * One password login attempt (SEC-S04, SEC-S05, SEC-S06).
  *
- * Every outcome writes a SecurityEvent. The caller shows one generic failure message for every
+ * Every outcome writes a SignInLog. The caller shows one generic failure message for every
  * failure kind, so nothing here reveals whether an account exists, is locked or is disabled
  * (SEC-S05). Lockout is 15 minutes after 5 consecutive failures, counted per account (User
- * counters) and per IP (SecurityEvent rows in the window — D-005: Postgres is the rate limiter,
+ * counters) and per IP (SignInLog rows in the window — D-005: Postgres is the rate limiter,
  * no new table needed).
  */
 const LOCKOUT_THRESHOLD = 5 // SEC-S04
@@ -34,7 +34,7 @@ export async function attemptLogin(
   const windowStart = new Date(now.getTime() - LOCKOUT_WINDOW_MS)
 
   const fail = async (userId?: string): Promise<LoginResult> => {
-    await prisma.securityEvent.create({
+    await prisma.signInLog.create({
       data: {
         eventType: 'login_failure', // SEC-S06
         userId: userId ?? null,
@@ -48,7 +48,7 @@ export async function attemptLogin(
   }
 
   // SEC-S04 per IP: five failures from one address in the window block further attempts there.
-  const ipFailures = await prisma.securityEvent.count({
+  const ipFailures = await prisma.signInLog.count({
     where: { eventType: 'login_failure', ipAddress: meta.ipAddress, createdAt: { gte: windowStart } },
   })
   if (ipFailures >= LOCKOUT_THRESHOLD) {
@@ -122,7 +122,7 @@ export async function attemptLogin(
     { ipAddress: meta.ipAddress, userAgent: meta.userAgent, remember: input.remember },
     clock,
   )
-  await prisma.securityEvent.create({
+  await prisma.signInLog.create({
     data: {
       eventType: 'login_success', // SEC-S06
       userId: user.id,

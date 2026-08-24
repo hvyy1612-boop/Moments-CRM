@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 
 /**
- * Prisma client singleton with an application layer guard that makes ActivityLog and SecurityEvent
+ * Prisma client singleton with an application layer guard that makes ActivityLog and SignInLog
  * insert-only (BR-L01, ADR-0003). The database triggers are the real guarantee; this stops a
  * mutation earlier with a clearer error. All access goes through Prisma, never raw SQL string
  * building (SEC-A03).
@@ -23,10 +23,10 @@ function createPrisma() {
           return query(args)
         },
       },
-      securityEvent: {
+      signInLog: {
         $allOperations({ operation, args, query }) {
           if (MUTATIONS.has(operation)) {
-            throw new Error('SecurityEvent is insert-only')
+            throw new Error('SignInLog is insert-only')
           }
           return query(args)
         },

@@ -1,5 +1,5 @@
 // Moments — Prisma schema. Project-centric (Database Blueprint v2 final).
-// Slices 1-5: Company, auth (User/Session/PasswordReset/SecurityEvent), Client, Project,
+// Slices 1-5: Company, auth (User/Session/PasswordReset/SignInLog), Client, Project,
 // Quote/QuoteVersion/QuoteLine, Contract/ContractVersion, Booking/Resource/ResourceAssignment,
 // Invoice/InvoiceLine/Payment/PaymentTransaction, Gallery/GalleryItem, AuditLog, OutboxEvent.
 // Later slices add: workflow/work_items, deliverables/revisions/approvals/assets (object storage),
@@ -308,7 +308,7 @@ model User {
   company                 Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
   passwordResets          PasswordReset[]
   sessions                Session[]
-  securityEvents          SecurityEvent[]
+  signInLogs          SignInLog[]
   auditLogs               AuditLog[]
   ownedProjects           Project[]            @relation("ProjectOwner")
   createdQuoteVersions    QuoteVersion[]       @relation("QuoteVersionCreatedBy")
@@ -364,7 +364,7 @@ model Session {
   @@map("sessions")
 }
 
-model SecurityEvent {
+model SignInLog {
   id             String          @id @default(cuid()) @db.VarChar(30)
   eventType      String          @map("event_type") @db.VarChar(100)
   userId         String?         @map("user_id") @db.VarChar(30)
