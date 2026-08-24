@@ -16,9 +16,15 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/login': { public: true },
 
   '/dashboard': { roles: ['ADMIN', 'STUDIO'] },
+  '/enquiries': { roles: ['ADMIN', 'STUDIO'] },
+  '/enquiries/new': { roles: ['ADMIN', 'STUDIO'] },
   '/projects': { roles: ['ADMIN', 'STUDIO'] },
   '/projects/new': { roles: ['ADMIN', 'STUDIO'] },
   '/projects/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  '/clients': { roles: ['ADMIN', 'STUDIO'] },
+  '/calendar': { roles: ['ADMIN', 'STUDIO'] },
+  '/finance': { roles: ['ADMIN', 'STUDIO'] },
+  '/settings': { roles: ['ADMIN', 'STUDIO'] },
 
   '/activity': { roles: ['ADMIN'] },
 
