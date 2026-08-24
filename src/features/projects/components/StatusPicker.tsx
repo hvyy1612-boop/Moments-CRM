@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { StatusTag } from '@/components/ui/StatusTag'
-import { LIFECYCLE_OPTIONS, statusKind, statusLabel } from '../lifecycle'
+import { LIFECYCLE_OPTIONS, statusKind, statusLabel, type LifecycleOption } from '../lifecycle'
 import { setProjectStatusAction } from '../status-actions'
+
+const COMMON_OPTIONS = LIFECYCLE_OPTIONS.filter((o) => o.common)
+const MORE_OPTIONS = LIFECYCLE_OPTIONS.filter((o) => !o.common)
 
 type Coords = { left: number; width: number; top?: number; bottom?: number; maxHeight: number }
 
@@ -30,6 +33,10 @@ export function StatusPicker({
   const menuRef = useRef<HTMLDivElement | null>(null)
   const [open, setOpen] = useState(false)
   const [coords, setCoords] = useState<Coords | null>(null)
+  const [showMore, setShowMore] = useState(false)
+
+  // If the project already sits on a less-common stage, open with the full list so its tick shows.
+  const currentIsMore = MORE_OPTIONS.some((o) => o.value === current)
 
   const place = useCallback(() => {
     const el = triggerRef.current
@@ -48,9 +55,12 @@ export function StatusPicker({
   }, [])
 
   const toggle = useCallback(() => {
-    if (!open) place()
+    if (!open) {
+      place()
+      setShowMore(currentIsMore)
+    }
     setOpen((v) => !v)
-  }, [open, place])
+  }, [open, place, currentIsMore])
 
   useEffect(() => {
     if (!open) return
@@ -80,6 +90,33 @@ export function StatusPicker({
       window.removeEventListener('mousedown', onDown)
     }
   }, [open])
+
+  const renderOption = (opt: LifecycleOption) => {
+    const selected = opt.value === current
+    return (
+      <form key={opt.value} action={setProjectStatusAction} onSubmit={() => setOpen(false)}>
+        <input type="hidden" name="csrf" value={csrf} />
+        <input type="hidden" name="projectId" value={projectId} />
+        <button
+          type="submit"
+          name="status"
+          value={opt.value}
+          role="option"
+          aria-selected={selected}
+          className="relative block w-full overflow-hidden rounded-md ring-accent transition-transform hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 aria-selected:ring-2 aria-selected:ring-ink"
+        >
+          <StatusTag kind={opt.kind} solid block>
+            {opt.label}
+          </StatusTag>
+          {selected ? (
+            <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-white">
+              ✓
+            </span>
+          ) : null}
+        </button>
+      </form>
+    )
+  }
 
   if (!canEdit) {
     return (
@@ -122,32 +159,21 @@ export function StatusPicker({
           }}
           className="z-50 flex flex-col gap-2 overflow-y-auto rounded-lg border border-line bg-surface p-2.5 shadow-xl"
         >
-          {LIFECYCLE_OPTIONS.map((opt) => {
-            const selected = opt.value === current
-            return (
-              <form key={opt.value} action={setProjectStatusAction} onSubmit={() => setOpen(false)}>
-                <input type="hidden" name="csrf" value={csrf} />
-                <input type="hidden" name="projectId" value={projectId} />
-                <button
-                  type="submit"
-                  name="status"
-                  value={opt.value}
-                  role="option"
-                  aria-selected={selected}
-                  className="relative block w-full overflow-hidden rounded-md ring-accent transition-transform hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 aria-selected:ring-2 aria-selected:ring-ink"
-                >
-                  <StatusTag kind={opt.kind} solid block>
-                    {opt.label}
-                  </StatusTag>
-                  {selected ? (
-                    <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-white">
-                      ✓
-                    </span>
-                  ) : null}
-                </button>
-              </form>
-            )
-          })}
+          {COMMON_OPTIONS.map(renderOption)}
+          {showMore ? (
+            <>
+              <div className="border-t border-line" />
+              {MORE_OPTIONS.map(renderOption)}
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowMore(true)}
+              className="flex w-full items-center justify-center gap-1 border-t border-line pt-2.5 text-sm font-semibold text-ink-muted transition-colors hover:text-ink"
+            >
+              More statuses ▾
+            </button>
+          )}
         </div>
       ) : null}
     </>

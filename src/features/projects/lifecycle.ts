@@ -49,6 +49,21 @@ export const CLOSED_STATUSES: ReadonlySet<ProjectLifecycle> = new Set([
   'ARCHIVED',
 ])
 
+/**
+ * The everyday stages a studio moves work through: the main funnel plus the "lost" outcome. The
+ * picker shows these first; the rest (sub-states and edge cases) sit behind a "More" toggle so the
+ * menu stays short, the way a Monday status column shows a curated label set.
+ */
+export const COMMON_STATUSES: ReadonlySet<ProjectLifecycle> = new Set([
+  'ENQUIRY',
+  'QUOTING',
+  'AWAITING_DECISION',
+  'CONFIRMED',
+  'IN_PRODUCTION',
+  'COMPLETED',
+  'LOST',
+])
+
 export function statusKind(status: string): StatusKind {
   return LIFECYCLE_KIND[status as ProjectLifecycle] ?? 'hold'
 }
@@ -62,13 +77,20 @@ export function statusLabel(status: string): string {
     .join(' ')
 }
 
-export type LifecycleOption = { value: ProjectLifecycle; label: string; kind: StatusKind }
+export type LifecycleOption = {
+  value: ProjectLifecycle
+  label: string
+  kind: StatusKind
+  /** Shown up front in the picker; the rest are tucked behind the "More" toggle. */
+  common: boolean
+}
 
 /** The full option list the picker renders, in reading order, each with its label and colour. */
 export const LIFECYCLE_OPTIONS: LifecycleOption[] = LIFECYCLE_ORDER.map((value) => ({
   value,
   label: statusLabel(value),
   kind: LIFECYCLE_KIND[value],
+  common: COMMON_STATUSES.has(value),
 }))
 
 /** Narrow an untrusted string (a form value) to a real lifecycle status. */
