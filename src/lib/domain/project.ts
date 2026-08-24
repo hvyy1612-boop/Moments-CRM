@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client'
+import { Prisma, type ProjectLifecycle } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
 import type { EnquiryInput } from '@/lib/validation/enquiry'
@@ -96,5 +96,44 @@ async function runCreateProjectFromEnquiry(input: EnquiryInput, now: Date) {
     })
 
     return project
+  })
+}
+
+/**
+ * Manually set a project's lifecycle status from the board (the Monday-style label pick). Records an
+ * audit row with the before/after status and a no-op when the status is unchanged. The commercial
+ * status is left as-is: this is a presentational stage move, not a billing transition.
+ */
+export async function setProjectLifecycle(
+  projectId: string,
+  status: ProjectLifecycle,
+  actorUserId: string,
+) {
+  return prisma.$transaction(async (tx) => {
+    const project = await tx.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, companyId: true, lifecycleStatus: true },
+    })
+    if (!project) throw new Error('Project not found.')
+    if (project.lifecycleStatus === status) return project
+
+    const updated = await tx.project.update({
+      where: { id: projectId },
+      data: { lifecycleStatus: status },
+      select: { id: true, lifecycleStatus: true },
+    })
+    await tx.auditLog.create({
+      data: {
+        companyId: project.companyId,
+        actorUserId,
+        action: 'project.status_changed',
+        entityType: 'Project',
+        entityId: projectId,
+        source: 'staff.board',
+        beforeData: { lifecycleStatus: project.lifecycleStatus },
+        afterData: { lifecycleStatus: status },
+      },
+    })
+    return updated
   })
 }
