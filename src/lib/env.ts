@@ -9,6 +9,9 @@ const envSchema = z
     SESSION_SECRET: z.string().min(32).optional(),
     GOOGLE_CLIENT_ID: z.string().min(1).optional(),
     GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+
+    RESEND_API_KEY: z.string().min(1).optional(),
+    EMAIL_FROM: z.string().min(1).optional(),
     STRIPE_SECRET_KEY: z.string().min(1).optional(),
     STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
     STRIPE_PUBLISHABLE_KEY: z.string().min(1).optional(),
@@ -26,6 +29,13 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         path: ['GOOGLE_CLIENT_ID'],
         message: 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together (§8.5)',
+      })
+    }
+    if (Boolean(val.RESEND_API_KEY) !== Boolean(val.EMAIL_FROM)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['RESEND_API_KEY'],
+        message: 'RESEND_API_KEY and EMAIL_FROM must be set together to send email',
       })
     }
   })
