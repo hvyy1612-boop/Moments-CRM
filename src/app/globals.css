@@ -34,20 +34,20 @@
   --color-danger: #b23b34;
 
   /* Status colours (D-22) — bright: light fill + dark same-hue text. One pair per status. */
-  --color-enquiry: #f9e6bb;
-  --color-enquiry-ink: #8a640f;
-  --color-quote: #fadcc7;
-  --color-quote-ink: #a5502c;
-  --color-booked: #f6dae4;
-  --color-booked-ink: #9c4f6e;
-  --color-editing: #ece1f3;
-  --color-editing-ink: #77528a;
-  --color-delivered: #e2edc6;
-  --color-delivered-ink: #5c7326;
-  --color-lost: #fad3ce;
+  --color-enquiry: #f6e3b8;
+  --color-enquiry-ink: #9c6c12;
+  --color-quote: #cfe6f0;
+  --color-quote-ink: #1c6f92;
+  --color-booked: #e7d9f0;
+  --color-booked-ink: #7e4794;
+  --color-editing: #cfe9e5;
+  --color-editing-ink: #2b8079;
+  --color-delivered: #dbeccb;
+  --color-delivered-ink: #3f7d34;
+  --color-lost: #f6d5cf;
   --color-lost-ink: #b23b34;
-  --color-hold: #ece5da;
-  --color-hold-ink: #79705f;
+  --color-hold: #dde3e8;
+  --color-hold-ink: #5f6b76;
 
   /* Chart — status series use the stronger mid-tone of the same hue (so filled areas read). */
   --color-chart-enquiry: #d9ab52;

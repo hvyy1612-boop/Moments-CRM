@@ -10,7 +10,7 @@ export const LIFECYCLE_KIND: Record<ProjectLifecycle, StatusKind> = {
   ENQUIRY: 'enquiry',
   QUALIFYING: 'enquiry',
   QUOTING: 'quote',
-  AWAITING_DECISION: 'quote',
+  AWAITING_DECISION: 'hold',
   NEGOTIATION: 'quote',
   BOOKING_REQUESTED: 'booked',
   CONFIRMED: 'booked',
