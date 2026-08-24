@@ -393,11 +393,15 @@ model Client {
   source             ClientSource @default(MANUAL) // B2: khách đến từ đâu (dashboard)
   displayName        String       @map("display_name") @db.VarChar(150)
   legalName          String?      @map("legal_name") @db.VarChar(150)
+  firstName          String?      @map("first_name") @db.VarChar(80)
+  lastName           String?      @map("last_name") @db.VarChar(80)
   email              String       @unique @db.Citext // dedupe tại enquiry (P1)
   phone              String?      @db.VarChar(30)
+  street             String?      @db.VarChar(200)
   suburb             String?      @db.VarChar(100)
   state              String?      @db.VarChar(100)
   postcode           String?      @db.VarChar(20)
+  country            String?      @db.VarChar(100)
   marketingConsent   Boolean      @default(false) @map("marketing_consent")
   consentUpdatedAt   DateTime?    @map("consent_updated_at") @db.Timestamptz
   anonymisedAt       DateTime?    @map("anonymised_at") @db.Timestamptz
@@ -525,8 +529,16 @@ model Enquiry {
   companyId          String        @map("company_id") @db.VarChar(30)
   ownerUserId        String?       @map("owner_user_id") @db.VarChar(30)
   name               String        @db.VarChar(150)
+  firstName          String?       @map("first_name") @db.VarChar(80)
+  lastName           String?       @map("last_name") @db.VarChar(80)
   email              String        @db.Citext // KHÔNG unique: một người có thể hỏi nhiều lần
   phone              String?       @db.VarChar(30)
+  street             String?       @db.VarChar(200)
+  suburb             String?       @db.VarChar(100)
+  state              String?       @db.VarChar(100)
+  postcode           String?       @db.VarChar(20)
+  country            String?       @db.VarChar(100)
+  isCompany          Boolean       @default(false) @map("is_company")
   eventType          String?       @map("event_type") @db.VarChar(50)
   eventDate          DateTime?     @map("event_date") @db.Date // chỉ ngày, chưa có giờ
   message            String?       @db.Text

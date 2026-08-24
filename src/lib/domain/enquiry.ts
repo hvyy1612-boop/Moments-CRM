@@ -18,8 +18,16 @@ import {
 
 export type CreateEnquiryInput = {
   name: string
+  firstName?: string | null
+  lastName?: string | null
   email: string
   phone?: string | null
+  street?: string | null
+  suburb?: string | null
+  state?: string | null
+  postcode?: string | null
+  country?: string | null
+  isCompany?: boolean
   eventType?: string | null
   eventDate?: Date | null
   message?: string | null
@@ -36,8 +44,16 @@ export async function createEnquiry(input: CreateEnquiryInput, actorUserId: stri
         companyId: company.id,
         ownerUserId: input.ownerUserId ?? null,
         name: input.name,
+        firstName: input.firstName ?? null,
+        lastName: input.lastName ?? null,
         email: input.email,
         phone: input.phone ?? null,
+        street: input.street ?? null,
+        suburb: input.suburb ?? null,
+        state: input.state ?? null,
+        postcode: input.postcode ?? null,
+        country: input.country ?? null,
+        isCompany: input.isCompany ?? false,
         eventType: input.eventType ?? null,
         eventDate: input.eventDate ?? null,
         message: input.message ?? null,
@@ -198,9 +214,17 @@ async function runConvertEnquiry(enquiryId: string, actorUserId: string | null, 
       client = await tx.client.create({
         data: {
           companyId: company.id,
+          type: enquiry.isCompany ? 'BUSINESS' : 'INDIVIDUAL',
           displayName: enquiry.name,
+          firstName: enquiry.firstName,
+          lastName: enquiry.lastName,
           email: enquiry.email,
           phone: enquiry.phone,
+          street: enquiry.street,
+          suburb: enquiry.suburb,
+          state: enquiry.state,
+          postcode: enquiry.postcode,
+          country: enquiry.country,
           status: 'PROSPECT',
           source: clientSourceFromEnquiry(enquiry.source),
         },

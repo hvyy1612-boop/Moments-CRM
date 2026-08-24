@@ -33,21 +33,61 @@ export default async function NewEnquiryPage() {
 
         <h1 className="mt-3 font-serif text-2xl font-semibold text-ink">Log an enquiry</h1>
         <p className="mt-1 text-base text-ink-muted">
-          Record a new lead. You can convert it into a project once you have spoken with them.
+          Record a new lead with their contact details. You can convert it into a project once you
+          have spoken with them.
         </p>
 
         <form action={logEnquiryAction} className="mt-6 rounded-md border border-line bg-surface p-6">
           <input type="hidden" name="csrf" value={csrf} />
+
+          <label className="mb-5 flex items-center gap-2.5 text-base text-ink">
+            <input
+              type="checkbox"
+              name="isCompany"
+              className="h-4 w-4 rounded border-line-strong accent-accent"
+            />
+            This client is a company, and invoices are addressed to the company.
+          </label>
+
+          <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Contact</h2>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <Field label="Name" htmlFor="name" required>
-              <TextInput id="name" name="name" required maxLength={120} placeholder="Sarah Nguyen" />
+            <Field label="First name" htmlFor="firstName" required>
+              <TextInput id="firstName" name="firstName" required maxLength={80} placeholder="Sarah" />
             </Field>
-            <Field label="Email" htmlFor="email" required>
-              <TextInput id="email" name="email" type="email" required maxLength={254} placeholder="sarah@email.com" />
+            <Field label="Last name" htmlFor="lastName">
+              <TextInput id="lastName" name="lastName" maxLength={80} placeholder="Nguyen" />
             </Field>
             <Field label="Phone" htmlFor="phone">
               <TextInput id="phone" name="phone" maxLength={40} placeholder="0412 345 678" />
             </Field>
+            <Field label="Email" htmlFor="email" required>
+              <TextInput id="email" name="email" type="email" required maxLength={254} placeholder="sarah@email.com" />
+            </Field>
+          </div>
+
+          <h2 className="mb-3 mt-6 text-xs font-bold uppercase tracking-wide text-muted">Address</h2>
+          <div className="grid grid-cols-1 gap-5">
+            <Field label="Street address" htmlFor="street">
+              <TextInput id="street" name="street" maxLength={200} placeholder="12 Wentworth Ave" />
+            </Field>
+          </div>
+          <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <Field label="Suburb / town" htmlFor="suburb">
+              <TextInput id="suburb" name="suburb" maxLength={100} placeholder="Surry Hills" />
+            </Field>
+            <Field label="Postcode" htmlFor="postcode">
+              <TextInput id="postcode" name="postcode" maxLength={20} placeholder="2010" />
+            </Field>
+            <Field label="State" htmlFor="state">
+              <TextInput id="state" name="state" maxLength={100} placeholder="NSW" />
+            </Field>
+            <Field label="Country" htmlFor="country">
+              <TextInput id="country" name="country" maxLength={100} placeholder="Australia" />
+            </Field>
+          </div>
+
+          <h2 className="mb-3 mt-6 text-xs font-bold uppercase tracking-wide text-muted">Enquiry</h2>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <Field label="Event type" htmlFor="eventType">
               <TextInput id="eventType" name="eventType" maxLength={80} placeholder="Wedding" />
             </Field>
@@ -65,10 +105,11 @@ export default async function NewEnquiryPage() {
             </Field>
           </div>
           <div className="mt-5">
-            <Field label="Message" htmlFor="message">
+            <Field label="Note" htmlFor="message">
               <Textarea id="message" name="message" maxLength={2000} placeholder="What are they looking for?" />
             </Field>
           </div>
+
           <div className="mt-6 flex items-center gap-3">
             <Button type="submit">Log enquiry</Button>
             <Link href="/enquiries" className="text-base text-ink-muted hover:text-ink">
