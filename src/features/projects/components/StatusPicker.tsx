@@ -164,6 +164,13 @@ export function StatusPicker({
             <>
               <div className="border-t border-line" />
               {MORE_OPTIONS.map(renderOption)}
+              <button
+                type="button"
+                onClick={() => setShowMore(false)}
+                className="flex w-full items-center justify-center gap-1 pt-0.5 text-sm font-semibold text-ink-muted transition-colors hover:text-ink"
+              >
+                Show less ▴
+              </button>
             </>
           ) : (
             <button
