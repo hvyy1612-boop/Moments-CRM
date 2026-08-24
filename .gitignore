@@ -24,7 +24,3 @@ next-env.d.ts
 
 # Playwright output
 test-results/
-
-# Local tooling + private build-session notes (kept on disk, not published)
-.claude/
-/_internal/
