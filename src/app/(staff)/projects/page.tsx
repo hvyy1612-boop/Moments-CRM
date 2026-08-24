@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import type { ProjectLifecycle } from '@prisma/client'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { Button } from '@/components/ui/Button'
@@ -9,22 +8,24 @@ import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
-import { CLOSED_STATUSES } from '@/features/projects/lifecycle'
+import { isClosedLabel, resolveLabel, type StatusLabel } from '@/features/projects/labels'
+import { getCompanyStatusLabels } from '@/lib/domain/status-labels'
 import { StatusPicker } from '@/features/projects/components/StatusPicker'
 import { AppShell } from '../AppShell'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Projects — Moments' }
 
-// Lifecycle colours, labels, order, and the closed set all live in one place (features/projects/
-// lifecycle.ts) so the board and the inline status picker read from the same source of truth.
+// Status colours and labels are company-defined (features/projects/labels.ts); the lifecycle enum
+// still drives grouping and automation while the label controls how each status reads.
 
 type Row = {
   id: string
   code: string
   name: string
   client: string
-  status: ProjectLifecycle
+  label: StatusLabel
+  closed: boolean
   enquiredAt: Date
 }
 
@@ -32,12 +33,14 @@ function Group({
   title,
   spine,
   rows,
+  labels,
   csrf,
   canEdit,
 }: {
   title: string
   spine: string
   rows: Row[]
+  labels: StatusLabel[]
   csrf: string
   canEdit: boolean
 }) {
@@ -84,7 +87,8 @@ function Group({
                 <td className="border-b border-line p-0">
                   <StatusPicker
                     projectId={row.id}
-                    current={row.status}
+                    current={row.label}
+                    labels={labels}
                     csrf={csrf}
                     canEdit={canEdit}
                   />
@@ -111,21 +115,28 @@ export default async function ProjectsPage() {
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
-  const projects = await prisma.project.findMany({
-    orderBy: { enquiryReceivedAt: 'desc' },
-    include: { client: { select: { displayName: true } } },
-  })
+  const [projects, labels] = await Promise.all([
+    prisma.project.findMany({
+      orderBy: { enquiryReceivedAt: 'desc' },
+      include: { client: { select: { displayName: true } } },
+    }),
+    getCompanyStatusLabels(),
+  ])
 
-  const rows: Row[] = projects.map((p) => ({
-    id: p.id,
-    code: p.code,
-    name: p.name,
-    client: p.client.displayName,
-    status: p.lifecycleStatus,
-    enquiredAt: p.enquiryReceivedAt,
-  }))
-  const active = rows.filter((r) => !CLOSED_STATUSES.has(r.status))
-  const closed = rows.filter((r) => CLOSED_STATUSES.has(r.status))
+  const rows: Row[] = projects.map((p) => {
+    const label = resolveLabel(p, labels)
+    return {
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      client: p.client.displayName,
+      label,
+      closed: isClosedLabel(label),
+      enquiredAt: p.enquiryReceivedAt,
+    }
+  })
+  const active = rows.filter((r) => !r.closed)
+  const closed = rows.filter((r) => r.closed)
   const canEdit = can(user, 'PROJECT_EDIT')
 
   const action = (
@@ -154,8 +165,8 @@ export default async function ProjectsPage() {
         </div>
       ) : (
         <div className="mt-5">
-          <Group title="Active projects" spine="border-l-delivered-ink" rows={active} csrf={csrf} canEdit={canEdit} />
-          <Group title="Closed" spine="border-l-line-strong" rows={closed} csrf={csrf} canEdit={canEdit} />
+          <Group title="Active projects" spine="border-l-delivered-ink" rows={active} labels={labels} csrf={csrf} canEdit={canEdit} />
+          <Group title="Closed" spine="border-l-line-strong" rows={closed} labels={labels} csrf={csrf} canEdit={canEdit} />
         </div>
       )}
     </AppShell>

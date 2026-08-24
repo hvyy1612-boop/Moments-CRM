@@ -451,6 +451,9 @@ model Project {
   name                 String           @db.VarChar(200)
   ownerUserId          String?          @map("owner_user_id") @db.VarChar(30)
   lifecycleStatus      ProjectLifecycle @default(ENQUIRY) @map("lifecycle_status")
+  // Optional custom status label (company-defined, Monday-style). The lifecycle enum above still
+  // drives all automation; this only overrides how the status reads on the board when set.
+  statusLabelId        String?          @map("status_label_id") @db.VarChar(60)
   commercialStatus     CommercialStatus @default(UNQUOTED) @map("commercial_status") // derived
   source               String?          @db.VarChar(50) // nguồn enquiry (I-6 taxonomy, TBD)
   sourceDetail         String?          @map("source_detail") @db.VarChar(255)

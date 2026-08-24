@@ -2,11 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { StatusTag } from '@/components/ui/StatusTag'
-import { LIFECYCLE_OPTIONS, statusKind, statusLabel, type LifecycleOption } from '../lifecycle'
+import { isCommonLabel, type StatusLabel } from '../labels'
 import { setProjectStatusAction } from '../status-actions'
-
-const COMMON_OPTIONS = LIFECYCLE_OPTIONS.filter((o) => o.common)
-const MORE_OPTIONS = LIFECYCLE_OPTIONS.filter((o) => !o.common)
+import { LabelEditor } from './LabelEditor'
 
 type Coords = { left: number; width: number; top?: number; bottom?: number; maxHeight: number }
 
@@ -15,17 +13,20 @@ const MENU_MIN_WIDTH = 188
 
 /**
  * Inline status picker for the Projects board (Monday's Stage cell). The trigger fills the cell with
- * the current status as a bold pill; clicking opens a card of every stage, and picking one submits
- * the server action to move the project. Read-only roles get a plain pill, no menu.
+ * the current label as a bold pill; clicking opens the company's status set, split into the everyday
+ * ones and a "More" group, with an "Edit labels" row that opens the label editor. Read-only roles
+ * get a plain pill, no menu.
  */
 export function StatusPicker({
   projectId,
   current,
+  labels,
   csrf,
   canEdit,
 }: {
   projectId: string
-  current: string
+  current: StatusLabel
+  labels: StatusLabel[]
   csrf: string
   canEdit: boolean
 }) {
@@ -34,9 +35,11 @@ export function StatusPicker({
   const [open, setOpen] = useState(false)
   const [coords, setCoords] = useState<Coords | null>(null)
   const [showMore, setShowMore] = useState(false)
+  const [showEditor, setShowEditor] = useState(false)
 
-  // If the project already sits on a less-common stage, open with the full list so its tick shows.
-  const currentIsMore = MORE_OPTIONS.some((o) => o.value === current)
+  const commonLabels = labels.filter(isCommonLabel)
+  const moreLabels = labels.filter((l) => !isCommonLabel(l))
+  const currentIsMore = moreLabels.some((l) => l.id === current.id)
 
   const place = useCallback(() => {
     const el = triggerRef.current
@@ -72,8 +75,6 @@ export function StatusPicker({
       if (menuRef.current?.contains(t) || triggerRef.current?.contains(t)) return
       setOpen(false)
     }
-    // Close when the page scrolls (the fixed menu would drift from its cell), but let the menu's own
-    // list scroll — the earlier version closed on any scroll, so the wheel never reached the list.
     const onScroll = (e: Event) => {
       if (menuRef.current?.contains(e.target as Node)) return
       setOpen(false)
@@ -91,22 +92,22 @@ export function StatusPicker({
     }
   }, [open])
 
-  const renderOption = (opt: LifecycleOption) => {
-    const selected = opt.value === current
+  const renderOption = (label: StatusLabel) => {
+    const selected = label.id === current.id
     return (
-      <form key={opt.value} action={setProjectStatusAction} onSubmit={() => setOpen(false)}>
+      <form key={label.id} action={setProjectStatusAction} onSubmit={() => setOpen(false)}>
         <input type="hidden" name="csrf" value={csrf} />
         <input type="hidden" name="projectId" value={projectId} />
         <button
           type="submit"
-          name="status"
-          value={opt.value}
+          name="labelId"
+          value={label.id}
           role="option"
           aria-selected={selected}
-          className="relative block w-full overflow-hidden rounded-md ring-accent transition-transform hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 aria-selected:ring-2 aria-selected:ring-ink"
+          className="relative block w-full overflow-hidden rounded-md transition-transform hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent aria-selected:ring-2 aria-selected:ring-ink"
         >
-          <StatusTag kind={opt.kind} solid block>
-            {opt.label}
+          <StatusTag kind={label.color} solid block>
+            {label.name}
           </StatusTag>
           {selected ? (
             <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-white">
@@ -120,8 +121,8 @@ export function StatusPicker({
 
   if (!canEdit) {
     return (
-      <StatusTag kind={statusKind(current)} solid block>
-        {statusLabel(current)}
+      <StatusTag kind={current.color} solid block>
+        {current.name}
       </StatusTag>
     )
   }
@@ -137,8 +138,8 @@ export function StatusPicker({
         className="group/status relative flex w-full cursor-pointer items-center"
         title="Change status"
       >
-        <StatusTag kind={statusKind(current)} solid block>
-          {statusLabel(current)}
+        <StatusTag kind={current.color} solid block>
+          {current.name}
         </StatusTag>
         <span className="pointer-events-none absolute right-2 text-xs text-white opacity-70 transition-opacity group-hover/status:opacity-100">
           ▾
@@ -157,31 +158,46 @@ export function StatusPicker({
             minWidth: Math.max(coords.width, MENU_MIN_WIDTH),
             maxHeight: coords.maxHeight,
           }}
-          className="z-50 flex flex-col gap-2 overflow-y-auto rounded-lg border border-line bg-surface p-2.5 shadow-xl"
+          className="z-40 flex flex-col gap-2 overflow-y-auto rounded-lg border border-line bg-surface p-2.5 shadow-xl"
         >
-          {COMMON_OPTIONS.map(renderOption)}
-          {showMore ? (
-            <>
-              <div className="border-t border-line" />
-              {MORE_OPTIONS.map(renderOption)}
+          {commonLabels.map(renderOption)}
+          {moreLabels.length > 0 &&
+            (showMore ? (
+              <>
+                <div className="border-t border-line" />
+                {moreLabels.map(renderOption)}
+                <button
+                  type="button"
+                  onClick={() => setShowMore(false)}
+                  className="flex w-full items-center justify-center gap-1 pt-0.5 text-sm font-semibold text-ink-muted transition-colors hover:text-ink"
+                >
+                  Show less ▴
+                </button>
+              </>
+            ) : (
               <button
                 type="button"
-                onClick={() => setShowMore(false)}
-                className="flex w-full items-center justify-center gap-1 pt-0.5 text-sm font-semibold text-ink-muted transition-colors hover:text-ink"
+                onClick={() => setShowMore(true)}
+                className="flex w-full items-center justify-center gap-1 border-t border-line pt-2.5 text-sm font-semibold text-ink-muted transition-colors hover:text-ink"
               >
-                Show less ▴
+                More statuses ▾
               </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowMore(true)}
-              className="flex w-full items-center justify-center gap-1 border-t border-line pt-2.5 text-sm font-semibold text-ink-muted transition-colors hover:text-ink"
-            >
-              More statuses ▾
-            </button>
-          )}
+            ))}
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false)
+              setShowEditor(true)
+            }}
+            className="flex w-full items-center justify-center gap-1 border-t border-line pt-2.5 text-sm font-semibold text-accent-ink hover:underline"
+          >
+            ✎ Edit labels
+          </button>
         </div>
+      ) : null}
+
+      {showEditor ? (
+        <LabelEditor labels={labels} csrf={csrf} onClose={() => setShowEditor(false)} />
       ) : null}
     </>
   )
