@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { Alert } from '@/components/ui/Alert'
@@ -34,6 +35,9 @@ export default async function LoginPage({
             </Alert>
           ) : null}
           <LoginForm csrf={csrf} />
+          <Link href="/forgot" className="text-sm font-bold text-accent-ink hover:underline">
+            Forgot your password?
+          </Link>
         </div>
       </div>
     </main>

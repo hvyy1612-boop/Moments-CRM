@@ -14,6 +14,8 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/api/health': { public: true },
 
   '/login': { public: true },
+  '/forgot': { public: true },
+  '/reset/[token]': { public: true },
 
   '/dashboard': { roles: ['ADMIN', 'STUDIO'] },
   '/enquiries': { roles: ['ADMIN', 'STUDIO'] },
