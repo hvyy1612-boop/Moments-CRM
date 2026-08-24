@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
+import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { ResetLinkGenerator } from '@/features/settings/components/ResetLinkGenerator'
@@ -23,7 +24,7 @@ export default async function SettingsPage() {
 
   return (
     <AppShell user={user} csrf={csrf} active="settings">
-      {user.role === 'ADMIN' ? (
+      {can(user, 'USER_MANAGE') ? (
         <div className="mb-4">
           <ResetLinkGenerator csrf={csrf} />
         </div>

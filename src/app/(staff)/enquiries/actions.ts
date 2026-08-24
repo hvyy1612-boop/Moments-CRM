@@ -4,6 +4,7 @@ import { EnquirySource } from '@prisma/client'
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
 import { convertEnquiry, createEnquiry, markEnquiryLost } from '@/lib/domain/enquiry'
@@ -11,7 +12,7 @@ import { enquirySchema } from '@/lib/validation/enquiry'
 
 async function requireStaff() {
   const user = await getSessionUser()
-  if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDIO')) {
+  if (!user || !can(user, 'ENQUIRY_CONVERT')) {
     throw new Error('Not authorised.')
   }
   return user

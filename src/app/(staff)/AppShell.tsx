@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
+import { can, type Permission } from '@/lib/auth/authz'
 import type { SessionUser } from '@/lib/auth/guard'
 import { signOut } from './actions'
 
@@ -21,7 +22,8 @@ type NavItem = {
   href: string
   group: NavGroup
   built: boolean
-  adminOnly?: boolean
+  /** When set, the item shows only for users whose role grants this permission. */
+  permission?: Permission
   icon: ReactNode
 }
 
@@ -51,7 +53,7 @@ const NAV: NavItem[] = [
   { key: 'calendar', label: 'Calendar', href: '/calendar', group: 'Operations', built: true, icon: svg(<><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 2v4M16 2v4" /></>) },
   { key: 'finance', label: 'Finance', href: '/finance', group: 'Operations', built: true, icon: svg(<path d="M12 2v20M17 6.5C17 4.5 14.8 3.5 12 3.5S7 4.7 7 6.8s2 2.7 5 3.4 5 1.4 5 3.5-2.2 3.3-5 3.3-5-1.1-5-3" />) },
   { key: 'dashboard', label: 'Dashboard', href: '/dashboard', group: 'Insights', built: true, icon: svg(<><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>) },
-  { key: 'activity', label: 'Activity', href: '/activity', group: 'Insights', built: true, adminOnly: true, icon: svg(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></>) },
+  { key: 'activity', label: 'Activity', href: '/activity', group: 'Insights', built: true, permission: 'AUTH_LOG_VIEW', icon: svg(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></>) },
   { key: 'settings', label: 'Settings', href: '/settings', group: 'System', built: true, icon: svg(<><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2l-.4-2.6H9.9l-.4 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2l.4 2.6h4.2l.4-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2Z" /></>) },
 ]
 
@@ -69,7 +71,7 @@ export function AppShell({
   action?: ReactNode
   children: ReactNode
 }) {
-  const items = NAV.filter((n) => !n.adminOnly || user.role === 'ADMIN')
+  const items = NAV.filter((n) => !n.permission || can(user, n.permission))
   const current = NAV.find((n) => n.key === active)
   const initial = user.name.trim().charAt(0).toUpperCase() || 'U'
 
