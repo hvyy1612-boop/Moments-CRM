@@ -42,6 +42,16 @@ export const CLOSED_STATUSES: ReadonlySet<ProjectLifecycle> = new Set([
   'ARCHIVED',
 ])
 
+export const COMMON_STATUSES: ReadonlySet<ProjectLifecycle> = new Set([
+  'ENQUIRY',
+  'QUOTING',
+  'AWAITING_DECISION',
+  'CONFIRMED',
+  'IN_PRODUCTION',
+  'COMPLETED',
+  'LOST',
+])
+
 export function statusKind(status: string): StatusKind {
   return LIFECYCLE_KIND[status as ProjectLifecycle] ?? 'hold'
 }
@@ -54,12 +64,19 @@ export function statusLabel(status: string): string {
     .join(' ')
 }
 
-export type LifecycleOption = { value: ProjectLifecycle; label: string; kind: StatusKind }
+export type LifecycleOption = {
+  value: ProjectLifecycle
+  label: string
+  kind: StatusKind
+
+  common: boolean
+}
 
 export const LIFECYCLE_OPTIONS: LifecycleOption[] = LIFECYCLE_ORDER.map((value) => ({
   value,
   label: statusLabel(value),
   kind: LIFECYCLE_KIND[value],
+  common: COMMON_STATUSES.has(value),
 }))
 
 export function isLifecycle(value: string): value is ProjectLifecycle {

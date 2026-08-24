@@ -23,7 +23,7 @@ export async function attemptLogin(
   const windowStart = new Date(now.getTime() - LOCKOUT_WINDOW_MS)
 
   const fail = async (userId?: string): Promise<LoginResult> => {
-    await prisma.securityEvent.create({
+    await prisma.signInLog.create({
       data: {
         eventType: 'login_failure', // SEC-S06
         userId: userId ?? null,
@@ -36,7 +36,7 @@ export async function attemptLogin(
     return { ok: false }
   }
 
-  const ipFailures = await prisma.securityEvent.count({
+  const ipFailures = await prisma.signInLog.count({
     where: { eventType: 'login_failure', ipAddress: meta.ipAddress, createdAt: { gte: windowStart } },
   })
   if (ipFailures >= LOCKOUT_THRESHOLD) {
@@ -106,7 +106,7 @@ export async function attemptLogin(
     { ipAddress: meta.ipAddress, userAgent: meta.userAgent, remember: input.remember },
     clock,
   )
-  await prisma.securityEvent.create({
+  await prisma.signInLog.create({
     data: {
       eventType: 'login_success', // SEC-S06
       userId: user.id,

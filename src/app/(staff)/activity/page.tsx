@@ -22,7 +22,7 @@ export default async function ActivityPage() {
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
   const [logins, actions] = await Promise.all([
-    prisma.securityEvent.findMany({
+    prisma.signInLog.findMany({
       orderBy: { createdAt: 'desc' },
       take: 50,
       select: {

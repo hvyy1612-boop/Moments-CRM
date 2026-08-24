@@ -16,10 +16,10 @@ function createPrisma() {
           return query(args)
         },
       },
-      securityEvent: {
+      signInLog: {
         $allOperations({ operation, args, query }) {
           if (MUTATIONS.has(operation)) {
-            throw new Error('SecurityEvent is insert-only')
+            throw new Error('SignInLog is insert-only')
           }
           return query(args)
         },

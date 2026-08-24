@@ -282,7 +282,7 @@ model User {
   company                 Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
   passwordResets          PasswordReset[]
   sessions                Session[]
-  securityEvents          SecurityEvent[]
+  signInLogs          SignInLog[]
   auditLogs               AuditLog[]
   ownedProjects           Project[]            @relation("ProjectOwner")
   createdQuoteVersions    QuoteVersion[]       @relation("QuoteVersionCreatedBy")
@@ -338,7 +338,7 @@ model Session {
   @@map("sessions")
 }
 
-model SecurityEvent {
+model SignInLog {
   id             String          @id @default(cuid()) @db.VarChar(30)
   eventType      String          @map("event_type") @db.VarChar(100)
   userId         String?         @map("user_id") @db.VarChar(30)

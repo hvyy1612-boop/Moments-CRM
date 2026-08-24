@@ -7,7 +7,7 @@ const prisma = new PrismaClient()
 async function main() {
   const take = Number(process.argv[2] ?? '20') || 20
 
-  const logins = await prisma.securityEvent.findMany({
+  const logins = await prisma.signInLog.findMany({
     orderBy: { createdAt: 'desc' },
     take,
     select: { createdAt: true, eventType: true, outcome: true, emailAttempted: true, ipAddress: true },

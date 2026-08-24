@@ -37,7 +37,7 @@ export async function requestPasswordReset(
       requestedIp: ip,
     },
   })
-  await prisma.securityEvent.create({
+  await prisma.signInLog.create({
     data: { eventType: 'password_reset_requested', userId: user.id, emailAttempted: email, ipAddress: ip, outcome: 'SUCCESS' },
   })
   return { token }
@@ -79,7 +79,7 @@ export async function resetPassword(
     prisma.passwordReset.update({ where: { id: record.id }, data: { usedAt: now } }),
   ])
   await revokeAllSessions(record.userId, {}, clock)
-  await prisma.securityEvent.create({
+  await prisma.signInLog.create({
     data: { eventType: 'password_reset_completed', userId: record.userId, ipAddress: ip, outcome: 'SUCCESS' },
   })
   return { ok: true }
