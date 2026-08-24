@@ -418,6 +418,7 @@ model Project {
   name                 String           @db.VarChar(200)
   ownerUserId          String?          @map("owner_user_id") @db.VarChar(30)
   lifecycleStatus      ProjectLifecycle @default(ENQUIRY) @map("lifecycle_status")
+  statusLabelId        String?          @map("status_label_id") @db.VarChar(60)
   commercialStatus     CommercialStatus @default(UNQUOTED) @map("commercial_status")
   source               String?          @db.VarChar(50)
   sourceDetail         String?          @map("source_detail") @db.VarChar(255)
