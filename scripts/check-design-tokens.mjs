@@ -8,7 +8,10 @@ import { readdirSync, statSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const SRC = 'src'
-const ALLOW = new Set(['src/app/globals.css'])
+// globals.css is the design-token source of truth. email.ts is allowlisted because HTML email
+// requires inline literal colours/sizes — email clients do not support CSS variables, external
+// stylesheets, or Tailwind classes, so the tokens cannot be referenced there.
+const ALLOW = new Set(['src/app/globals.css', 'src/lib/email.ts'])
 const PATTERNS = [
   { name: 'hex colour', re: /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})\b/ },
   { name: 'colour function', re: /\b(?:rgb|rgba|hsl|hsla|oklch|oklab|lab|lch)\s*\(/ },
