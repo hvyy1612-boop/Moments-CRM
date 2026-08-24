@@ -4,6 +4,7 @@ import { StatusPill } from '@/components/ui/StatusPill'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { maskEmail } from '@/lib/text'
 import { formatSydneyDateTime } from '@/lib/time'
 import { AppShell } from '../AppShell'
 
@@ -53,7 +54,7 @@ export default async function ActivityPage() {
       <div>
         <h1 className="font-serif text-2xl text-ink">Activity</h1>
         <p className="mt-1 text-sm text-ink-muted">
-          Sign-in history and a record of what happened. Read-only — nothing here can be changed.
+          Sign-in history and a record of what happened. Read-only: nothing here can be changed.
         </p>
 
         <section className="mt-8">
@@ -83,7 +84,9 @@ export default async function ActivityPage() {
                         {formatSydneyDateTime(event.createdAt)}
                       </td>
                       <td className="px-4 py-2 text-ink">{humanEvent(event.eventType)}</td>
-                      <td className="px-4 py-2 text-ink">{event.emailAttempted ?? '—'}</td>
+                      <td className="px-4 py-2 text-ink">
+                        {event.emailAttempted ? maskEmail(event.emailAttempted) : '-'}
+                      </td>
                       <td className="px-4 py-2 text-ink-muted">{event.ipAddress}</td>
                       <td className="px-4 py-2">
                         <StatusPill tone={event.outcome === 'SUCCESS' ? 'good' : 'bad'}>
