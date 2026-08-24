@@ -7,7 +7,7 @@ import { setProjectStatusAction } from '../status-actions'
 
 type Coords = { left: number; width: number; top?: number; bottom?: number; maxHeight: number }
 
-const MENU_MAX = 360
+const MENU_MAX = 420
 const MENU_MIN_WIDTH = 188
 
 /**
@@ -54,7 +54,6 @@ export function StatusPicker({
 
   useEffect(() => {
     if (!open) return
-    const close = () => setOpen(false)
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
     }
@@ -63,13 +62,20 @@ export function StatusPicker({
       if (menuRef.current?.contains(t) || triggerRef.current?.contains(t)) return
       setOpen(false)
     }
-    window.addEventListener('scroll', close, true)
-    window.addEventListener('resize', close)
+    // Close when the page scrolls (the fixed menu would drift from its cell), but let the menu's own
+    // list scroll — the earlier version closed on any scroll, so the wheel never reached the list.
+    const onScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return
+      setOpen(false)
+    }
+    const onResize = () => setOpen(false)
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', onResize)
     window.addEventListener('keydown', onKey)
     window.addEventListener('mousedown', onDown)
     return () => {
-      window.removeEventListener('scroll', close, true)
-      window.removeEventListener('resize', close)
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('resize', onResize)
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('mousedown', onDown)
     }
@@ -114,7 +120,7 @@ export function StatusPicker({
             minWidth: Math.max(coords.width, MENU_MIN_WIDTH),
             maxHeight: coords.maxHeight,
           }}
-          className="z-50 flex flex-col gap-1 overflow-y-auto rounded-lg border border-line bg-surface p-1.5 shadow-xl"
+          className="z-50 flex flex-col gap-2 overflow-y-auto rounded-lg border border-line bg-surface p-2.5 shadow-xl"
         >
           {LIFECYCLE_OPTIONS.map((opt) => {
             const selected = opt.value === current
