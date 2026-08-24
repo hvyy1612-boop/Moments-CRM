@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
+import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { StatusPill, type Tone } from '@/components/ui/StatusPill'
+import { StatusTag, type StatusKind } from '@/components/ui/StatusTag'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
@@ -12,19 +13,115 @@ import { AppShell } from '../AppShell'
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Projects — Moments' }
 
-const LIFECYCLE_TONE: Record<string, Tone> = {
-  ENQUIRY: 'info',
-  QUALIFYING: 'info',
-  QUOTING: 'info',
-  AWAITING_DECISION: 'warn',
-  CONFIRMED: 'good',
-  IN_PRODUCTION: 'good',
-  COMPLETED: 'neutral',
-  CANCELLED: 'neutral',
+// Each lifecycle status maps to a status colour (StatusKind) and a group. Closed work sits in its own
+// group so the open pipeline stays clean, mirroring the Monday-style "group by status" board.
+const STATUS_KIND: Record<string, StatusKind> = {
+  ENQUIRY: 'enquiry',
+  QUALIFYING: 'enquiry',
+  QUOTING: 'quote',
+  AWAITING_DECISION: 'quote',
+  NEGOTIATION: 'quote',
+  BOOKING_REQUESTED: 'booked',
+  CONFIRMED: 'booked',
+  IN_PRODUCTION: 'editing',
+  COMPLETED: 'delivered',
+  CANCELLED: 'lost',
+  LOST: 'lost',
+  ON_HOLD: 'hold',
+  POSTPONED: 'hold',
+  ARCHIVED: 'hold',
+}
+const CLOSED = new Set(['COMPLETED', 'CANCELLED', 'LOST', 'ARCHIVED'])
+
+function statusKind(status: string): StatusKind {
+  return STATUS_KIND[status] ?? 'hold'
+}
+function statusLabel(status: string): string {
+  return status
+    .toLowerCase()
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
 }
 
-function label(status: string): string {
-  return status.toLowerCase().replace(/_/g, ' ')
+type Row = {
+  id: string
+  code: string
+  name: string
+  client: string
+  status: string
+  enquiredAt: Date
+}
+
+function Group({
+  title,
+  spine,
+  rows,
+}: {
+  title: string
+  spine: string
+  rows: Row[]
+}) {
+  if (rows.length === 0) return null
+  return (
+    <div className="mb-5">
+      <div className="mb-1.5 flex items-center gap-2 text-sm font-bold text-ink">
+        <span className="text-muted">▾</span>
+        {title}
+        <span className="font-normal text-muted">· {rows.length}</span>
+      </div>
+      <div className={`overflow-x-auto rounded-md border border-line border-l-4 ${spine}`}>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-sunk text-left text-xs uppercase tracking-wide text-muted">
+              <th className="w-10 border-b border-r border-line px-3 py-2.5" />
+              <th className="border-b border-r border-line px-3 py-2.5 font-bold">Client</th>
+              <th className="border-b border-r border-line px-3 py-2.5 font-bold">Project</th>
+              <th className="border-b border-r border-line px-3 py-2.5 font-bold">Enquired</th>
+              <th className="w-40 border-b border-line px-3 py-2.5 font-bold">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id} className="group transition-colors hover:bg-paper">
+                <td className="border-b border-r border-line px-3 py-2.5 text-center">
+                  <span className="inline-block h-4 w-4 rounded-sm border border-line-strong align-middle" />
+                </td>
+                <td className="border-b border-r border-line px-3 py-2.5">
+                  <Link
+                    href={`/projects/${row.id}`}
+                    className="font-serif text-base font-semibold text-ink transition-colors group-hover:text-accent-ink"
+                  >
+                    {row.client}
+                  </Link>
+                </td>
+                <td className="border-b border-r border-line px-3 py-2.5 text-sm">
+                  <span className="text-ink">{row.name}</span>
+                  <span className="tabular text-ink-muted"> · {row.code}</span>
+                </td>
+                <td className="tabular border-b border-r border-line px-3 py-2.5 text-sm text-ink-muted">
+                  {formatSydneyDate(row.enquiredAt)}
+                </td>
+                <td className="border-b border-line p-0">
+                  <StatusTag kind={statusKind(row.status)} block>
+                    {statusLabel(row.status)}
+                  </StatusTag>
+                </td>
+              </tr>
+            ))}
+            <tr>
+              <td className="px-3 py-2.5" />
+              <td colSpan={4} className="px-3 py-2.5 text-sm text-muted">
+                <Link href="/projects/new" className="hover:text-accent-ink">
+                  + New project
+                </Link>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
 }
 
 export default async function ProjectsPage() {
@@ -37,55 +134,47 @@ export default async function ProjectsPage() {
     include: { client: { select: { displayName: true } } },
   })
 
-  return (
-    <AppShell user={user} csrf={csrf} active="projects">
-      <div>
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <div>
-            <h1 className="text-xl">Projects</h1>
-            <p className="mt-1 text-sm text-ink-muted">Every enquiry becomes a project here.</p>
-          </div>
-          <Link
-            href="/projects/new"
-            className="inline-flex items-center rounded bg-accent px-4 py-2 text-sm font-medium text-surface transition-colors duration-150 hover:brightness-95"
-          >
-            New enquiry
-          </Link>
-        </div>
+  const rows: Row[] = projects.map((p) => ({
+    id: p.id,
+    code: p.code,
+    name: p.name,
+    client: p.client.displayName,
+    status: p.lifecycleStatus,
+    enquiredAt: p.enquiryReceivedAt,
+  }))
+  const active = rows.filter((r) => !CLOSED.has(r.status))
+  const closed = rows.filter((r) => CLOSED.has(r.status))
 
-        {projects.length === 0 ? (
-          <div className="mt-6">
-            <EmptyState
-              title="No projects yet"
-              description="Log the first enquiry with the New enquiry button above."
-            />
-          </div>
-        ) : (
-          <ul className="mt-6 flex flex-col rounded border border-line bg-surface">
-            {projects.map((project) => (
-              <li
-                key={project.id}
-                className="flex flex-wrap items-baseline justify-between gap-3 border-b border-line px-4 py-3 last:border-b-0"
-              >
-                <div>
-                  <Link
-                    href={`/projects/${project.id}`}
-                    className="text-base text-ink underline underline-offset-2 transition-colors duration-150 hover:text-accent"
-                  >
-                    {project.client.displayName}
-                  </Link>
-                  <p className="text-xs text-ink-muted">
-                    {project.code} · {project.name} · enquired {formatSydneyDate(project.enquiryReceivedAt)}
-                  </p>
-                </div>
-                <StatusPill tone={LIFECYCLE_TONE[project.lifecycleStatus] ?? 'neutral'}>
-                  {label(project.lifecycleStatus)}
-                </StatusPill>
-              </li>
-            ))}
-          </ul>
-        )}
+  const action = (
+    <Link href="/projects/new">
+      <Button size="sm">+ New project</Button>
+    </Link>
+  )
+
+  return (
+    <AppShell user={user} csrf={csrf} active="projects" action={action}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded border border-line-strong px-3 py-1.5 text-sm text-ink-muted">
+          Group by: status
+        </span>
+        <span className="rounded border border-line-strong px-3 py-1.5 text-sm text-ink-muted">
+          Filter
+        </span>
       </div>
+
+      {rows.length === 0 ? (
+        <div className="mt-6">
+          <EmptyState
+            title="No projects yet"
+            description="Create your first project using the New project button above."
+          />
+        </div>
+      ) : (
+        <div className="mt-5">
+          <Group title="Active projects" spine="border-l-delivered-ink" rows={active} />
+          <Group title="Closed" spine="border-l-line-strong" rows={closed} />
+        </div>
+      )}
     </AppShell>
   )
 }

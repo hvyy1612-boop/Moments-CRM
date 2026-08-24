@@ -19,11 +19,17 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/api/health': { public: true },
   // Staff entrance and account recovery: public by necessity (not signed in yet / token-authorised).
   '/login': { public: true },
-  // Staff workspace: the dashboard, projects, logging a new enquiry, and the project detail.
+  // Staff workspace: the dashboard, enquiries, projects, and the project detail.
   '/dashboard': { roles: ['ADMIN', 'STUDIO'] },
+  '/enquiries': { roles: ['ADMIN', 'STUDIO'] },
+  '/enquiries/new': { roles: ['ADMIN', 'STUDIO'] },
   '/projects': { roles: ['ADMIN', 'STUDIO'] },
   '/projects/new': { roles: ['ADMIN', 'STUDIO'] },
   '/projects/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  '/clients': { roles: ['ADMIN', 'STUDIO'] },
+  '/calendar': { roles: ['ADMIN', 'STUDIO'] },
+  '/finance': { roles: ['ADMIN', 'STUDIO'] },
+  '/settings': { roles: ['ADMIN', 'STUDIO'] },
   // Security + activity log: ADMIN only (contains IP addresses and login history).
   '/activity': { roles: ['ADMIN'] },
   // Client-facing, reached by a token only. No session, no account.

@@ -6,43 +6,89 @@
  * No colour, spacing, or radius literal may appear anywhere else in the codebase.
  * scripts/check-design-tokens.mjs (§12.8) enforces this and allowlists ONLY this file.
  *
- * Typefaces here are provisional system stacks so nothing looks broken in Phase 0; the final
- * serif/sans pairing is chosen and justified in Phase 4 (design system), per §10.3 and DECISIONS.md.
+ * Palette + type are the locked design system from docs/19 (criteria C1–C18, decisions D-04..D-23):
+ * warm off-white ground, dusty-rose accent, Cormorant Garamond (display) + Lato (UI, self-hosted via
+ * next/font), border-first surfaces, bright status colours (light fill + dark text), and a separate
+ * categorical chart palette used only for multi-series charts.
  */
 @theme {
-  /* Colour — the nine permitted tokens (§10.1). No colour outside this set (§10.2). */
-  --color-ink: #1a1a18;
-  --color-ink-muted: #6b6862;
-  --color-paper: #faf8f5;
+  /* Base palette (keeps the original token names; values are the locked brand). */
+  --color-ink: #20201e;
+  --color-ink-muted: #6f6f69;
+  --color-muted: #9c948b;
+  --color-paper: #faf9f6;
   --color-surface: #ffffff;
-  --color-line: #e4dfd7;
-  --color-accent: #8a6f4e;
-  --color-ok: #3f6b4f;
-  --color-warn: #a8702a;
-  --color-danger: #9b3b34;
+  --color-sunk: #f1ede7;
+  --color-line: #e7e2da;
+  --color-line-strong: #ded7cc;
 
-  /* Radius — 2px and 4px only (§10.1; §10.2 bans anything above 4px). */
+  /* Accent — dusty rose (D-04). Used for links, active state, focus ring, small highlights.
+     Primary buttons use --color-ink, not the accent (D-12). */
+  --color-accent: #a06a67;
+  --color-accent-ink: #82504e;
+  --color-accent-tint: #f4e7e4;
+
+  /* Semantic (kept from Phase 0; aligned to brand hues). */
+  --color-ok: #47734f;
+  --color-warn: #a5702a;
+  --color-danger: #b23b34;
+
+  /* Status colours (D-22) — bright: light fill + dark same-hue text. One pair per status. */
+  --color-enquiry: #f9e6bb;
+  --color-enquiry-ink: #8a640f;
+  --color-quote: #fadcc7;
+  --color-quote-ink: #a5502c;
+  --color-booked: #f6dae4;
+  --color-booked-ink: #9c4f6e;
+  --color-editing: #ece1f3;
+  --color-editing-ink: #77528a;
+  --color-delivered: #e2edc6;
+  --color-delivered-ink: #5c7326;
+  --color-lost: #fad3ce;
+  --color-lost-ink: #b23b34;
+  --color-hold: #ece5da;
+  --color-hold-ink: #79705f;
+
+  /* Chart — status series use the stronger mid-tone of the same hue (so filled areas read). */
+  --color-chart-enquiry: #d9ab52;
+  --color-chart-quote: #d17a52;
+  --color-chart-booked: #c081a0;
+  --color-chart-editing: #9a7fb0;
+  --color-chart-delivered: #93a24f;
+
+  /* Chart — categorical palette A (D-23), ONLY for pies/charts needing many distinct colours. */
+  --color-cat-1: #00b0be;
+  --color-cat-2: #f45f74;
+  --color-cat-3: #98c127;
+  --color-cat-4: #ffb255;
+  --color-cat-5: #8fd7d7;
+  --color-cat-6: #ff8ca1;
+
+  /* Radius — small for controls, medium/large for cards (D-10: card 8–10, button 7, tag 5). */
   --radius-sm: 2px;
-  --radius: 4px;
+  --radius: 5px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
 
-  /* Type scale — 12 / 14 / 15 / 18 / 24 / 32 (§10.1). Base UI text is 15px. */
-  --text-xs: 12px;
-  --text-sm: 14px;
-  --text-base: 15px;
-  --text-lg: 18px;
+  /* Type scale — hand-tuned (D-08), bumped up for readability (Monday benchmark). Base UI text 16px. */
+  --text-xs: 13px;
+  --text-sm: 15px;
+  --text-base: 16px;
+  --text-lg: 19px;
   --text-xl: 24px;
-  --text-2xl: 32px;
+  --text-2xl: 30px;
+  --text-3xl: 36px;
 
-  /* Typefaces — provisional; final pairing decided in Phase 4. */
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial,
-    sans-serif;
-  --font-serif: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+  /* Typefaces (D-05) — real brand fonts, self-hosted by next/font (see app/layout.tsx). The CSS
+     variables (--font-cormorant / --font-lato) are injected on <html> by next/font. */
+  --font-sans: var(--font-lato), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-serif: var(--font-cormorant), ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
 }
 
 /*
- * Spacing (§10.1: 4, 8, 12, 16, 24, 32, 48, 64px) is Tailwind's default 4px step, so
- * p-1=4 p-2=8 p-3=12 p-4=16 p-6=24 p-8=32 p-12=48 p-16=64. The design system (Phase 4)
- * documents the permitted steps; off-scale values are rejected in review.
+ * Spacing (§10.1: 4, 8, 12, 16, 24, 32, 48, 64px) = Tailwind's default 4px step (8-point grid, D-09):
+ * p-1=4 p-2=8 p-3=12 p-4=16 p-6=24 p-8=32 p-12=48 p-16=64. Density = Cozy (row ~44px, card padding 20).
  */
 
 :root {
@@ -55,6 +101,7 @@ body {
   font-family: var(--font-sans);
   font-size: var(--text-base);
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
 h1,
@@ -62,4 +109,9 @@ h2,
 h3,
 h4 {
   font-family: var(--font-serif);
+}
+
+/* Numbers line up in tables/finance: opt-in tabular figures (D-14). */
+.tabular {
+  font-variant-numeric: tabular-nums;
 }
