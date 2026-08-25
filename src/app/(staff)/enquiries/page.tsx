@@ -35,6 +35,8 @@ function titleCase(value: string): string {
 type Row = {
   id: string
   name: string
+  email: string
+  phone: string | null
   event: string
   eventDate: Date | null
   source: string
@@ -68,6 +70,8 @@ function Group({
             <tr className="bg-sunk text-left text-xs uppercase tracking-wide text-muted">
               <th className="w-10 border-b border-r border-line px-3 py-3" />
               <th className="border-b border-r border-line px-3 py-3 font-bold">Name</th>
+              <th className="border-b border-r border-line px-3 py-3 font-bold">Email</th>
+              <th className="border-b border-r border-line px-3 py-3 font-bold">Phone</th>
               <th className="border-b border-r border-line px-3 py-3 font-bold">Event</th>
               <th className="border-b border-r border-line px-3 py-3 font-bold">Event date</th>
               <th className="border-b border-r border-line px-3 py-3 font-bold">Source</th>
@@ -83,6 +87,12 @@ function Group({
                 </td>
                 <td className="border-b border-r border-line px-3 py-3">
                   <span className="font-serif text-lg font-semibold text-ink">{row.name}</span>
+                </td>
+                <td className="border-b border-r border-line px-3 py-3 text-base text-ink-muted">
+                  {row.email}
+                </td>
+                <td className="tabular border-b border-r border-line px-3 py-3 text-base text-ink-muted">
+                  {row.phone ?? '-'}
                 </td>
                 <td className="border-b border-r border-line px-3 py-3 text-base text-ink">
                   {row.event}
@@ -134,6 +144,8 @@ export default async function EnquiriesPage() {
     select: {
       id: true,
       name: true,
+      email: true,
+      phone: true,
       eventType: true,
       eventDate: true,
       source: true,
@@ -146,6 +158,8 @@ export default async function EnquiriesPage() {
   const rows: Row[] = enquiries.map((e) => ({
     id: e.id,
     name: e.name,
+    email: e.email,
+    phone: e.phone,
     event: e.eventType ? titleCase(e.eventType) : '-',
     eventDate: e.eventDate,
     source: titleCase(e.source),
