@@ -7,7 +7,9 @@ import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { assignResource, createBooking } from '@/lib/domain/booking'
+import { logCommunication } from '@/lib/domain/communication'
 import { createProjectFromEnquiry } from '@/lib/domain/project'
+import { toggleProjectTask } from '@/lib/domain/project-workflow'
 import { enquirySchema } from '@/lib/validation/enquiry'
 import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/contract'
 import { addGalleryItem, createGallery, publishGallery } from '@/lib/domain/delivery'
@@ -358,6 +360,52 @@ export async function publishGalleryAction(formData: FormData): Promise<void> {
   } catch {
     // The button only shows on a draft with items; a double submit is a no-op here.
   }
+  revalidatePath(`/projects/${projectId}`)
+}
+
+export async function toggleProjectTaskAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const workItemId = String(formData.get('workItemId') ?? '')
+  if (!projectId || !workItemId) return
+  try {
+    await toggleProjectTask(workItemId, user.id)
+  } catch {
+    // Double submit / stale id: the re-render shows the real state.
+  }
+  revalidatePath(`/projects/${projectId}`)
+}
+
+export async function sendProjectReplyAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const body = String(formData.get('body') ?? '').trim()
+  if (!projectId || !body) return
+  await logCommunication(projectId, {
+    type: 'CLIENT_MESSAGE',
+    direction: 'outbound',
+    body,
+    byUserId: user.id,
+  })
+  revalidatePath(`/projects/${projectId}`)
+}
+
+export async function logProjectClientReplyAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const body = String(formData.get('body') ?? '').trim()
+  if (!projectId || !body) return
+  await logCommunication(projectId, {
+    type: 'CLIENT_MESSAGE',
+    direction: 'inbound',
+    body,
+  })
   revalidatePath(`/projects/${projectId}`)
 }
 
