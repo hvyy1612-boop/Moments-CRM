@@ -1,6 +1,15 @@
 import type { StatusKind } from '@/components/ui/StatusTag'
 
-export const ENQUIRY_KIND: Record<string, StatusKind> = {
+export const ENQUIRY_STAGE_LABEL: Record<string, string> = {
+  NEW: 'New enquiry',
+  CONTACTED: 'Discussing details',
+  QUALIFIED: 'Preparing quote',
+  CONVERTED: 'Booked',
+  LOST: 'Not proceeding',
+  ARCHIVED: 'Archived',
+}
+
+export const ENQUIRY_STAGE_KIND: Record<string, StatusKind> = {
   NEW: 'enquiry',
   CONTACTED: 'quote',
   QUALIFIED: 'booked',
@@ -9,35 +18,45 @@ export const ENQUIRY_KIND: Record<string, StatusKind> = {
   ARCHIVED: 'hold',
 }
 
-export const ENQUIRY_LABEL: Record<string, string> = {
-  NEW: 'New enquiry',
-  CONTACTED: 'Contacted',
-  QUALIFIED: 'Quoting',
-  CONVERTED: 'Booked',
-  LOST: 'Lost',
-  ARCHIVED: 'Archived',
-}
-
-export const ENQUIRY_NEXT_STEP: Record<string, string> = {
-  NEW: 'Send first reply',
-  CONTACTED: 'Follow up',
-  QUALIFIED: 'Send a quote, then book',
-  CONVERTED: 'Open the project',
-  LOST: '-',
-  ARCHIVED: '-',
-}
-
 export const OPEN_STATUSES = new Set(['NEW', 'CONTACTED', 'QUALIFIED'])
 
-type Option = { value: string; label: string; kind: StatusKind }
+export function isOpenEnquiry(status: string): boolean {
+  return OPEN_STATUSES.has(status)
+}
 
-export const STAGE_OPTIONS: Option[] = [
-  { value: 'NEW', label: 'New enquiry', kind: 'enquiry' },
-  { value: 'CONTACTED', label: 'Contacted', kind: 'quote' },
-  { value: 'QUALIFIED', label: 'Quoting', kind: 'booked' },
+export function waitingLabel(waitingOn: string | null): string {
+  if (waitingOn === 'STUDIO') return 'You'
+  if (waitingOn === 'CLIENT') return 'Client'
+  return '-'
+}
+
+type ViewMatch = (status: string, waitingOn: string | null) => boolean
+
+export const ENQUIRY_VIEWS: { key: string; label: string; match: ViewMatch }[] = [
+  {
+    key: 'attention',
+    label: 'Needs attention',
+    match: (s, w) => isOpenEnquiry(s) && w === 'STUDIO',
+  },
+  {
+    key: 'waiting',
+    label: 'Waiting for client reply',
+    match: (s, w) => isOpenEnquiry(s) && w === 'CLIENT',
+  },
+  { key: 'all', label: 'All', match: () => true },
 ]
 
-export const OUTCOME_OPTIONS: Option[] = [
-  { value: 'CONVERTED', label: 'Booked · create project', kind: 'delivered' },
-  { value: 'LOST', label: 'Lost', kind: 'lost' },
-]
+export const ENQUIRY_EMPTY: Record<string, { title: string; description: string }> = {
+  attention: {
+    title: "You're all caught up",
+    description: 'No enquiries are waiting for your reply right now.',
+  },
+  waiting: {
+    title: 'Nothing waiting on a client',
+    description: 'No enquiries are currently with a client for their response.',
+  },
+  all: {
+    title: 'No enquiries yet',
+    description: 'Log a new lead using the Log enquiry button above, or wait for one from the website.',
+  },
+}

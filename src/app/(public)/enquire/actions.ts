@@ -2,7 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { createProjectFromEnquiry } from '@/lib/domain/project'
+import { createEnquiry } from '@/lib/domain/enquiry'
 import { enquirySchema } from '@/lib/validation/enquiry'
 
 export type EnquiryFormState =
@@ -45,7 +45,20 @@ export async function submitEnquiry(
   }
 
   try {
-    await createProjectFromEnquiry(parsed.data)
+
+    await createEnquiry(
+      {
+        name: parsed.data.name,
+        firstName: parsed.data.firstName ?? null,
+        lastName: parsed.data.lastName ?? null,
+        email: parsed.data.email,
+        phone: parsed.data.phone ?? null,
+        eventType: parsed.data.eventType ?? null,
+        message: parsed.data.message ?? null,
+        source: 'WEBSITE',
+      },
+      null,
+    )
   } catch {
     return { status: 'error', message: 'Something went wrong saving your enquiry. Please try again.' }
   }

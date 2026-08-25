@@ -7,7 +7,8 @@ import { redirect } from 'next/navigation'
 import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
-import { convertEnquiry, createEnquiry, markEnquiryLost, setEnquiryStage } from '@/lib/domain/enquiry'
+import { convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
+import { completeWorkItem, logClientReply, sendStaffReply } from '@/lib/domain/enquiry-workflow'
 import { enquirySchema } from '@/lib/validation/enquiry'
 
 async function requireStaff() {
@@ -23,25 +24,58 @@ async function csrfOk(formData: FormData): Promise<boolean> {
   return verifyCsrf(cookieValue, formData.get('csrf'))
 }
 
-const OPEN_STAGES = new Set(['NEW', 'CONTACTED', 'QUALIFIED'])
-
-export async function setEnquiryStatusAction(formData: FormData): Promise<void> {
+export async function updateEnquiryAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
   const enquiryId = String(formData.get('enquiryId') ?? '')
-  const status = String(formData.get('status') ?? '')
+  const op = String(formData.get('op') ?? '')
   if (!enquiryId) return
 
-  if (status === 'CONVERTED') {
-    await convertEnquiry(enquiryId, user.id)
-  } else if (status === 'LOST') {
-    await markEnquiryLost(enquiryId, 'Not proceeding', user.id)
-  } else if (OPEN_STAGES.has(status)) {
-    await setEnquiryStage(enquiryId, status as 'NEW' | 'CONTACTED' | 'QUALIFIED', user.id)
-  } else {
-    return
+  switch (op) {
+    case 'lost':
+      await markEnquiryLost(enquiryId, 'Not proceeding', user.id)
+      break
+    case 'reopen':
+      await reopenEnquiry(enquiryId, user.id)
+      break
+    default:
+      return
   }
   revalidatePath('/enquiries')
+  revalidatePath(`/enquiries/${enquiryId}`)
+}
+
+export async function completeWorkItemAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const workItemId = String(formData.get('workItemId') ?? '')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  if (!workItemId) return
+  await completeWorkItem(workItemId, user.id)
+  revalidatePath('/enquiries')
+  if (enquiryId) revalidatePath(`/enquiries/${enquiryId}`)
+}
+
+export async function sendReplyAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  const body = String(formData.get('body') ?? '')
+  if (!enquiryId || !body.trim()) return
+  await sendStaffReply(enquiryId, body, user.id)
+  revalidatePath('/enquiries')
+  revalidatePath(`/enquiries/${enquiryId}`)
+}
+
+export async function logClientReplyAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  const body = String(formData.get('body') ?? '')
+  if (!enquiryId || !body.trim()) return
+  await logClientReply(enquiryId, body, user.id)
+  revalidatePath('/enquiries')
+  revalidatePath(`/enquiries/${enquiryId}`)
 }
 
 export async function convertEnquiryAction(formData: FormData): Promise<void> {

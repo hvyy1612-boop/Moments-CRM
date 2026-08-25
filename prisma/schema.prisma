@@ -166,6 +166,17 @@ enum EnquiryStatus {
   ARCHIVED
 }
 
+enum WaitingOn {
+  STUDIO
+  CLIENT
+}
+
+enum WorkItemStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
 enum EnquirySource {
   WEBSITE
   REFERRAL
@@ -258,6 +269,7 @@ model Company {
   packages  Package[]
   bookings  Booking[]
   resources Resource[]
+  workItems WorkItem[]
 
   @@map("companies")
 }
@@ -295,6 +307,7 @@ model User {
   uploadedFiles           File[]
   requestedChanges        ChangeRequest[]      @relation("ChangeRequestedBy")
   approvedChanges         ChangeRequest[]      @relation("ChangeApprovedBy")
+  completedWorkItems      WorkItem[]           @relation("WorkItemCompletedBy")
 
   @@index([companyId])
   @@index([role])
@@ -446,6 +459,7 @@ model Project {
   quotes                 Quote[]
   contracts              Contract[]
   bookings               Booking[]
+  workItems              WorkItem[]
   invoices               Invoice[]
   payments               Payment[]
   galleries              Gallery[]
@@ -502,6 +516,7 @@ model Enquiry {
   message            String?       @db.Text
   source             EnquirySource @default(WEBSITE)
   status             EnquiryStatus @default(NEW)
+  waitingOn          WaitingOn?    @map("waiting_on")
   lostReason         String?       @map("lost_reason") @db.VarChar(500)
   convertedClientId  String?       @map("converted_client_id") @db.VarChar(30)
   convertedProjectId String?       @map("converted_project_id") @db.VarChar(30)
@@ -513,6 +528,8 @@ model Enquiry {
   owner            User?    @relation("EnquiryOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   convertedClient  Client?  @relation("EnquiryConvertedClient", fields: [convertedClientId], references: [id], onDelete: SetNull)
   convertedProject Project? @relation("EnquiryConvertedProject", fields: [convertedProjectId], references: [id], onDelete: SetNull)
+  communications   Communication[]
+  workItems        WorkItem[]
 
   @@index([companyId])
   @@index([status])
@@ -863,7 +880,8 @@ model OutboxEvent {
 
 model Communication {
   id        String            @id @default(cuid()) @db.VarChar(30)
-  projectId String            @map("project_id") @db.VarChar(30)
+  projectId String?           @map("project_id") @db.VarChar(30)
+  enquiryId String?           @map("enquiry_id") @db.VarChar(30)
   clientId  String?           @map("client_id") @db.VarChar(30)
   type      CommunicationType
   direction String            @db.VarChar(10)
@@ -873,12 +891,37 @@ model Communication {
   channel   String?           @db.VarChar(50)
   createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   client  Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
   by      User?   @relation(fields: [byUserId], references: [id], onDelete: SetNull)
+  enquiry Enquiry? @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
 
   @@index([projectId, createdAt])
+  @@index([enquiryId, createdAt])
   @@map("communications")
+}
+
+model WorkItem {
+  id                String         @id @default(cuid()) @db.VarChar(30)
+  companyId         String         @map("company_id") @db.VarChar(30)
+  enquiryId         String?        @map("enquiry_id") @db.VarChar(30)
+  projectId         String?        @map("project_id") @db.VarChar(30)
+  kind              String         @db.VarChar(50)
+  title             String         @db.VarChar(150)
+  status            WorkItemStatus @default(PENDING)
+  order             Int            @default(0)
+  completedByUserId String?        @map("completed_by_user_id") @db.VarChar(30)
+  completedAt       DateTime?      @map("completed_at") @db.Timestamptz
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  enquiry     Enquiry? @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  completedBy User?    @relation("WorkItemCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([enquiryId])
+  @@index([projectId])
+  @@map("work_items")
 }
 
 model File {

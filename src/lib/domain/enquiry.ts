@@ -8,6 +8,7 @@ import {
   rankPossibleMatches,
   type ClientMatch,
 } from './enquiry-match'
+import { cancelOpenWorkItems, seedEnquiryWorkflow } from './enquiry-workflow'
 
 export type CreateEnquiryInput = {
   name: string
@@ -50,6 +51,7 @@ export async function createEnquiry(input: CreateEnquiryInput, actorUserId: stri
         eventDate: input.eventDate ?? null,
         message: input.message ?? null,
         source: input.source ?? 'WEBSITE',
+        waitingOn: 'STUDIO',
       },
     })
     await tx.auditLog.create({
@@ -71,6 +73,8 @@ export async function createEnquiry(input: CreateEnquiryInput, actorUserId: stri
         payload: { enquiryId: enquiry.id, email: enquiry.email },
       },
     })
+
+    await seedEnquiryWorkflow(tx, enquiry)
     return enquiry
   })
 }
@@ -118,8 +122,9 @@ export async function markEnquiryLost(
     if (enquiry.status === 'CONVERTED') throw new Error('A converted enquiry cannot be marked lost.')
     const updated = await tx.enquiry.update({
       where: { id: enquiryId },
-      data: { status: 'LOST', lostReason: reason },
+      data: { status: 'LOST', lostReason: reason, waitingOn: null },
     })
+    await cancelOpenWorkItems(tx, enquiryId)
     await tx.auditLog.create({
       data: {
         companyId: enquiry.companyId,
@@ -143,7 +148,7 @@ export async function reopenEnquiry(enquiryId: string, actorUserId: string | nul
     }
     const updated = await tx.enquiry.update({
       where: { id: enquiryId },
-      data: { status: 'CONTACTED', lostReason: null },
+      data: { status: 'CONTACTED', lostReason: null, waitingOn: 'STUDIO' },
     })
     await tx.auditLog.create({
       data: {
@@ -232,11 +237,13 @@ async function runConvertEnquiry(enquiryId: string, actorUserId: string | null, 
       where: { id: enquiry.id },
       data: {
         status: 'CONVERTED',
+        waitingOn: null,
         convertedClientId: client.id,
         convertedProjectId: project.id,
         convertedAt: now,
       },
     })
+    await cancelOpenWorkItems(tx, enquiry.id)
 
     await tx.auditLog.create({
       data: {
@@ -303,32 +310,4 @@ export async function findClientMatches(input: {
 
   const possible = rankPossibleMatches(input, [...byName, ...phoneHolders], exact?.id)
   return { exact, possible }
-}
-
-export async function setEnquiryStage(
-  enquiryId: string,
-  to: OpenStage,
-  actorUserId: string | null = null,
-) {
-  return prisma.$transaction(async (tx) => {
-    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Enquiry not found.')
-    if (!OPEN_STAGES.includes(enquiry.status as OpenStage)) {
-      throw new Error('This enquiry is already closed.')
-    }
-    if (enquiry.status === to) return enquiry
-    const updated = await tx.enquiry.update({ where: { id: enquiryId }, data: { status: to } })
-    await tx.auditLog.create({
-      data: {
-        companyId: enquiry.companyId,
-        action: 'enquiry.status',
-        entityType: 'Enquiry',
-        entityId: enquiryId,
-        actorUserId,
-        beforeData: { status: enquiry.status },
-        afterData: { status: to },
-      },
-    })
-    return updated
-  })
 }
