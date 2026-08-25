@@ -9,7 +9,7 @@ import { prisma } from '@/lib/db'
 import { assignResource, createBooking } from '@/lib/domain/booking'
 import { logCommunication } from '@/lib/domain/communication'
 import { createProjectFromEnquiry } from '@/lib/domain/project'
-import { completeProjectStep } from '@/lib/domain/project-workflow'
+import { toggleProjectTask } from '@/lib/domain/project-workflow'
 import { enquirySchema } from '@/lib/validation/enquiry'
 import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/contract'
 import { addGalleryItem, createGallery, publishGallery } from '@/lib/domain/delivery'
@@ -376,18 +376,18 @@ export async function publishGalleryAction(formData: FormData): Promise<void> {
   revalidatePath(`/projects/${projectId}`)
 }
 
-/** Complete the current workflow step (a staff work item) on a project. Backend runs the transition. */
-export async function completeProjectStepAction(formData: FormData): Promise<void> {
+/** Toggle a workflow task on a project (tick to complete, tick again to reopen). Backend + audit. */
+export async function toggleProjectTaskAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
   if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
   const user = await requireStaff()
   const projectId = String(formData.get('projectId') ?? '')
-  const kind = String(formData.get('kind') ?? '')
-  if (!projectId || !kind) return
+  const workItemId = String(formData.get('workItemId') ?? '')
+  if (!projectId || !workItemId) return
   try {
-    await completeProjectStep(projectId, kind, user.id)
+    await toggleProjectTask(workItemId, user.id)
   } catch {
-    // Out-of-order / double submit: the re-render shows the real current step.
+    // Double submit / stale id: the re-render shows the real state.
   }
   revalidatePath(`/projects/${projectId}`)
 }

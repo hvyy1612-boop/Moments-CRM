@@ -1,98 +1,118 @@
 import { prisma } from '@/lib/db'
+import { formatSydneyDate } from '@/lib/time'
 import {
   buildProjectBoard,
-  projectWorkItemGroup,
-  projectWorkItemTitle,
-  PROJECT_WORKITEM_KINDS,
-  type CompletedWorkItem,
+  PROJECT_TASK_KINDS,
+  PROJECT_TASKS,
   type ProjectBoard,
   type ProjectFacts,
+  type WorkItemLite,
 } from '@/features/projects/workflow'
 
+/** Interactive-transaction client type. */
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+
 /**
- * Read the project's real business records and its completed work items, then build the board. The
- * board is a pure reflection of backend state (contract docs/23): facts come from Quote / Contract /
- * Invoice / Booking / Gallery; staff steps come from completed WorkItems. Nothing is invented here.
+ * Seed the project's task checklist once (idempotent): create a PENDING WorkItem for every task kind in
+ * the template that does not exist yet. Derived rows are never stored - they reflect real records.
+ */
+export async function seedProjectWorkflow(tx: Tx, projectId: string, companyId: string) {
+  const existing = await tx.workItem.findMany({
+    where: { projectId, kind: { in: [...PROJECT_TASK_KINDS] } },
+    select: { kind: true },
+  })
+  const have = new Set(existing.map((e) => e.kind))
+  const missing = PROJECT_TASKS.filter((t) => !have.has(t.kind))
+  if (missing.length === 0) return
+  await tx.workItem.createMany({
+    data: missing.map((t) => ({
+      companyId,
+      projectId,
+      kind: t.kind,
+      title: t.title,
+      status: 'PENDING' as const,
+      order: t.order,
+    })),
+  })
+}
+
+/**
+ * Read the project's real business records and its task work items, then build the board. Lazily seeds
+ * the task checklist on first read. The board is a pure reflection of backend state (contract docs/23).
  */
 export async function getProjectBoard(projectId: string): Promise<ProjectBoard> {
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: projectId },
     select: {
+      companyId: true,
       quotes: { select: { status: true } },
       contracts: { select: { status: true } },
       invoices: { select: { amountPaid: true } },
       galleries: { select: { status: true } },
-      _count: { select: { bookings: true } },
+      bookings: { orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true } },
       workItems: {
-        where: { status: 'COMPLETED' },
-        select: { kind: true, completedAt: true, completedBy: { select: { name: true } } },
+        where: { kind: { in: [...PROJECT_TASK_KINDS] } },
+        select: { id: true, kind: true, status: true, completedAt: true, completedBy: { select: { name: true } } },
       },
     },
   })
 
+  // Lazy seed if the checklist is missing.
+  if (project.workItems.length < PROJECT_TASKS.length) {
+    await prisma.$transaction((tx) => seedProjectWorkflow(tx, projectId, project.companyId))
+    return getProjectBoard(projectId)
+  }
+
+  const quoteAccepted = project.quotes.some((q) => q.status === 'ACCEPTED')
+  const contractSigned = project.contracts.some((c) => c.status === 'SIGNED')
+  const depositPaid = project.invoices.some((i) => Number(i.amountPaid) > 0)
   const facts: ProjectFacts = {
-    quoteAccepted: project.quotes.some((q) => q.status === 'ACCEPTED'),
-    contractSigned: project.contracts.some((c) => c.status === 'SIGNED'),
-    depositPaid: project.invoices.some((i) => Number(i.amountPaid) > 0),
-    shootScheduled: project._count.bookings > 0,
+    booked: quoteAccepted || contractSigned || depositPaid,
+    shootScheduled: project.bookings.length > 0,
     galleryPrepared: project.galleries.length > 0,
     gallerySent: project.galleries.some((g) => g.status === 'PUBLISHED'),
   }
 
-  const completed = new Map<string, CompletedWorkItem>()
-  for (const item of project.workItems) {
-    // Keep the most recent completion for a kind if it somehow recurs.
-    const existing = completed.get(item.kind)
-    if (!existing || (item.completedAt?.getTime() ?? 0) > (existing.at?.getTime() ?? 0)) {
-      completed.set(item.kind, { name: item.completedBy?.name ?? null, at: item.completedAt })
-    }
-  }
+  const items: WorkItemLite[] = project.workItems.map((w) => ({
+    id: w.id,
+    kind: w.kind,
+    status: w.status,
+    completedAt: w.completedAt,
+    completedByName: w.completedBy?.name ?? null,
+  }))
 
-  return buildProjectBoard(facts, completed)
+  const shootDate = project.bookings[0]?.startsAt ?? null
+  return buildProjectBoard(facts, items, shootDate, formatSydneyDate)
 }
 
 /**
- * Complete the current staff work item on a project. The transition is server-owned: it verifies the
- * kind IS the board's current actionable step (so steps cannot be completed out of order or twice),
- * records who/when as a completed WorkItem, and writes the audit row. It does NOT touch ProjectLifecycle
- * - the existing business rules (contract signed, gallery created/published) keep owning that.
+ * Toggle a task work item (Studio-Ninja style free checklist): complete a pending task or reopen a
+ * completed one. Server-owned: records who/when and writes the audit row that feeds the History Log.
  */
-export async function completeProjectStep(projectId: string, kind: string, actorUserId: string) {
-  if (!PROJECT_WORKITEM_KINDS.has(kind)) throw new Error('Unknown work item.')
-
-  const board = await getProjectBoard(projectId)
-  if (board.currentKind !== kind) {
-    // Idempotent no-op if it is already done; a real out-of-order attempt is rejected.
-    if (board.groups.some((g) => g.steps.some((s) => s.kind === kind && s.state === 'done'))) return
-    throw new Error('That step is not the current action.')
-  }
-
+export async function toggleProjectTask(workItemId: string, actorUserId: string) {
   return prisma.$transaction(async (tx) => {
-    const project = await tx.project.findUniqueOrThrow({
-      where: { id: projectId },
-      select: { companyId: true },
+    const item = await tx.workItem.findUnique({
+      where: { id: workItemId },
+      select: { id: true, kind: true, status: true, projectId: true, companyId: true, title: true },
     })
-    const order = await tx.workItem.count({ where: { projectId } })
-    await tx.workItem.create({
-      data: {
-        companyId: project.companyId,
-        projectId,
-        kind,
-        title: projectWorkItemTitle(kind),
-        status: 'COMPLETED',
-        order,
-        completedByUserId: actorUserId,
-        completedAt: new Date(),
-      },
+    if (!item || !item.projectId) throw new Error('Task not found.')
+    if (!PROJECT_TASK_KINDS.has(item.kind)) throw new Error('Not a project task.')
+
+    const completing = item.status !== 'COMPLETED'
+    await tx.workItem.update({
+      where: { id: item.id },
+      data: completing
+        ? { status: 'COMPLETED', completedByUserId: actorUserId, completedAt: new Date() }
+        : { status: 'PENDING', completedByUserId: null, completedAt: null },
     })
     await tx.auditLog.create({
       data: {
-        companyId: project.companyId,
+        companyId: item.companyId,
         actorUserId,
-        action: 'project.work_item_completed',
+        action: completing ? 'project.task_completed' : 'project.task_reopened',
         entityType: 'Project',
-        entityId: projectId,
-        afterData: { kind, group: projectWorkItemGroup(kind) },
+        entityId: item.projectId,
+        afterData: { kind: item.kind, title: item.title },
       },
     })
   })

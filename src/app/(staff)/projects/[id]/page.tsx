@@ -11,15 +11,17 @@ import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
 import { getProjectBoard } from '@/lib/domain/project-workflow'
+import { STEP_TAG_LABEL } from '@/features/projects/workflow'
 import { AppShell } from '../../AppShell'
 import {
-  completeProjectStepAction,
   createContractAction,
   createQuoteAction,
   logProjectClientReplyAction,
   sendProjectReplyAction,
+  toggleProjectTaskAction,
 } from '../actions'
 import { ContractSend } from './ContractSend'
+import { HistoryLogModal, type HistoryEntry } from './HistoryLogModal'
 import { Delivery } from './Delivery'
 import { Finance } from './Finance'
 import { QuoteBuilder } from './QuoteBuilder'
@@ -48,6 +50,29 @@ const CONTRACT_TONE: Record<string, Tone> = {
 
 function label(value: string): string {
   return value.toLowerCase().replace(/_/g, ' ')
+}
+
+/** Phase colour -> literal Tailwind classes (literals so the JIT generates them). */
+const PHASE_CLASSES: Record<string, { rail: string; label: string; tag: string }> = {
+  booked: { rail: 'bg-booked', label: 'text-booked-ink', tag: 'bg-booked text-booked-ink' },
+  enquiry: { rail: 'bg-enquiry', label: 'text-enquiry-ink', tag: 'bg-enquiry text-enquiry-ink' },
+  quote: { rail: 'bg-quote', label: 'text-quote-ink', tag: 'bg-quote text-quote-ink' },
+  editing: { rail: 'bg-editing', label: 'text-editing-ink', tag: 'bg-editing text-editing-ink' },
+  delivered: { rail: 'bg-delivered', label: 'text-delivered-ink', tag: 'bg-delivered text-delivered-ink' },
+}
+const PHASE_FALLBACK = { rail: 'bg-hold', label: 'text-hold-ink', tag: 'bg-hold text-hold-ink' }
+
+/** Turn an audit action + payload into the History Log's plain-language columns. */
+function historyActionType(action: string): string {
+  const base = action.replace(/^project\./, '').replace(/_/g, ' ')
+  return base.charAt(0).toUpperCase() + base.slice(1)
+}
+function historyDetails(action: string, after: unknown): string {
+  const title = (after && typeof after === 'object' && 'title' in after ? String((after as { title?: unknown }).title ?? '') : '') || 'a task'
+  if (action === 'project.task_completed') return `${title} was completed.`
+  if (action === 'project.task_reopened') return `${title} was reopened.`
+  if (action === 'enquiry.converted') return 'Project was created from an enquiry.'
+  return historyActionType(action)
 }
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -128,6 +153,23 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       })
     : []
 
+  const history: HistoryEntry[] = isConfirmed
+    ? (
+        await prisma.auditLog.findMany({
+          where: { entityType: 'Project', entityId: project.id },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+          select: { id: true, action: true, createdAt: true, afterData: true, actor: { select: { name: true } } },
+        })
+      ).map((r) => ({
+        id: r.id,
+        actionType: historyActionType(r.action),
+        dateLabel: formatSydneyDateTime(r.createdAt),
+        user: r.actor?.name ?? 'System',
+        details: historyDetails(r.action, r.afterData),
+      }))
+    : []
+
   const bookingViews = project.bookings.map((booking) => ({
     id: booking.id,
     title: booking.title,
@@ -189,17 +231,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <p className="mt-2 text-base text-ink-muted">
             {board.allDone ? (
               <span className="font-bold text-delivered-ink">All workflow steps complete</span>
-            ) : board.currentKind && board.currentTitle ? (
+            ) : board.activePhaseKey ? (
               <>
-                Now:{' '}
+                Now in:{' '}
                 <span className="font-bold text-ink">
-                  Staff needs to {board.currentTitle.toLowerCase()}
+                  {board.phases.find((p) => p.key === board.activePhaseKey)?.label ?? ''}
                 </span>
-              </>
-            ) : board.currentHint ? (
-              <>
-                Next:{' '}
-                <span className="font-bold text-ink">{board.currentHint}</span>
               </>
             ) : null}
           </p>
@@ -207,90 +244,91 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
         {isConfirmed && board ? (
           <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {/* Workflow board: operational layer over the business records (Hybrid, contract docs/23). */}
+            {/* Workflow board: Studio-Ninja phased checklist over the business records (Hybrid, docs/23). */}
             <section className="rounded border border-line bg-surface p-5">
-              <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Workflow</h2>
-              <div className="flex flex-col gap-4">
-                {board.groups.map((group) => (
-                  <div key={group.key}>
-                    <div className="mb-1.5 flex items-center gap-2">
-                      <span
-                        className={`text-xs font-bold uppercase tracking-wide ${
-                          group.active ? 'text-accent-ink' : 'text-muted'
-                        }`}
-                      >
-                        {group.label}
-                      </span>
-                      {group.active && !board.allDone ? (
-                        <span className="rounded bg-accent px-1.5 py-0.5 text-xs font-bold text-accent-ink">
-                          Now
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      {group.steps.map((step) => {
-                        const done = step.state === 'done'
-                        const current = step.state === 'current'
-                        return (
-                          <div
-                            key={step.key}
-                            className={`flex items-start justify-between gap-3 rounded-md border px-3 py-2 ${
-                              current ? 'border-accent bg-paper' : 'border-line'
-                            }`}
-                          >
-                            <div>
-                              <div className={`text-base ${done || current ? 'text-ink' : 'text-ink-muted'}`}>
-                                <span
-                                  className={
-                                    done
-                                      ? 'text-delivered-ink'
-                                      : current
-                                        ? 'text-accent-ink'
-                                        : 'text-muted'
-                                  }
-                                >
-                                  {done ? '✓' : current ? '●' : '○'}
-                                </span>{' '}
-                                {step.title}
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-xs font-bold uppercase tracking-wide text-muted">Workflow</h2>
+                <HistoryLogModal entries={history} />
+              </div>
+              <div className="flex flex-col gap-5">
+                {board.phases.map((phase) => {
+                  const cls = PHASE_CLASSES[phase.color] ?? PHASE_FALLBACK
+                  return (
+                    <div key={phase.key} className="flex gap-3">
+                      <div className={`w-1 shrink-0 rounded ${cls.rail}`} aria-hidden="true" />
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-1.5 flex items-center gap-2">
+                          <span className={`text-xs font-bold uppercase tracking-wide ${cls.label}`}>
+                            {phase.label}
+                          </span>
+                          {phase.active && !board.allDone ? (
+                            <span className="rounded bg-accent px-1.5 py-0.5 text-xs font-bold text-accent-ink">
+                              Now
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          {phase.steps.map((step) => {
+                            const canToggle = step.type === 'task' && step.workItemId
+                            const checkClass = `flex h-4 w-4 shrink-0 items-center justify-center rounded border text-xs ${
+                              step.done
+                                ? 'border-delivered-ink bg-delivered text-delivered-ink'
+                                : 'border-line-strong text-transparent'
+                            }`
+                            return (
+                              <div
+                                key={step.key}
+                                className="flex items-start gap-2 rounded-md border border-line px-3 py-2"
+                              >
+                                {canToggle ? (
+                                  <form action={toggleProjectTaskAction} className="mt-0.5">
+                                    <input type="hidden" name="csrf" value={csrf} />
+                                    <input type="hidden" name="projectId" value={project.id} />
+                                    <input type="hidden" name="workItemId" value={step.workItemId ?? ''} />
+                                    <button
+                                      type="submit"
+                                      aria-label={step.done ? 'Reopen task' : 'Mark done'}
+                                      className={`${checkClass} ${step.done ? '' : 'hover:border-ink'}`}
+                                    >
+                                      ✓
+                                    </button>
+                                  </form>
+                                ) : (
+                                  <span className={`mt-0.5 ${checkClass}`} aria-hidden="true">
+                                    ✓
+                                  </span>
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className={`text-base ${step.done ? 'text-ink-muted' : 'text-ink'}`}>
+                                      {step.title}
+                                    </span>
+                                    <span className={`rounded px-1.5 py-0.5 text-xs font-bold ${cls.tag}`}>
+                                      {STEP_TAG_LABEL[step.tag]}
+                                    </span>
+                                    {step.dueLabel ? (
+                                      <span className="rounded bg-paper px-1.5 py-0.5 text-xs text-ink-muted">
+                                        {step.dueLabel}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {step.done && step.completedByName ? (
+                                    <div className="text-sm text-muted">
+                                      {step.completedByName}
+                                      {step.completedAt ? ` · ${formatSydneyDateTime(step.completedAt)}` : ''}
+                                    </div>
+                                  ) : step.note ? (
+                                    <div className="text-sm text-muted">{step.note}</div>
+                                  ) : null}
+                                </div>
                               </div>
-                              <div className={`text-sm ${current ? 'text-accent-ink' : 'text-muted'}`}>
-                                {done
-                                  ? step.type === 'workitem'
-                                    ? `${step.completedByName ?? 'Staff'}${
-                                        step.completedAt
-                                          ? ` · ${formatSydneyDateTime(step.completedAt)}`
-                                          : ''
-                                      }`
-                                    : 'Done'
-                                  : current
-                                    ? step.tickable
-                                      ? 'Staff needs to do this'
-                                      : (step.hint ?? 'Waiting')
-                                    : 'Not started'}
-                              </div>
-                            </div>
-                            {step.tickable && step.kind ? (
-                              <form action={completeProjectStepAction}>
-                                <input type="hidden" name="csrf" value={csrf} />
-                                <input type="hidden" name="projectId" value={project.id} />
-                                <input type="hidden" name="kind" value={step.kind} />
-                                <button
-                                  type="submit"
-                                  className="whitespace-nowrap rounded border border-line-strong px-2.5 py-1 text-sm font-bold text-ink-muted hover:text-ink"
-                                >
-                                  Mark done
-                                </button>
-                              </form>
-                            ) : null}
-                          </div>
-                        )
-                      })}
+                            )
+                          })}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
-                {board.allDone ? (
-                  <p className="text-sm text-delivered-ink">All workflow steps complete.</p>
-                ) : null}
+                  )
+                })}
               </div>
             </section>
 
