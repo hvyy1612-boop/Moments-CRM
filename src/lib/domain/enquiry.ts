@@ -58,6 +58,7 @@ export async function createEnquiry(input: CreateEnquiryInput, actorUserId: stri
         eventDate: input.eventDate ?? null,
         message: input.message ?? null,
         source: input.source ?? 'WEBSITE',
+        waitingOn: 'STUDIO',
       },
     })
     await tx.auditLog.create({
@@ -128,7 +129,7 @@ export async function markEnquiryLost(
     if (enquiry.status === 'CONVERTED') throw new Error('A converted enquiry cannot be marked lost.')
     const updated = await tx.enquiry.update({
       where: { id: enquiryId },
-      data: { status: 'LOST', lostReason: reason },
+      data: { status: 'LOST', lostReason: reason, waitingOn: null },
     })
     await tx.auditLog.create({
       data: {
@@ -154,7 +155,7 @@ export async function reopenEnquiry(enquiryId: string, actorUserId: string | nul
     }
     const updated = await tx.enquiry.update({
       where: { id: enquiryId },
-      data: { status: 'CONTACTED', lostReason: null },
+      data: { status: 'CONTACTED', lostReason: null, waitingOn: 'STUDIO' },
     })
     await tx.auditLog.create({
       data: {
@@ -250,6 +251,7 @@ async function runConvertEnquiry(enquiryId: string, actorUserId: string | null, 
       where: { id: enquiry.id },
       data: {
         status: 'CONVERTED',
+        waitingOn: null,
         convertedClientId: client.id,
         convertedProjectId: project.id,
         convertedAt: now,
@@ -328,10 +330,17 @@ export async function findClientMatches(input: {
 }
 
 /** Set an open lead's stage directly from the inline picker (any open stage, any direction). */
-export async function setEnquiryStage(
+/**
+ * Operational-state moves for an open lead. These change `waitingOn` (who owes the next response),
+ * kept separate from the pipeline `status`. Each is a no-op once the lead is closed.
+ */
+type OpenUpdate = { status?: OpenStage; waitingOn: 'STUDIO' | 'CLIENT' }
+
+async function updateOpenEnquiry(
   enquiryId: string,
-  to: OpenStage,
-  actorUserId: string | null = null,
+  build: (current: OpenStage) => OpenUpdate,
+  action: string,
+  actorUserId: string | null,
 ) {
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
@@ -339,19 +348,42 @@ export async function setEnquiryStage(
     if (!OPEN_STAGES.includes(enquiry.status as OpenStage)) {
       throw new Error('This enquiry is already closed.')
     }
-    if (enquiry.status === to) return enquiry
-    const updated = await tx.enquiry.update({ where: { id: enquiryId }, data: { status: to } })
+    const updated = await tx.enquiry.update({
+      where: { id: enquiryId },
+      data: build(enquiry.status as OpenStage),
+    })
     await tx.auditLog.create({
       data: {
         companyId: enquiry.companyId,
-        action: 'enquiry.status',
+        action,
         entityType: 'Enquiry',
         entityId: enquiryId,
         actorUserId,
-        beforeData: { status: enquiry.status },
-        afterData: { status: to },
+        beforeData: { status: enquiry.status, waitingOn: enquiry.waitingOn },
+        afterData: { status: updated.status, waitingOn: updated.waitingOn },
       },
     })
     return updated
   })
+}
+
+/** Staff has replied: the ball moves to the client. A brand-new lead also advances to CONTACTED, but
+ * a lead already qualified keeps its stage (a reply does not demote it). */
+export function enquiryStudioReplied(enquiryId: string, actorUserId: string | null = null) {
+  return updateOpenEnquiry(
+    enquiryId,
+    (current) => (current === 'NEW' ? { status: 'CONTACTED', waitingOn: 'CLIENT' } : { waitingOn: 'CLIENT' }),
+    'enquiry.replied',
+    actorUserId,
+  )
+}
+
+/** The client has responded: the ball moves back to the studio. */
+export function enquiryClientReplied(enquiryId: string, actorUserId: string | null = null) {
+  return updateOpenEnquiry(enquiryId, () => ({ waitingOn: 'STUDIO' }), 'enquiry.client_replied', actorUserId)
+}
+
+/** The lead is qualified and ready to quote: the studio owes the next action. */
+export function enquiryQualify(enquiryId: string, actorUserId: string | null = null) {
+  return updateOpenEnquiry(enquiryId, () => ({ status: 'QUALIFIED', waitingOn: 'STUDIO' }), 'enquiry.qualified', actorUserId)
 }

@@ -1,11 +1,22 @@
 import type { StatusKind } from '@/components/ui/StatusTag'
 
 /**
- * Enquiry status, in plain wording a first-time reader understands (Studio Ninja style: a lead is
- * worked, then Booked as a project or marked Lost). The database keeps the original enum; these maps
- * only decide what shows on screen and which options the inline picker offers.
+ * Two separate dimensions, straight from the backend — never invented on the frontend:
+ *  - STAGE  = the pipeline `status` enum (where the lead sits): New, Contacted, Qualified, Converted,
+ *    Lost, Archived.
+ *  - WAITING = the operational `waitingOn` field (who owes the next response): STUDIO or CLIENT.
+ * The work queue reads WAITING; the stage is shown as a secondary label.
  */
-export const ENQUIRY_KIND: Record<string, StatusKind> = {
+export const ENQUIRY_STAGE_LABEL: Record<string, string> = {
+  NEW: 'New',
+  CONTACTED: 'Contacted',
+  QUALIFIED: 'Qualified',
+  CONVERTED: 'Converted',
+  LOST: 'Lost',
+  ARCHIVED: 'Archived',
+}
+
+export const ENQUIRY_STAGE_KIND: Record<string, StatusKind> = {
   NEW: 'enquiry',
   CONTACTED: 'quote',
   QUALIFIED: 'booked',
@@ -14,39 +25,52 @@ export const ENQUIRY_KIND: Record<string, StatusKind> = {
   ARCHIVED: 'hold',
 }
 
-export const ENQUIRY_LABEL: Record<string, string> = {
-  NEW: 'New enquiry',
-  CONTACTED: 'Contacted',
-  QUALIFIED: 'Quoting',
-  CONVERTED: 'Booked',
-  LOST: 'Lost',
-  ARCHIVED: 'Archived',
-}
-
-/** What to do next at each stage, so a row reads as an instruction. */
-export const ENQUIRY_NEXT_STEP: Record<string, string> = {
-  NEW: 'Send first reply',
-  CONTACTED: 'Follow up',
-  QUALIFIED: 'Send a quote, then book',
-  CONVERTED: 'Open the project',
-  LOST: '-',
-  ARCHIVED: '-',
-}
-
-/** Stages where the lead is still being worked. Only these show the interactive picker. */
 export const OPEN_STATUSES = new Set(['NEW', 'CONTACTED', 'QUALIFIED'])
 
-type Option = { value: string; label: string; kind: StatusKind }
+export function isOpenEnquiry(status: string): boolean {
+  return OPEN_STATUSES.has(status)
+}
 
-/** Pipeline stages the picker sets directly (a plain status change). */
-export const STAGE_OPTIONS: Option[] = [
-  { value: 'NEW', label: 'New enquiry', kind: 'enquiry' },
-  { value: 'CONTACTED', label: 'Contacted', kind: 'quote' },
-  { value: 'QUALIFIED', label: 'Quoting', kind: 'booked' },
+/** Who owes the next response, in plain words. */
+export function waitingLabel(waitingOn: string | null): string {
+  if (waitingOn === 'STUDIO') return 'You'
+  if (waitingOn === 'CLIENT') return 'Client'
+  return '-'
+}
+
+type ViewMatch = (status: string, waitingOn: string | null) => boolean
+
+/**
+ * The work queue. "Needs attention" and "Waiting for client" are driven by waitingOn (not by status),
+ * so a CONTACTED lead can sit in either depending on who replied last. Closed leads never appear in
+ * the two active views; they only show under All.
+ */
+export const ENQUIRY_VIEWS: { key: string; label: string; match: ViewMatch }[] = [
+  {
+    key: 'attention',
+    label: 'Needs attention',
+    match: (s, w) => isOpenEnquiry(s) && w === 'STUDIO',
+  },
+  {
+    key: 'waiting',
+    label: 'Waiting for client',
+    match: (s, w) => isOpenEnquiry(s) && w === 'CLIENT',
+  },
+  { key: 'all', label: 'All', match: () => true },
 ]
 
-/** Outcomes the picker triggers as an action: Booked creates a project, Lost closes the lead. */
-export const OUTCOME_OPTIONS: Option[] = [
-  { value: 'CONVERTED', label: 'Booked · create project', kind: 'delivered' },
-  { value: 'LOST', label: 'Lost', kind: 'lost' },
-]
+/** Empty-state copy per view, phrased as a status rather than a dead filter. */
+export const ENQUIRY_EMPTY: Record<string, { title: string; description: string }> = {
+  attention: {
+    title: "You're all caught up",
+    description: 'No enquiries are waiting for your reply right now.',
+  },
+  waiting: {
+    title: 'Nothing waiting on a client',
+    description: 'No enquiries are currently with a client for their response.',
+  },
+  all: {
+    title: 'No enquiries yet',
+    description: 'Log a new lead using the Log enquiry button above, or wait for one from the website.',
+  },
+}

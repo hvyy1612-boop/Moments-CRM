@@ -7,7 +7,15 @@ import { redirect } from 'next/navigation'
 import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
-import { convertEnquiry, createEnquiry, markEnquiryLost, setEnquiryStage } from '@/lib/domain/enquiry'
+import {
+  convertEnquiry,
+  createEnquiry,
+  enquiryClientReplied,
+  enquiryQualify,
+  enquiryStudioReplied,
+  markEnquiryLost,
+  reopenEnquiry,
+} from '@/lib/domain/enquiry'
 import { enquirySchema } from '@/lib/validation/enquiry'
 
 async function requireStaff() {
@@ -23,28 +31,39 @@ async function csrfOk(formData: FormData): Promise<boolean> {
   return verifyCsrf(cookieValue, formData.get('csrf'))
 }
 
-const OPEN_STAGES = new Set(['NEW', 'CONTACTED', 'QUALIFIED'])
-
 /**
- * Set a lead's status from the inline picker. Open stages (New/Contacted/Quoting) are a plain status
- * change; "Booked" runs the convert flow (creates a client + project); "Lost" closes the lead. Stays
- * on the list after each change (no redirect) so the row simply updates in place.
+ * The Enquiries work-queue actions. `replied`/`client_replied` flip who owes the next response
+ * (waiting_on), `qualify` advances the pipeline stage, and `convert`/`lost` close the lead out of the
+ * queue. Each stays on the list (no redirect) so the row just moves between the views.
  */
-export async function setEnquiryStatusAction(formData: FormData): Promise<void> {
+export async function updateEnquiryAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
   const enquiryId = String(formData.get('enquiryId') ?? '')
-  const status = String(formData.get('status') ?? '')
+  const op = String(formData.get('op') ?? '')
   if (!enquiryId) return
 
-  if (status === 'CONVERTED') {
-    await convertEnquiry(enquiryId, user.id)
-  } else if (status === 'LOST') {
-    await markEnquiryLost(enquiryId, 'Not proceeding', user.id)
-  } else if (OPEN_STAGES.has(status)) {
-    await setEnquiryStage(enquiryId, status as 'NEW' | 'CONTACTED' | 'QUALIFIED', user.id)
-  } else {
-    return
+  switch (op) {
+    case 'replied':
+      await enquiryStudioReplied(enquiryId, user.id)
+      break
+    case 'client_replied':
+      await enquiryClientReplied(enquiryId, user.id)
+      break
+    case 'qualify':
+      await enquiryQualify(enquiryId, user.id)
+      break
+    case 'convert':
+      await convertEnquiry(enquiryId, user.id)
+      break
+    case 'lost':
+      await markEnquiryLost(enquiryId, 'Not proceeding', user.id)
+      break
+    case 'reopen':
+      await reopenEnquiry(enquiryId, user.id)
+      break
+    default:
+      return
   }
   revalidatePath('/enquiries')
 }

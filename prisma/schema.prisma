@@ -186,6 +186,14 @@ enum EnquiryStatus {
   ARCHIVED
 }
 
+// Operational owner of the next response, kept SEPARATE from the pipeline stage above. STUDIO = the
+// lead needs staff attention; CLIENT = the studio has replied and is waiting on the client; NULL for
+// closed leads. This is what the Enquiries work queue reads, never inferred from status alone.
+enum WaitingOn {
+  STUDIO
+  CLIENT
+}
+
 enum EnquirySource {
   WEBSITE
   REFERRAL
@@ -544,6 +552,7 @@ model Enquiry {
   message            String?       @db.Text
   source             EnquirySource @default(WEBSITE)
   status             EnquiryStatus @default(NEW)
+  waitingOn          WaitingOn?    @map("waiting_on")
   lostReason         String?       @map("lost_reason") @db.VarChar(500)
   convertedClientId  String?       @map("converted_client_id") @db.VarChar(30)
   convertedProjectId String?       @map("converted_project_id") @db.VarChar(30)
