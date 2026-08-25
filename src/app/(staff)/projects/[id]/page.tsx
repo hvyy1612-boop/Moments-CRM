@@ -186,6 +186,26 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         </div>
 
         {isConfirmed && board ? (
+          <p className="mt-2 text-base text-ink-muted">
+            {board.allDone ? (
+              <span className="font-bold text-delivered-ink">All workflow steps complete</span>
+            ) : board.currentKind && board.currentTitle ? (
+              <>
+                Now:{' '}
+                <span className="font-bold text-ink">
+                  Staff needs to {board.currentTitle.toLowerCase()}
+                </span>
+              </>
+            ) : board.currentHint ? (
+              <>
+                Next:{' '}
+                <span className="font-bold text-ink">{board.currentHint}</span>
+              </>
+            ) : null}
+          </p>
+        ) : null}
+
+        {isConfirmed && board ? (
           <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* Workflow board: operational layer over the business records (Hybrid, contract docs/23). */}
             <section className="rounded border border-line bg-surface p-5">
