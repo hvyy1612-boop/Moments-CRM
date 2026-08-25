@@ -4,13 +4,21 @@ import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
+import { Textarea } from '@/components/ui/form'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
+import { getProjectBoard } from '@/lib/domain/project-workflow'
 import { AppShell } from '../../AppShell'
-import { createContractAction, createQuoteAction } from '../actions'
+import {
+  completeProjectStepAction,
+  createContractAction,
+  createQuoteAction,
+  logProjectClientReplyAction,
+  sendProjectReplyAction,
+} from '../actions'
 import { ContractSend } from './ContractSend'
 import { Delivery } from './Delivery'
 import { Finance } from './Finance'
@@ -105,6 +113,21 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       })
     : []
 
+  const board = isConfirmed ? await getProjectBoard(project.id) : null
+  const communications = isConfirmed
+    ? await prisma.communication.findMany({
+        where: { projectId: project.id },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          direction: true,
+          body: true,
+          createdAt: true,
+          by: { select: { name: true } },
+        },
+      })
+    : []
+
   const bookingViews = project.bookings.map((booking) => ({
     id: booking.id,
     title: booking.title,
@@ -148,7 +171,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
   return (
     <AppShell user={user} csrf={csrf} active="projects">
-      <div className="mx-auto w-full max-w-3xl">
+      <div className="mx-auto w-full max-w-5xl">
         <Link href="/projects" className="text-sm text-ink-muted transition-colors hover:text-accent">
           ← Projects
         </Link>
@@ -161,6 +184,154 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           </div>
           <StatusPill tone="info">{label(project.lifecycleStatus)}</StatusPill>
         </div>
+
+        {isConfirmed && board ? (
+          <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {/* Workflow board: operational layer over the business records (Hybrid, contract docs/23). */}
+            <section className="rounded border border-line bg-surface p-5">
+              <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Workflow</h2>
+              <div className="flex flex-col gap-4">
+                {board.groups.map((group) => (
+                  <div key={group.key}>
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <span
+                        className={`text-xs font-bold uppercase tracking-wide ${
+                          group.active ? 'text-accent-ink' : 'text-muted'
+                        }`}
+                      >
+                        {group.label}
+                      </span>
+                      {group.active && !board.allDone ? (
+                        <span className="rounded bg-accent px-1.5 py-0.5 text-xs font-bold text-accent-ink">
+                          Now
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      {group.steps.map((step) => {
+                        const done = step.state === 'done'
+                        const current = step.state === 'current'
+                        return (
+                          <div
+                            key={step.key}
+                            className={`flex items-start justify-between gap-3 rounded-md border px-3 py-2 ${
+                              current ? 'border-accent bg-paper' : 'border-line'
+                            }`}
+                          >
+                            <div>
+                              <div className={`text-base ${done || current ? 'text-ink' : 'text-ink-muted'}`}>
+                                <span
+                                  className={
+                                    done
+                                      ? 'text-delivered-ink'
+                                      : current
+                                        ? 'text-accent-ink'
+                                        : 'text-muted'
+                                  }
+                                >
+                                  {done ? '✓' : current ? '●' : '○'}
+                                </span>{' '}
+                                {step.title}
+                              </div>
+                              <div className={`text-sm ${current ? 'text-accent-ink' : 'text-muted'}`}>
+                                {done
+                                  ? step.type === 'workitem'
+                                    ? `${step.completedByName ?? 'Staff'}${
+                                        step.completedAt
+                                          ? ` · ${formatSydneyDateTime(step.completedAt)}`
+                                          : ''
+                                      }`
+                                    : 'Done'
+                                  : current
+                                    ? step.tickable
+                                      ? 'Staff needs to do this'
+                                      : (step.hint ?? 'Waiting')
+                                    : 'Not started'}
+                              </div>
+                            </div>
+                            {step.tickable && step.kind ? (
+                              <form action={completeProjectStepAction}>
+                                <input type="hidden" name="csrf" value={csrf} />
+                                <input type="hidden" name="projectId" value={project.id} />
+                                <input type="hidden" name="kind" value={step.kind} />
+                                <button
+                                  type="submit"
+                                  className="whitespace-nowrap rounded border border-line-strong px-2.5 py-1 text-sm font-bold text-ink-muted hover:text-ink"
+                                >
+                                  Mark done
+                                </button>
+                              </form>
+                            ) : null}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+                {board.allDone ? (
+                  <p className="text-sm text-delivered-ink">All workflow steps complete.</p>
+                ) : null}
+              </div>
+            </section>
+
+            {/* Conversation: reuses the Communication model, kept separate from the workflow. */}
+            <section className="rounded border border-line bg-surface p-5">
+              <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Conversation</h2>
+              <div className="flex flex-col gap-3">
+                {communications.length === 0 ? (
+                  <p className="text-base text-ink-muted">No messages yet.</p>
+                ) : (
+                  communications.map((c) => {
+                    const inbound = c.direction === 'inbound'
+                    return (
+                      <div key={c.id} className={inbound ? '' : 'text-right'}>
+                        <div className="text-sm text-muted">
+                          {inbound ? 'Client' : (c.by?.name ?? 'Staff')} ·{' '}
+                          {formatSydneyDateTime(c.createdAt)}
+                        </div>
+                        <div
+                          className={`mt-1 inline-block max-w-[85%] whitespace-pre-line rounded-md px-3 py-2 text-base ${
+                            inbound ? 'bg-paper text-ink' : 'bg-ink text-surface'
+                          }`}
+                        >
+                          {c.body}
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+
+              <div className="mt-4 flex flex-col gap-4 border-t border-line pt-4">
+                <form action={sendProjectReplyAction} className="flex flex-col gap-2">
+                  <input type="hidden" name="csrf" value={csrf} />
+                  <input type="hidden" name="projectId" value={project.id} />
+                  <label className="text-sm font-bold text-ink">Reply to client</label>
+                  <Textarea name="body" required placeholder="Write your reply..." />
+                  <div>
+                    <Button size="sm" type="submit">
+                      Send reply
+                    </Button>
+                  </div>
+                </form>
+                <form action={logProjectClientReplyAction} className="flex flex-col gap-2">
+                  <input type="hidden" name="csrf" value={csrf} />
+                  <input type="hidden" name="projectId" value={project.id} />
+                  <label className="text-sm font-bold text-ink">Log a message from the client</label>
+                  <Textarea name="body" required placeholder="Paste what the client said..." />
+                  <div>
+                    <button
+                      type="submit"
+                      className="rounded border border-line-strong px-3 py-1.5 text-sm font-bold text-ink-muted hover:text-ink"
+                    >
+                      Record client message
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </section>
+          </div>
+        ) : null}
 
         <section className="mt-6 rounded border border-line bg-surface p-5">
           <h2 className="text-lg">Client</h2>
