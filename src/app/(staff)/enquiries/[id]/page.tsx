@@ -15,13 +15,14 @@ import {
   isOpenEnquiry,
   waitingLabel,
 } from '@/features/enquiries/status'
-import { TICKABLE_KINDS } from '@/features/enquiries/workflow'
+import { buildWorkflowBoard } from '@/features/enquiries/workflow'
 import { AppShell } from '../../AppShell'
 import {
   completeWorkItemAction,
   convertEnquiryAction,
   logClientReplyAction,
   sendReplyAction,
+  startQuotingAction,
   updateEnquiryAction,
 } from '../actions'
 
@@ -80,6 +81,16 @@ export default async function EnquiryDetailPage({ params }: { params: Promise<{ 
   })
 
   const open = isOpenEnquiry(enquiry.status)
+  const board = buildWorkflowBoard(
+    enquiry.status,
+    enquiry.workItems.map((w) => ({
+      id: w.id,
+      kind: w.kind,
+      status: w.status,
+      completedAt: w.completedAt,
+      completedByName: w.completedBy?.name ?? null,
+    })),
+  )
 
   return (
     <AppShell user={user} csrf={csrf} active="enquiries">
@@ -108,66 +119,101 @@ export default async function EnquiryDetailPage({ params }: { params: Promise<{ 
           {/* Workflow */}
           <div className="rounded-md border border-line bg-surface p-5">
             <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Workflow</h2>
-            <div className="flex flex-col gap-2">
-              {enquiry.workItems
-                .filter((w) => w.status !== 'CANCELLED')
-                .map((w) => {
-                  const done = w.status === 'COMPLETED'
-                  return (
-                    <div
-                      key={w.id}
-                      className={`flex items-start justify-between gap-3 rounded-md border px-3 py-2.5 ${
-                        done ? 'border-line' : 'border-accent bg-paper'
+
+            <div className="flex flex-col gap-4">
+              {board.stages.map((stage) => (
+                <div key={stage.key}>
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <span
+                      className={`text-xs font-bold uppercase tracking-wide ${
+                        stage.active ? 'text-accent-ink' : 'text-muted'
                       }`}
                     >
-                      <div>
-                        <div className="text-base text-ink">
-                          <span className={done ? 'text-delivered-ink' : 'text-ink'}>
-                            {done ? '✓' : '○'}
-                          </span>{' '}
-                          {w.title}
+                      {stage.label}
+                    </span>
+                    {stage.active && open ? (
+                      <span className="rounded bg-accent px-1.5 py-0.5 text-xs font-bold text-accent-ink">
+                        Now
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    {stage.steps.map((step) => {
+                      const done = step.state === 'done'
+                      const current = step.state === 'current'
+                      return (
+                        <div
+                          key={step.kind}
+                          className={`flex items-start justify-between gap-3 rounded-md border px-3 py-2 ${
+                            current ? 'border-accent bg-paper' : 'border-line'
+                          }`}
+                        >
+                          <div>
+                            <div className={`text-base ${done || current ? 'text-ink' : 'text-ink-muted'}`}>
+                              <span
+                                className={
+                                  done ? 'text-delivered-ink' : current ? 'text-accent-ink' : 'text-muted'
+                                }
+                              >
+                                {done ? '✓' : current ? '●' : '○'}
+                              </span>{' '}
+                              {step.title}
+                            </div>
+                            <div className={`text-sm ${current ? 'text-accent-ink' : 'text-muted'}`}>
+                              {done
+                                ? `${step.completedByName ?? 'Staff'}${
+                                    step.completedAt ? ` · ${formatSydneyDateTime(step.completedAt)}` : ''
+                                  }`
+                                : current
+                                  ? step.tickable
+                                    ? 'Staff needs to do this'
+                                    : 'Reply in the conversation panel ->'
+                                  : 'Not started'}
+                            </div>
+                          </div>
+                          {current && step.tickable && step.workItemId ? (
+                            <form action={completeWorkItemAction}>
+                              <input type="hidden" name="csrf" value={csrf} />
+                              <input type="hidden" name="workItemId" value={step.workItemId} />
+                              <input type="hidden" name="enquiryId" value={enquiry.id} />
+                              <button
+                                type="submit"
+                                className="whitespace-nowrap rounded border border-line-strong px-2.5 py-1 text-sm font-bold text-ink-muted hover:text-ink"
+                              >
+                                Mark done
+                              </button>
+                            </form>
+                          ) : null}
                         </div>
-                        {done ? (
-                          <div className="text-sm text-muted">
-                            {w.completedBy?.name ?? 'Staff'}
-                            {w.completedAt ? ` · ${formatSydneyDateTime(w.completedAt)}` : ''}
-                          </div>
-                        ) : (
-                          <div className="text-sm text-accent-ink">
-                            {enquiry.waitingOn === 'CLIENT' ? 'Waiting for client' : 'Staff needs to act'}
-                          </div>
-                        )}
-                      </div>
-                      {!done && TICKABLE_KINDS.has(w.kind) ? (
-                        <form action={completeWorkItemAction}>
-                          <input type="hidden" name="csrf" value={csrf} />
-                          <input type="hidden" name="workItemId" value={w.id} />
-                          <input type="hidden" name="enquiryId" value={enquiry.id} />
-                          <button
-                            type="submit"
-                            className="whitespace-nowrap rounded border border-line-strong px-2.5 py-1 text-sm font-bold text-ink-muted hover:text-ink"
-                          >
-                            Mark done
-                          </button>
-                        </form>
-                      ) : null}
-                    </div>
-                  )
-                })}
-              {enquiry.workItems.filter((w) => w.status !== 'CANCELLED').length === 0 ? (
-                <p className="text-base text-ink-muted">No workflow steps.</p>
-              ) : null}
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
 
             {/* Outcomes */}
-            <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
               {open ? (
                 <>
+                  {enquiry.status === 'CONTACTED' ? (
+                    <form action={startQuotingAction}>
+                      <input type="hidden" name="csrf" value={csrf} />
+                      <input type="hidden" name="enquiryId" value={enquiry.id} />
+                      <button
+                        type="submit"
+                        className="rounded border border-line-strong px-3 py-1.5 text-sm font-bold text-ink-muted hover:text-ink"
+                      >
+                        Move to preparing quote
+                      </button>
+                    </form>
+                  ) : null}
                   <form action={convertEnquiryAction}>
                     <input type="hidden" name="csrf" value={csrf} />
                     <input type="hidden" name="enquiryId" value={enquiry.id} />
                     <Button size="sm" type="submit">
-                      Create project
+                      Book it (create project)
                     </Button>
                   </form>
                   <form action={updateEnquiryAction}>
@@ -176,7 +222,7 @@ export default async function EnquiryDetailPage({ params }: { params: Promise<{ 
                     <input type="hidden" name="op" value="lost" />
                     <button
                       type="submit"
-                      className="rounded border border-line-strong px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline"
+                      className="rounded px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline"
                     >
                       Mark as lost
                     </button>

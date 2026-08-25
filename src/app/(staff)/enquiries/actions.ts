@@ -8,7 +8,12 @@ import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
 import { convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
-import { completeWorkItem, logClientReply, sendStaffReply } from '@/lib/domain/enquiry-workflow'
+import {
+  completeWorkItem,
+  logClientReply,
+  sendStaffReply,
+  startQuoting,
+} from '@/lib/domain/enquiry-workflow'
 import { enquirySchema } from '@/lib/validation/enquiry'
 
 async function requireStaff() {
@@ -74,6 +79,16 @@ export async function logClientReplyAction(formData: FormData): Promise<void> {
   const body = String(formData.get('body') ?? '')
   if (!enquiryId || !body.trim()) return
   await logClientReply(enquiryId, body, user.id)
+  revalidatePath('/enquiries')
+  revalidatePath(`/enquiries/${enquiryId}`)
+}
+
+export async function startQuotingAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  if (!enquiryId) return
+  await startQuoting(enquiryId, user.id)
   revalidatePath('/enquiries')
   revalidatePath(`/enquiries/${enquiryId}`)
 }
