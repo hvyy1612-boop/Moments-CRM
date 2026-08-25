@@ -38,6 +38,14 @@ type Row = {
   waitingOn: string | null
   waitingDays: number
   currentTask: string | null
+  latestClient: string | null
+  latestStaff: string | null
+}
+
+function snippet(value: string | null | undefined, max = 44): string {
+  if (!value) return '-'
+  const clean = value.trim().replace(/\s+/g, ' ')
+  return clean.length > max ? `${clean.slice(0, max)}...` : clean
 }
 
 export default async function EnquiriesPage({
@@ -67,6 +75,11 @@ export default async function EnquiriesPage({
         take: 1,
         select: { title: true },
       },
+      communications: {
+        orderBy: { createdAt: 'desc' },
+        take: 8,
+        select: { direction: true, body: true },
+      },
     },
   })
 
@@ -79,6 +92,8 @@ export default async function EnquiriesPage({
     waitingOn: e.waitingOn,
     waitingDays: Math.max(0, Math.floor((now - e.updatedAt.getTime()) / DAY_MS)),
     currentTask: e.workItems[0]?.title ?? null,
+    latestClient: e.communications.find((c) => c.direction === 'inbound')?.body ?? null,
+    latestStaff: e.communications.find((c) => c.direction === 'outbound')?.body ?? null,
   }))
 
   const shown = rows.filter((r) => activeView.match(r.status, r.waitingOn))
@@ -129,6 +144,8 @@ export default async function EnquiriesPage({
                 <th className="border-b border-r border-line px-3 py-3 font-bold">Stage</th>
                 <th className="border-b border-r border-line px-3 py-3 font-bold">Waiting on</th>
                 <th className="border-b border-r border-line px-3 py-3 font-bold">Current task</th>
+                <th className="border-b border-r border-line px-3 py-3 font-bold">Client&apos;s message</th>
+                <th className="border-b border-r border-line px-3 py-3 font-bold">Staff reply</th>
                 <th className="w-24 border-b border-line px-3 py-3 font-bold">Open</th>
               </tr>
             </thead>
@@ -165,6 +182,12 @@ export default async function EnquiriesPage({
                   </td>
                   <td className="border-b border-r border-line px-3 py-3 text-base text-ink-muted">
                     {currentActionText(row.waitingOn, row.currentTask)}
+                  </td>
+                  <td className="border-b border-r border-line px-3 py-3 text-sm text-ink-muted">
+                    {snippet(row.latestClient)}
+                  </td>
+                  <td className="border-b border-r border-line px-3 py-3 text-sm text-ink-muted">
+                    {snippet(row.latestStaff)}
                   </td>
                   <td className="border-b border-line px-3 py-3">
                     <Link
