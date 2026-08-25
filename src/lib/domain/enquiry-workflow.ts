@@ -66,8 +66,10 @@ export async function completeWorkItem(workItemId: string, actorUserId: string) 
         nextKind = 'REPLY_TO_CLIENT'
         break
       case 'REVIEW_CLIENT_REPLY':
-        change = { status: 'QUALIFIED', waitingOn: 'STUDIO' }
-        nextKind = 'PREPARE_QUOTE'
+        // Reviewing a client reply keeps the case in discussion: the studio replies again. The move
+        // to a quote is a deliberate staff decision (startQuoting), not an automatic jump.
+        change = { status: 'CONTACTED', waitingOn: 'STUDIO' }
+        nextKind = 'REPLY_TO_CLIENT'
         break
       case 'PREPARE_QUOTE':
         change = { status: 'QUALIFIED', waitingOn: 'STUDIO' }
@@ -128,6 +130,32 @@ export async function sendStaffReply(enquiryId: string, body: string, actorUserI
         companyId: enquiry.companyId,
         actorUserId,
         action: 'enquiry.replied',
+        entityType: 'Enquiry',
+        entityId: enquiryId,
+      },
+    })
+    return enquiry
+  })
+}
+
+/**
+ * Staff decides the discussion is settled and moves the case into quoting. Cancels the outstanding
+ * discussion task so the board keeps a single current task, then opens "Prepare quote".
+ */
+export async function startQuoting(enquiryId: string, actorUserId: string) {
+  return prisma.$transaction(async (tx) => {
+    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
+    if (!enquiry) throw new Error('Enquiry not found.')
+    if (enquiry.status !== 'CONTACTED') throw new Error('This enquiry is not in the discussion stage.')
+
+    await cancelOpenWorkItems(tx, enquiryId)
+    await tx.enquiry.update({ where: { id: enquiryId }, data: { status: 'QUALIFIED', waitingOn: 'STUDIO' } })
+    await addWorkItem(tx, { id: enquiry.id, companyId: enquiry.companyId }, 'PREPARE_QUOTE')
+    await tx.auditLog.create({
+      data: {
+        companyId: enquiry.companyId,
+        actorUserId,
+        action: 'enquiry.moved_to_quote',
         entityType: 'Enquiry',
         entityId: enquiryId,
       },
