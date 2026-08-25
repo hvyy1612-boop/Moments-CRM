@@ -7,15 +7,8 @@ import { redirect } from 'next/navigation'
 import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
-import {
-  convertEnquiry,
-  createEnquiry,
-  enquiryClientReplied,
-  enquiryQualify,
-  enquiryStudioReplied,
-  markEnquiryLost,
-  reopenEnquiry,
-} from '@/lib/domain/enquiry'
+import { convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
+import { completeWorkItem, logClientReply, sendStaffReply } from '@/lib/domain/enquiry-workflow'
 import { enquirySchema } from '@/lib/validation/enquiry'
 
 async function requireStaff() {
@@ -31,11 +24,8 @@ async function csrfOk(formData: FormData): Promise<boolean> {
   return verifyCsrf(cookieValue, formData.get('csrf'))
 }
 
-/**
- * The Enquiries work-queue actions. `replied`/`client_replied` flip who owes the next response
- * (waiting_on), `qualify` advances the pipeline stage, and `convert`/`lost` close the lead out of the
- * queue. Each stays on the list (no redirect) so the row just moves between the views.
- */
+/** Outcomes that close or reopen a lead (contract docs/23). Convert/Lost leave the active queue;
+ * reopen brings a closed lead back. The case detail also uses these. */
 export async function updateEnquiryAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
@@ -44,18 +34,6 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
   if (!enquiryId) return
 
   switch (op) {
-    case 'replied':
-      await enquiryStudioReplied(enquiryId, user.id)
-      break
-    case 'client_replied':
-      await enquiryClientReplied(enquiryId, user.id)
-      break
-    case 'qualify':
-      await enquiryQualify(enquiryId, user.id)
-      break
-    case 'convert':
-      await convertEnquiry(enquiryId, user.id)
-      break
     case 'lost':
       await markEnquiryLost(enquiryId, 'Not proceeding', user.id)
       break
@@ -66,6 +44,43 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
       return
   }
   revalidatePath('/enquiries')
+  revalidatePath(`/enquiries/${enquiryId}`)
+}
+
+/** Complete a tickable work item; the backend runs the transition and opens the next item. */
+export async function completeWorkItemAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const workItemId = String(formData.get('workItemId') ?? '')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  if (!workItemId) return
+  await completeWorkItem(workItemId, user.id)
+  revalidatePath('/enquiries')
+  if (enquiryId) revalidatePath(`/enquiries/${enquiryId}`)
+}
+
+/** Staff sends a reply to the client (records an outbound message and moves the ball to the client). */
+export async function sendReplyAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  const body = String(formData.get('body') ?? '')
+  if (!enquiryId || !body.trim()) return
+  await sendStaffReply(enquiryId, body, user.id)
+  revalidatePath('/enquiries')
+  revalidatePath(`/enquiries/${enquiryId}`)
+}
+
+/** Record a message received from the client (moves the ball back to the studio). */
+export async function logClientReplyAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  const body = String(formData.get('body') ?? '')
+  if (!enquiryId || !body.trim()) return
+  await logClientReply(enquiryId, body, user.id)
+  revalidatePath('/enquiries')
+  revalidatePath(`/enquiries/${enquiryId}`)
 }
 
 /** Convert an enquiry into a client + project, then open the new project. */

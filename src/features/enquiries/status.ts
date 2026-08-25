@@ -8,11 +8,11 @@ import type { StatusKind } from '@/components/ui/StatusTag'
  * The work queue reads WAITING; the stage is shown as a secondary label.
  */
 export const ENQUIRY_STAGE_LABEL: Record<string, string> = {
-  NEW: 'New',
-  CONTACTED: 'Contacted',
-  QUALIFIED: 'Qualified',
-  CONVERTED: 'Converted',
-  LOST: 'Lost',
+  NEW: 'New enquiry',
+  CONTACTED: 'Discussing details',
+  QUALIFIED: 'Preparing quote',
+  CONVERTED: 'Booked',
+  LOST: 'Not proceeding',
   ARCHIVED: 'Archived',
 }
 
@@ -53,7 +53,7 @@ export const ENQUIRY_VIEWS: { key: string; label: string; match: ViewMatch }[] =
   },
   {
     key: 'waiting',
-    label: 'Waiting for client',
+    label: 'Waiting for client reply',
     match: (s, w) => isOpenEnquiry(s) && w === 'CLIENT',
   },
   { key: 'all', label: 'All', match: () => true },

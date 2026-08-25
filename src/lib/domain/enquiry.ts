@@ -8,6 +8,7 @@ import {
   rankPossibleMatches,
   type ClientMatch,
 } from './enquiry-match'
+import { cancelOpenWorkItems, seedEnquiryWorkflow } from './enquiry-workflow'
 
 /**
  * Acquisition layer (B2). A website enquiry — or a staff-logged lead — lives as an Enquiry and does
@@ -80,6 +81,8 @@ export async function createEnquiry(input: CreateEnquiryInput, actorUserId: stri
         payload: { enquiryId: enquiry.id, email: enquiry.email },
       },
     })
+    // Store the client's first message as a Communication and open the first work item.
+    await seedEnquiryWorkflow(tx, enquiry)
     return enquiry
   })
 }
@@ -131,6 +134,7 @@ export async function markEnquiryLost(
       where: { id: enquiryId },
       data: { status: 'LOST', lostReason: reason, waitingOn: null },
     })
+    await cancelOpenWorkItems(tx, enquiryId)
     await tx.auditLog.create({
       data: {
         companyId: enquiry.companyId,
@@ -257,6 +261,7 @@ async function runConvertEnquiry(enquiryId: string, actorUserId: string | null, 
         convertedAt: now,
       },
     })
+    await cancelOpenWorkItems(tx, enquiry.id)
 
     await tx.auditLog.create({
       data: {
@@ -327,63 +332,4 @@ export async function findClientMatches(input: {
 
   const possible = rankPossibleMatches(input, [...byName, ...phoneHolders], exact?.id)
   return { exact, possible }
-}
-
-/** Set an open lead's stage directly from the inline picker (any open stage, any direction). */
-/**
- * Operational-state moves for an open lead. These change `waitingOn` (who owes the next response),
- * kept separate from the pipeline `status`. Each is a no-op once the lead is closed.
- */
-type OpenUpdate = { status?: OpenStage; waitingOn: 'STUDIO' | 'CLIENT' }
-
-async function updateOpenEnquiry(
-  enquiryId: string,
-  build: (current: OpenStage) => OpenUpdate,
-  action: string,
-  actorUserId: string | null,
-) {
-  return prisma.$transaction(async (tx) => {
-    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Enquiry not found.')
-    if (!OPEN_STAGES.includes(enquiry.status as OpenStage)) {
-      throw new Error('This enquiry is already closed.')
-    }
-    const updated = await tx.enquiry.update({
-      where: { id: enquiryId },
-      data: build(enquiry.status as OpenStage),
-    })
-    await tx.auditLog.create({
-      data: {
-        companyId: enquiry.companyId,
-        action,
-        entityType: 'Enquiry',
-        entityId: enquiryId,
-        actorUserId,
-        beforeData: { status: enquiry.status, waitingOn: enquiry.waitingOn },
-        afterData: { status: updated.status, waitingOn: updated.waitingOn },
-      },
-    })
-    return updated
-  })
-}
-
-/** Staff has replied: the ball moves to the client. A brand-new lead also advances to CONTACTED, but
- * a lead already qualified keeps its stage (a reply does not demote it). */
-export function enquiryStudioReplied(enquiryId: string, actorUserId: string | null = null) {
-  return updateOpenEnquiry(
-    enquiryId,
-    (current) => (current === 'NEW' ? { status: 'CONTACTED', waitingOn: 'CLIENT' } : { waitingOn: 'CLIENT' }),
-    'enquiry.replied',
-    actorUserId,
-  )
-}
-
-/** The client has responded: the ball moves back to the studio. */
-export function enquiryClientReplied(enquiryId: string, actorUserId: string | null = null) {
-  return updateOpenEnquiry(enquiryId, () => ({ waitingOn: 'STUDIO' }), 'enquiry.client_replied', actorUserId)
-}
-
-/** The lead is qualified and ready to quote: the studio owes the next action. */
-export function enquiryQualify(enquiryId: string, actorUserId: string | null = null) {
-  return updateOpenEnquiry(enquiryId, () => ({ status: 'QUALIFIED', waitingOn: 'STUDIO' }), 'enquiry.qualified', actorUserId)
 }

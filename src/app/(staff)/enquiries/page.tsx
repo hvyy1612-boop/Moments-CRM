@@ -14,7 +14,7 @@ import {
   ENQUIRY_VIEWS,
   isOpenEnquiry,
 } from '@/features/enquiries/status'
-import { EnquiryActions } from '@/features/enquiries/components/EnquiryActions'
+import { currentActionText } from '@/features/enquiries/workflow'
 import { AppShell } from '../AppShell'
 
 export const runtime = 'nodejs'
@@ -33,13 +33,11 @@ function titleCase(value: string): string {
 type Row = {
   id: string
   name: string
-  email: string
-  phone: string | null
   event: string
   status: string
   waitingOn: string | null
   waitingDays: number
-  projectId: string | null
+  currentTask: string | null
 }
 
 export default async function EnquiriesPage({
@@ -59,13 +57,16 @@ export default async function EnquiriesPage({
     select: {
       id: true,
       name: true,
-      email: true,
-      phone: true,
       eventType: true,
       status: true,
       waitingOn: true,
       updatedAt: true,
-      convertedProjectId: true,
+      workItems: {
+        where: { status: 'PENDING' },
+        orderBy: { order: 'asc' },
+        take: 1,
+        select: { title: true },
+      },
     },
   })
 
@@ -73,13 +74,11 @@ export default async function EnquiriesPage({
   const rows: Row[] = enquiries.map((e) => ({
     id: e.id,
     name: e.name,
-    email: e.email,
-    phone: e.phone,
     event: e.eventType ? titleCase(e.eventType) : '-',
     status: e.status,
     waitingOn: e.waitingOn,
     waitingDays: Math.max(0, Math.floor((now - e.updatedAt.getTime()) / DAY_MS)),
-    projectId: e.convertedProjectId,
+    currentTask: e.workItems[0]?.title ?? null,
   }))
 
   const shown = rows.filter((r) => activeView.match(r.status, r.waitingOn))
@@ -126,25 +125,23 @@ export default async function EnquiriesPage({
             <thead>
               <tr className="bg-sunk text-left text-xs uppercase tracking-wide text-muted">
                 <th className="border-b border-r border-line px-3 py-3 font-bold">Name</th>
-                <th className="border-b border-r border-line px-3 py-3 font-bold">Email</th>
-                <th className="border-b border-r border-line px-3 py-3 font-bold">Phone</th>
                 <th className="border-b border-r border-line px-3 py-3 font-bold">Event</th>
                 <th className="border-b border-r border-line px-3 py-3 font-bold">Stage</th>
                 <th className="border-b border-r border-line px-3 py-3 font-bold">Waiting on</th>
-                <th className="w-32 border-b border-line px-3 py-3 font-bold">Action</th>
+                <th className="border-b border-r border-line px-3 py-3 font-bold">Current task</th>
+                <th className="w-24 border-b border-line px-3 py-3 font-bold">Open</th>
               </tr>
             </thead>
             <tbody>
               {shown.map((row) => (
-                <tr key={row.id} className="align-middle transition-colors hover:bg-paper">
+                <tr key={row.id} className="group align-middle transition-colors hover:bg-paper">
                   <td className="border-b border-r border-line px-3 py-3">
-                    <span className="font-serif text-lg font-semibold text-ink">{row.name}</span>
-                  </td>
-                  <td className="border-b border-r border-line px-3 py-3 text-base text-ink-muted">
-                    {row.email}
-                  </td>
-                  <td className="tabular border-b border-r border-line px-3 py-3 text-base text-ink-muted">
-                    {row.phone ?? '-'}
+                    <Link
+                      href={`/enquiries/${row.id}`}
+                      className="font-serif text-lg font-semibold text-ink transition-colors group-hover:text-accent-ink"
+                    >
+                      {row.name}
+                    </Link>
                   </td>
                   <td className="border-b border-r border-line px-3 py-3 text-base text-ink">
                     {row.event}
@@ -166,14 +163,16 @@ export default async function EnquiriesPage({
                       <span className="tabular text-muted"> · {row.waitingDays}d</span>
                     ) : null}
                   </td>
+                  <td className="border-b border-r border-line px-3 py-3 text-base text-ink-muted">
+                    {currentActionText(row.waitingOn, row.currentTask)}
+                  </td>
                   <td className="border-b border-line px-3 py-3">
-                    <EnquiryActions
-                      enquiryId={row.id}
-                      status={row.status}
-                      waitingOn={row.waitingOn}
-                      projectId={row.projectId}
-                      csrf={csrf}
-                    />
+                    <Link
+                      href={`/enquiries/${row.id}`}
+                      className="font-bold text-accent-ink hover:underline"
+                    >
+                      Open
+                    </Link>
                   </td>
                 </tr>
               ))}
