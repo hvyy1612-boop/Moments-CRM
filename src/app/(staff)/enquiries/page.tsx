@@ -30,6 +30,11 @@ function titleCase(value: string): string {
     .join(' ')
 }
 
+function snippet(value: string, max = 70): string {
+  const clean = value.trim().replace(/\s+/g, ' ')
+  return clean.length > max ? `${clean.slice(0, max)}...` : clean
+}
+
 type Row = {
   id: string
   name: string
@@ -38,14 +43,8 @@ type Row = {
   waitingOn: string | null
   waitingDays: number
   currentTask: string | null
-  latestClient: string | null
-  latestStaff: string | null
-}
-
-function snippet(value: string | null | undefined, max = 44): string {
-  if (!value) return '-'
-  const clean = value.trim().replace(/\s+/g, ' ')
-  return clean.length > max ? `${clean.slice(0, max)}...` : clean
+  latestWho: 'Client' | 'You' | null
+  latestText: string | null
 }
 
 export default async function EnquiriesPage({
@@ -77,24 +76,27 @@ export default async function EnquiriesPage({
       },
       communications: {
         orderBy: { createdAt: 'desc' },
-        take: 8,
+        take: 1,
         select: { direction: true, body: true },
       },
     },
   })
 
   const now = Date.now()
-  const rows: Row[] = enquiries.map((e) => ({
-    id: e.id,
-    name: e.name,
-    event: e.eventType ? titleCase(e.eventType) : '-',
-    status: e.status,
-    waitingOn: e.waitingOn,
-    waitingDays: Math.max(0, Math.floor((now - e.updatedAt.getTime()) / DAY_MS)),
-    currentTask: e.workItems[0]?.title ?? null,
-    latestClient: e.communications.find((c) => c.direction === 'inbound')?.body ?? null,
-    latestStaff: e.communications.find((c) => c.direction === 'outbound')?.body ?? null,
-  }))
+  const rows: Row[] = enquiries.map((e) => {
+    const last = e.communications[0]
+    return {
+      id: e.id,
+      name: e.name,
+      event: e.eventType ? titleCase(e.eventType) : 'Enquiry',
+      status: e.status,
+      waitingOn: e.waitingOn,
+      waitingDays: Math.max(0, Math.floor((now - e.updatedAt.getTime()) / DAY_MS)),
+      currentTask: e.workItems[0]?.title ?? null,
+      latestWho: last ? (last.direction === 'inbound' ? 'Client' : 'You') : null,
+      latestText: last?.body ?? null,
+    }
+  })
 
   const shown = rows.filter((r) => activeView.match(r.status, r.waitingOn))
   const empty = ENQUIRY_EMPTY[activeView.key] ?? ENQUIRY_EMPTY.all!
@@ -135,72 +137,58 @@ export default async function EnquiriesPage({
           <EmptyState title={empty.title} description={empty.description} />
         </div>
       ) : (
-        <div className="mt-5 overflow-x-auto rounded-md border border-line">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-sunk text-left text-xs uppercase tracking-wide text-muted">
-                <th className="border-b border-r border-line px-3 py-3 font-bold">Name</th>
-                <th className="border-b border-r border-line px-3 py-3 font-bold">Event</th>
-                <th className="border-b border-r border-line px-3 py-3 font-bold">Stage</th>
-                <th className="border-b border-r border-line px-3 py-3 font-bold">Waiting on</th>
-                <th className="border-b border-r border-line px-3 py-3 font-bold">Current task</th>
-                <th className="border-b border-r border-line px-3 py-3 font-bold">Client&apos;s message</th>
-                <th className="border-b border-r border-line px-3 py-3 font-bold">Staff reply</th>
-                <th className="w-24 border-b border-line px-3 py-3 font-bold">Open</th>
-              </tr>
-            </thead>
-            <tbody>
-              {shown.map((row) => (
-                <tr key={row.id} className="group align-middle transition-colors hover:bg-paper">
-                  <td className="border-b border-r border-line px-3 py-3">
-                    <Link
-                      href={`/enquiries/${row.id}`}
-                      className="font-serif text-lg font-semibold text-ink transition-colors group-hover:text-accent-ink"
-                    >
+        <div className="mt-5 flex flex-col gap-2">
+          {shown.map((row) => (
+            <Link
+              key={row.id}
+              href={`/enquiries/${row.id}`}
+              className="group block rounded-md border border-line bg-surface px-4 py-3 transition-colors hover:border-line-strong hover:bg-paper"
+            >
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-serif text-lg font-semibold text-ink transition-colors group-hover:text-accent-ink">
                       {row.name}
-                    </Link>
-                  </td>
-                  <td className="border-b border-r border-line px-3 py-3 text-base text-ink">
-                    {row.event}
-                  </td>
-                  <td className="border-b border-r border-line px-3 py-3">
+                    </span>
+                    <span className="shrink-0 text-sm text-ink-muted">· {row.event}</span>
+                  </div>
+                  {row.latestText ? (
+                    <div className="mt-0.5 truncate text-sm text-ink-muted">
+                      <span className="font-semibold text-ink">{row.latestWho}:</span>{' '}
+                      {snippet(row.latestText)}
+                    </div>
+                  ) : (
+                    <div className="mt-0.5 text-sm text-muted">No messages yet</div>
+                  )}
+                </div>
+
+                <div className="flex shrink-0 items-center gap-4">
+                  <div className="hidden text-right sm:block">
+                    <div className="text-sm">
+                      {row.waitingOn === 'STUDIO' ? (
+                        <span className="font-bold text-accent-ink">You</span>
+                      ) : row.waitingOn === 'CLIENT' ? (
+                        <span className="text-ink-muted">Client</span>
+                      ) : (
+                        <span className="text-muted">Closed</span>
+                      )}
+                      {isOpenEnquiry(row.status) && row.waitingDays > 0 ? (
+                        <span className="tabular text-muted"> · {row.waitingDays}d</span>
+                      ) : null}
+                    </div>
+                    <div className="text-sm text-ink-muted">
+                      {currentActionText(row.waitingOn, row.currentTask)}
+                    </div>
+                  </div>
+                  <div className="w-36 text-right">
                     <StatusTag kind={ENQUIRY_STAGE_KIND[row.status] ?? 'hold'}>
                       {ENQUIRY_STAGE_LABEL[row.status] ?? titleCase(row.status)}
                     </StatusTag>
-                  </td>
-                  <td className="border-b border-r border-line px-3 py-3 text-base">
-                    {row.waitingOn === 'STUDIO' ? (
-                      <span className="font-bold text-accent-ink">You</span>
-                    ) : row.waitingOn === 'CLIENT' ? (
-                      <span className="text-ink-muted">Client</span>
-                    ) : (
-                      <span className="text-muted">-</span>
-                    )}
-                    {isOpenEnquiry(row.status) && row.waitingDays > 0 ? (
-                      <span className="tabular text-muted"> · {row.waitingDays}d</span>
-                    ) : null}
-                  </td>
-                  <td className="border-b border-r border-line px-3 py-3 text-base text-ink-muted">
-                    {currentActionText(row.waitingOn, row.currentTask)}
-                  </td>
-                  <td className="border-b border-r border-line px-3 py-3 text-sm text-ink-muted">
-                    {snippet(row.latestClient)}
-                  </td>
-                  <td className="border-b border-r border-line px-3 py-3 text-sm text-ink-muted">
-                    {snippet(row.latestStaff)}
-                  </td>
-                  <td className="border-b border-line px-3 py-3">
-                    <Link
-                      href={`/enquiries/${row.id}`}
-                      className="font-bold text-accent-ink hover:underline"
-                    >
-                      Open
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                </div>
+              </div>
+            </Link>
+          ))}
         </div>
       )}
     </AppShell>
