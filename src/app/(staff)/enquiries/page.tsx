@@ -23,11 +23,22 @@ const STATUS_KIND: Record<string, StatusKind> = {
   ARCHIVED: 'hold',
 }
 
+// Plain labels a first-time reader understands. "Won" (became a client + project) sits opposite
+// "Lost". The database keeps the original enum; this only changes what shows on screen.
+const STATUS_LABEL: Record<string, string> = {
+  NEW: 'New',
+  CONTACTED: 'Contacted',
+  QUALIFIED: 'Qualified',
+  CONVERTED: 'Won',
+  LOST: 'Lost',
+  ARCHIVED: 'Archived',
+}
+
 // What the staff member should do next for a lead at this stage. Reading the row tells you the action.
 const NEXT_STEP: Record<string, string> = {
   NEW: 'Send first reply',
   CONTACTED: 'Follow up',
-  QUALIFIED: 'Send a quote, then convert',
+  QUALIFIED: 'Send a quote, then create the project',
   CONVERTED: 'Open the project',
   LOST: '-',
   ARCHIVED: '-',
@@ -37,7 +48,7 @@ const NEXT_STEP: Record<string, string> = {
 const VIEWS = [
   { key: 'open', label: 'Open', match: (s: string) => ['NEW', 'CONTACTED', 'QUALIFIED'].includes(s) },
   { key: 'awaiting', label: 'Awaiting reply', match: (s: string) => s === 'NEW' },
-  { key: 'converted', label: 'Converted', match: (s: string) => s === 'CONVERTED' },
+  { key: 'won', label: 'Won', match: (s: string) => s === 'CONVERTED' },
   { key: 'lost', label: 'Lost', match: (s: string) => s === 'LOST' || s === 'ARCHIVED' },
   { key: 'all', label: 'All', match: () => true },
 ] as const
@@ -184,7 +195,7 @@ export default async function EnquiriesPage({
                   </td>
                   <td className="border-b border-r border-line p-0">
                     <StatusTag kind={STATUS_KIND[row.status] ?? 'hold'} block>
-                      {titleCase(row.status)}
+                      {STATUS_LABEL[row.status] ?? titleCase(row.status)}
                     </StatusTag>
                   </td>
                   <td className="border-b border-r border-line px-3 py-3 text-base text-ink-muted">
@@ -196,7 +207,7 @@ export default async function EnquiriesPage({
                         <input type="hidden" name="csrf" value={csrf} />
                         <input type="hidden" name="enquiryId" value={row.id} />
                         <button type="submit" className="font-bold text-accent-ink hover:underline">
-                          Convert
+                          Create project
                         </button>
                       </form>
                     ) : row.projectId ? (
