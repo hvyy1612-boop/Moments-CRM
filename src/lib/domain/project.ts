@@ -46,9 +46,17 @@ async function runCreateProjectFromEnquiry(input: EnquiryInput, now: Date) {
       client = await tx.client.create({
         data: {
           companyId: company.id,
+          type: input.isCompany ? 'BUSINESS' : 'INDIVIDUAL',
           displayName: input.name,
+          firstName: input.firstName ?? null,
+          lastName: input.lastName ?? null,
           email: input.email,
           phone: input.phone ?? null,
+          street: input.street ?? null,
+          suburb: input.suburb ?? null,
+          state: input.state ?? null,
+          postcode: input.postcode ?? null,
+          country: input.country ?? null,
           status: 'PROSPECT',
         },
       })

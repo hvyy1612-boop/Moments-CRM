@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { BoardGroup } from '@/components/ui/BoardGroup'
@@ -12,11 +13,12 @@ import { AppShell } from '../AppShell'
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Clients — Moments' }
 
-const HEAD = ['Name', 'Email', 'Phone', 'Source', 'Projects', 'Since']
+const HEAD = ['Name', 'Type', 'Email', 'Phone', 'Source', 'Projects', 'Since']
 
 type Row = {
   id: string
   name: string
+  type: string
   email: string
   phone: string | null
   source: string
@@ -29,10 +31,16 @@ function Table({ rows }: { rows: Row[] }) {
   return (
     <>
       {rows.map((row) => (
-        <tr key={row.id} className="transition-colors hover:bg-paper">
+        <tr key={row.id} className="group transition-colors hover:bg-paper">
           <td className="border-b border-r border-line px-3 py-3">
-            <span className="font-serif text-lg font-semibold text-ink">{row.name}</span>
+            <Link
+              href={`/clients/${row.id}`}
+              className="font-serif text-lg font-semibold text-ink transition-colors group-hover:text-accent-ink"
+            >
+              {row.name}
+            </Link>
           </td>
+          <td className="border-b border-r border-line px-3 py-3 text-base text-ink-muted">{row.type}</td>
           <td className="border-b border-r border-line px-3 py-3 text-base text-ink-muted">{row.email}</td>
           <td className="tabular border-b border-r border-line px-3 py-3 text-base text-ink-muted">{row.phone ?? '-'}</td>
           <td className="border-b border-r border-line px-3 py-3 text-base text-ink">{row.source}</td>
@@ -55,6 +63,7 @@ export default async function ClientsPage() {
     select: {
       id: true,
       displayName: true,
+      type: true,
       email: true,
       phone: true,
       source: true,
@@ -67,6 +76,7 @@ export default async function ClientsPage() {
   const rows: Row[] = clients.map((c) => ({
     id: c.id,
     name: c.displayName,
+    type: c.type === 'BUSINESS' ? 'Company' : 'Individual',
     email: c.email,
     phone: c.phone,
     source: titleCase(c.source),

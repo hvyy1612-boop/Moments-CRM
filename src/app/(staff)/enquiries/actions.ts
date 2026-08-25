@@ -47,10 +47,20 @@ export async function logEnquiryAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
 
+  const firstName = String(formData.get('firstName') ?? '').trim()
+  const lastName = String(formData.get('lastName') ?? '').trim()
   const parsed = enquirySchema.safeParse({
-    name: formData.get('name'),
+    name: [firstName, lastName].filter(Boolean).join(' '),
+    firstName: formData.get('firstName'),
+    lastName: formData.get('lastName'),
     email: formData.get('email'),
     phone: formData.get('phone'),
+    street: formData.get('street'),
+    suburb: formData.get('suburb'),
+    state: formData.get('state'),
+    postcode: formData.get('postcode'),
+    country: formData.get('country'),
+    isCompany: formData.get('isCompany') === 'on',
     eventType: formData.get('eventType'),
     message: formData.get('message'),
   })
@@ -67,8 +77,16 @@ export async function logEnquiryAction(formData: FormData): Promise<void> {
   await createEnquiry(
     {
       name: parsed.data.name,
+      firstName: parsed.data.firstName,
+      lastName: parsed.data.lastName ?? null,
       email: parsed.data.email,
       phone: parsed.data.phone ?? null,
+      street: parsed.data.street ?? null,
+      suburb: parsed.data.suburb ?? null,
+      state: parsed.data.state ?? null,
+      postcode: parsed.data.postcode ?? null,
+      country: parsed.data.country ?? null,
+      isCompany: parsed.data.isCompany ?? false,
       eventType: parsed.data.eventType ?? null,
       eventDate,
       message: parsed.data.message ?? null,
