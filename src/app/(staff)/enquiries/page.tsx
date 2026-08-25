@@ -3,57 +3,31 @@ import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { StatusTag, type StatusKind } from '@/components/ui/StatusTag'
+import { StatusTag } from '@/components/ui/StatusTag'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
+import {
+  ENQUIRY_KIND,
+  ENQUIRY_LABEL,
+  ENQUIRY_NEXT_STEP,
+  OPEN_STATUSES,
+} from '@/features/enquiries/status'
+import { EnquiryStatusPicker } from '@/features/enquiries/components/EnquiryStatusPicker'
 import { AppShell } from '../AppShell'
-import { convertEnquiryAction } from './actions'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Enquiries - Moments' }
 
-const STATUS_KIND: Record<string, StatusKind> = {
-  NEW: 'enquiry',
-  CONTACTED: 'quote',
-  QUALIFIED: 'booked',
-  CONVERTED: 'delivered',
-  LOST: 'lost',
-  ARCHIVED: 'hold',
-}
-
-// Plain labels a first-time reader understands. "Won" (became a client + project) sits opposite
-// "Lost". The database keeps the original enum; this only changes what shows on screen.
-const STATUS_LABEL: Record<string, string> = {
-  NEW: 'New',
-  CONTACTED: 'Contacted',
-  QUALIFIED: 'Qualified',
-  CONVERTED: 'Won',
-  LOST: 'Lost',
-  ARCHIVED: 'Archived',
-}
-
-// What the staff member should do next for a lead at this stage. Reading the row tells you the action.
-const NEXT_STEP: Record<string, string> = {
-  NEW: 'Send first reply',
-  CONTACTED: 'Follow up',
-  QUALIFIED: 'Send a quote, then create the project',
-  CONVERTED: 'Open the project',
-  LOST: '-',
-  ARCHIVED: '-',
-}
-
 // Named views, each a purpose rather than a raw status, in the order they read across the top.
 const VIEWS = [
-  { key: 'open', label: 'Open', match: (s: string) => ['NEW', 'CONTACTED', 'QUALIFIED'].includes(s) },
-  { key: 'awaiting', label: 'Awaiting reply', match: (s: string) => s === 'NEW' },
-  { key: 'won', label: 'Won', match: (s: string) => s === 'CONVERTED' },
+  { key: 'open', label: 'Open leads', match: (s: string) => OPEN_STATUSES.has(s) },
+  { key: 'awaiting', label: 'Awaiting my reply', match: (s: string) => s === 'NEW' },
+  { key: 'booked', label: 'Booked', match: (s: string) => s === 'CONVERTED' },
   { key: 'lost', label: 'Lost', match: (s: string) => s === 'LOST' || s === 'ARCHIVED' },
   { key: 'all', label: 'All', match: () => true },
 ] as const
-
-const OPEN = new Set(['NEW', 'CONTACTED', 'QUALIFIED'])
 
 function titleCase(value: string): string {
   return value
@@ -167,7 +141,7 @@ export default async function EnquiriesPage({
                 <th className="border-b border-r border-line px-3 py-3 font-bold">Phone</th>
                 <th className="border-b border-r border-line px-3 py-3 font-bold">Event</th>
                 <th className="border-b border-r border-line px-3 py-3 font-bold">Event date</th>
-                <th className="w-36 border-b border-r border-line px-3 py-3 font-bold">Status</th>
+                <th className="w-44 border-b border-r border-line px-3 py-3 font-bold">Status</th>
                 <th className="border-b border-r border-line px-3 py-3 font-bold">Next step</th>
                 <th className="w-28 border-b border-line px-3 py-3 font-bold">Action</th>
               </tr>
@@ -194,24 +168,23 @@ export default async function EnquiriesPage({
                     {row.eventDate ? formatSydneyDate(row.eventDate) : '-'}
                   </td>
                   <td className="border-b border-r border-line p-0">
-                    <StatusTag kind={STATUS_KIND[row.status] ?? 'hold'} block>
-                      {STATUS_LABEL[row.status] ?? titleCase(row.status)}
-                    </StatusTag>
+                    {OPEN_STATUSES.has(row.status) ? (
+                      <EnquiryStatusPicker enquiryId={row.id} current={row.status} csrf={csrf} />
+                    ) : (
+                      <StatusTag kind={ENQUIRY_KIND[row.status] ?? 'hold'} solid block>
+                        {ENQUIRY_LABEL[row.status] ?? titleCase(row.status)}
+                      </StatusTag>
+                    )}
                   </td>
                   <td className="border-b border-r border-line px-3 py-3 text-base text-ink-muted">
-                    {NEXT_STEP[row.status] ?? '-'}
+                    {ENQUIRY_NEXT_STEP[row.status] ?? '-'}
                   </td>
                   <td className="border-b border-line px-3 py-3 text-sm">
-                    {OPEN.has(row.status) ? (
-                      <form action={convertEnquiryAction}>
-                        <input type="hidden" name="csrf" value={csrf} />
-                        <input type="hidden" name="enquiryId" value={row.id} />
-                        <button type="submit" className="font-bold text-accent-ink hover:underline">
-                          Create project
-                        </button>
-                      </form>
-                    ) : row.projectId ? (
-                      <Link href={`/projects/${row.projectId}`} className="font-bold text-accent-ink hover:underline">
+                    {row.status === 'CONVERTED' && row.projectId ? (
+                      <Link
+                        href={`/projects/${row.projectId}`}
+                        className="font-bold text-accent-ink hover:underline"
+                      >
                         View project
                       </Link>
                     ) : (

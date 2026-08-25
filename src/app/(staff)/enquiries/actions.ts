@@ -7,7 +7,7 @@ import { redirect } from 'next/navigation'
 import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
-import { convertEnquiry, createEnquiry, markEnquiryLost } from '@/lib/domain/enquiry'
+import { convertEnquiry, createEnquiry, markEnquiryLost, setEnquiryStage } from '@/lib/domain/enquiry'
 import { enquirySchema } from '@/lib/validation/enquiry'
 
 async function requireStaff() {
@@ -21,6 +21,32 @@ async function requireStaff() {
 async function csrfOk(formData: FormData): Promise<boolean> {
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value
   return verifyCsrf(cookieValue, formData.get('csrf'))
+}
+
+const OPEN_STAGES = new Set(['NEW', 'CONTACTED', 'QUALIFIED'])
+
+/**
+ * Set a lead's status from the inline picker. Open stages (New/Contacted/Quoting) are a plain status
+ * change; "Booked" runs the convert flow (creates a client + project); "Lost" closes the lead. Stays
+ * on the list after each change (no redirect) so the row simply updates in place.
+ */
+export async function setEnquiryStatusAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  const status = String(formData.get('status') ?? '')
+  if (!enquiryId) return
+
+  if (status === 'CONVERTED') {
+    await convertEnquiry(enquiryId, user.id)
+  } else if (status === 'LOST') {
+    await markEnquiryLost(enquiryId, 'Not proceeding', user.id)
+  } else if (OPEN_STAGES.has(status)) {
+    await setEnquiryStage(enquiryId, status as 'NEW' | 'CONTACTED' | 'QUALIFIED', user.id)
+  } else {
+    return
+  }
+  revalidatePath('/enquiries')
 }
 
 /** Convert an enquiry into a client + project, then open the new project. */

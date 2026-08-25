@@ -326,3 +326,32 @@ export async function findClientMatches(input: {
   const possible = rankPossibleMatches(input, [...byName, ...phoneHolders], exact?.id)
   return { exact, possible }
 }
+
+/** Set an open lead's stage directly from the inline picker (any open stage, any direction). */
+export async function setEnquiryStage(
+  enquiryId: string,
+  to: OpenStage,
+  actorUserId: string | null = null,
+) {
+  return prisma.$transaction(async (tx) => {
+    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
+    if (!enquiry) throw new Error('Enquiry not found.')
+    if (!OPEN_STAGES.includes(enquiry.status as OpenStage)) {
+      throw new Error('This enquiry is already closed.')
+    }
+    if (enquiry.status === to) return enquiry
+    const updated = await tx.enquiry.update({ where: { id: enquiryId }, data: { status: to } })
+    await tx.auditLog.create({
+      data: {
+        companyId: enquiry.companyId,
+        action: 'enquiry.status',
+        entityType: 'Enquiry',
+        entityId: enquiryId,
+        actorUserId,
+        beforeData: { status: enquiry.status },
+        afterData: { status: to },
+      },
+    })
+    return updated
+  })
+}
