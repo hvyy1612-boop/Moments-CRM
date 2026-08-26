@@ -1,10 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { archiveClientAction, deleteClientAction, restoreClientAction } from './actions'
 
-/** Per-row actions menu (Studio-Ninja style): View / Send Email / Edit / Delete or Archive / Restore. */
+const MENU_H = 172
+
+/** Per-row actions menu (Studio-Ninja style). Uses fixed positioning so the dropdown is never clipped
+ * by the table's scroll container, and flips upward when the row is near the bottom of the viewport. */
 export function ClientRowMenu({
   clientId,
   email,
@@ -18,17 +21,33 @@ export function ClientRowMenu({
   archived: boolean
   hasProjects: boolean
 }) {
+  const btnRef = useRef<HTMLButtonElement>(null)
   const [open, setOpen] = useState(false)
-  const itemClass =
-    'block w-full px-4 py-2 text-left text-sm text-ink hover:bg-paper'
+  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
+
+  function toggle() {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect()
+      const menuWidth = 176
+      const flipUp = r.bottom + MENU_H > window.innerHeight
+      setPos({
+        top: flipUp ? Math.max(8, r.top - MENU_H - 4) : r.bottom + 4,
+        left: Math.max(8, r.right - menuWidth),
+      })
+    }
+    setOpen((o) => !o)
+  }
+
+  const itemClass = 'block w-full px-4 py-2 text-left text-sm text-ink hover:bg-paper'
 
   return (
-    <div className="relative flex justify-end">
+    <div className="flex justify-end">
       <button
+        ref={btnRef}
         type="button"
         aria-label="Client actions"
         aria-haspopup="menu"
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         className="rounded border border-transparent px-2 py-1 text-lg leading-none text-ink-muted hover:border-line-strong hover:text-ink"
       >
         ⋮
@@ -39,7 +58,8 @@ export function ClientRowMenu({
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden="true" />
           <div
             role="menu"
-            className="absolute right-0 top-8 z-50 w-44 overflow-hidden rounded-md border border-line bg-surface py-1 shadow-lg"
+            style={{ position: 'fixed', top: pos.top, left: pos.left }}
+            className="z-50 w-44 overflow-hidden rounded-md border border-line bg-surface py-1 shadow-lg"
           >
             <Link href={`/clients/${clientId}`} role="menuitem" className={itemClass}>
               View client
