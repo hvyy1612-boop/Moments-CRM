@@ -8,7 +8,7 @@ import { createClientAction } from '../actions'
 import { ClientForm } from '../ClientForm'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Add client — Moments' }
+export const metadata: Metadata = { title: 'Add client - Moments' }
 
 export default async function NewClientPage() {
   const user = await requireRole('/clients/new')

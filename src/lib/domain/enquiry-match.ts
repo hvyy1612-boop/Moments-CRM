@@ -32,7 +32,7 @@ export type ClientMatch = {
 
 /**
  * Dedup tier 2 (pure): from a candidate set, keep clients that share the enquirer's name
- * (case-insensitive) or normalised phone. Only *suggests* to staff — never auto-merges.
+ * (case-insensitive) or normalised phone. Only *suggests* to staff - never auto-merges.
  */
 export function rankPossibleMatches(
   input: { name?: string | null; phone?: string | null },

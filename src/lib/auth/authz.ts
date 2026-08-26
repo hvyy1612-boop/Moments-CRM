@@ -4,7 +4,7 @@ import type { Role } from './permissions'
  * Permission layer (docs/22 §3). Authorization is expressed as permissions, not scattered
  * `role === 'ADMIN'` checks. For V1 the permissions are derived from the role by a static map here
  * (no database tables); if roles ever become dynamic, this map moves to `role_permissions` in the DB
- * without changing any call site. Every check must run on the server — the UI only hides things.
+ * without changing any call site. Every check must run on the server - the UI only hides things.
  */
 export type Permission =
   | 'ENQUIRY_VIEW'

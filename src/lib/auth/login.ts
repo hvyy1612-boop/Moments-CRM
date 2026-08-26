@@ -9,7 +9,7 @@ import { createSession, type CreatedSession } from './session'
  * Every outcome writes a SignInLog. The caller shows one generic failure message for every
  * failure kind, so nothing here reveals whether an account exists, is locked or is disabled
  * (SEC-S05). Lockout is 15 minutes after 5 consecutive failures, counted per account (User
- * counters) and per IP (SignInLog rows in the window — D-005: Postgres is the rate limiter,
+ * counters) and per IP (SignInLog rows in the window - D-005: Postgres is the rate limiter,
  * no new table needed).
  */
 const LOCKOUT_THRESHOLD = 5 // SEC-S04

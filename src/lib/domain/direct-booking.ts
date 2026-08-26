@@ -6,7 +6,7 @@ import { nextProjectCode, requireCompany } from './project'
 
 /**
  * Direct package booking (F-ENTRY-02/03). The client picks a fixed-price package and books straight
- * away — this SKIPS the enquiry/lead stage. It creates (or reuses, by email) a Client and a Project
+ * away - this SKIPS the enquiry/lead stage. It creates (or reuses, by email) a Client and a Project
  * in BOOKING_REQUESTED with the package price snapshotted, plus a confirmToken. No quote is created.
  * The client then confirms by token → Project CONFIRMED (F-ENTRY-03); contract is not required.
  */

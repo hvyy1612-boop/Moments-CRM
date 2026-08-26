@@ -14,7 +14,7 @@ import { StatusPicker } from '@/features/projects/components/StatusPicker'
 import { AppShell } from '../AppShell'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Projects — Moments' }
+export const metadata: Metadata = { title: 'Projects - Moments' }
 
 // Status colours and labels are company-defined (features/projects/labels.ts); the lifecycle enum
 // still drives grouping and automation while the label controls how each status reads.

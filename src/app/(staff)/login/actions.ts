@@ -12,7 +12,7 @@ export type LoginFormState =
   | { status: 'idle' }
   | { status: 'error'; message?: string; errors?: { email?: string; password?: string } }
 
-// SEC-S05: one generic message for every failure kind — wrong password, unknown account, locked,
+// SEC-S05: one generic message for every failure kind - wrong password, unknown account, locked,
 // disabled, rate limited. Nothing distinguishes them.
 const GENERIC_FAILURE = 'Email or password is incorrect.'
 
@@ -51,7 +51,7 @@ export async function signIn(_prev: LoginFormState, formData: FormData): Promise
     return { status: 'error', message: GENERIC_FAILURE }
   }
 
-  // SEC-S03: rotate on login — whatever session an existing cookie referenced is revoked before
+  // SEC-S03: rotate on login - whatever session an existing cookie referenced is revoked before
   // the new token is set.
   const existing = cookieStore.get(SESSION_COOKIE)?.value
   if (existing) await revokeSessionByToken(existing)

@@ -245,7 +245,7 @@ async function runDeclineQuote(
 /**
  * Client requests changes / staff revises (F-QUOTE-04). The current version is SUPERSEDED and a new
  * DRAFT version (copying the lines) becomes current; the project moves to NEGOTIATION. An accepted
- * quote is immutable — a change there goes through a change request instead.
+ * quote is immutable - a change there goes through a change request instead.
  */
 export async function reviseQuote(quoteId: string, actorUserId: string | null = null) {
   return prisma.$transaction(async (tx) => {

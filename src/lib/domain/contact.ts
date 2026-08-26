@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 
 /**
  * Contacts (F-CLIENT-02): one client can have several contacts (a couple, a billing person, the
- * signer). A client should always have exactly one PRIMARY contact — the first contact added becomes
+ * signer). A client should always have exactly one PRIMARY contact - the first contact added becomes
  * primary automatically, and setting a new primary clears the old one.
  */
 

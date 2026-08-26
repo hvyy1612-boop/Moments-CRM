@@ -4,7 +4,7 @@ import { requireCompany } from './project'
 
 /**
  * Package catalogue (F-PKG). Fixed-price service packages, GST-inclusive. Changing a package price
- * later never rewrites past records — pricing history lives as a snapshot on Project/Quote/Invoice
+ * later never rewrites past records - pricing history lives as a snapshot on Project/Quote/Invoice
  * (F-PKG-02).
  */
 

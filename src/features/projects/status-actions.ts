@@ -11,7 +11,7 @@ import { sanitizeLabels } from './labels'
 /**
  * Move a project to a status label from the board's inline picker. Deny-by-default: the write is
  * gated on PROJECT_EDIT on the server, never on the menu's shown/hidden state. A bad value or a
- * stale CSRF token is a silent no-op — the re-render shows the real state either way.
+ * stale CSRF token is a silent no-op - the re-render shows the real state either way.
  */
 export async function setProjectStatusAction(formData: FormData): Promise<void> {
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value

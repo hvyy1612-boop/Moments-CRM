@@ -7,7 +7,7 @@ import { WorkspaceHighlights } from '@/features/landing/components/WorkspaceHigh
 // Reads the session (Node runtime for the session/crypto libs, matching the other auth-aware pages).
 export const runtime = 'nodejs'
 
-export const metadata: Metadata = { title: 'Moments — Studio workspace' }
+export const metadata: Metadata = { title: 'Moments - Studio workspace' }
 
 /** The landing / sign-in gateway. Already-signed-in staff skip straight to the dashboard. */
 export default async function LandingPage() {

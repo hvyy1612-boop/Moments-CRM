@@ -10,11 +10,11 @@ import { LoginForm } from './LoginForm'
 // Auth pages pin the Node runtime for @node-rs/argon2 and node:crypto (D-006).
 export const runtime = 'nodejs'
 
-export const metadata: Metadata = { title: 'Sign in — Moments' }
+export const metadata: Metadata = { title: 'Sign in - Moments' }
 
 /**
  * The staff sign-in page, §8.5: a single centred column in the mandated order. The studio name is
- * text, the heading is "Sign in", and there is no sign-up link — staff accounts are created by an
+ * text, the heading is "Sign in", and there is no sign-up link - staff accounts are created by an
  * admin invitation only. The Google button and OR divider render only when the Google environment
  * pair is present (BR-G11); that flow arrives with the BR-G work and nothing renders until then.
  */

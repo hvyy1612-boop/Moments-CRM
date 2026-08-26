@@ -10,7 +10,7 @@ import { formatSydneyDate } from '@/lib/time'
 import { QuoteAccept } from './QuoteAccept'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Your quote — Moments' }
+export const metadata: Metadata = { title: 'Your quote - Moments' }
 
 export default async function ClientQuotePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params

@@ -11,7 +11,7 @@ import {
 import { cancelOpenWorkItems, seedEnquiryWorkflow } from './enquiry-workflow'
 
 /**
- * Acquisition layer (B2). A website enquiry — or a staff-logged lead — lives as an Enquiry and does
+ * Acquisition layer (B2). A website enquiry - or a staff-logged lead - lives as an Enquiry and does
  * NOT create a Client/Project until it converts. Convert upserts the Client by email (dedup) and
  * creates a QUALIFYING Project; the enquiry is marked CONVERTED and linked, never deleted. LOST leads
  * are kept and can be reopened. See docs/14 §0 and docs/15 F-ENQ-*.
@@ -175,7 +175,7 @@ export async function reopenEnquiry(enquiryId: string, actorUserId: string | nul
 }
 
 /**
- * Convert a lead: upsert the Client by email (dedup tier 1 — a returning enquirer never duplicates)
+ * Convert a lead: upsert the Client by email (dedup tier 1 - a returning enquirer never duplicates)
  * and create a QUALIFYING Project. Idempotent: converting an already-converted enquiry returns the
  * existing client/project. Retries on a unique collision (per-year project code) like createProject.
  */
@@ -296,7 +296,7 @@ const CLIENT_MATCH_SELECT = {
 
 /**
  * Dedup helper for staff UX. Tier 1: exact email match (safe to auto-link). Tier 2: other clients
- * that share a normalised phone or the same name — surfaced as "possible", never auto-merged.
+ * that share a normalised phone or the same name - surfaced as "possible", never auto-merged.
  */
 export async function findClientMatches(input: {
   email: string

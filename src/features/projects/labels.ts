@@ -17,7 +17,7 @@ export type StatusLabel = {
   order: number
 }
 
-/** The palette a label may use — the seven brand status tones, no new colours. */
+/** The palette a label may use - the seven brand status tones, no new colours. */
 export const LABEL_COLORS: StatusKind[] = [
   'enquiry',
   'quote',

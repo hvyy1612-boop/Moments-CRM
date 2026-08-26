@@ -1,7 +1,7 @@
 import type { StatusKind } from '@/components/ui/StatusTag'
 
 /**
- * Two separate dimensions, straight from the backend — never invented on the frontend:
+ * Two separate dimensions, straight from the backend - never invented on the frontend:
  *  - STAGE  = the pipeline `status` enum (where the lead sits): New, Contacted, Qualified, Converted,
  *    Lost, Archived.
  *  - WAITING = the operational `waitingOn` field (who owes the next response): STUDIO or CLIENT.

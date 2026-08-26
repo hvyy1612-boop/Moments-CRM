@@ -28,7 +28,7 @@ import { QuoteBuilder } from './QuoteBuilder'
 import { Scheduling } from './Scheduling'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Project — Moments' }
+export const metadata: Metadata = { title: 'Project - Moments' }
 
 const QUOTE_TONE: Record<string, Tone> = {
   DRAFT: 'neutral',
@@ -173,7 +173,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const bookingViews = project.bookings.map((booking) => ({
     id: booking.id,
     title: booking.title,
-    timeLabel: `${formatSydneyDateTime(booking.startsAt)} – ${formatSydneyDateTime(booking.endsAt)}`,
+    timeLabel: `${formatSydneyDateTime(booking.startsAt)} - ${formatSydneyDateTime(booking.endsAt)}`,
     location: booking.location,
     status: booking.status,
     assignments: booking.assignments.map((assignment) => ({

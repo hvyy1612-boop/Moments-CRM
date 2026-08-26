@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
 
 /**
- * Cancellation and refunds (F-FIN-02). Financial records are never hard-deleted — a refund is a new
+ * Cancellation and refunds (F-FIN-02). Financial records are never hard-deleted - a refund is a new
  * row plus a REFUND payment transaction, and total refunds can never exceed what was captured.
  */
 

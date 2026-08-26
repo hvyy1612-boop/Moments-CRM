@@ -26,7 +26,7 @@ const lato = Lato({
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-  title: 'Moments — Client Management',
+  title: 'Moments - Client Management',
   description: 'Client management system for Moments Photography and Film.',
 }
 

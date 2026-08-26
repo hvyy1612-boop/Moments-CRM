@@ -1,12 +1,12 @@
 @import 'tailwindcss';
 
 /*
- * DESIGN TOKENS — the single source of truth (§10.1).
+ * DESIGN TOKENS - the single source of truth (§10.1).
  *
  * No colour, spacing, or radius literal may appear anywhere else in the codebase.
  * scripts/check-design-tokens.mjs (§12.8) enforces this and allowlists ONLY this file.
  *
- * Palette + type are the locked design system from docs/19 (criteria C1–C18, decisions D-04..D-23):
+ * Palette + type are the locked design system from docs/19 (criteria C1-C18, decisions D-04..D-23):
  * warm off-white ground, dusty-rose accent, Cormorant Garamond (display) + Lato (UI, self-hosted via
  * next/font), border-first surfaces, bright status colours (light fill + dark text), and a separate
  * categorical chart palette used only for multi-series charts.
@@ -22,7 +22,7 @@
   --color-line: #e7e2da;
   --color-line-strong: #ded7cc;
 
-  /* Accent — dusty rose (D-04). Used for links, active state, focus ring, small highlights.
+  /* Accent - dusty rose (D-04). Used for links, active state, focus ring, small highlights.
      Primary buttons use --color-ink, not the accent (D-12). */
   --color-accent: #a06a67;
   --color-accent-ink: #82504e;
@@ -33,7 +33,7 @@
   --color-warn: #a5702a;
   --color-danger: #b23b34;
 
-  /* Status colours (D-22) — bright: light fill + dark same-hue text. One pair per status. */
+  /* Status colours (D-22) - bright: light fill + dark same-hue text. One pair per status. */
   --color-enquiry: #f6e3b8;
   --color-enquiry-ink: #9c6c12;
   --color-quote: #cfe6f0;
@@ -49,14 +49,14 @@
   --color-hold: #dde3e8;
   --color-hold-ink: #5f6b76;
 
-  /* Chart — status series use the stronger mid-tone of the same hue (so filled areas read). */
+  /* Chart - status series use the stronger mid-tone of the same hue (so filled areas read). */
   --color-chart-enquiry: #d9ab52;
   --color-chart-quote: #d17a52;
   --color-chart-booked: #c081a0;
   --color-chart-editing: #9a7fb0;
   --color-chart-delivered: #93a24f;
 
-  /* Chart — categorical palette A (D-23), ONLY for pies/charts needing many distinct colours. */
+  /* Chart - categorical palette A (D-23), ONLY for pies/charts needing many distinct colours. */
   --color-cat-1: #00b0be;
   --color-cat-2: #f45f74;
   --color-cat-3: #98c127;
@@ -64,13 +64,13 @@
   --color-cat-5: #8fd7d7;
   --color-cat-6: #ff8ca1;
 
-  /* Radius — small for controls, medium/large for cards (D-10: card 8–10, button 7, tag 5). */
+  /* Radius - small for controls, medium/large for cards (D-10: card 8-10, button 7, tag 5). */
   --radius-sm: 2px;
   --radius: 5px;
   --radius-md: 8px;
   --radius-lg: 10px;
 
-  /* Type scale — hand-tuned (D-08), bumped up for readability (Monday benchmark). Base UI text 16px. */
+  /* Type scale - hand-tuned (D-08), bumped up for readability (Monday benchmark). Base UI text 16px. */
   --text-xs: 13px;
   --text-sm: 15px;
   --text-base: 16px;
@@ -79,7 +79,7 @@
   --text-2xl: 30px;
   --text-3xl: 36px;
 
-  /* Typefaces (D-05) — real brand fonts, self-hosted by next/font (see app/layout.tsx). The CSS
+  /* Typefaces (D-05) - real brand fonts, self-hosted by next/font (see app/layout.tsx). The CSS
      variables (--font-cormorant / --font-lato) are injected on <html> by next/font. */
   --font-sans: var(--font-lato), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
     Helvetica, Arial, sans-serif;

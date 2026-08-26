@@ -2,12 +2,12 @@ import { logger } from '@/lib/logger'
 import { maskEmail } from '@/lib/text'
 
 // Read the optional Resend config from process.env directly (not the validated env module) so this
-// adapter never forces env validation at build time — email is an optional integration.
+// adapter never forces env validation at build time - email is an optional integration.
 
 /**
  * Email delivery. When RESEND_API_KEY + EMAIL_FROM are set the message is sent through Resend's HTTP
  * API (no SDK dependency); otherwise the adapter only records intent so local development works with
- * no provider. A send failure is logged, never thrown — a slow or down mail provider must not break
+ * no provider. A send failure is logged, never thrown - a slow or down mail provider must not break
  * the request that triggered it.
  *
  * PRIVACY (SEC-P02, BR-L04): logs never contain plaintext PII or tokens. The recipient is masked, and

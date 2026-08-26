@@ -12,7 +12,7 @@ function deriveDisplayName(input: ClientInput): string {
   return input.email
 }
 
-/** Create a client by hand (staff, not from an enquiry). Email is unique — a duplicate is rejected. */
+/** Create a client by hand (staff, not from an enquiry). Email is unique - a duplicate is rejected. */
 export async function createClient(input: ClientInput, actorUserId: string) {
   return prisma.$transaction(async (tx) => {
     const company = await requireCompany(tx)
@@ -146,7 +146,7 @@ export async function deleteClient(clientId: string, actorUserId: string) {
 }
 
 /**
- * Merge a duplicate client into a survivor (F-ENQ-05). Staff-confirmed only — the app never auto-
+ * Merge a duplicate client into a survivor (F-ENQ-05). Staff-confirmed only - the app never auto-
  * merges. All of the duplicate's projects (and any enquiries that converted to it) move to the
  * survivor; the duplicate is archived and points at the survivor via merged_into_client_id so a
  * later enquiry with its old email resolves to the survivor instead of reviving the duplicate.

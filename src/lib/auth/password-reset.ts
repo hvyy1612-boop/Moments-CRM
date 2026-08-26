@@ -9,12 +9,12 @@ import { revokeAllSessions } from './session'
  *
  * - The token is 32 random bytes from a CSPRNG; only its SHA-256 hash is stored (like sessions), so a
  *   database read never exposes a usable token.
- * - Tokens are single-use (`usedAt`) and short-lived (60 minutes — OWASP's 15–60 window).
+ * - Tokens are single-use (`usedAt`) and short-lived (60 minutes - OWASP's 15-60 window).
  * - `requestPasswordReset` never reveals whether an account exists: the caller shows the same message
  *   in every case, and no account change is made until a valid token is presented at reset time.
  * - On a successful reset every session is revoked, so a stolen session cannot outlive the reset.
  */
-const RESET_TTL_MS = 60 * 60 * 1000 // 60 minutes (OWASP: 15–60)
+const RESET_TTL_MS = 60 * 60 * 1000 // 60 minutes (OWASP: 15-60)
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex')

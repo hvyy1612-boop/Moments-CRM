@@ -4,7 +4,7 @@ import { z } from 'zod'
  * Environment validation (SEC-A08).
  *
  * Parsed once at module load; the app refuses to boot if a required variable is missing or
- * malformed. Never put secrets in the repository — see .env.example.
+ * malformed. Never put secrets in the repository - see .env.example.
  *
  * - SESSION_SECRET signs sessions and CSRF tokens (SEC-S01, SEC-A04). Required in production; in
  *   development and test the session layer falls back to a per-process secret when it is absent.

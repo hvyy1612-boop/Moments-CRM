@@ -1,5 +1,5 @@
 /**
- * Lightweight charts drawn with CSS/SVG only — no charting library, so the bundle stays tiny and
+ * Lightweight charts drawn with CSS/SVG only - no charting library, so the bundle stays tiny and
  * nothing loads from a third party (docs/20). Colours are passed as design-token CSS variables.
  */
 

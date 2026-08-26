@@ -10,7 +10,7 @@ import { updateClientAction } from '../../actions'
 import { ClientForm } from '../../ClientForm'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Edit client — Moments' }
+export const metadata: Metadata = { title: 'Edit client - Moments' }
 
 export default async function EditClientPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireRole('/clients/[id]/edit')

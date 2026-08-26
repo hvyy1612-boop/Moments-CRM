@@ -13,7 +13,7 @@ import { formatSydneyDate, formatSydneyDateTime, systemClock } from '@/lib/time'
 import { AppShell } from '../AppShell'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Dashboard — Moments' }
+export const metadata: Metadata = { title: 'Dashboard - Moments' }
 
 type AttnTone = 'new' | 'waiting' | 'money'
 type Attn = { id: string; who: string; what: string; tone: AttnTone; href: string }

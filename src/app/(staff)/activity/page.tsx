@@ -9,7 +9,7 @@ import { formatSydneyDateTime } from '@/lib/time'
 import { AppShell } from '../AppShell'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Activity — Moments' }
+export const metadata: Metadata = { title: 'Activity - Moments' }
 
 function humanEvent(eventType: string): string {
   return eventType.toLowerCase().replace(/_/g, ' ')

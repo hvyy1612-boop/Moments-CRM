@@ -2,7 +2,7 @@ import Link from 'next/link'
 
 /**
  * The staff sign-in gateway shown at "/". Moments is an internal staff tool, so this is a calm,
- * professional welcome — brand masthead, one line of what the workspace does, and a single primary
+ * professional welcome - brand masthead, one line of what the workspace does, and a single primary
  * action (Sign in). No marketing copy.
  */
 export function WelcomeHero() {

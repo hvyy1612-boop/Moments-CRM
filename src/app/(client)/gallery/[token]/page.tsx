@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Your gallery — Moments' }
+export const metadata: Metadata = { title: 'Your gallery - Moments' }
 
 export default async function ClientGalleryPage({
   params,
