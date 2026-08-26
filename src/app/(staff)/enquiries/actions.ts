@@ -9,10 +9,14 @@ import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
 import { convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
 import {
-  completeWorkItem,
+  addEnquiryTask,
+  deleteEnquiryTask,
   logClientReply,
+  moveEnquiryTask,
   sendStaffReply,
   startQuoting,
+  toggleEnquiryTask,
+  updateEnquiryTask,
 } from '@/lib/domain/enquiry-workflow'
 import { enquirySchema } from '@/lib/validation/enquiry'
 
@@ -52,16 +56,95 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
   revalidatePath(`/enquiries/${enquiryId}`)
 }
 
-/** Complete a tickable work item; the backend runs the transition and opens the next item. */
-export async function completeWorkItemAction(formData: FormData): Promise<void> {
+/** A yyyy-mm-dd form value to a Date, or null. */
+function parseDue(formData: FormData): Date | null {
+  const raw = String(formData.get('dueAt') ?? '').trim()
+  if (!raw) return null
+  const d = new Date(raw)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function revalidateEnquiry(enquiryId: string) {
+  revalidatePath('/enquiries')
+  if (enquiryId) revalidatePath(`/enquiries/${enquiryId}`)
+}
+
+/** Toggle a workflow task (tick to complete, tick again to reopen). */
+export async function toggleWorkItemAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
   const workItemId = String(formData.get('workItemId') ?? '')
   const enquiryId = String(formData.get('enquiryId') ?? '')
   if (!workItemId) return
-  await completeWorkItem(workItemId, user.id)
-  revalidatePath('/enquiries')
-  if (enquiryId) revalidatePath(`/enquiries/${enquiryId}`)
+  try {
+    await toggleEnquiryTask(workItemId, user.id)
+  } catch {
+    // no-op on stale id
+  }
+  revalidateEnquiry(enquiryId)
+}
+
+/** Add a task to a stage of the enquiry workflow. */
+export async function addEnquiryTaskAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  const stage = String(formData.get('stage') ?? '')
+  const title = String(formData.get('title') ?? '')
+  if (!enquiryId || !stage || !title.trim()) return
+  try {
+    await addEnquiryTask(enquiryId, stage, title, parseDue(formData), user.id)
+  } catch {
+    // no-op on invalid stage / empty title
+  }
+  revalidateEnquiry(enquiryId)
+}
+
+/** Rename a task and/or change its due date. */
+export async function updateEnquiryTaskAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  const workItemId = String(formData.get('workItemId') ?? '')
+  const title = String(formData.get('title') ?? '')
+  if (!enquiryId || !workItemId || !title.trim()) return
+  try {
+    await updateEnquiryTask(workItemId, title, parseDue(formData), user.id)
+  } catch {
+    // no-op on stale id
+  }
+  revalidateEnquiry(enquiryId)
+}
+
+/** Delete a task from the enquiry workflow. */
+export async function deleteEnquiryTaskAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  const workItemId = String(formData.get('workItemId') ?? '')
+  if (!enquiryId || !workItemId) return
+  try {
+    await deleteEnquiryTask(workItemId, user.id)
+  } catch {
+    // no-op on stale id
+  }
+  revalidateEnquiry(enquiryId)
+}
+
+/** Move a task up or down within its stage. */
+export async function moveEnquiryTaskAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  const workItemId = String(formData.get('workItemId') ?? '')
+  const direction = String(formData.get('direction') ?? '') === 'up' ? 'up' : 'down'
+  if (!enquiryId || !workItemId) return
+  try {
+    await moveEnquiryTask(workItemId, direction, user.id)
+  } catch {
+    // no-op on stale id
+  }
+  revalidateEnquiry(enquiryId)
 }
 
 /** Staff sends a reply to the client (records an outbound message and moves the ball to the client). */
