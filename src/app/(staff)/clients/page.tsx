@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
+import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { BoardGroup } from '@/components/ui/BoardGroup'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
@@ -9,11 +10,12 @@ import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
 import { titleCase } from '@/lib/text'
 import { AppShell } from '../AppShell'
+import { ClientRowMenu } from './ClientRowMenu'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Clients — Moments' }
 
-const HEAD = ['Name', 'Type', 'Email', 'Phone', 'Source', 'Projects', 'Since']
+const HEAD = ['Name', 'Type', 'Email', 'Phone', 'Source', 'Projects', 'Since', '']
 
 type Row = {
   id: string
@@ -27,7 +29,7 @@ type Row = {
   archived: boolean
 }
 
-function Table({ rows }: { rows: Row[] }) {
+function Table({ rows, csrf }: { rows: Row[]; csrf: string }) {
   return (
     <>
       {rows.map((row) => (
@@ -45,7 +47,16 @@ function Table({ rows }: { rows: Row[] }) {
           <td className="tabular border-b border-r border-line px-3 py-3 text-base text-ink-muted">{row.phone ?? '-'}</td>
           <td className="border-b border-r border-line px-3 py-3 text-base text-ink">{row.source}</td>
           <td className="tabular border-b border-r border-line px-3 py-3 text-base text-ink">{row.projects}</td>
-          <td className="tabular border-b border-line px-3 py-3 text-base text-ink-muted">{formatSydneyDate(row.since)}</td>
+          <td className="tabular border-b border-r border-line px-3 py-3 text-base text-ink-muted">{formatSydneyDate(row.since)}</td>
+          <td className="border-b border-line px-2 py-3">
+            <ClientRowMenu
+              clientId={row.id}
+              email={row.email}
+              csrf={csrf}
+              archived={row.archived}
+              hasProjects={row.projects > 0}
+            />
+          </td>
         </tr>
       ))}
     </>
@@ -87,17 +98,26 @@ export default async function ClientsPage() {
   const active = rows.filter((r) => !r.archived)
   const archived = rows.filter((r) => r.archived)
 
+  const action = (
+    <Link href="/clients/new">
+      <Button size="sm">+ Add client</Button>
+    </Link>
+  )
+
   return (
-    <AppShell user={user} csrf={csrf} active="clients">
+    <AppShell user={user} csrf={csrf} active="clients" action={action}>
       {clients.length === 0 ? (
-        <EmptyState title="No clients yet" description="Clients appear here once you convert an enquiry or add one." />
+        <EmptyState
+          title="No clients yet"
+          description="Add a client with the button above, or convert an enquiry."
+        />
       ) : (
         <div>
           <BoardGroup title="Active clients" count={active.length} spine="border-l-delivered-ink" head={HEAD}>
-            <Table rows={active} />
+            <Table rows={active} csrf={csrf} />
           </BoardGroup>
           <BoardGroup title="Archived" count={archived.length} spine="border-l-line-strong" head={HEAD}>
-            <Table rows={archived} />
+            <Table rows={archived} csrf={csrf} />
           </BoardGroup>
         </div>
       )}
