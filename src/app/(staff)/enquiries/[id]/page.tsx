@@ -15,16 +15,16 @@ import {
   isOpenEnquiry,
   waitingLabel,
 } from '@/features/enquiries/status'
-import { buildWorkflowBoard } from '@/features/enquiries/workflow'
+import { getEnquiryBoard } from '@/lib/domain/enquiry-workflow'
 import { AppShell } from '../../AppShell'
 import {
-  completeWorkItemAction,
   convertEnquiryAction,
   logClientReplyAction,
   sendReplyAction,
   startQuotingAction,
   updateEnquiryAction,
 } from '../actions'
+import { EnquiryWorkflow } from './EnquiryWorkflow'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Enquiry - Moments' }
@@ -54,17 +54,6 @@ export default async function EnquiryDetailPage({ params }: { params: Promise<{ 
       status: true,
       waitingOn: true,
       convertedProjectId: true,
-      workItems: {
-        orderBy: { order: 'asc' },
-        select: {
-          id: true,
-          kind: true,
-          title: true,
-          status: true,
-          completedAt: true,
-          completedBy: { select: { name: true } },
-        },
-      },
       communications: {
         orderBy: { createdAt: 'asc' },
         select: { id: true, direction: true, body: true, createdAt: true, by: { select: { name: true } } },
@@ -81,16 +70,7 @@ export default async function EnquiryDetailPage({ params }: { params: Promise<{ 
   })
 
   const open = isOpenEnquiry(enquiry.status)
-  const board = buildWorkflowBoard(
-    enquiry.status,
-    enquiry.workItems.map((w) => ({
-      id: w.id,
-      kind: w.kind,
-      status: w.status,
-      completedAt: w.completedAt,
-      completedByName: w.completedBy?.name ?? null,
-    })),
-  )
+  const board = await getEnquiryBoard(id)
 
   return (
     <AppShell user={user} csrf={csrf} active="enquiries">
@@ -120,78 +100,12 @@ export default async function EnquiryDetailPage({ params }: { params: Promise<{ 
           <div className="rounded-md border border-line bg-surface p-5">
             <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Workflow</h2>
 
-            <div className="flex flex-col gap-4">
-              {board.stages.map((stage) => (
-                <div key={stage.key}>
-                  <div className="mb-1.5 flex items-center gap-2">
-                    <span
-                      className={`text-xs font-bold uppercase tracking-wide ${
-                        stage.active ? 'text-accent-ink' : 'text-muted'
-                      }`}
-                    >
-                      {stage.label}
-                    </span>
-                    {stage.active && open ? (
-                      <span className="rounded bg-accent px-1.5 py-0.5 text-xs font-bold text-accent-ink">
-                        Now
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    {stage.steps.map((step) => {
-                      const done = step.state === 'done'
-                      const current = step.state === 'current'
-                      return (
-                        <div
-                          key={step.kind}
-                          className={`flex items-start justify-between gap-3 rounded-md border px-3 py-2 ${
-                            current ? 'border-accent bg-paper' : 'border-line'
-                          }`}
-                        >
-                          <div>
-                            <div className={`text-base ${done || current ? 'text-ink' : 'text-ink-muted'}`}>
-                              <span
-                                className={
-                                  done ? 'text-delivered-ink' : current ? 'text-accent-ink' : 'text-muted'
-                                }
-                              >
-                                {done ? '✓' : current ? '●' : '○'}
-                              </span>{' '}
-                              {step.title}
-                            </div>
-                            <div className={`text-sm ${current ? 'text-accent-ink' : 'text-muted'}`}>
-                              {done
-                                ? `${step.completedByName ?? 'Staff'}${
-                                    step.completedAt ? ` · ${formatSydneyDateTime(step.completedAt)}` : ''
-                                  }`
-                                : current
-                                  ? step.tickable
-                                    ? 'Staff needs to do this'
-                                    : 'Reply in the conversation panel ->'
-                                  : 'Not started'}
-                            </div>
-                          </div>
-                          {current && step.tickable && step.workItemId ? (
-                            <form action={completeWorkItemAction}>
-                              <input type="hidden" name="csrf" value={csrf} />
-                              <input type="hidden" name="workItemId" value={step.workItemId} />
-                              <input type="hidden" name="enquiryId" value={enquiry.id} />
-                              <button
-                                type="submit"
-                                className="whitespace-nowrap rounded border border-line-strong px-2.5 py-1 text-sm font-bold text-ink-muted hover:text-ink"
-                              >
-                                Mark done
-                              </button>
-                            </form>
-                          ) : null}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <EnquiryWorkflow
+              stages={board.stages}
+              allDone={board.allDone}
+              enquiryId={enquiry.id}
+              csrf={csrf}
+            />
 
             {/* Outcomes */}
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">

@@ -4,7 +4,7 @@ import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { EnquiryForm } from './EnquiryForm'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Enquire — Moments' }
+export const metadata: Metadata = { title: 'Enquire - Moments' }
 
 export default async function EnquirePage() {
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''

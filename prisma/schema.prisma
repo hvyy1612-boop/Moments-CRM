@@ -907,9 +907,11 @@ model WorkItem {
   enquiryId         String?        @map("enquiry_id") @db.VarChar(30)
   projectId         String?        @map("project_id") @db.VarChar(30)
   kind              String         @db.VarChar(50)
+  stage             String?        @db.VarChar(50)
   title             String         @db.VarChar(150)
   status            WorkItemStatus @default(PENDING)
   order             Int            @default(0)
+  dueAt             DateTime?      @map("due_at") @db.Timestamptz
   completedByUserId String?        @map("completed_by_user_id") @db.VarChar(30)
   completedAt       DateTime?      @map("completed_at") @db.Timestamptz
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz

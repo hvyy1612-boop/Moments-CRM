@@ -1,18 +1,17 @@
 import { prisma } from '@/lib/db'
-import { workItemTitle } from '@/features/enquiries/workflow'
+import { formatSydneyDate } from '@/lib/time'
+import {
+  buildEnquiryBoard,
+  DEFAULT_ENQUIRY_TASKS,
+  ENQUIRY_STAGE_KEYS,
+  enquiryStageLabel,
+  type EnquiryBoard,
+  type TaskInput,
+} from '@/features/enquiries/workflow'
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
 const OPEN = new Set(['NEW', 'CONTACTED', 'QUALIFIED'])
-
-type StageChange = { status?: 'NEW' | 'CONTACTED' | 'QUALIFIED'; waitingOn?: 'STUDIO' | 'CLIENT' | null }
-
-async function addWorkItem(tx: Tx, enquiry: { id: string; companyId: string }, kind: string) {
-  const order = await tx.workItem.count({ where: { enquiryId: enquiry.id } })
-  return tx.workItem.create({
-    data: { companyId: enquiry.companyId, enquiryId: enquiry.id, kind, title: workItemTitle(kind), order },
-  })
-}
 
 export async function seedEnquiryWorkflow(
   tx: Tx,
@@ -29,7 +28,17 @@ export async function seedEnquiryWorkflow(
       },
     })
   }
-  await addWorkItem(tx, enquiry, 'REVIEW_ENQUIRY')
+  await tx.workItem.createMany({
+    data: DEFAULT_ENQUIRY_TASKS.map((t, i) => ({
+      companyId: enquiry.companyId,
+      enquiryId: enquiry.id,
+      kind: 'TASK',
+      stage: t.stage,
+      title: t.title,
+      status: 'PENDING' as const,
+      order: i,
+    })),
+  })
 }
 
 export async function cancelOpenWorkItems(tx: Tx, enquiryId: string) {
@@ -39,61 +48,32 @@ export async function cancelOpenWorkItems(tx: Tx, enquiryId: string) {
   })
 }
 
-export async function completeWorkItem(workItemId: string, actorUserId: string) {
-  return prisma.$transaction(async (tx) => {
-    const item = await tx.workItem.findUnique({ where: { id: workItemId }, include: { enquiry: true } })
-    if (!item || !item.enquiry) throw new Error('Work item not found.')
-    if (item.status !== 'PENDING') return item
-    const enquiry = item.enquiry
-
-    await tx.workItem.update({
-      where: { id: item.id },
-      data: { status: 'COMPLETED', completedByUserId: actorUserId, completedAt: new Date() },
-    })
-
-    let change: StageChange = {}
-    let nextKind: string | null = null
-    switch (item.kind) {
-      case 'REVIEW_ENQUIRY':
-        change = { waitingOn: 'STUDIO' }
-        nextKind = 'REPLY_TO_CLIENT'
-        break
-      case 'REVIEW_CLIENT_REPLY':
-
-        change = { status: 'CONTACTED', waitingOn: 'STUDIO' }
-        nextKind = 'REPLY_TO_CLIENT'
-        break
-      case 'PREPARE_QUOTE':
-        change = { status: 'QUALIFIED', waitingOn: 'STUDIO' }
-        nextKind = 'SEND_QUOTE'
-        break
-      case 'SEND_QUOTE':
-        change = { waitingOn: 'CLIENT' }
-        break
-      case 'REPLY_TO_CLIENT':
-        change = { status: 'CONTACTED', waitingOn: 'CLIENT' }
-        break
-      default:
-        break
-    }
-
-    if (Object.keys(change).length > 0) {
-      await tx.enquiry.update({ where: { id: enquiry.id }, data: change })
-    }
-    if (nextKind) await addWorkItem(tx, enquiry, nextKind)
-
-    await tx.auditLog.create({
-      data: {
-        companyId: enquiry.companyId,
-        actorUserId,
-        action: 'enquiry.work_item_completed',
-        entityType: 'Enquiry',
-        entityId: enquiry.id,
-        afterData: { kind: item.kind, next: nextKind },
-      },
-    })
-    return item
+export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> {
+  const items = await prisma.workItem.findMany({
+    where: { enquiryId, status: { not: 'CANCELLED' } },
+    orderBy: { order: 'asc' },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      stage: true,
+      dueAt: true,
+      order: true,
+      completedAt: true,
+      completedBy: { select: { name: true } },
+    },
   })
+  const tasks: TaskInput[] = items.map((w) => ({
+    id: w.id,
+    title: w.title,
+    status: w.status,
+    stage: w.stage,
+    dueAt: w.dueAt,
+    order: w.order,
+    completedByName: w.completedBy?.name ?? null,
+    completedAt: w.completedAt ?? null,
+  }))
+  return buildEnquiryBoard(tasks, formatSydneyDate)
 }
 
 export async function sendStaffReply(enquiryId: string, body: string, actorUserId: string) {
@@ -107,44 +87,12 @@ export async function sendStaffReply(enquiryId: string, body: string, actorUserI
     await tx.communication.create({
       data: { enquiryId, type: 'CLIENT_MESSAGE', direction: 'outbound', body: text, byUserId: actorUserId },
     })
-    await tx.workItem.updateMany({
-      where: { enquiryId, kind: 'REPLY_TO_CLIENT', status: 'PENDING' },
-      data: { status: 'COMPLETED', completedByUserId: actorUserId, completedAt: new Date() },
-    })
     await tx.enquiry.update({
       where: { id: enquiryId },
       data: { status: enquiry.status === 'NEW' ? 'CONTACTED' : enquiry.status, waitingOn: 'CLIENT' },
     })
     await tx.auditLog.create({
-      data: {
-        companyId: enquiry.companyId,
-        actorUserId,
-        action: 'enquiry.replied',
-        entityType: 'Enquiry',
-        entityId: enquiryId,
-      },
-    })
-    return enquiry
-  })
-}
-
-export async function startQuoting(enquiryId: string, actorUserId: string) {
-  return prisma.$transaction(async (tx) => {
-    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Enquiry not found.')
-    if (enquiry.status !== 'CONTACTED') throw new Error('This enquiry is not in the discussion stage.')
-
-    await cancelOpenWorkItems(tx, enquiryId)
-    await tx.enquiry.update({ where: { id: enquiryId }, data: { status: 'QUALIFIED', waitingOn: 'STUDIO' } })
-    await addWorkItem(tx, { id: enquiry.id, companyId: enquiry.companyId }, 'PREPARE_QUOTE')
-    await tx.auditLog.create({
-      data: {
-        companyId: enquiry.companyId,
-        actorUserId,
-        action: 'enquiry.moved_to_quote',
-        entityType: 'Enquiry',
-        entityId: enquiryId,
-      },
+      data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.replied', entityType: 'Enquiry', entityId: enquiryId },
     })
     return enquiry
   })
@@ -162,16 +110,139 @@ export async function logClientReply(enquiryId: string, body: string, actorUserI
       data: { enquiryId, type: 'CLIENT_MESSAGE', direction: 'inbound', body: text, byUserId: null },
     })
     await tx.enquiry.update({ where: { id: enquiryId }, data: { waitingOn: 'STUDIO' } })
-    await addWorkItem(tx, enquiry, 'REVIEW_CLIENT_REPLY')
+    await tx.auditLog.create({
+      data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.client_replied', entityType: 'Enquiry', entityId: enquiryId },
+    })
+    return enquiry
+  })
+}
+
+export async function startQuoting(enquiryId: string, actorUserId: string) {
+  return prisma.$transaction(async (tx) => {
+    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
+    if (!enquiry) throw new Error('Enquiry not found.')
+    if (enquiry.status !== 'CONTACTED') throw new Error('This enquiry is not in the discussion stage.')
+    await tx.enquiry.update({ where: { id: enquiryId }, data: { status: 'QUALIFIED', waitingOn: 'STUDIO' } })
+    await tx.auditLog.create({
+      data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.moved_to_quote', entityType: 'Enquiry', entityId: enquiryId },
+    })
+    return enquiry
+  })
+}
+
+async function loadTask(taskId: string) {
+  const task = await prisma.workItem.findUnique({
+    where: { id: taskId },
+    select: { id: true, enquiryId: true, companyId: true, stage: true, order: true, status: true, title: true },
+  })
+  if (!task || !task.enquiryId) throw new Error('Task not found.')
+  return task
+}
+
+export async function addEnquiryTask(
+  enquiryId: string,
+  stage: string,
+  title: string,
+  dueAt: Date | null,
+  actorUserId: string,
+) {
+  const clean = title.trim()
+  if (!clean) throw new Error('A task needs a title.')
+  if (!ENQUIRY_STAGE_KEYS.has(stage)) throw new Error('Unknown stage.')
+  return prisma.$transaction(async (tx) => {
+    const enquiry = await tx.enquiry.findUniqueOrThrow({ where: { id: enquiryId }, select: { companyId: true } })
+    const last = await tx.workItem.findFirst({
+      where: { enquiryId, stage },
+      orderBy: { order: 'desc' },
+      select: { order: true },
+    })
+    await tx.workItem.create({
+      data: {
+        companyId: enquiry.companyId,
+        enquiryId,
+        kind: 'CUSTOM',
+        stage,
+        title: clean,
+        status: 'PENDING',
+        order: (last?.order ?? 0) + 1,
+        dueAt,
+      },
+    })
     await tx.auditLog.create({
       data: {
         companyId: enquiry.companyId,
         actorUserId,
-        action: 'enquiry.client_replied',
+        action: 'enquiry.task_added',
         entityType: 'Enquiry',
         entityId: enquiryId,
+        afterData: { stage: enquiryStageLabel(stage), title: clean },
       },
     })
-    return enquiry
+  })
+}
+
+export async function updateEnquiryTask(taskId: string, title: string, dueAt: Date | null, actorUserId: string) {
+  const clean = title.trim()
+  if (!clean) throw new Error('A task needs a title.')
+  const task = await loadTask(taskId)
+  await prisma.$transaction(async (tx) => {
+    await tx.workItem.update({ where: { id: taskId }, data: { title: clean, dueAt } })
+    await tx.auditLog.create({
+      data: { companyId: task.companyId, actorUserId, action: 'enquiry.task_edited', entityType: 'Enquiry', entityId: task.enquiryId!, afterData: { title: clean } },
+    })
+  })
+}
+
+export async function deleteEnquiryTask(taskId: string, actorUserId: string) {
+  const task = await loadTask(taskId)
+  await prisma.$transaction(async (tx) => {
+    await tx.workItem.delete({ where: { id: taskId } })
+    await tx.auditLog.create({
+      data: { companyId: task.companyId, actorUserId, action: 'enquiry.task_deleted', entityType: 'Enquiry', entityId: task.enquiryId!, afterData: { title: task.title } },
+    })
+  })
+}
+
+export async function moveEnquiryTask(taskId: string, direction: 'up' | 'down', actorUserId: string) {
+  const task = await loadTask(taskId)
+  const neighbour = await prisma.workItem.findFirst({
+    where: {
+      enquiryId: task.enquiryId,
+      stage: task.stage,
+      order: direction === 'up' ? { lt: task.order } : { gt: task.order },
+    },
+    orderBy: { order: direction === 'up' ? 'desc' : 'asc' },
+    select: { id: true, order: true },
+  })
+  if (!neighbour) return
+  await prisma.$transaction([
+    prisma.workItem.update({ where: { id: task.id }, data: { order: neighbour.order } }),
+    prisma.workItem.update({ where: { id: neighbour.id }, data: { order: task.order } }),
+    prisma.auditLog.create({
+      data: { companyId: task.companyId, actorUserId, action: 'enquiry.task_moved', entityType: 'Enquiry', entityId: task.enquiryId! },
+    }),
+  ])
+}
+
+export async function toggleEnquiryTask(taskId: string, actorUserId: string) {
+  const task = await loadTask(taskId)
+  const completing = task.status !== 'COMPLETED'
+  await prisma.$transaction(async (tx) => {
+    await tx.workItem.update({
+      where: { id: taskId },
+      data: completing
+        ? { status: 'COMPLETED', completedByUserId: actorUserId, completedAt: new Date() }
+        : { status: 'PENDING', completedByUserId: null, completedAt: null },
+    })
+    await tx.auditLog.create({
+      data: {
+        companyId: task.companyId,
+        actorUserId,
+        action: completing ? 'enquiry.task_completed' : 'enquiry.task_reopened',
+        entityType: 'Enquiry',
+        entityId: task.enquiryId!,
+        afterData: { title: task.title },
+      },
+    })
   })
 }

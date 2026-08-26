@@ -147,7 +147,7 @@ export function AppShell({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Top bar (D-21): h-16 tall — eyebrow + page title, search, page action, avatar. */}
+        {/* Top bar (D-21): h-16 tall - eyebrow + page title, search, page action, avatar. */}
         <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b border-line bg-surface px-5 sm:px-8">
           <div className="min-w-0">
             <div className="text-xs uppercase tracking-widest text-muted">

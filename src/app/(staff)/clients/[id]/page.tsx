@@ -19,7 +19,7 @@ import { AppShell } from '../../AppShell'
 import { archiveClientAction, deleteClientAction, restoreClientAction } from '../actions'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Client — Moments' }
+export const metadata: Metadata = { title: 'Client - Moments' }
 
 const svg = {
   fill: 'none' as const,

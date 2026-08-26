@@ -7,7 +7,7 @@ import { AppShell } from '../../AppShell'
 import { StaffEnquiryForm } from './StaffEnquiryForm'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'New enquiry — Moments' }
+export const metadata: Metadata = { title: 'New enquiry - Moments' }
 
 export default async function NewEnquiryPage() {
   const user = await requireRole('/projects/new')

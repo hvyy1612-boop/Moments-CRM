@@ -7,7 +7,7 @@ import { ResetLinkGenerator } from '@/features/settings/components/ResetLinkGene
 import { AppShell } from '../AppShell'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Settings — Moments' }
+export const metadata: Metadata = { title: 'Settings - Moments' }
 
 const SECTIONS: { title: string; items: string[] }[] = [
   { title: 'Company', items: ['Company details', 'Logo', 'Currency & tax (GST)', 'Date & time'] },

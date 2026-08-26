@@ -6,7 +6,7 @@ import { WorkspaceHighlights } from '@/features/landing/components/WorkspaceHigh
 
 export const runtime = 'nodejs'
 
-export const metadata: Metadata = { title: 'Moments — Studio workspace' }
+export const metadata: Metadata = { title: 'Moments - Studio workspace' }
 
 export default async function LandingPage() {
   const user = await getSessionUser()

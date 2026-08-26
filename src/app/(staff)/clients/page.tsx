@@ -13,7 +13,7 @@ import { AppShell } from '../AppShell'
 import { ClientRowMenu } from './ClientRowMenu'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Clients — Moments' }
+export const metadata: Metadata = { title: 'Clients - Moments' }
 
 const HEAD = ['Name', 'Type', 'Email', 'Phone', 'Source', 'Projects', 'Since', '']
 

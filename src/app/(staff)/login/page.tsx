@@ -9,7 +9,7 @@ import { LoginForm } from './LoginForm'
 
 export const runtime = 'nodejs'
 
-export const metadata: Metadata = { title: 'Sign in — Moments' }
+export const metadata: Metadata = { title: 'Sign in - Moments' }
 
 export default async function LoginPage({
   searchParams,

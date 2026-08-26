@@ -14,7 +14,7 @@ import { StatusPicker } from '@/features/projects/components/StatusPicker'
 import { AppShell } from '../AppShell'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Projects — Moments' }
+export const metadata: Metadata = { title: 'Projects - Moments' }
 
 type Row = {
   id: string

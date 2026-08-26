@@ -9,7 +9,7 @@ import { isResetTokenValid } from '@/lib/auth/password-reset'
 import { resetPasswordAction } from './actions'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Set a new password — Moments' }
+export const metadata: Metadata = { title: 'Set a new password - Moments' }
 
 const ERROR_MESSAGE: Record<string, string> = {
   invalid: 'This reset link is invalid or has expired. Please request a new one.',

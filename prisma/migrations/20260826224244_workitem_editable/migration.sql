@@ -1,0 +1,2 @@
+ALTER TABLE "work_items" ADD COLUMN "stage" VARCHAR(50);
+ALTER TABLE "work_items" ADD COLUMN "due_at" TIMESTAMPTZ;

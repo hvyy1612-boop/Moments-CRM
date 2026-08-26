@@ -9,7 +9,7 @@ import { AppShell } from '../../AppShell'
 import { logEnquiryAction } from '../actions'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Log enquiry — Moments' }
+export const metadata: Metadata = { title: 'Log enquiry - Moments' }
 
 const SOURCES = [
   { value: 'WEBSITE', label: 'Website' },

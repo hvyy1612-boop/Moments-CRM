@@ -1,187 +1,131 @@
 
 
 export type ProjectFacts = {
-
   booked: boolean
   shootScheduled: boolean
   galleryPrepared: boolean
   gallerySent: boolean
 }
 
-export type StepTag = 'AUTO' | 'TASK' | 'EMAIL' | 'SHOOT'
+type DerivedDef = { key: string; title: string; fact: keyof ProjectFacts; note?: string; showShootDate?: boolean }
+type StageDef = { key: string; label: string; color: string; derived: DerivedDef[] }
 
-type StepDef =
-  | { key: string; title: string; type: 'derived'; fact: keyof ProjectFacts; tag: StepTag; note?: string; showShootDate?: boolean }
-  | { key: string; title: string; type: 'task'; kind: string; tag: StepTag; dueOffsetDays?: number }
-
-type PhaseDef = { key: string; label: string; color: string; steps: StepDef[] }
-
-export const PROJECT_WORKFLOW_PHASES: PhaseDef[] = [
+export const PROJECT_STAGES: StageDef[] = [
   {
     key: 'booking',
     label: 'Booking',
     color: 'booked',
-    steps: [
-      {
-        key: 'booking_confirmed',
-        title: 'Booking confirmed',
-        type: 'derived',
-        fact: 'booked',
-        tag: 'AUTO',
-        note: 'Auto-checks when a quote is accepted, a contract is signed, or a deposit is paid.',
-      },
+    derived: [
+      { key: 'booking_confirmed', title: 'Booking confirmed', fact: 'booked', note: 'Auto-checks when a quote is accepted, a contract is signed, or a deposit is paid.' },
     ],
   },
-  {
-    key: 'preshoot',
-    label: 'Pre-shoot',
-    color: 'enquiry',
-    steps: [
-      { key: 'confirm_shoot_details', title: 'Confirm shoot details', type: 'task', kind: 'CONFIRM_SHOOT_DETAILS', tag: 'TASK' },
-      { key: 'send_preshoot_reminder', title: 'Send pre-shoot reminder', type: 'task', kind: 'SEND_PRESHOOT_REMINDER', tag: 'EMAIL', dueOffsetDays: -2 },
-      { key: 'preshoot_call', title: 'Pre-shoot confirmation call', type: 'task', kind: 'PRESHOOT_CALL', tag: 'TASK', dueOffsetDays: -1 },
-    ],
-  },
+  { key: 'preshoot', label: 'Pre-shoot', color: 'enquiry', derived: [] },
   {
     key: 'shoot',
     label: 'Shoot',
     color: 'quote',
-    steps: [
-      { key: 'main_shoot', title: 'Main shoot', type: 'derived', fact: 'shootScheduled', tag: 'SHOOT', showShootDate: true, note: 'From the scheduled booking.' },
-      { key: 'shoot_completed', title: 'Mark shoot completed', type: 'task', kind: 'MARK_SHOOT_COMPLETED', tag: 'TASK', dueOffsetDays: 0 },
-    ],
+    derived: [{ key: 'main_shoot', title: 'Main shoot', fact: 'shootScheduled', showShootDate: true, note: 'From the scheduled booking.' }],
   },
-  {
-    key: 'editing',
-    label: 'Editing',
-    color: 'editing',
-    steps: [
-      { key: 'upload_cull', title: 'Upload and cull photos', type: 'task', kind: 'UPLOAD_CULL', tag: 'TASK', dueOffsetDays: 1 },
-      { key: 'send_to_editor', title: 'Send photos to editor', type: 'task', kind: 'SEND_TO_EDITOR', tag: 'TASK', dueOffsetDays: 2 },
-      { key: 'editing_completed', title: 'Editing completed', type: 'task', kind: 'EDITING_COMPLETED', tag: 'TASK' },
-      { key: 'review_edits', title: 'Review edited photos', type: 'task', kind: 'REVIEW_EDITS', tag: 'TASK' },
-    ],
-  },
+  { key: 'editing', label: 'Editing', color: 'editing', derived: [] },
   {
     key: 'delivery',
     label: 'Delivery',
     color: 'delivered',
-    steps: [
-      { key: 'gallery_prepared', title: 'Prepare final gallery', type: 'derived', fact: 'galleryPrepared', tag: 'AUTO' },
-      { key: 'gallery_sent', title: 'Send gallery to client', type: 'derived', fact: 'gallerySent', tag: 'AUTO' },
-      { key: 'confirm_delivery', title: 'Confirm final delivery', type: 'task', kind: 'CONFIRM_DELIVERY', tag: 'TASK' },
+    derived: [
+      { key: 'gallery_prepared', title: 'Prepare final gallery', fact: 'galleryPrepared' },
+      { key: 'gallery_sent', title: 'Send gallery to client', fact: 'gallerySent' },
     ],
   },
 ]
 
-export const PROJECT_TASKS: { kind: string; title: string; phaseKey: string; order: number }[] = []
-const PROJECT_TASK_KIND: Record<string, true> = {}
-{
-  let order = 0
-  for (const phase of PROJECT_WORKFLOW_PHASES) {
-    for (const step of phase.steps) {
-      if (step.type === 'task') {
-        PROJECT_TASKS.push({ kind: step.kind, title: step.title, phaseKey: phase.key, order: order++ })
-        PROJECT_TASK_KIND[step.kind] = true
-      }
-    }
-  }
+export const PROJECT_STAGE_KEYS: ReadonlySet<string> = new Set(PROJECT_STAGES.map((s) => s.key))
+
+export function stageLabel(key: string): string {
+  return PROJECT_STAGES.find((s) => s.key === key)?.label ?? key
 }
 
-export const PROJECT_TASK_KINDS: ReadonlySet<string> = new Set(Object.keys(PROJECT_TASK_KIND))
+export const DEFAULT_PROJECT_TASKS: { stage: string; title: string; dueOffsetDays: number | null }[] = [
+  { stage: 'preshoot', title: 'Confirm shoot details', dueOffsetDays: null },
+  { stage: 'preshoot', title: 'Send pre-shoot reminder', dueOffsetDays: -2 },
+  { stage: 'preshoot', title: 'Pre-shoot confirmation call', dueOffsetDays: -1 },
+  { stage: 'shoot', title: 'Mark shoot completed', dueOffsetDays: 0 },
+  { stage: 'editing', title: 'Upload and cull photos', dueOffsetDays: 1 },
+  { stage: 'editing', title: 'Send photos to editor', dueOffsetDays: 2 },
+  { stage: 'editing', title: 'Editing completed', dueOffsetDays: null },
+  { stage: 'editing', title: 'Review edited photos', dueOffsetDays: null },
+  { stage: 'delivery', title: 'Confirm final delivery', dueOffsetDays: null },
+]
 
-export const STEP_TAG_LABEL: Record<StepTag, string> = {
-  AUTO: 'Auto',
-  TASK: 'Task',
-  EMAIL: 'Email',
-  SHOOT: 'Main shoot',
-}
-
-export type WorkItemLite = {
+export type TaskInput = {
   id: string
-  kind: string
-  status: string
-  completedAt: Date | null
-  completedByName: string | null
-}
-
-export type ProjectBoardStep = {
-  key: string
   title: string
-  type: 'derived' | 'task'
-  tag: StepTag
-  done: boolean
-
-  workItemId: string | null
+  status: string
+  stage: string | null
+  dueAt: Date | null
+  order: number
   completedByName: string | null
   completedAt: Date | null
-  dueLabel: string | null
-  note: string | null
 }
 
-export type ProjectBoardPhase = {
+export type BoardDerivedRow = { key: string; title: string; done: boolean; dueLabel: string | null; note: string | null }
+export type BoardTaskRow = {
+  id: string
+  title: string
+  done: boolean
+  dueLabel: string | null
+  dueValue: string | null
+  completedByName: string | null
+  completedAt: Date | null
+}
+export type BoardStage = {
   key: string
   label: string
   color: string
   active: boolean
-  steps: ProjectBoardStep[]
+  derived: BoardDerivedRow[]
+  tasks: BoardTaskRow[]
 }
+export type ProjectBoard = { stages: BoardStage[]; allDone: boolean }
 
-export type ProjectBoard = { phases: ProjectBoardPhase[]; activePhaseKey: string | null; allDone: boolean }
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
 
 export function buildProjectBoard(
   facts: ProjectFacts,
-  workItems: WorkItemLite[],
+  tasks: TaskInput[],
   shootDate: Date | null,
   formatDate: (d: Date) => string,
 ): ProjectBoard {
-  const byKind = new Map<string, WorkItemLite>()
-  for (const w of workItems) byKind.set(w.kind, w)
+  let activeKey: string | null = null
 
-  const dueLabelFor = (offset: number | undefined): string | null => {
-    if (offset == null || !shootDate) return null
-    const d = new Date(shootDate.getTime() + offset * 86_400_000)
-    return formatDate(d)
-  }
+  const stages: BoardStage[] = PROJECT_STAGES.map((stage) => {
+    const derived: BoardDerivedRow[] = stage.derived.map((d) => ({
+      key: d.key,
+      title: d.title,
+      done: facts[d.fact],
+      dueLabel: d.showShootDate && shootDate ? formatDate(shootDate) : null,
+      note: d.note ?? null,
+    }))
+    const stageTasks: BoardTaskRow[] = tasks
+      .filter((t) => t.stage === stage.key)
+      .sort((a, b) => a.order - b.order)
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        done: t.status === 'COMPLETED',
+        dueLabel: t.dueAt ? formatDate(t.dueAt) : null,
+        dueValue: t.dueAt ? isoDate(t.dueAt) : null,
+        completedByName: t.completedByName,
+        completedAt: t.completedAt,
+      }))
 
-  let activePhaseKey: string | null = null
-  const phases: ProjectBoardPhase[] = PROJECT_WORKFLOW_PHASES.map((phase) => {
-    const steps: ProjectBoardStep[] = phase.steps.map((step) => {
-      if (step.type === 'derived') {
-        return {
-          key: step.key,
-          title: step.title,
-          type: 'derived',
-          tag: step.tag,
-          done: facts[step.fact],
-          workItemId: null,
-          completedByName: null,
-          completedAt: null,
-          dueLabel: step.showShootDate && shootDate ? formatDate(shootDate) : null,
-          note: step.note ?? null,
-        }
-      }
-      const wi = byKind.get(step.kind)
-      const done = wi?.status === 'COMPLETED'
-      return {
-        key: step.key,
-        title: step.title,
-        type: 'task',
-        tag: step.tag,
-        done,
-        workItemId: wi?.id ?? null,
-        completedByName: wi?.completedByName ?? null,
-        completedAt: wi?.completedAt ?? null,
-        dueLabel: dueLabelFor(step.dueOffsetDays),
-        note: null,
-      }
-    })
-    const phaseComplete = steps.every((s) => s.done)
-    if (!phaseComplete && activePhaseKey === null) activePhaseKey = phase.key
-    return { key: phase.key, label: phase.label, color: phase.color, active: false, steps }
+    const incomplete = derived.some((d) => !d.done) || stageTasks.some((t) => !t.done)
+    if (incomplete && activeKey === null) activeKey = stage.key
+
+    return { key: stage.key, label: stage.label, color: stage.color, active: false, derived, tasks: stageTasks }
   })
 
-  for (const phase of phases) phase.active = phase.key === activePhaseKey
-  const allDone = activePhaseKey === null
-  return { phases, activePhaseKey, allDone }
+  for (const s of stages) s.active = s.key === activeKey
+  return { stages, allDone: activeKey === null }
 }

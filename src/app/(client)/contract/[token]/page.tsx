@@ -11,7 +11,7 @@ import { formatSydneyDate } from '@/lib/time'
 import { ContractSign } from './ContractSign'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Your contract — Moments' }
+export const metadata: Metadata = { title: 'Your contract - Moments' }
 
 export default async function ClientContractPage({
   params,

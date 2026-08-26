@@ -8,7 +8,7 @@ import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requestResetAction } from './actions'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Reset password — Moments' }
+export const metadata: Metadata = { title: 'Reset password - Moments' }
 
 export default async function ForgotPasswordPage({
   searchParams,
