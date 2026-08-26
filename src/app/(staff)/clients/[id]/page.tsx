@@ -299,16 +299,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
           {/* Right: activity */}
           <div className="flex flex-col gap-4 lg:col-span-2">
-            <SectionCard
-              title="Enquiries"
-              icon={<IconLeads />}
-              count={enquiries.length}
-              action={
-                <Link href="/enquiries/new" className="text-sm font-bold text-accent-ink hover:underline">
-                  + New
-                </Link>
-              }
-            >
+            <SectionCard title="Enquiries" icon={<IconLeads />} count={enquiries.length}>
               {enquiries.length === 0 ? (
                 <p className="text-base text-ink-muted">No enquiries.</p>
               ) : (

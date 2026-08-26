@@ -71,6 +71,6 @@ export const ENQUIRY_EMPTY: Record<string, { title: string; description: string 
   },
   all: {
     title: 'No enquiries yet',
-    description: 'Log a new lead using the Log enquiry button above, or wait for one from the website.',
+    description: 'Add a client to start a lead, or wait for one from the website.',
   },
 }
