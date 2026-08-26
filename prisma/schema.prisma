@@ -988,10 +988,12 @@ model WorkItem {
   companyId         String         @map("company_id") @db.VarChar(30)
   enquiryId         String?        @map("enquiry_id") @db.VarChar(30)
   projectId         String?        @map("project_id") @db.VarChar(30)
-  kind              String         @db.VarChar(50) // e.g. REVIEW_ENQUIRY, REPLY_TO_CLIENT
+  kind              String         @db.VarChar(50) // e.g. REVIEW_ENQUIRY, or CUSTOM for a staff-added task
+  stage             String?        @db.VarChar(50) // workflow group key (project checklist): preshoot, shoot, ...
   title             String         @db.VarChar(150)
   status            WorkItemStatus @default(PENDING)
   order             Int            @default(0)
+  dueAt             DateTime?      @map("due_at") @db.Timestamptz // optional per-task due date (editable)
   completedByUserId String?        @map("completed_by_user_id") @db.VarChar(30)
   completedAt       DateTime?      @map("completed_at") @db.Timestamptz
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz

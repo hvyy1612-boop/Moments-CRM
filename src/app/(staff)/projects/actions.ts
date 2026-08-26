@@ -9,7 +9,13 @@ import { prisma } from '@/lib/db'
 import { assignResource, createBooking } from '@/lib/domain/booking'
 import { logCommunication } from '@/lib/domain/communication'
 import { createProjectFromEnquiry } from '@/lib/domain/project'
-import { toggleProjectTask } from '@/lib/domain/project-workflow'
+import {
+  addProjectTask,
+  deleteProjectTask,
+  moveProjectTask,
+  toggleProjectTask,
+  updateProjectTask,
+} from '@/lib/domain/project-workflow'
 import { enquirySchema } from '@/lib/validation/enquiry'
 import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/contract'
 import { addGalleryItem, createGallery, publishGallery } from '@/lib/domain/delivery'
@@ -376,6 +382,14 @@ export async function publishGalleryAction(formData: FormData): Promise<void> {
   revalidatePath(`/projects/${projectId}`)
 }
 
+/** A yyyy-mm-dd form value to a Date, or null. */
+function parseDue(formData: FormData): Date | null {
+  const raw = String(formData.get('dueAt') ?? '').trim()
+  if (!raw) return null
+  const d = new Date(raw)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
 /** Toggle a workflow task on a project (tick to complete, tick again to reopen). Backend + audit. */
 export async function toggleProjectTaskAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
@@ -388,6 +402,73 @@ export async function toggleProjectTaskAction(formData: FormData): Promise<void>
     await toggleProjectTask(workItemId, user.id)
   } catch {
     // Double submit / stale id: the re-render shows the real state.
+  }
+  revalidatePath(`/projects/${projectId}`)
+}
+
+/** Add a task to a stage of the project's workflow. */
+export async function addProjectTaskAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const stage = String(formData.get('stage') ?? '')
+  const title = String(formData.get('title') ?? '')
+  if (!projectId || !stage || !title.trim()) return
+  try {
+    await addProjectTask(projectId, stage, title, parseDue(formData), user.id)
+  } catch {
+    // Invalid stage / empty title: the re-render shows the real state.
+  }
+  revalidatePath(`/projects/${projectId}`)
+}
+
+/** Rename a task and/or change its due date. */
+export async function updateProjectTaskAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const workItemId = String(formData.get('workItemId') ?? '')
+  const title = String(formData.get('title') ?? '')
+  if (!projectId || !workItemId || !title.trim()) return
+  try {
+    await updateProjectTask(workItemId, title, parseDue(formData), user.id)
+  } catch {
+    // no-op on stale id
+  }
+  revalidatePath(`/projects/${projectId}`)
+}
+
+/** Delete a task from the project's workflow. */
+export async function deleteProjectTaskAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const workItemId = String(formData.get('workItemId') ?? '')
+  if (!projectId || !workItemId) return
+  try {
+    await deleteProjectTask(workItemId, user.id)
+  } catch {
+    // no-op on stale id
+  }
+  revalidatePath(`/projects/${projectId}`)
+}
+
+/** Move a task up or down within its stage. */
+export async function moveProjectTaskAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const workItemId = String(formData.get('workItemId') ?? '')
+  const direction = String(formData.get('direction') ?? '') === 'up' ? 'up' : 'down'
+  if (!projectId || !workItemId) return
+  try {
+    await moveProjectTask(workItemId, direction, user.id)
+  } catch {
+    // no-op on stale id
   }
   revalidatePath(`/projects/${projectId}`)
 }

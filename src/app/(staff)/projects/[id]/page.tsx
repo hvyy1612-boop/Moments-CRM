@@ -11,17 +11,16 @@ import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
 import { getProjectBoard } from '@/lib/domain/project-workflow'
-import { STEP_TAG_LABEL } from '@/features/projects/workflow'
 import { AppShell } from '../../AppShell'
 import {
   createContractAction,
   createQuoteAction,
   logProjectClientReplyAction,
   sendProjectReplyAction,
-  toggleProjectTaskAction,
 } from '../actions'
 import { ContractSend } from './ContractSend'
 import { HistoryLogModal, type HistoryEntry } from './HistoryLogModal'
+import { ProjectWorkflow } from './ProjectWorkflow'
 import { Delivery } from './Delivery'
 import { Finance } from './Finance'
 import { QuoteBuilder } from './QuoteBuilder'
@@ -52,15 +51,6 @@ function label(value: string): string {
   return value.toLowerCase().replace(/_/g, ' ')
 }
 
-/** Phase colour -> literal Tailwind classes (literals so the JIT generates them). */
-const PHASE_CLASSES: Record<string, { rail: string; label: string; tag: string }> = {
-  booked: { rail: 'bg-booked', label: 'text-booked-ink', tag: 'bg-booked text-booked-ink' },
-  enquiry: { rail: 'bg-enquiry', label: 'text-enquiry-ink', tag: 'bg-enquiry text-enquiry-ink' },
-  quote: { rail: 'bg-quote', label: 'text-quote-ink', tag: 'bg-quote text-quote-ink' },
-  editing: { rail: 'bg-editing', label: 'text-editing-ink', tag: 'bg-editing text-editing-ink' },
-  delivered: { rail: 'bg-delivered', label: 'text-delivered-ink', tag: 'bg-delivered text-delivered-ink' },
-}
-const PHASE_FALLBACK = { rail: 'bg-hold', label: 'text-hold-ink', tag: 'bg-hold text-hold-ink' }
 
 /** Turn an audit action + payload into the History Log's plain-language columns. */
 function historyActionType(action: string): string {
@@ -231,14 +221,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <p className="mt-2 text-base text-ink-muted">
             {board.allDone ? (
               <span className="font-bold text-delivered-ink">All workflow steps complete</span>
-            ) : board.activePhaseKey ? (
+            ) : (
               <>
                 Now in:{' '}
-                <span className="font-bold text-ink">
-                  {board.phases.find((p) => p.key === board.activePhaseKey)?.label ?? ''}
-                </span>
+                <span className="font-bold text-ink">{board.stages.find((s) => s.active)?.label ?? ''}</span>
               </>
-            ) : null}
+            )}
           </p>
         ) : null}
 
@@ -250,86 +238,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 <h2 className="text-xs font-bold uppercase tracking-wide text-muted">Workflow</h2>
                 <HistoryLogModal entries={history} />
               </div>
-              <div className="flex flex-col gap-5">
-                {board.phases.map((phase) => {
-                  const cls = PHASE_CLASSES[phase.color] ?? PHASE_FALLBACK
-                  return (
-                    <div key={phase.key} className="flex gap-3">
-                      <div className={`w-1 shrink-0 rounded ${cls.rail}`} aria-hidden="true" />
-                      <div className="min-w-0 flex-1">
-                        <div className="mb-1.5 flex items-center gap-2">
-                          <span className={`text-xs font-bold uppercase tracking-wide ${cls.label}`}>
-                            {phase.label}
-                          </span>
-                          {phase.active && !board.allDone ? (
-                            <span className="rounded bg-accent px-1.5 py-0.5 text-xs font-bold text-accent-ink">
-                              Now
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                          {phase.steps.map((step) => {
-                            const canToggle = step.type === 'task' && step.workItemId
-                            const checkClass = `flex h-4 w-4 shrink-0 items-center justify-center rounded border text-xs ${
-                              step.done
-                                ? 'border-delivered-ink bg-delivered text-delivered-ink'
-                                : 'border-line-strong text-transparent'
-                            }`
-                            return (
-                              <div
-                                key={step.key}
-                                className="flex items-start gap-2 rounded-md border border-line px-3 py-2"
-                              >
-                                {canToggle ? (
-                                  <form action={toggleProjectTaskAction} className="mt-0.5">
-                                    <input type="hidden" name="csrf" value={csrf} />
-                                    <input type="hidden" name="projectId" value={project.id} />
-                                    <input type="hidden" name="workItemId" value={step.workItemId ?? ''} />
-                                    <button
-                                      type="submit"
-                                      aria-label={step.done ? 'Reopen task' : 'Mark done'}
-                                      className={`${checkClass} ${step.done ? '' : 'hover:border-ink'}`}
-                                    >
-                                      ✓
-                                    </button>
-                                  </form>
-                                ) : (
-                                  <span className={`mt-0.5 ${checkClass}`} aria-hidden="true">
-                                    ✓
-                                  </span>
-                                )}
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className={`text-base ${step.done ? 'text-ink-muted' : 'text-ink'}`}>
-                                      {step.title}
-                                    </span>
-                                    <span className={`rounded px-1.5 py-0.5 text-xs font-bold ${cls.tag}`}>
-                                      {STEP_TAG_LABEL[step.tag]}
-                                    </span>
-                                    {step.dueLabel ? (
-                                      <span className="rounded bg-paper px-1.5 py-0.5 text-xs text-ink-muted">
-                                        {step.dueLabel}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                  {step.done && step.completedByName ? (
-                                    <div className="text-sm text-muted">
-                                      {step.completedByName}
-                                      {step.completedAt ? ` · ${formatSydneyDateTime(step.completedAt)}` : ''}
-                                    </div>
-                                  ) : step.note ? (
-                                    <div className="text-sm text-muted">{step.note}</div>
-                                  ) : null}
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+              <ProjectWorkflow
+                stages={board.stages}
+                allDone={board.allDone}
+                projectId={project.id}
+                csrf={csrf}
+              />
             </section>
 
             {/* Conversation: reuses the Communication model, kept separate from the workflow. */}
