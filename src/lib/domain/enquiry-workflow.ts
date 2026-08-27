@@ -34,8 +34,10 @@ export async function seedEnquiryWorkflow(
       enquiryId: enquiry.id,
       kind: 'TASK',
       stage: t.stage,
+      type: t.type,
       title: t.title,
-      status: 'PENDING' as const,
+      status: t.done ? ('COMPLETED' as const) : ('PENDING' as const),
+      completedAt: t.done ? new Date() : null,
       order: i,
     })),
   })
@@ -57,6 +59,7 @@ export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> 
       title: true,
       status: true,
       stage: true,
+      type: true,
       dueAt: true,
       order: true,
       completedAt: true,
@@ -68,6 +71,7 @@ export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> 
     title: w.title,
     status: w.status,
     stage: w.stage,
+    type: w.type,
     dueAt: w.dueAt,
     order: w.order,
     completedByName: w.completedBy?.name ?? null,
@@ -133,22 +137,26 @@ export async function startQuoting(enquiryId: string, actorUserId: string) {
 async function loadTask(taskId: string) {
   const task = await prisma.workItem.findUnique({
     where: { id: taskId },
-    select: { id: true, enquiryId: true, companyId: true, stage: true, order: true, status: true, title: true },
+    select: { id: true, enquiryId: true, companyId: true, stage: true, order: true, status: true, title: true, type: true },
   })
   if (!task || !task.enquiryId) throw new Error('Task not found.')
   return task
 }
 
+const ADDABLE = new Set(['TODO', 'AUTO_EMAIL', 'APPOINTMENT', 'SHOOT'])
+
 export async function addEnquiryTask(
   enquiryId: string,
   stage: string,
   title: string,
+  type: string,
   dueAt: Date | null,
   actorUserId: string,
 ) {
   const clean = title.trim()
   if (!clean) throw new Error('A task needs a title.')
   if (!ENQUIRY_STAGE_KEYS.has(stage)) throw new Error('Unknown stage.')
+  const taskType = ADDABLE.has(type) ? type : 'TODO'
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUniqueOrThrow({ where: { id: enquiryId }, select: { companyId: true } })
     const last = await tx.workItem.findFirst({
@@ -162,6 +170,7 @@ export async function addEnquiryTask(
         enquiryId,
         kind: 'CUSTOM',
         stage,
+        type: taskType,
         title: clean,
         status: 'PENDING',
         order: (last?.order ?? 0) + 1,
@@ -226,6 +235,7 @@ export async function moveEnquiryTask(taskId: string, direction: 'up' | 'down', 
 
 export async function toggleEnquiryTask(taskId: string, actorUserId: string) {
   const task = await loadTask(taskId)
+  if (task.type === 'AUTO') return
   const completing = task.status !== 'COMPLETED'
   await prisma.$transaction(async (tx) => {
     await tx.workItem.update({

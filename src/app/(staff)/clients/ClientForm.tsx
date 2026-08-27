@@ -1,5 +1,13 @@
 import { Button } from '@/components/ui/Button'
-import { Checkbox, Field, TextInput, Textarea } from '@/components/ui/form'
+import { Checkbox, Field, Select, TextInput, Textarea } from '@/components/ui/form'
+
+const SOURCES = [
+  { value: 'MANUAL', label: 'Manual' },
+  { value: 'REFERRAL', label: 'Referral' },
+  { value: 'WEBSITE', label: 'Website' },
+  { value: 'INSTAGRAM', label: 'Instagram' },
+  { value: 'OTHER', label: 'Other' },
+]
 
 export type ClientFormValues = {
   firstName?: string | null
@@ -22,12 +30,14 @@ export function ClientForm({
   values = {},
   clientId,
   submitLabel,
+  showEnquiryFields = false,
 }: {
   action: (formData: FormData) => void | Promise<void>
   csrf: string
   values?: ClientFormValues
   clientId?: string
   submitLabel: string
+  showEnquiryFields?: boolean
 }) {
   const v = values
   return (
@@ -77,9 +87,37 @@ export function ClientForm({
         </Field>
       </div>
 
+      {showEnquiryFields ? (
+        <div className="mt-6 border-t border-line pt-6">
+          <p className="mb-4 text-xs font-bold uppercase tracking-wide text-muted">Enquiry</p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Event type" htmlFor="eventType">
+              <TextInput id="eventType" name="eventType" placeholder="Wedding" />
+            </Field>
+            <Field label="Event date" htmlFor="eventDate">
+              <TextInput id="eventDate" name="eventDate" type="date" />
+            </Field>
+            <Field label="Source" htmlFor="source">
+              <Select id="source" name="source" defaultValue="MANUAL">
+                {SOURCES.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+        </div>
+      ) : null}
+
       <div className="mt-4">
-        <Field label="Notes" htmlFor="notes">
-          <Textarea id="notes" name="notes" defaultValue={v.notes ?? ''} placeholder="Anything worth remembering about this client." />
+        <Field label={showEnquiryFields ? 'Note' : 'Notes'} htmlFor="notes">
+          <Textarea
+            id="notes"
+            name="notes"
+            defaultValue={v.notes ?? ''}
+            placeholder={showEnquiryFields ? 'What are they looking for?' : 'Anything worth remembering about this client.'}
+          />
         </Field>
       </div>
 

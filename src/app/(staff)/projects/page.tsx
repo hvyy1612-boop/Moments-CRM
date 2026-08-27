@@ -9,6 +9,7 @@ import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
 import { isClosedLabel, resolveLabel, type StatusLabel } from '@/features/projects/labels'
+import { stageLabel } from '@/features/projects/workflow'
 import { getCompanyStatusLabels } from '@/lib/domain/status-labels'
 import { StatusPicker } from '@/features/projects/components/StatusPicker'
 import { AppShell } from '../AppShell'
@@ -24,6 +25,8 @@ type Row = {
   label: StatusLabel
   closed: boolean
   enquiredAt: Date
+  nextTask: string | null
+  nextStage: string | null
 }
 
 function Group({
@@ -57,6 +60,7 @@ function Group({
               <th className="border-b border-r border-line px-3 py-2.5 font-bold">Client</th>
               <th className="border-b border-r border-line px-3 py-2.5 font-bold">Project</th>
               <th className="border-b border-r border-line px-3 py-2.5 font-bold">Enquired</th>
+              <th className="border-b border-r border-line px-3 py-2.5 font-bold">Next task</th>
               <th className="w-40 border-b border-line px-3 py-2.5 font-bold">Status</th>
             </tr>
           </thead>
@@ -81,6 +85,18 @@ function Group({
                 <td className="tabular border-b border-r border-line px-3 py-2.5 text-sm text-ink-muted">
                   {formatSydneyDate(row.enquiredAt)}
                 </td>
+                <td className="border-b border-r border-line px-3 py-2.5 text-sm">
+                  {row.nextTask ? (
+                    <>
+                      <span className="text-ink">{row.nextTask}</span>
+                      {row.nextStage ? (
+                        <span className="text-ink-muted"> · {stageLabel(row.nextStage)}</span>
+                      ) : null}
+                    </>
+                  ) : (
+                    <span className="text-muted">-</span>
+                  )}
+                </td>
                 <td className="border-b border-line p-0">
                   <StatusPicker
                     projectId={row.id}
@@ -94,7 +110,7 @@ function Group({
             ))}
             <tr>
               <td className="px-3 py-2.5" />
-              <td colSpan={4} className="px-3 py-2.5 text-sm text-muted">
+              <td colSpan={5} className="px-3 py-2.5 text-sm text-muted">
                 <Link href="/projects/new" className="hover:text-accent-ink">
                   + New project
                 </Link>
@@ -115,13 +131,22 @@ export default async function ProjectsPage() {
   const [projects, labels] = await Promise.all([
     prisma.project.findMany({
       orderBy: { enquiryReceivedAt: 'desc' },
-      include: { client: { select: { displayName: true } } },
+      include: {
+        client: { select: { displayName: true } },
+        workItems: {
+          where: { status: 'PENDING', type: { not: 'AUTO' } },
+          orderBy: { order: 'asc' },
+          take: 1,
+          select: { title: true, stage: true },
+        },
+      },
     }),
     getCompanyStatusLabels(),
   ])
 
   const rows: Row[] = projects.map((p) => {
     const label = resolveLabel(p, labels)
+    const next = p.workItems[0]
     return {
       id: p.id,
       code: p.code,
@@ -130,6 +155,8 @@ export default async function ProjectsPage() {
       label,
       closed: isClosedLabel(label),
       enquiredAt: p.enquiryReceivedAt,
+      nextTask: next?.title ?? null,
+      nextStage: next?.stage ?? null,
     }
   })
   const active = rows.filter((r) => !r.closed)

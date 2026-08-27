@@ -1,5 +1,6 @@
 'use server'
 
+import { EnquirySource } from '@prisma/client'
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -12,6 +13,7 @@ import {
   restoreClient,
   updateClient,
 } from '@/lib/domain/client'
+import { createEnquiry } from '@/lib/domain/enquiry'
 import { clientSchema } from '@/lib/validation/client'
 
 async function requireStaff() {
@@ -49,9 +51,41 @@ function parseClient(formData: FormData) {
 export async function createClientAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const client = await createClient(parseClient(formData), user.id)
+  const data = parseClient(formData)
+  await createClient(data, user.id)
+
+  const name = [data.firstName, data.lastName].filter(Boolean).join(' ') || data.company || data.email
+  const eventDateRaw = String(formData.get('eventDate') ?? '').trim()
+  const eventDate = eventDateRaw ? new Date(eventDateRaw) : null
+  const sourceRaw = String(formData.get('source') ?? '').toUpperCase()
+  const source = (Object.values(EnquirySource) as string[]).includes(sourceRaw)
+    ? (sourceRaw as EnquirySource)
+    : EnquirySource.MANUAL
+
+  const enquiry = await createEnquiry(
+    {
+      name,
+      firstName: data.firstName ?? null,
+      lastName: data.lastName ?? null,
+      email: data.email,
+      phone: data.phone ?? null,
+      street: data.street ?? null,
+      suburb: data.suburb ?? null,
+      state: data.state ?? null,
+      postcode: data.postcode ?? null,
+      country: data.country ?? null,
+      isCompany: data.isCompany ?? false,
+      eventType: String(formData.get('eventType') ?? '').trim() || null,
+      eventDate,
+      message: data.notes ?? null,
+      source,
+    },
+    user.id,
+  )
+
   revalidatePath('/clients')
-  redirect(`/clients/${client.id}`)
+  revalidatePath('/enquiries')
+  redirect(`/enquiries/${enquiry.id}`)
 }
 
 export async function updateClientAction(formData: FormData): Promise<void> {

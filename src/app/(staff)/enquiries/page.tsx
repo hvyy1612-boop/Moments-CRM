@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
-import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StatusTag } from '@/components/ui/StatusTag'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
@@ -101,14 +100,8 @@ export default async function EnquiriesPage({
   const shown = rows.filter((r) => activeView.match(r.status, r.waitingOn))
   const empty = ENQUIRY_EMPTY[activeView.key] ?? ENQUIRY_EMPTY.all!
 
-  const action = (
-    <Link href="/enquiries/new">
-      <Button size="sm">+ Log enquiry</Button>
-    </Link>
-  )
-
   return (
-    <AppShell user={user} csrf={csrf} active="enquiries" action={action}>
+    <AppShell user={user} csrf={csrf} active="enquiries">
       <p className="mb-4 text-base text-ink-muted">Who needs attention from you today.</p>
 
       <div className="flex flex-wrap items-center gap-2">

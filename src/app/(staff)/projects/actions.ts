@@ -10,6 +10,7 @@ import { assignResource, createBooking } from '@/lib/domain/booking'
 import { logCommunication } from '@/lib/domain/communication'
 import { createProjectFromEnquiry } from '@/lib/domain/project'
 import {
+  addProjectStageBlock,
   addProjectTask,
   deleteProjectTask,
   moveProjectTask,
@@ -398,9 +399,10 @@ export async function addProjectTaskAction(formData: FormData): Promise<void> {
   const projectId = String(formData.get('projectId') ?? '')
   const stage = String(formData.get('stage') ?? '')
   const title = String(formData.get('title') ?? '')
+  const type = String(formData.get('type') ?? 'TODO')
   if (!projectId || !stage || !title.trim()) return
   try {
-    await addProjectTask(projectId, stage, title, parseDue(formData), user.id)
+    await addProjectTask(projectId, stage, title, type, parseDue(formData), user.id)
   } catch {
     // Invalid stage / empty title: the re-render shows the real state.
   }
@@ -434,6 +436,21 @@ export async function deleteProjectTaskAction(formData: FormData): Promise<void>
     await deleteProjectTask(workItemId, user.id)
   } catch {
     // no-op on stale id
+  }
+  revalidatePath(`/projects/${projectId}`)
+}
+
+export async function addProjectStageBlockAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const stage = String(formData.get('stage') ?? '')
+  if (!projectId || !stage) return
+  try {
+    await addProjectStageBlock(projectId, stage, user.id)
+  } catch {
+    // not an optional stage / already populated: no-op
   }
   revalidatePath(`/projects/${projectId}`)
 }

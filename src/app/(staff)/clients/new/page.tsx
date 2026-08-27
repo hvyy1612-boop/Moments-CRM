@@ -23,9 +23,10 @@ export default async function NewClientPage() {
         </Link>
         <h1 className="mt-3 font-serif text-2xl font-semibold text-ink">Add a client</h1>
         <p className="mt-1 text-base text-ink-muted">
-          Record a client directly. You can create projects, quotes, and invoices for them afterwards.
+          Record the client and their enquiry. This opens a lead in Enquiries with a workflow you can
+          work through, and becomes a project once you convert it.
         </p>
-        <ClientForm action={createClientAction} csrf={csrf} submitLabel="Add client" />
+        <ClientForm action={createClientAction} csrf={csrf} submitLabel="Add client" showEnquiryFields />
       </div>
     </AppShell>
   )

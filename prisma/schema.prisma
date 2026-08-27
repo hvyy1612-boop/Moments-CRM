@@ -908,6 +908,7 @@ model WorkItem {
   projectId         String?        @map("project_id") @db.VarChar(30)
   kind              String         @db.VarChar(50)
   stage             String?        @db.VarChar(50)
+  type              String         @default("TODO") @db.VarChar(20)
   title             String         @db.VarChar(150)
   status            WorkItemStatus @default(PENDING)
   order             Int            @default(0)
