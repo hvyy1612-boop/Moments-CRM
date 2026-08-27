@@ -1,3 +1,4 @@
+import type { EnquiryStatus } from '@prisma/client'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
@@ -11,6 +12,7 @@ import {
   ENQUIRY_STAGE_KIND,
   ENQUIRY_STAGE_LABEL,
   ENQUIRY_VIEWS,
+  OPEN_STATUSES,
   isOpenEnquiry,
 } from '@/features/enquiries/status'
 import { currentActionText } from '@/features/enquiries/workflow'
@@ -59,6 +61,8 @@ export default async function EnquiriesPage({
   const activeView = ENQUIRY_VIEWS.find((v) => v.key === requested) ?? ENQUIRY_VIEWS[0]!
 
   const enquiries = await prisma.enquiry.findMany({
+
+    where: { status: { in: Array.from(OPEN_STATUSES) as EnquiryStatus[] } },
     orderBy: { updatedAt: 'asc' }, // oldest-waiting first, so the most overdue rises to the top
     select: {
       id: true,
@@ -113,7 +117,7 @@ export default async function EnquiriesPage({
           return (
             <Link
               key={v.key}
-              href={v.key === 'attention' ? '/enquiries' : `/enquiries?view=${v.key}`}
+              href={v.key === 'all' ? '/enquiries' : `/enquiries?view=${v.key}`}
               className={`rounded border px-3 py-1.5 text-sm transition-colors ${
                 isActive
                   ? 'border-ink bg-ink font-bold text-surface'

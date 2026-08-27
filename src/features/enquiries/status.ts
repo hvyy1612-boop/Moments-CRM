@@ -33,30 +33,31 @@ export function waitingLabel(waitingOn: string | null): string {
 type ViewMatch = (status: string, waitingOn: string | null) => boolean
 
 export const ENQUIRY_VIEWS: { key: string; label: string; match: ViewMatch }[] = [
+
+  { key: 'all', label: 'All open', match: () => true },
   {
     key: 'attention',
-    label: 'Needs attention',
+    label: 'Needs your reply',
     match: (s, w) => isOpenEnquiry(s) && w === 'STUDIO',
   },
   {
     key: 'waiting',
-    label: 'Waiting for client reply',
+    label: 'Waiting on client',
     match: (s, w) => isOpenEnquiry(s) && w === 'CLIENT',
   },
-  { key: 'all', label: 'All', match: () => true },
 ]
 
 export const ENQUIRY_EMPTY: Record<string, { title: string; description: string }> = {
+  all: {
+    title: 'No open enquiries',
+    description: 'New leads from the website or "Add client" appear here. Booked clients are in Jobs.',
+  },
   attention: {
     title: "You're all caught up",
-    description: 'No enquiries are waiting for your reply right now.',
+    description: 'No open enquiries are waiting for your reply right now.',
   },
   waiting: {
     title: 'Nothing waiting on a client',
-    description: 'No enquiries are currently with a client for their response.',
-  },
-  all: {
-    title: 'No enquiries yet',
-    description: 'Add a client to start a lead, or wait for one from the website.',
+    description: 'No open enquiries are currently with a client for their response.',
   },
 }
