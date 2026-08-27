@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { ADDABLE_TASK_TYPES, type BoardStage, type TaskType } from '@/features/projects/workflow'
+import { WorkflowProgress } from '@/components/WorkflowProgress'
 import {
   addProjectStageBlockAction,
   addProjectTaskAction,
@@ -48,8 +49,18 @@ export function ProjectWorkflow({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [addingStage, setAddingStage] = useState<string | null>(null)
 
+  const allTasks = stages.flatMap((s) => s.tasks)
+  const nowStage = stages.find((s) => s.active) ?? null
+  const nextTask = nowStage?.tasks.find((t) => !t.done) ?? allTasks.find((t) => !t.done) ?? null
+
   return (
     <div className="flex flex-col gap-5">
+      <WorkflowProgress
+        done={allTasks.filter((t) => t.done).length}
+        total={allTasks.length}
+        nowLabel={allDone ? null : (nowStage?.label ?? null)}
+        nextTitle={allDone ? null : (nextTask?.title ?? null)}
+      />
       {stages.map((stage) => {
         const cls = PHASE[stage.color] ?? FALLBACK
         return (
