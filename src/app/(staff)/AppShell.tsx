@@ -14,6 +14,7 @@ export type NavKey =
   | 'finance'
   | 'activity'
   | 'settings'
+  | 'users'
 
 type NavGroup = 'Studio' | 'Operations' | 'Insights' | 'System'
 type NavItem = {
@@ -55,6 +56,7 @@ const NAV: NavItem[] = [
   { key: 'dashboard', label: 'Dashboard', href: '/dashboard', group: 'Insights', built: true, icon: svg(<><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>) },
   { key: 'activity', label: 'Activity', href: '/activity', group: 'Insights', built: true, permission: 'AUTH_LOG_VIEW', icon: svg(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></>) },
   { key: 'settings', label: 'Settings', href: '/settings', group: 'System', built: true, icon: svg(<><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2l-.4-2.6H9.9l-.4 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2l.4 2.6h4.2l.4-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2Z" /></>) },
+  { key: 'users', label: 'Users', href: '/users', group: 'System', built: true, permission: 'USER_MANAGE', icon: svg(<><circle cx="9" cy="8" r="3" /><path d="M3 20a6 6 0 0 1 12 0" /><path d="M16 3.5a3 3 0 0 1 0 5.8M21 20a5 5 0 0 0-4-4.9" /></>) },
 ]
 
 export function AppShell({

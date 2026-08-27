@@ -314,6 +314,7 @@ model User {
   role               UserRole
   name               String    @db.VarChar(150)
   isActive           Boolean   @default(true) @map("is_active")
+  status             String    @default("PENDING") @db.VarChar(20) // PENDING | ACTIVE | REJECTED (self-signup approval)
   mustChangePassword Boolean   @default(false) @map("must_change_password")
   lastLoginAt        DateTime? @map("last_login_at") @db.Timestamptz
   failedAttempts     Int       @default(0) @map("failed_attempts")
