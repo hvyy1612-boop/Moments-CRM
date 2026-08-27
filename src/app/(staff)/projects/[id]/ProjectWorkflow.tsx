@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ADDABLE_TASK_TYPES, type BoardStage, type TaskType } from '@/features/projects/workflow'
 import {
+  addProjectStageBlockAction,
   addProjectTaskAction,
   deleteProjectTaskAction,
   moveProjectTaskAction,
@@ -153,6 +154,20 @@ export function ProjectWorkflow({
                     </div>
                   )
                 })}
+
+                {stage.optional && stage.tasks.length === 0 ? (
+                  <form action={addProjectStageBlockAction}>
+                    <input type="hidden" name="csrf" value={csrf} />
+                    <input type="hidden" name="projectId" value={projectId} />
+                    <input type="hidden" name="stage" value={stage.key} />
+                    <button
+                      type="submit"
+                      className="self-start rounded border border-line-strong px-2.5 py-1 text-sm font-bold text-ink-muted hover:text-ink"
+                    >
+                      + Add {stage.label} tasks
+                    </button>
+                  </form>
+                ) : null}
 
                 {addingStage === stage.key ? (
                   <form

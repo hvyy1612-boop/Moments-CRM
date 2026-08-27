@@ -3,7 +3,9 @@ import { formatSydneyDate } from '@/lib/time'
 import {
   buildProjectBoard,
   DEFAULT_PROJECT_TASKS,
+  OPTIONAL_STAGE_TASKS,
   PROJECT_STAGE_KEYS,
+  PROJECT_STAGES,
   stageLabel,
   type ProjectBoard,
   type ProjectFacts,
@@ -36,6 +38,13 @@ async function seedIfNeeded(tx: Tx, projectId: string, companyId: string) {
   await tx.auditLog.create({
     data: { companyId, action: SEED_ACTION, entityType: 'Project', entityId: projectId },
   })
+}
+
+/** Seed the workflow for a project up front (e.g. right after a booking is confirmed), so the projects
+ *  list shows its next task without waiting for the detail page to be opened. Idempotent. */
+export async function seedProjectWorkflow(projectId: string) {
+  const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId }, select: { companyId: true } })
+  await prisma.$transaction((tx) => seedIfNeeded(tx, projectId, project.companyId))
 }
 
 /** Read the project's business facts + editable task rows and build the board. Seeds once on first read. */
@@ -96,6 +105,40 @@ async function loadTask(taskId: string) {
   })
   if (!task || !task.projectId) throw new Error('Task not found.')
   return task
+}
+
+/** Insert the default task block for an optional stage (Pre-wedding / Video / Film / Album), once. */
+export async function addProjectStageBlock(projectId: string, stage: string, actorUserId: string) {
+  const def = PROJECT_STAGES.find((s) => s.key === stage)
+  const block = OPTIONAL_STAGE_TASKS[stage]
+  if (!def || !def.optional || !block) throw new Error('Not an optional stage.')
+  return prisma.$transaction(async (tx) => {
+    const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { companyId: true } })
+    const existing = await tx.workItem.count({ where: { projectId, stage } })
+    if (existing > 0) return // already has tasks; do not duplicate
+    await tx.workItem.createMany({
+      data: block.map((t, i) => ({
+        companyId: project.companyId,
+        projectId,
+        kind: 'TASK',
+        stage,
+        type: t.type,
+        title: t.title,
+        status: 'PENDING' as const,
+        order: i,
+      })),
+    })
+    await tx.auditLog.create({
+      data: {
+        companyId: project.companyId,
+        actorUserId,
+        action: 'project.stage_block_added',
+        entityType: 'Project',
+        entityId: projectId,
+        afterData: { stage: stageLabel(stage) },
+      },
+    })
+  })
 }
 
 const ADDABLE = new Set(['TODO', 'AUTO_EMAIL', 'APPOINTMENT', 'SHOOT'])

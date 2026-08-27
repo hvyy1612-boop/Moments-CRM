@@ -11,6 +11,9 @@ const MUTATIONS = new Set(['update', 'updateMany', 'delete', 'deleteMany', 'upse
 function createPrisma() {
   return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+    // Neon (serverless) suspends when idle; the first request after a wake can be slow, so give
+    // interactive transactions more room than the 5s default to avoid cold-start failures.
+    transactionOptions: { maxWait: 10_000, timeout: 20_000 },
   }).$extends({
     query: {
       // Application-layer guard mirroring the database triggers: these tables are insert-only.

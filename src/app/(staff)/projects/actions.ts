@@ -10,6 +10,7 @@ import { assignResource, createBooking } from '@/lib/domain/booking'
 import { logCommunication } from '@/lib/domain/communication'
 import { createProjectFromEnquiry } from '@/lib/domain/project'
 import {
+  addProjectStageBlock,
   addProjectTask,
   deleteProjectTask,
   moveProjectTask,
@@ -453,6 +454,22 @@ export async function deleteProjectTaskAction(formData: FormData): Promise<void>
     await deleteProjectTask(workItemId, user.id)
   } catch {
     // no-op on stale id
+  }
+  revalidatePath(`/projects/${projectId}`)
+}
+
+/** Insert the default task block for an optional stage (per package). */
+export async function addProjectStageBlockAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const stage = String(formData.get('stage') ?? '')
+  if (!projectId || !stage) return
+  try {
+    await addProjectStageBlock(projectId, stage, user.id)
+  } catch {
+    // not an optional stage / already populated: no-op
   }
   revalidatePath(`/projects/${projectId}`)
 }

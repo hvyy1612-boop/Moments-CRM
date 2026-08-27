@@ -72,6 +72,38 @@ export const DEFAULT_PROJECT_TASKS: { stage: string; title: string; type: TaskTy
   { stage: 'delivery', title: 'Close project', type: 'TODO' },
 ]
 
+/** Tasks inserted when staff adds an optional stage block (per package). */
+export const OPTIONAL_STAGE_TASKS: Record<string, { title: string; type: TaskType }[]> = {
+  preshoot: [
+    { title: 'Schedule pre-wedding shoot', type: 'APPOINTMENT' },
+    { title: 'Confirm pre-wedding shoot details', type: 'TODO' },
+    { title: 'Conduct pre-wedding shoot', type: 'SHOOT' },
+    { title: 'Back up pre-wedding images', type: 'TODO' },
+    { title: 'Edit and send pre-wedding photos', type: 'TODO' },
+  ],
+  video: [
+    { title: 'Prepare video footage for editing', type: 'TODO' },
+    { title: 'Edit wedding film', type: 'TODO' },
+    { title: 'Colour grade wedding film', type: 'TODO' },
+    { title: 'Review final wedding film', type: 'TODO' },
+    { title: 'Finalise wedding film', type: 'TODO' },
+  ],
+  film: [
+    { title: 'Send film for processing and scanning', type: 'TODO' },
+    { title: 'Review film scans', type: 'TODO' },
+    { title: 'Add film images to client gallery', type: 'TODO' },
+  ],
+  album: [
+    { title: 'Prepare album design', type: 'TODO' },
+    { title: 'Send album draft to client', type: 'TODO' },
+    { title: 'Review client album changes', type: 'TODO' },
+    { title: 'Update album design', type: 'TODO' },
+    { title: 'Approve album for production', type: 'TODO' },
+    { title: 'Send album to print', type: 'TODO' },
+    { title: 'Quality check finished products', type: 'TODO' },
+  ],
+}
+
 export type TaskInput = {
   id: string
   title: string

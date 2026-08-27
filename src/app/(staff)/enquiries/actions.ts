@@ -17,6 +17,7 @@ import {
   toggleEnquiryTask,
   updateEnquiryTask,
 } from '@/lib/domain/enquiry-workflow'
+import { seedProjectWorkflow } from '@/lib/domain/project-workflow'
 
 async function requireStaff() {
   const user = await getSessionUser()
@@ -188,6 +189,7 @@ export async function convertEnquiryAction(formData: FormData): Promise<void> {
   const enquiryId = String(formData.get('enquiryId') ?? '')
   if (!enquiryId) throw new Error('Missing enquiry.')
   const result = await convertEnquiry(enquiryId, user.id)
+  if (result.projectId) await seedProjectWorkflow(result.projectId)
   revalidatePath('/enquiries')
   redirect(`/projects/${result.projectId}`)
 }
