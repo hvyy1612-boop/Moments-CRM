@@ -177,14 +177,6 @@ export default async function ProjectsPage() {
       <p className="mb-4 text-base text-ink-muted">
         Booked jobs in production - from planning through the shoot, editing, and delivery.
       </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded border border-line-strong px-3 py-1.5 text-sm text-ink-muted">
-          Group by: status
-        </span>
-        <span className="rounded border border-line-strong px-3 py-1.5 text-sm text-ink-muted">
-          Filter
-        </span>
-      </div>
 
       {rows.length === 0 ? (
         <div className="mt-6">
