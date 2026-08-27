@@ -46,31 +46,33 @@ type ViewMatch = (status: string, waitingOn: string | null) => boolean
  * the two active views; they only show under All.
  */
 export const ENQUIRY_VIEWS: { key: string; label: string; match: ViewMatch }[] = [
+  // Default view first. Booked leads are excluded at the query level (they are Jobs now), so "All"
+  // here means every open lead in the pipeline - it is never blank while leads are waiting.
+  { key: 'all', label: 'All open', match: () => true },
   {
     key: 'attention',
-    label: 'Needs attention',
+    label: 'Needs your reply',
     match: (s, w) => isOpenEnquiry(s) && w === 'STUDIO',
   },
   {
     key: 'waiting',
-    label: 'Waiting for client reply',
+    label: 'Waiting on client',
     match: (s, w) => isOpenEnquiry(s) && w === 'CLIENT',
   },
-  { key: 'all', label: 'All', match: () => true },
 ]
 
 /** Empty-state copy per view, phrased as a status rather than a dead filter. */
 export const ENQUIRY_EMPTY: Record<string, { title: string; description: string }> = {
+  all: {
+    title: 'No open enquiries',
+    description: 'New leads from the website or "Add client" appear here. Booked clients are in Jobs.',
+  },
   attention: {
     title: "You're all caught up",
-    description: 'No enquiries are waiting for your reply right now.',
+    description: 'No open enquiries are waiting for your reply right now.',
   },
   waiting: {
     title: 'Nothing waiting on a client',
-    description: 'No enquiries are currently with a client for their response.',
-  },
-  all: {
-    title: 'No enquiries yet',
-    description: 'Add a client to start a lead, or wait for one from the website.',
+    description: 'No open enquiries are currently with a client for their response.',
   },
 }
