@@ -2,13 +2,8 @@
 
 import { useState } from 'react'
 import { ADDABLE_TASK_TYPES, type EnqStage, type TaskType } from '@/features/enquiries/workflow'
-import {
-  addEnquiryTaskAction,
-  deleteEnquiryTaskAction,
-  moveEnquiryTaskAction,
-  toggleWorkItemAction,
-  updateEnquiryTaskAction,
-} from '../actions'
+import { addEnquiryTaskAction, updateEnquiryTaskAction } from '../actions'
+import { EnquiryTaskRow } from './EnquiryTaskRow'
 
 const PHASE: Record<string, { rail: string; label: string }> = {
   enquiry: { rail: 'bg-enquiry', label: 'text-enquiry-ink' },
@@ -27,7 +22,6 @@ const TYPE_BADGE: Record<TaskType, string> = {
 
 const inputClass =
   'h-9 w-full rounded border border-line-strong bg-surface px-2.5 text-base text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
-const iconBtn = 'rounded px-1.5 py-0.5 text-sm text-muted hover:text-ink'
 
 function TypeTag({ label, type }: { label: string; type: TaskType }) {
   if (!label) return null
@@ -106,59 +100,13 @@ export function EnquiryWorkflow({
                       </div>
                     </form>
                   ) : (
-                    <div key={t.id} className="flex items-start gap-2 rounded-md border border-line px-3 py-2">
-                      <form action={toggleWorkItemAction} className="mt-0.5">
-                        <input type="hidden" name="csrf" value={csrf} />
-                        <input type="hidden" name="enquiryId" value={enquiryId} />
-                        <input type="hidden" name="workItemId" value={t.id} />
-                        <button
-                          type="submit"
-                          aria-label={t.done ? 'Reopen task' : 'Mark done'}
-                          className={`flex h-4 w-4 items-center justify-center rounded border text-xs ${
-                            t.done ? 'border-delivered-ink bg-delivered text-delivered-ink' : 'border-line-strong text-transparent hover:border-ink'
-                          }`}
-                        >
-                          ✓
-                        </button>
-                      </form>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`text-base ${t.done ? 'text-ink-muted line-through' : 'text-ink'}`}>{t.title}</span>
-                          <TypeTag label={t.typeLabel} type={t.type} />
-                          {t.dueLabel ? (
-                            <span className="rounded bg-paper px-1.5 py-0.5 text-xs text-ink-muted">{t.dueLabel}</span>
-                          ) : null}
-                        </div>
-                        {t.done && t.completedByName ? <div className="text-sm text-muted">Done by {t.completedByName}</div> : null}
-                      </div>
-                      <div className="flex shrink-0 items-center">
-                        <button type="button" onClick={() => setEditingId(t.id)} className={iconBtn}>
-                          Edit
-                        </button>
-                        <form action={moveEnquiryTaskAction} className="inline">
-                          <input type="hidden" name="csrf" value={csrf} />
-                          <input type="hidden" name="enquiryId" value={enquiryId} />
-                          <input type="hidden" name="workItemId" value={t.id} />
-                          <input type="hidden" name="direction" value="up" />
-                          <button type="submit" aria-label="Move up" className={iconBtn}>↑</button>
-                        </form>
-                        <form action={moveEnquiryTaskAction} className="inline">
-                          <input type="hidden" name="csrf" value={csrf} />
-                          <input type="hidden" name="enquiryId" value={enquiryId} />
-                          <input type="hidden" name="workItemId" value={t.id} />
-                          <input type="hidden" name="direction" value="down" />
-                          <button type="submit" aria-label="Move down" className={iconBtn}>↓</button>
-                        </form>
-                        <form action={deleteEnquiryTaskAction} className="inline">
-                          <input type="hidden" name="csrf" value={csrf} />
-                          <input type="hidden" name="enquiryId" value={enquiryId} />
-                          <input type="hidden" name="workItemId" value={t.id} />
-                          <button type="submit" aria-label="Delete task" className="rounded px-1.5 py-0.5 text-sm text-muted hover:text-lost-ink">
-                            Delete
-                          </button>
-                        </form>
-                      </div>
-                    </div>
+                    <EnquiryTaskRow
+                      key={t.id}
+                      task={t}
+                      enquiryId={enquiryId}
+                      csrf={csrf}
+                      onEdit={() => setEditingId(t.id)}
+                    />
                   )
                 })}
 
