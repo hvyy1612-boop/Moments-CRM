@@ -8,7 +8,7 @@ import { signOut } from './actions'
 export type NavKey =
   | 'dashboard'
   | 'enquiries'
-  | 'projects'
+  | 'jobs'
   | 'clients'
   | 'calendar'
   | 'finance'
@@ -28,7 +28,7 @@ type NavItem = {
   icon: ReactNode
 }
 
-// Order follows Monday's logic: the entities you work in every day come first (enquiries → projects →
+// Order follows Monday's logic: the entities you work in every day come first (enquiries → jobs →
 // clients), then operations, then the Dashboard as an overview near the end (not first).
 const GROUPS: NavGroup[] = ['Studio', 'Operations', 'Insights', 'System']
 
@@ -50,7 +50,7 @@ function svg(children: ReactNode): ReactNode {
 const NAV: NavItem[] = [
   { key: 'clients', label: 'Clients', href: '/clients', group: 'Studio', built: true, icon: svg(<><circle cx="9" cy="8" r="3" /><path d="M3 20a6 6 0 0 1 12 0" /><path d="M16 6a3 3 0 0 1 0 6M18 20a5 5 0 0 0-3-4.6" /></>) },
   { key: 'enquiries', label: 'Enquiries', href: '/enquiries', group: 'Studio', built: true, icon: svg(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" /></>) },
-  { key: 'projects', label: 'Projects', href: '/projects', group: 'Studio', built: true, icon: svg(<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />) },
+  { key: 'jobs', label: 'Jobs', href: '/jobs', group: 'Studio', built: true, icon: svg(<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />) },
   { key: 'calendar', label: 'Calendar', href: '/calendar', group: 'Operations', built: true, icon: svg(<><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 2v4M16 2v4" /></>) },
   { key: 'finance', label: 'Finance', href: '/finance', group: 'Operations', built: true, icon: svg(<path d="M12 2v20M17 6.5C17 4.5 14.8 3.5 12 3.5S7 4.7 7 6.8s2 2.7 5 3.4 5 1.4 5 3.5-2.2 3.3-5 3.3-5-1.1-5-3" />) },
   { key: 'dashboard', label: 'Dashboard', href: '/dashboard', group: 'Insights', built: true, icon: svg(<><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>) },
@@ -69,7 +69,7 @@ export function AppShell({
   user: SessionUser
   csrf: string
   active: NavKey
-  /** Optional page-specific primary action rendered on the right of the top bar (e.g. "+ New project"). */
+  /** Optional page-specific primary action rendered on the right of the top bar (e.g. "+ New job"). */
   action?: ReactNode
   children: ReactNode
 }) {

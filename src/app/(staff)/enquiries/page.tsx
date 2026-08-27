@@ -102,7 +102,9 @@ export default async function EnquiriesPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="enquiries">
-      <p className="mb-4 text-base text-ink-muted">Who needs attention from you today.</p>
+      <p className="mb-4 text-base text-ink-muted">
+        Clients who have not booked yet - from first enquiry through consultation, quote, and booking.
+      </p>
 
       <div className="flex flex-wrap items-center gap-2">
         {ENQUIRY_VIEWS.map((v) => {

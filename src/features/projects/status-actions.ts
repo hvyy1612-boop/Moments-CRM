@@ -25,7 +25,7 @@ export async function setProjectStatusAction(formData: FormData): Promise<void> 
   if (!projectId || !labelId) return
 
   await setProjectStatusByLabel(projectId, labelId, user.id)
-  revalidatePath('/projects')
+  revalidatePath('/jobs')
 }
 
 /** Save the company's curated status-label set (Edit Labels). Gated on PROJECT_EDIT. */
@@ -46,5 +46,5 @@ export async function saveStatusLabelsAction(formData: FormData): Promise<void> 
   if (labels.length === 0) return
 
   await saveCompanyStatusLabels(labels)
-  revalidatePath('/projects')
+  revalidatePath('/jobs')
 }

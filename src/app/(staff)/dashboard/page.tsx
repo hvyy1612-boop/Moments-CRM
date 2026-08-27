@@ -88,18 +88,18 @@ export default async function DashboardPage() {
   const attention: Attn[] = []
   for (const p of projects) {
     if (p.lifecycleStatus === 'ENQUIRY') {
-      attention.push({ id: p.id, who: p.client.displayName, what: 'New enquiry awaiting first reply.', tone: 'new', href: `/projects/${p.id}` })
+      attention.push({ id: p.id, who: p.client.displayName, what: 'New enquiry awaiting first reply.', tone: 'new', href: `/jobs/${p.id}` })
     } else if (p.lifecycleStatus === 'AWAITING_DECISION' && p.commercialStatus === 'QUOTED') {
-      attention.push({ id: p.id, who: p.client.displayName, what: 'Quote sent, awaiting client response.', tone: 'waiting', href: `/projects/${p.id}` })
+      attention.push({ id: p.id, who: p.client.displayName, what: 'Quote sent, awaiting client response.', tone: 'waiting', href: `/jobs/${p.id}` })
     } else if (p.lifecycleStatus === 'AWAITING_DECISION' && p.commercialStatus === 'ACCEPTED') {
-      attention.push({ id: p.id, who: p.client.displayName, what: 'Contract sent, awaiting signature.', tone: 'waiting', href: `/projects/${p.id}` })
+      attention.push({ id: p.id, who: p.client.displayName, what: 'Contract sent, awaiting signature.', tone: 'waiting', href: `/jobs/${p.id}` })
     }
   }
   let outstanding = new Prisma.Decimal(0)
   for (const inv of unpaidInvoices) {
     const due = inv.total.sub(inv.amountPaid)
     outstanding = outstanding.add(due)
-    attention.push({ id: inv.id, who: inv.project.client.displayName, what: `Invoice outstanding, ${formatAud(due)} due.`, tone: 'money', href: `/projects/${inv.project.id}` })
+    attention.push({ id: inv.id, who: inv.project.client.displayName, what: `Invoice outstanding, ${formatAud(due)} due.`, tone: 'money', href: `/jobs/${inv.project.id}` })
   }
 
   const newEnquiries = projects.filter((p) => p.lifecycleStatus === 'ENQUIRY').length
@@ -138,8 +138,8 @@ export default async function DashboardPage() {
   }))
 
   const action = (
-    <Link href="/projects/new">
-      <Button size="sm">+ New project</Button>
+    <Link href="/jobs/new">
+      <Button size="sm">+ New job</Button>
     </Link>
   )
 
@@ -162,7 +162,7 @@ export default async function DashboardPage() {
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section className="rounded-md border border-line bg-surface p-5">
-          <h2 className="mb-4 text-lg font-bold text-ink">Project status distribution</h2>
+          <h2 className="mb-4 text-lg font-bold text-ink">Job status distribution</h2>
           <Donut segments={donutSegments} />
         </section>
         <section className="rounded-md border border-line bg-surface p-5">
@@ -208,7 +208,7 @@ export default async function DashboardPage() {
             <ul>
               {upcoming.map((b) => (
                 <li key={b.id} className="border-b border-line px-5 py-3.5 last:border-b-0">
-                  <Link href={`/projects/${b.project.id}`} className="font-serif text-lg font-semibold text-ink hover:text-accent-ink">
+                  <Link href={`/jobs/${b.project.id}`} className="font-serif text-lg font-semibold text-ink hover:text-accent-ink">
                     {b.project.client.displayName}
                   </Link>
                   <div className="mt-0.5 text-sm text-ink-muted">

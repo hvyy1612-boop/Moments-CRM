@@ -10,14 +10,14 @@ export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'New enquiry - Moments' }
 
 export default async function NewEnquiryPage() {
-  const user = await requireRole('/projects/new')
+  const user = await requireRole('/jobs/new')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
   return (
-    <AppShell user={user} csrf={csrf} active="projects">
+    <AppShell user={user} csrf={csrf} active="jobs">
       <div className="mx-auto w-full max-w-lg">
-        <Link href="/projects" className="text-sm text-ink-muted transition-colors hover:text-accent">
+        <Link href="/jobs" className="text-sm text-ink-muted transition-colors hover:text-accent">
           ← Projects
         </Link>
         <h1 className="mt-2 font-serif text-2xl text-ink">New enquiry</h1>

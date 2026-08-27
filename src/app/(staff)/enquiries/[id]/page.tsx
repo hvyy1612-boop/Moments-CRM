@@ -127,7 +127,7 @@ export default async function EnquiryDetailPage({ params }: { params: Promise<{ 
                     <input type="hidden" name="csrf" value={csrf} />
                     <input type="hidden" name="enquiryId" value={enquiry.id} />
                     <Button size="sm" type="submit">
-                      Book it (create project)
+                      Book it (create job)
                     </Button>
                   </form>
                   <form action={updateEnquiryAction}>
@@ -144,10 +144,10 @@ export default async function EnquiryDetailPage({ params }: { params: Promise<{ 
                 </>
               ) : enquiry.status === 'CONVERTED' && enquiry.convertedProjectId ? (
                 <Link
-                  href={`/projects/${enquiry.convertedProjectId}`}
+                  href={`/jobs/${enquiry.convertedProjectId}`}
                   className="font-bold text-accent-ink hover:underline"
                 >
-                  Open the project
+                  Open the job
                 </Link>
               ) : (
                 <form action={updateEnquiryAction}>

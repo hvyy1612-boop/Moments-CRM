@@ -13,7 +13,7 @@ const SECTIONS: { title: string; items: string[] }[] = [
   { title: 'Company', items: ['Company details', 'Logo', 'Currency & tax (GST)', 'Date & time'] },
   { title: 'Finance', items: ['Invoice settings', 'Payment schedules', 'Payment methods'] },
   { title: 'Templates', items: ['Packages', 'Email templates', 'Quote & contract', 'Questionnaire', 'Workflow templates'] },
-  { title: 'Labels & status', items: ['Project statuses', 'Enquiry statuses', 'Invoice statuses'] },
+  { title: 'Labels & status', items: ['Job statuses', 'Enquiry statuses', 'Invoice statuses'] },
   { title: 'Account', items: ['Users', 'Notifications', 'Density'] },
 ]
 

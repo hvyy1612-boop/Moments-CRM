@@ -81,7 +81,7 @@ export default async function CalendarPage() {
                     {(byDay.get(day) ?? []).map((e) => (
                       <Link
                         key={e.id}
-                        href={`/projects/${e.projectId}`}
+                        href={`/jobs/${e.projectId}`}
                         className="truncate rounded bg-accent-tint px-2 py-0.5 text-sm font-medium text-accent-ink"
                       >
                         {e.label}
