@@ -15,7 +15,7 @@ import { ClientRowMenu } from './ClientRowMenu'
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Clients - Moments' }
 
-const HEAD = ['Name', 'Type', 'Email', 'Phone', 'Source', 'Projects', 'Since', '']
+const HEAD = ['Name', 'Type', 'Email', 'Phone', 'Source', 'Jobs', 'Since', '']
 
 type Row = {
   id: string

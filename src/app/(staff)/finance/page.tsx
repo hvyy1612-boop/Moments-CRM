@@ -36,7 +36,7 @@ function Rows({ rows }: { rows: Row[] }) {
       {rows.map((row) => (
         <tr key={row.id} className="transition-colors hover:bg-paper">
           <td className="tabular border-b border-r border-line px-3 py-3 text-base text-ink">
-            <Link href={`/projects/${row.projectId}`} className="font-bold text-accent-ink hover:underline">
+            <Link href={`/jobs/${row.projectId}`} className="font-bold text-accent-ink hover:underline">
               {row.number}
             </Link>
           </td>
@@ -95,7 +95,7 @@ export default async function FinancePage() {
   return (
     <AppShell user={user} csrf={csrf} active="finance">
       {rows.length === 0 ? (
-        <EmptyState title="No invoices yet" description="Invoices raised on a project appear here." />
+        <EmptyState title="No invoices yet" description="Invoices raised on a job appear here." />
       ) : (
         <div>
           <BoardGroup title="Outstanding" count={outstanding.length} spine="border-l-lost-ink" head={HEAD}>

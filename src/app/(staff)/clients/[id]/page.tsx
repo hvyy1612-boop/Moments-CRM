@@ -332,9 +332,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               )}
             </SectionCard>
 
-            <SectionCard title="Projects" icon={<IconJobs />} count={client.projects.length}>
+            <SectionCard title="Jobs" icon={<IconJobs />} count={client.projects.length}>
               {client.projects.length === 0 ? (
-                <p className="text-base text-ink-muted">No projects yet.</p>
+                <p className="text-base text-ink-muted">No jobs yet.</p>
               ) : (
                 <div className="flex flex-col gap-2.5">
                   {client.projects.map((p) => (
@@ -355,8 +355,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                         <Fact label="Next task" value={p.workItems[0]?.title ?? '-'} />
                       </div>
                       <div className="mt-2.5">
-                        <Link href={`/projects/${p.id}`} className="text-sm font-bold text-accent-ink hover:underline">
-                          View project
+                        <Link href={`/jobs/${p.id}`} className="text-sm font-bold text-accent-ink hover:underline">
+                          View job
                         </Link>
                       </div>
                     </div>

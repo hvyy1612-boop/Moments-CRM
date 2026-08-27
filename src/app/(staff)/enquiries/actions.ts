@@ -179,7 +179,7 @@ export async function convertEnquiryAction(formData: FormData): Promise<void> {
   const result = await convertEnquiry(enquiryId, user.id)
   if (result.projectId) await seedProjectWorkflow(result.projectId)
   revalidatePath('/enquiries')
-  redirect(`/projects/${result.projectId}`)
+  redirect(`/jobs/${result.projectId}`)
 }
 
 export async function markEnquiryLostAction(formData: FormData): Promise<void> {

@@ -14,15 +14,16 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/api/health': { public: true },
 
   '/login': { public: true },
+  '/register': { public: true },
   '/forgot': { public: true },
   '/reset/[token]': { public: true },
 
   '/dashboard': { roles: ['ADMIN', 'STUDIO'] },
   '/enquiries': { roles: ['ADMIN', 'STUDIO'] },
   '/enquiries/[id]': { roles: ['ADMIN', 'STUDIO'] },
-  '/projects': { roles: ['ADMIN', 'STUDIO'] },
-  '/projects/new': { roles: ['ADMIN', 'STUDIO'] },
-  '/projects/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  '/jobs': { roles: ['ADMIN', 'STUDIO'] },
+  '/jobs/new': { roles: ['ADMIN', 'STUDIO'] },
+  '/jobs/[id]': { roles: ['ADMIN', 'STUDIO'] },
   '/clients': { roles: ['ADMIN', 'STUDIO'] },
   '/clients/new': { roles: ['ADMIN', 'STUDIO'] },
   '/clients/[id]': { roles: ['ADMIN', 'STUDIO'] },
@@ -30,6 +31,7 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/calendar': { roles: ['ADMIN', 'STUDIO'] },
   '/finance': { roles: ['ADMIN', 'STUDIO'] },
   '/settings': { roles: ['ADMIN', 'STUDIO'] },
+  '/users': { roles: ['ADMIN'] },
 
   '/activity': { roles: ['ADMIN'] },
 

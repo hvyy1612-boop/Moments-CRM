@@ -20,7 +20,7 @@ export async function setProjectStatusAction(formData: FormData): Promise<void> 
   if (!projectId || !labelId) return
 
   await setProjectStatusByLabel(projectId, labelId, user.id)
-  revalidatePath('/projects')
+  revalidatePath('/jobs')
 }
 
 export async function saveStatusLabelsAction(formData: FormData): Promise<void> {
@@ -40,5 +40,5 @@ export async function saveStatusLabelsAction(formData: FormData): Promise<void> 
   if (labels.length === 0) return
 
   await saveCompanyStatusLabels(labels)
-  revalidatePath('/projects')
+  revalidatePath('/jobs')
 }

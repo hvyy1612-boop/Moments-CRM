@@ -27,7 +27,7 @@ import { QuoteBuilder } from './QuoteBuilder'
 import { Scheduling } from './Scheduling'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Project - Moments' }
+export const metadata: Metadata = { title: 'Job - Moments' }
 
 const QUOTE_TONE: Record<string, Tone> = {
   DRAFT: 'neutral',
@@ -59,12 +59,12 @@ function historyDetails(action: string, after: unknown): string {
   const title = (after && typeof after === 'object' && 'title' in after ? String((after as { title?: unknown }).title ?? '') : '') || 'a task'
   if (action === 'project.task_completed') return `${title} was completed.`
   if (action === 'project.task_reopened') return `${title} was reopened.`
-  if (action === 'enquiry.converted') return 'Project was created from an enquiry.'
+  if (action === 'enquiry.converted') return 'Job was created from an enquiry.'
   return historyActionType(action)
 }
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await requireRole('/projects/[id]')
+  const user = await requireRole('/jobs/[id]')
   const { id } = await params
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
@@ -200,9 +200,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     : null
 
   return (
-    <AppShell user={user} csrf={csrf} active="projects">
+    <AppShell user={user} csrf={csrf} active="jobs">
       <div className="mx-auto w-full max-w-5xl">
-        <Link href="/projects" className="text-sm text-ink-muted transition-colors hover:text-accent">
+        <Link href="/jobs" className="text-sm text-ink-muted transition-colors hover:text-accent">
           ← Projects
         </Link>
         <div className="mt-3 flex flex-wrap items-baseline justify-between gap-3">

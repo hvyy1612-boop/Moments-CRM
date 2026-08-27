@@ -52,7 +52,7 @@ export async function createQuoteAction(formData: FormData): Promise<void> {
   const projectId = String(formData.get('projectId') ?? '')
   if (!projectId) return
   await createQuote(projectId, user.id)
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
 }
 
 export async function saveQuoteAction(
@@ -85,7 +85,7 @@ export async function saveQuoteAction(
   } catch (error) {
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not save.' }
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
   return { status: 'success' }
 }
 
@@ -120,7 +120,7 @@ export async function sendQuoteAction(
       quoteLink: `${base}/quote/${viewToken}`,
     })
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
   return { status: 'success' }
 }
 
@@ -135,7 +135,7 @@ export async function createContractAction(formData: FormData): Promise<void> {
   } catch {
     // The button only shows in a valid state; a double submit ("already exists") is a no-op here.
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
 }
 
 export async function sendContractAction(
@@ -169,7 +169,7 @@ export async function sendContractAction(
       contractLink: `${base}/contract/${signToken}`,
     })
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
   return { status: 'success' }
 }
 
@@ -199,7 +199,7 @@ export async function createBookingAction(
   } catch (error) {
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not schedule.' }
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
   return { status: 'success' }
 }
 
@@ -227,7 +227,7 @@ export async function assignResourceAction(
   } catch (error) {
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not assign.' }
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
   return { status: 'success' }
 }
 
@@ -255,7 +255,7 @@ export async function createInvoiceAction(
   } catch (error) {
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not raise the invoice.' }
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
   return { status: 'success' }
 }
 
@@ -271,7 +271,7 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
   } catch {
     // A double submit ("already issued") is a no-op here; the re-render shows the real state.
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
 }
 
 export async function recordPaymentAction(
@@ -299,7 +299,7 @@ export async function recordPaymentAction(
   } catch (error) {
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not record the payment.' }
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
   return { status: 'success' }
 }
 
@@ -323,7 +323,7 @@ export async function createGalleryAction(
   } catch (error) {
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not create the gallery.' }
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
   return { status: 'success' }
 }
 
@@ -351,7 +351,7 @@ export async function addGalleryItemAction(
   } catch (error) {
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not add the item.' }
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
   return { status: 'success' }
 }
 
@@ -367,7 +367,7 @@ export async function publishGalleryAction(formData: FormData): Promise<void> {
   } catch {
     // The button only shows on a draft with items; a double submit is a no-op here.
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
 }
 
 function parseDue(formData: FormData): Date | null {
@@ -389,7 +389,7 @@ export async function toggleProjectTaskAction(formData: FormData): Promise<void>
   } catch {
     // Double submit / stale id: the re-render shows the real state.
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
 }
 
 export async function addProjectTaskAction(formData: FormData): Promise<void> {
@@ -406,7 +406,7 @@ export async function addProjectTaskAction(formData: FormData): Promise<void> {
   } catch {
     // Invalid stage / empty title: the re-render shows the real state.
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
 }
 
 export async function updateProjectTaskAction(formData: FormData): Promise<void> {
@@ -422,7 +422,7 @@ export async function updateProjectTaskAction(formData: FormData): Promise<void>
   } catch {
     // no-op on stale id
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
 }
 
 export async function deleteProjectTaskAction(formData: FormData): Promise<void> {
@@ -437,7 +437,7 @@ export async function deleteProjectTaskAction(formData: FormData): Promise<void>
   } catch {
     // no-op on stale id
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
 }
 
 export async function addProjectStageBlockAction(formData: FormData): Promise<void> {
@@ -452,7 +452,7 @@ export async function addProjectStageBlockAction(formData: FormData): Promise<vo
   } catch {
     // not an optional stage / already populated: no-op
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
 }
 
 export async function moveProjectTaskAction(formData: FormData): Promise<void> {
@@ -468,7 +468,7 @@ export async function moveProjectTaskAction(formData: FormData): Promise<void> {
   } catch {
     // no-op on stale id
   }
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
 }
 
 export async function sendProjectReplyAction(formData: FormData): Promise<void> {
@@ -484,7 +484,7 @@ export async function sendProjectReplyAction(formData: FormData): Promise<void> 
     body,
     byUserId: user.id,
   })
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
 }
 
 export async function logProjectClientReplyAction(formData: FormData): Promise<void> {
@@ -499,7 +499,7 @@ export async function logProjectClientReplyAction(formData: FormData): Promise<v
     direction: 'inbound',
     body,
   })
-  revalidatePath(`/projects/${projectId}`)
+  revalidatePath(`/jobs/${projectId}`)
 }
 
 export type StaffEnquiryState =
@@ -546,7 +546,7 @@ export async function createStaffEnquiryAction(
     const project = await createProjectFromEnquiry(parsed.data)
     projectId = project.id
   } catch {
-    return { status: 'error', message: 'Could not create the project. Please try again.' }
+    return { status: 'error', message: 'Could not create the job. Please try again.' }
   }
-  redirect(`/projects/${projectId}`)
+  redirect(`/jobs/${projectId}`)
 }

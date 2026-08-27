@@ -14,12 +14,12 @@ export const metadata: Metadata = { title: 'Sign in - Moments' }
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ reset?: string }>
+  searchParams: Promise<{ reset?: string; registered?: string }>
 }) {
   const user = await getSessionUser()
   if (user) redirect('/dashboard')
 
-  const { reset } = await searchParams
+  const { reset, registered } = await searchParams
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
@@ -34,10 +34,20 @@ export default async function LoginPage({
               Sign in with your new password.
             </Alert>
           ) : null}
+          {registered === '1' ? (
+            <Alert tone="success" title="Account created">
+              An admin will approve it before you can sign in.
+            </Alert>
+          ) : null}
           <LoginForm csrf={csrf} />
-          <Link href="/forgot" className="text-sm font-bold text-accent-ink hover:underline">
-            Forgot your password?
-          </Link>
+          <div className="flex items-center justify-between gap-4">
+            <Link href="/forgot" className="text-sm font-bold text-accent-ink hover:underline">
+              Forgot your password?
+            </Link>
+            <Link href="/register" className="text-sm font-bold text-accent-ink hover:underline">
+              Create an account
+            </Link>
+          </div>
         </div>
       </div>
     </main>

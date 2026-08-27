@@ -15,7 +15,7 @@ import { StatusPicker } from '@/features/projects/components/StatusPicker'
 import { AppShell } from '../AppShell'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Projects - Moments' }
+export const metadata: Metadata = { title: 'Jobs - Moments' }
 
 type Row = {
   id: string
@@ -58,7 +58,7 @@ function Group({
             <tr className="bg-sunk text-left text-xs uppercase tracking-wide text-muted">
               <th className="w-10 border-b border-r border-line px-3 py-2.5" />
               <th className="border-b border-r border-line px-3 py-2.5 font-bold">Client</th>
-              <th className="border-b border-r border-line px-3 py-2.5 font-bold">Project</th>
+              <th className="border-b border-r border-line px-3 py-2.5 font-bold">Job</th>
               <th className="border-b border-r border-line px-3 py-2.5 font-bold">Enquired</th>
               <th className="border-b border-r border-line px-3 py-2.5 font-bold">Next task</th>
               <th className="w-40 border-b border-line px-3 py-2.5 font-bold">Status</th>
@@ -72,7 +72,7 @@ function Group({
                 </td>
                 <td className="border-b border-r border-line px-3 py-2.5">
                   <Link
-                    href={`/projects/${row.id}`}
+                    href={`/jobs/${row.id}`}
                     className="font-serif text-base font-semibold text-ink transition-colors group-hover:text-accent-ink"
                   >
                     {row.client}
@@ -111,8 +111,8 @@ function Group({
             <tr>
               <td className="px-3 py-2.5" />
               <td colSpan={5} className="px-3 py-2.5 text-sm text-muted">
-                <Link href="/projects/new" className="hover:text-accent-ink">
-                  + New project
+                <Link href="/jobs/new" className="hover:text-accent-ink">
+                  + New job
                 </Link>
               </td>
             </tr>
@@ -124,7 +124,7 @@ function Group({
 }
 
 export default async function ProjectsPage() {
-  const user = await requireRole('/projects')
+  const user = await requireRole('/jobs')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
@@ -164,13 +164,16 @@ export default async function ProjectsPage() {
   const canEdit = can(user, 'PROJECT_EDIT')
 
   const action = (
-    <Link href="/projects/new">
-      <Button size="sm">+ New project</Button>
+    <Link href="/jobs/new">
+      <Button size="sm">+ New job</Button>
     </Link>
   )
 
   return (
-    <AppShell user={user} csrf={csrf} active="projects" action={action}>
+    <AppShell user={user} csrf={csrf} active="jobs" action={action}>
+      <p className="mb-4 text-base text-ink-muted">
+        Booked jobs in production - from planning through the shoot, editing, and delivery.
+      </p>
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded border border-line-strong px-3 py-1.5 text-sm text-ink-muted">
           Group by: status
@@ -183,13 +186,13 @@ export default async function ProjectsPage() {
       {rows.length === 0 ? (
         <div className="mt-6">
           <EmptyState
-            title="No projects yet"
-            description="Create your first project using the New project button above."
+            title="No jobs yet"
+            description="Create your first job using the New job button above."
           />
         </div>
       ) : (
         <div className="mt-5">
-          <Group title="Active projects" spine="border-l-delivered-ink" rows={active} labels={labels} csrf={csrf} canEdit={canEdit} />
+          <Group title="Active jobs" spine="border-l-delivered-ink" rows={active} labels={labels} csrf={csrf} canEdit={canEdit} />
           <Group title="Closed" spine="border-l-line-strong" rows={closed} labels={labels} csrf={csrf} canEdit={canEdit} />
         </div>
       )}
