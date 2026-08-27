@@ -15,8 +15,8 @@ type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 const SEED_ACTION = 'project.workflow_seeded'
 
 /** Seed the default suggested flow exactly once per project (guarded by a seed audit row), so deleting
- *  every task later does not make it re-appear. Due dates are set relative to the shoot when one exists. */
-async function seedIfNeeded(tx: Tx, projectId: string, companyId: string, shootDate: Date | null) {
+ *  every task later does not make it re-appear. Optional stages are not seeded. */
+async function seedIfNeeded(tx: Tx, projectId: string, companyId: string) {
   const seeded = await tx.auditLog.count({
     where: { entityType: 'Project', entityId: projectId, action: SEED_ACTION },
   })
@@ -27,10 +27,10 @@ async function seedIfNeeded(tx: Tx, projectId: string, companyId: string, shootD
       projectId,
       kind: 'TASK',
       stage: t.stage,
+      type: t.type,
       title: t.title,
       status: 'PENDING' as const,
       order: i,
-      dueAt: shootDate && t.dueOffsetDays != null ? new Date(shootDate.getTime() + t.dueOffsetDays * 86_400_000) : null,
     })),
   })
   await tx.auditLog.create({
@@ -44,16 +44,12 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     where: { id: projectId },
     select: {
       companyId: true,
-      quotes: { select: { status: true } },
-      contracts: { select: { status: true } },
-      invoices: { select: { amountPaid: true } },
+      invoices: { select: { total: true, amountPaid: true } },
       galleries: { select: { status: true } },
-      bookings: { orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true } },
     },
   })
-  const shootDate = project.bookings[0]?.startsAt ?? null
 
-  await prisma.$transaction((tx) => seedIfNeeded(tx, projectId, project.companyId, shootDate))
+  await prisma.$transaction((tx) => seedIfNeeded(tx, projectId, project.companyId))
 
   const items = await prisma.workItem.findMany({
     where: { projectId },
@@ -63,6 +59,7 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
       title: true,
       status: true,
       stage: true,
+      type: true,
       dueAt: true,
       order: true,
       completedAt: true,
@@ -70,14 +67,11 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     },
   })
 
-  const quoteAccepted = project.quotes.some((q) => q.status === 'ACCEPTED')
-  const contractSigned = project.contracts.some((c) => c.status === 'SIGNED')
-  const depositPaid = project.invoices.some((i) => Number(i.amountPaid) > 0)
+  const totalInvoiced = project.invoices.reduce((s, i) => s + Number(i.total), 0)
+  const totalPaid = project.invoices.reduce((s, i) => s + Number(i.amountPaid), 0)
   const facts: ProjectFacts = {
-    booked: quoteAccepted || contractSigned || depositPaid,
-    shootScheduled: project.bookings.length > 0,
-    galleryPrepared: project.galleries.length > 0,
     gallerySent: project.galleries.some((g) => g.status === 'PUBLISHED'),
+    finalPaid: totalInvoiced > 0 && totalPaid >= totalInvoiced,
   }
 
   const tasks: TaskInput[] = items.map((w) => ({
@@ -85,35 +79,40 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     title: w.title,
     status: w.status,
     stage: w.stage,
+    type: w.type,
     dueAt: w.dueAt,
     order: w.order,
     completedByName: w.completedBy?.name ?? null,
     completedAt: w.completedAt ?? null,
   }))
 
-  return buildProjectBoard(facts, tasks, shootDate, formatSydneyDate)
+  return buildProjectBoard(facts, tasks, formatSydneyDate)
 }
 
 async function loadTask(taskId: string) {
   const task = await prisma.workItem.findUnique({
     where: { id: taskId },
-    select: { id: true, projectId: true, companyId: true, stage: true, order: true, status: true, title: true },
+    select: { id: true, projectId: true, companyId: true, stage: true, order: true, status: true, title: true, type: true },
   })
   if (!task || !task.projectId) throw new Error('Task not found.')
   return task
 }
+
+const ADDABLE = new Set(['TODO', 'AUTO_EMAIL', 'APPOINTMENT', 'SHOOT'])
 
 /** Add a task to a stage of a project's workflow. */
 export async function addProjectTask(
   projectId: string,
   stage: string,
   title: string,
+  type: string,
   dueAt: Date | null,
   actorUserId: string,
 ) {
   const clean = title.trim()
   if (!clean) throw new Error('A task needs a title.')
   if (!PROJECT_STAGE_KEYS.has(stage)) throw new Error('Unknown stage.')
+  const taskType = ADDABLE.has(type) ? type : 'TODO'
   return prisma.$transaction(async (tx) => {
     const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { companyId: true } })
     const last = await tx.workItem.findFirst({
@@ -127,6 +126,7 @@ export async function addProjectTask(
         projectId,
         kind: 'CUSTOM',
         stage,
+        type: taskType,
         title: clean,
         status: 'PENDING',
         order: (last?.order ?? 0) + 1,
@@ -215,6 +215,7 @@ export async function moveProjectTask(taskId: string, direction: 'up' | 'down', 
 /** Toggle a task complete or reopen it. */
 export async function toggleProjectTask(taskId: string, actorUserId: string) {
   const task = await loadTask(taskId)
+  if (task.type === 'AUTO') return // auto rows are system-driven, not staff-toggled
   const completing = task.status !== 'COMPLETED'
   await prisma.$transaction(async (tx) => {
     await tx.workItem.update({

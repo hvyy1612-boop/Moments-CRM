@@ -89,9 +89,10 @@ export async function addEnquiryTaskAction(formData: FormData): Promise<void> {
   const enquiryId = String(formData.get('enquiryId') ?? '')
   const stage = String(formData.get('stage') ?? '')
   const title = String(formData.get('title') ?? '')
+  const type = String(formData.get('type') ?? 'TODO')
   if (!enquiryId || !stage || !title.trim()) return
   try {
-    await addEnquiryTask(enquiryId, stage, title, parseDue(formData), user.id)
+    await addEnquiryTask(enquiryId, stage, title, type, parseDue(formData), user.id)
   } catch {
     // no-op on invalid stage / empty title
   }

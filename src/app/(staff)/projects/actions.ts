@@ -414,9 +414,10 @@ export async function addProjectTaskAction(formData: FormData): Promise<void> {
   const projectId = String(formData.get('projectId') ?? '')
   const stage = String(formData.get('stage') ?? '')
   const title = String(formData.get('title') ?? '')
+  const type = String(formData.get('type') ?? 'TODO')
   if (!projectId || !stage || !title.trim()) return
   try {
-    await addProjectTask(projectId, stage, title, parseDue(formData), user.id)
+    await addProjectTask(projectId, stage, title, type, parseDue(formData), user.id)
   } catch {
     // Invalid stage / empty title: the re-render shows the real state.
   }

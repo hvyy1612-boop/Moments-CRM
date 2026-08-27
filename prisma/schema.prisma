@@ -990,6 +990,7 @@ model WorkItem {
   projectId         String?        @map("project_id") @db.VarChar(30)
   kind              String         @db.VarChar(50) // e.g. REVIEW_ENQUIRY, or CUSTOM for a staff-added task
   stage             String?        @db.VarChar(50) // workflow group key (project checklist): preshoot, shoot, ...
+  type              String         @default("TODO") @db.VarChar(20) // TODO | AUTO_EMAIL | APPOINTMENT | SHOOT | AUTO
   title             String         @db.VarChar(150)
   status            WorkItemStatus @default(PENDING)
   order             Int            @default(0)

@@ -1,50 +1,29 @@
 /**
- * Project workflow, Studio-Ninja style and EDITABLE per project (contract docs/23 + Hybrid decision).
- *
- * The stage shape (Booking / Pre-shoot / Shoot / Editing / Delivery), their colours, and the derived
- * auto-checked business facts live in code - they describe how a photo job runs and are read from the
- * real records (never duplicated). The TASKS inside each stage are editable data (WorkItem rows): staff
- * add, rename, re-date, reorder, complete, or delete them per client. A new project is seeded with the
- * default suggested flow below, then the studio tailors it.
+ * Project workflow (job phase), editable per project. Fixed coloured stages carry the Moments process;
+ * tasks inside are editable WorkItem rows and carry a type (To-do / Auto email / Appointment / Shoot /
+ * Auto). AUTO rows are system-driven: their done state is read from the real records (gallery sent,
+ * final payment), not toggled by staff. Optional stages (Pre-wedding, Video, Film, Album) are not
+ * seeded by default; staff add their tasks per package.
  */
+import { TASK_TYPE_LABEL, type TaskType } from '@/features/enquiries/workflow'
 
-export type ProjectFacts = {
-  booked: boolean
-  shootScheduled: boolean
-  galleryPrepared: boolean
-  gallerySent: boolean
-}
+export { ADDABLE_TASK_TYPES } from '@/features/enquiries/workflow'
+export type { TaskType } from '@/features/enquiries/workflow'
 
-type DerivedDef = { key: string; title: string; fact: keyof ProjectFacts; note?: string; showShootDate?: boolean }
-type StageDef = { key: string; label: string; color: string; derived: DerivedDef[] }
+export type ProjectFacts = { gallerySent: boolean; finalPaid: boolean }
 
-/** The fixed stages of a photography job. Colours map to the app status palette. */
+type StageDef = { key: string; label: string; color: string; optional?: boolean }
+
 export const PROJECT_STAGES: StageDef[] = [
-  {
-    key: 'booking',
-    label: 'Booking',
-    color: 'booked',
-    derived: [
-      { key: 'booking_confirmed', title: 'Booking confirmed', fact: 'booked', note: 'Auto-checks when a quote is accepted, a contract is signed, or a deposit is paid.' },
-    ],
-  },
-  { key: 'preshoot', label: 'Pre-shoot', color: 'enquiry', derived: [] },
-  {
-    key: 'shoot',
-    label: 'Shoot',
-    color: 'quote',
-    derived: [{ key: 'main_shoot', title: 'Main shoot', fact: 'shootScheduled', showShootDate: true, note: 'From the scheduled booking.' }],
-  },
-  { key: 'editing', label: 'Editing', color: 'editing', derived: [] },
-  {
-    key: 'delivery',
-    label: 'Delivery',
-    color: 'delivered',
-    derived: [
-      { key: 'gallery_prepared', title: 'Prepare final gallery', fact: 'galleryPrepared' },
-      { key: 'gallery_sent', title: 'Send gallery to client', fact: 'gallerySent' },
-    ],
-  },
+  { key: 'planning', label: 'Planning', color: 'enquiry' },
+  { key: 'preshoot', label: 'Pre-wedding shoot', color: 'booked', optional: true },
+  { key: 'finalprep', label: 'Final shoot preparation', color: 'quote' },
+  { key: 'shootday', label: 'Shoot day', color: 'booked' },
+  { key: 'editing', label: 'Photo editing', color: 'editing' },
+  { key: 'video', label: 'Video editing', color: 'editing', optional: true },
+  { key: 'film', label: 'Film processing', color: 'editing', optional: true },
+  { key: 'album', label: 'Album and prints', color: 'editing', optional: true },
+  { key: 'delivery', label: 'Final delivery and close', color: 'delivered' },
 ]
 
 export const PROJECT_STAGE_KEYS: ReadonlySet<string> = new Set(PROJECT_STAGES.map((s) => s.key))
@@ -53,17 +32,44 @@ export function stageLabel(key: string): string {
   return PROJECT_STAGES.find((s) => s.key === key)?.label ?? key
 }
 
-/** The default suggested flow a new project is seeded with. dueOffsetDays is relative to the shoot. */
-export const DEFAULT_PROJECT_TASKS: { stage: string; title: string; dueOffsetDays: number | null }[] = [
-  { stage: 'preshoot', title: 'Confirm shoot details', dueOffsetDays: null },
-  { stage: 'preshoot', title: 'Send pre-shoot reminder', dueOffsetDays: -2 },
-  { stage: 'preshoot', title: 'Pre-shoot confirmation call', dueOffsetDays: -1 },
-  { stage: 'shoot', title: 'Mark shoot completed', dueOffsetDays: 0 },
-  { stage: 'editing', title: 'Upload and cull photos', dueOffsetDays: 1 },
-  { stage: 'editing', title: 'Send photos to editor', dueOffsetDays: 2 },
-  { stage: 'editing', title: 'Editing completed', dueOffsetDays: null },
-  { stage: 'editing', title: 'Review edited photos', dueOffsetDays: null },
-  { stage: 'delivery', title: 'Confirm final delivery', dueOffsetDays: null },
+/** Which fact an AUTO task's done-state is read from (matched by title). */
+export const AUTO_FACT_BY_TITLE: Record<string, keyof ProjectFacts> = {
+  'Gallery delivered': 'gallerySent',
+  'Confirm final payment received': 'finalPaid',
+}
+
+/** The default flow seeded for a new project (core stages only; optional stages start empty). */
+export const DEFAULT_PROJECT_TASKS: { stage: string; title: string; type: TaskType }[] = [
+  { stage: 'planning', title: 'Send client welcome email', type: 'AUTO_EMAIL' },
+  { stage: 'planning', title: 'Collect wedding and shoot details', type: 'TODO' },
+  { stage: 'planning', title: 'Confirm timeline and venue details', type: 'TODO' },
+  { stage: 'planning', title: 'Record special requests', type: 'TODO' },
+  { stage: 'planning', title: 'Confirm photography and video coverage', type: 'TODO' },
+
+  { stage: 'finalprep', title: 'Send pre-shoot questionnaire and reminder', type: 'AUTO_EMAIL' },
+  { stage: 'finalprep', title: 'Review final shoot information', type: 'TODO' },
+  { stage: 'finalprep', title: 'Schedule final planning call', type: 'APPOINTMENT' },
+  { stage: 'finalprep', title: 'Confirm final timeline and shoot details', type: 'TODO' },
+  { stage: 'finalprep', title: 'Send final payment reminder', type: 'AUTO_EMAIL' },
+
+  { stage: 'shootday', title: 'Conduct wedding photography', type: 'SHOOT' },
+  { stage: 'shootday', title: 'Back up all captured files', type: 'TODO' },
+
+  { stage: 'editing', title: 'Prepare preview images', type: 'TODO' },
+  { stage: 'editing', title: 'Send preview gallery to client', type: 'TODO' },
+  { stage: 'editing', title: 'Cull wedding images', type: 'TODO' },
+  { stage: 'editing', title: 'Edit wedding images', type: 'TODO' },
+  { stage: 'editing', title: 'Review edited gallery', type: 'TODO' },
+  { stage: 'editing', title: 'Finalise wedding gallery', type: 'TODO' },
+
+  { stage: 'delivery', title: 'Prepare final client deliverables', type: 'TODO' },
+  { stage: 'delivery', title: 'Send final gallery to client', type: 'TODO' },
+  { stage: 'delivery', title: 'Gallery delivered', type: 'AUTO' },
+  { stage: 'delivery', title: 'Confirm client received deliverables', type: 'TODO' },
+  { stage: 'delivery', title: 'Confirm final payment received', type: 'AUTO' },
+  { stage: 'delivery', title: 'Send final thank-you email', type: 'AUTO_EMAIL' },
+  { stage: 'delivery', title: 'Archive project files', type: 'TODO' },
+  { stage: 'delivery', title: 'Close project', type: 'TODO' },
 ]
 
 export type TaskInput = {
@@ -71,16 +77,19 @@ export type TaskInput = {
   title: string
   status: string
   stage: string | null
+  type: string
   dueAt: Date | null
   order: number
   completedByName: string | null
   completedAt: Date | null
 }
 
-export type BoardDerivedRow = { key: string; title: string; done: boolean; dueLabel: string | null; note: string | null }
 export type BoardTaskRow = {
   id: string
   title: string
+  type: TaskType
+  typeLabel: string
+  editable: boolean
   done: boolean
   dueLabel: string | null
   dueValue: string | null
@@ -91,8 +100,8 @@ export type BoardStage = {
   key: string
   label: string
   color: string
+  optional: boolean
   active: boolean
-  derived: BoardDerivedRow[]
   tasks: BoardTaskRow[]
 }
 export type ProjectBoard = { stages: BoardStage[]; allDone: boolean }
@@ -101,42 +110,44 @@ function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-/** Build the board from real backend state: derived facts + the project's editable task rows. */
 export function buildProjectBoard(
   facts: ProjectFacts,
   tasks: TaskInput[],
-  shootDate: Date | null,
   formatDate: (d: Date) => string,
 ): ProjectBoard {
   let activeKey: string | null = null
-
   const stages: BoardStage[] = PROJECT_STAGES.map((stage) => {
-    const derived: BoardDerivedRow[] = stage.derived.map((d) => ({
-      key: d.key,
-      title: d.title,
-      done: facts[d.fact],
-      dueLabel: d.showShootDate && shootDate ? formatDate(shootDate) : null,
-      note: d.note ?? null,
-    }))
     const stageTasks: BoardTaskRow[] = tasks
       .filter((t) => t.stage === stage.key)
       .sort((a, b) => a.order - b.order)
-      .map((t) => ({
-        id: t.id,
-        title: t.title,
-        done: t.status === 'COMPLETED',
-        dueLabel: t.dueAt ? formatDate(t.dueAt) : null,
-        dueValue: t.dueAt ? isoDate(t.dueAt) : null,
-        completedByName: t.completedByName,
-        completedAt: t.completedAt,
-      }))
-
-    const incomplete = derived.some((d) => !d.done) || stageTasks.some((t) => !t.done)
-    if (incomplete && activeKey === null) activeKey = stage.key
-
-    return { key: stage.key, label: stage.label, color: stage.color, active: false, derived, tasks: stageTasks }
+      .map((t) => {
+        const type = (t.type as TaskType) ?? 'TODO'
+        const isAuto = type === 'AUTO'
+        const fact = isAuto ? AUTO_FACT_BY_TITLE[t.title] : undefined
+        const done = isAuto ? (fact ? facts[fact] : false) : t.status === 'COMPLETED'
+        return {
+          id: t.id,
+          title: t.title,
+          type,
+          typeLabel: TASK_TYPE_LABEL[type] ?? '',
+          editable: !isAuto,
+          done,
+          dueLabel: t.dueAt ? formatDate(t.dueAt) : null,
+          dueValue: t.dueAt ? isoDate(t.dueAt) : null,
+          completedByName: t.completedByName,
+          completedAt: t.completedAt,
+        }
+      })
+    if (stageTasks.some((t) => !t.done) && activeKey === null) activeKey = stage.key
+    return {
+      key: stage.key,
+      label: stage.label,
+      color: stage.color,
+      optional: stage.optional ?? false,
+      active: false,
+      tasks: stageTasks,
+    }
   })
-
   for (const s of stages) s.active = s.key === activeKey
   return { stages, allDone: activeKey === null }
 }
