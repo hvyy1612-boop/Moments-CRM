@@ -42,7 +42,7 @@ export const ENQUIRY_VIEWS: { key: string; label: string; match: ViewMatch }[] =
   },
   {
     key: 'waiting',
-    label: 'Waiting on client',
+    label: 'Waiting on client reply',
     match: (s, w) => isOpenEnquiry(s) && w === 'CLIENT',
   },
   { key: 'archived', label: 'Lost or archived', match: (s) => s === 'LOST' || s === 'ARCHIVED' },

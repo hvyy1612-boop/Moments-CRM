@@ -1,5 +1,5 @@
 
-import { TASK_TYPE_LABEL, type TaskType } from '@/features/enquiries/workflow'
+import { addDays, TASK_TYPE_LABEL, type TaskType } from '@/features/enquiries/workflow'
 
 export { ADDABLE_TASK_TYPES } from '@/features/enquiries/workflow'
 export type { TaskType } from '@/features/enquiries/workflow'
@@ -95,6 +95,106 @@ export const OPTIONAL_STAGE_TASKS: Record<string, { title: string; type: TaskTyp
   ],
 }
 
+export const PROJECT_TASK_NOTE: Record<string, string> = {
+  'Send client welcome email': 'Sent automatically once the booking is confirmed.',
+  'Collect wedding and shoot details': 'Gather the timeline, venues, and key people.',
+  'Confirm timeline and venue details': 'Confirm the run sheet and locations.',
+  'Record special requests': 'Note the must-have shots and special moments.',
+  'Confirm photography and video coverage': 'Confirm what the package includes.',
+  'Send pre-shoot questionnaire and reminder': 'Sent automatically about three weeks before the shoot.',
+  'Review final shoot information': "Check the client's answers before the day.",
+  'Schedule final planning call': 'Book a call about a week before the shoot.',
+  'Confirm final timeline and shoot details': 'Lock the final run sheet with the client.',
+  'Send final payment reminder': 'Sent automatically about two weeks before the shoot.',
+  'Conduct wedding photography': 'Shoot the day per the agreed coverage.',
+  'Back up all captured files': 'Copy every card to two drives before deleting.',
+  'Prepare preview images': 'Select and edit a small preview set.',
+  'Send preview gallery to client': 'Share a first look within a few days.',
+  'Cull wedding images': 'Choose the final selects from the full take.',
+  'Edit wedding images': 'Edit the selected images to the studio standard.',
+  'Review edited gallery': 'Quality-check the full gallery before delivery.',
+  'Finalise wedding gallery': 'Approve the gallery for delivery.',
+  'Prepare final client deliverables': 'Assemble the gallery, files, and any prints.',
+  'Send final gallery to client': 'Deliver the full gallery to the client.',
+  'Gallery delivered': 'Ticks itself when the gallery is published.',
+  'Confirm client received deliverables': 'Confirm the client has downloaded everything.',
+  'Confirm final payment received': 'Ticks itself when the balance is paid.',
+  'Send final thank-you email': 'Sent automatically after delivery.',
+  'Archive project files': 'Move the finished files to long-term storage.',
+  'Close project': 'Mark the job complete.',
+
+  'Schedule pre-wedding shoot': 'Book the engagement or pre-wedding session.',
+  'Confirm pre-wedding shoot details': 'Confirm the date, location, and outfits.',
+  'Conduct pre-wedding shoot': 'Shoot the pre-wedding session.',
+  'Back up pre-wedding images': 'Copy every card to two drives.',
+  'Edit and send pre-wedding photos': 'Edit and deliver the pre-wedding gallery.',
+  'Prepare video footage for editing': 'Organise and back up the footage.',
+  'Edit wedding film': 'Cut the wedding film to the agreed length.',
+  'Colour grade wedding film': 'Grade the film to the studio look.',
+  'Review final wedding film': 'Quality-check the film before delivery.',
+  'Finalise wedding film': 'Approve the film for delivery.',
+  'Send film for processing and scanning': 'Send the rolls to the lab for developing.',
+  'Review film scans': 'Check the scans when they return.',
+  'Add film images to client gallery': 'Add the film selects to the gallery.',
+  'Prepare album design': "Design the album from the client's favourites.",
+  'Send album draft to client': 'Share the draft for review.',
+  'Review client album changes': 'Collect and note the requested changes.',
+  'Update album design': "Apply the client's changes.",
+  'Approve album for production': 'Get final sign-off before printing.',
+  'Send album to print': 'Order the album from the printer.',
+  'Quality check finished products': 'Inspect the album on arrival.',
+}
+
+export const PROJECT_TASK_SCHEDULE: Record<string, number> = {
+  'Send client welcome email': -60,
+  'Collect wedding and shoot details': -45,
+  'Confirm timeline and venue details': -30,
+  'Record special requests': -30,
+  'Confirm photography and video coverage': -28,
+  'Send pre-shoot questionnaire and reminder': -21,
+  'Send final payment reminder': -14,
+  'Review final shoot information': -14,
+  'Schedule final planning call': -10,
+  'Confirm final timeline and shoot details': -7,
+  'Conduct wedding photography': 0,
+  'Back up all captured files': 1,
+  'Prepare preview images': 3,
+  'Send preview gallery to client': 5,
+  'Cull wedding images': 7,
+  'Edit wedding images': 21,
+  'Review edited gallery': 35,
+  'Finalise wedding gallery': 40,
+  'Prepare final client deliverables': 42,
+  'Send final gallery to client': 42,
+  'Gallery delivered': 42,
+  'Confirm client received deliverables': 45,
+  'Confirm final payment received': 49,
+  'Send final thank-you email': 50,
+  'Archive project files': 56,
+  'Close project': 56,
+
+  'Schedule pre-wedding shoot': -90,
+  'Confirm pre-wedding shoot details': -75,
+  'Conduct pre-wedding shoot': -60,
+  'Back up pre-wedding images': -59,
+  'Edit and send pre-wedding photos': -45,
+  'Prepare video footage for editing': 3,
+  'Edit wedding film': 30,
+  'Colour grade wedding film': 45,
+  'Review final wedding film': 50,
+  'Finalise wedding film': 55,
+  'Send film for processing and scanning': 2,
+  'Review film scans': 14,
+  'Add film images to client gallery': 20,
+  'Prepare album design': 45,
+  'Send album draft to client': 50,
+  'Review client album changes': 57,
+  'Update album design': 60,
+  'Approve album for production': 63,
+  'Send album to print': 65,
+  'Quality check finished products': 75,
+}
+
 export type TaskInput = {
   id: string
   title: string
@@ -112,10 +212,12 @@ export type BoardTaskRow = {
   title: string
   type: TaskType
   typeLabel: string
+  note: string | null
   editable: boolean
   done: boolean
   dueLabel: string | null
   dueValue: string | null
+  noDate: boolean
   completedByName: string | null
   completedAt: Date | null
 }
@@ -137,6 +239,7 @@ export function buildProjectBoard(
   facts: ProjectFacts,
   tasks: TaskInput[],
   formatDate: (d: Date) => string,
+  shootDate: Date | null = null,
 ): ProjectBoard {
   let activeKey: string | null = null
   const stages: BoardStage[] = PROJECT_STAGES.map((stage) => {
@@ -148,15 +251,24 @@ export function buildProjectBoard(
         const isAuto = type === 'AUTO'
         const fact = isAuto ? AUTO_FACT_BY_TITLE[t.title] : undefined
         const done = isAuto ? (fact ? facts[fact] : false) : t.status === 'COMPLETED'
+        const offset = PROJECT_TASK_SCHEDULE[t.title]
+        let dueDate: Date | null = t.dueAt ?? null
+        let noDate = false
+        if (!dueDate && offset !== undefined) {
+          if (shootDate) dueDate = addDays(shootDate, offset)
+          else noDate = true
+        }
         return {
           id: t.id,
           title: t.title,
           type,
           typeLabel: TASK_TYPE_LABEL[type] ?? '',
+          note: PROJECT_TASK_NOTE[t.title] ?? null,
           editable: !isAuto,
           done,
-          dueLabel: t.dueAt ? formatDate(t.dueAt) : null,
-          dueValue: t.dueAt ? isoDate(t.dueAt) : null,
+          dueLabel: dueDate ? formatDate(dueDate) : null,
+          dueValue: dueDate ? isoDate(dueDate) : null,
+          noDate,
           completedByName: t.completedByName,
           completedAt: t.completedAt,
         }

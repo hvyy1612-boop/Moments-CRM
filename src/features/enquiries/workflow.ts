@@ -51,6 +51,39 @@ export const DEFAULT_ENQUIRY_TASKS: { stage: string; title: string; type: TaskTy
   { stage: 'quote', title: 'Send contract and deposit invoice', type: 'TODO' },
 ]
 
+export const ENQUIRY_TASK_NOTE: Record<string, string> = {
+  'Enquiry received': 'Logged automatically when the enquiry arrives.',
+  'Send initial enquiry response': 'Reply within 24 hours of the enquiry.',
+  'Follow up on enquiry': 'Follow up if there is no reply after 2 to 3 days.',
+  'Discuss shoot requirements': 'Confirm the date, location, and coverage.',
+  'Schedule client consultation': 'Book a call or meeting to talk through the shoot.',
+  'Confirm shoot date and requirements': 'Lock the date and scope before quoting.',
+  'Prepare client quote': 'Build the quote from the agreed package.',
+  'Send client quote': 'Send the quote and note when a reply is due.',
+  'Follow up on quote': 'Follow up if the quote is unanswered after 3 days.',
+  'Update quote based on client request': 'Revise and resend if the client asks for changes.',
+  'Send contract and deposit invoice': 'Send the contract and deposit to secure the booking.',
+}
+
+export const ENQUIRY_TASK_SCHEDULE: Record<string, number> = {
+  'Send initial enquiry response': 1,
+  'Follow up on enquiry': 3,
+  'Discuss shoot requirements': 5,
+  'Schedule client consultation': 7,
+  'Confirm shoot date and requirements': 10,
+  'Prepare client quote': 12,
+  'Send client quote': 13,
+  'Follow up on quote': 16,
+  'Update quote based on client request': 18,
+  'Send contract and deposit invoice': 20,
+}
+
+export function addDays(base: Date, days: number): Date {
+  const d = new Date(base.getTime())
+  d.setDate(d.getDate() + days)
+  return d
+}
+
 export type TaskInput = {
   id: string
   title: string
@@ -68,10 +101,12 @@ export type EnqTaskRow = {
   title: string
   type: TaskType
   typeLabel: string
+  note: string | null
   editable: boolean
   done: boolean
   dueLabel: string | null
   dueValue: string | null
+  noDate: boolean
   completedByName: string | null
   completedAt: Date | null
 }
@@ -82,7 +117,11 @@ function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-export function buildEnquiryBoard(tasks: TaskInput[], formatDate: (d: Date) => string): EnquiryBoard {
+export function buildEnquiryBoard(
+  tasks: TaskInput[],
+  formatDate: (d: Date) => string,
+  anchorDate: Date | null = null,
+): EnquiryBoard {
   let activeKey: string | null = null
   const stages: EnqStage[] = ENQUIRY_STAGES.map((stage) => {
     const stageTasks: EnqTaskRow[] = tasks
@@ -90,15 +129,24 @@ export function buildEnquiryBoard(tasks: TaskInput[], formatDate: (d: Date) => s
       .sort((a, b) => a.order - b.order)
       .map((t) => {
         const type = (t.type as TaskType) ?? 'TODO'
+        const offset = ENQUIRY_TASK_SCHEDULE[t.title]
+        let dueDate: Date | null = t.dueAt ?? null
+        let noDate = false
+        if (!dueDate && offset !== undefined) {
+          if (anchorDate) dueDate = addDays(anchorDate, offset)
+          else noDate = true
+        }
         return {
           id: t.id,
           title: t.title,
           type,
           typeLabel: TASK_TYPE_LABEL[type] ?? '',
+          note: ENQUIRY_TASK_NOTE[t.title] ?? null,
           editable: type !== 'AUTO',
           done: t.status === 'COMPLETED',
-          dueLabel: t.dueAt ? formatDate(t.dueAt) : null,
-          dueValue: t.dueAt ? isoDate(t.dueAt) : null,
+          dueLabel: dueDate ? formatDate(dueDate) : null,
+          dueValue: dueDate ? isoDate(dueDate) : null,
+          noDate,
           completedByName: t.completedByName,
           completedAt: t.completedAt,
         }

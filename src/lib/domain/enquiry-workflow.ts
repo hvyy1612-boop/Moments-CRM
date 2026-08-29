@@ -77,7 +77,11 @@ export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> 
     completedByName: w.completedBy?.name ?? null,
     completedAt: w.completedAt ?? null,
   }))
-  return buildEnquiryBoard(tasks, formatSydneyDate)
+  const enquiry = await prisma.enquiry.findUnique({
+    where: { id: enquiryId },
+    select: { createdAt: true },
+  })
+  return buildEnquiryBoard(tasks, formatSydneyDate, enquiry?.createdAt ?? null)
 }
 
 export async function sendStaffReply(enquiryId: string, body: string, actorUserId: string) {
