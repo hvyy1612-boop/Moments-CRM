@@ -72,6 +72,7 @@ export function EditableTaskRow({
             <span className="rounded bg-paper px-1.5 py-0.5 text-xs text-ink-muted">{task.dueLabel}</span>
           ) : null}
         </div>
+        {task.note ? <div className="mt-0.5 text-sm text-muted">{task.note}</div> : null}
         {done && task.completedByName ? <div className="text-sm text-muted">Done by {task.completedByName}</div> : null}
       </div>
       <div className="flex shrink-0 items-center">

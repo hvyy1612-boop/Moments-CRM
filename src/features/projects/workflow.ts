@@ -104,6 +104,57 @@ export const OPTIONAL_STAGE_TASKS: Record<string, { title: string; type: TaskTyp
   ],
 }
 
+/** A short, formal note under each default and optional task - what it is and when it is done. */
+export const PROJECT_TASK_NOTE: Record<string, string> = {
+  'Send client welcome email': 'Sent automatically once the booking is confirmed.',
+  'Collect wedding and shoot details': 'Gather the timeline, venues, and key people.',
+  'Confirm timeline and venue details': 'Confirm the run sheet and locations.',
+  'Record special requests': 'Note the must-have shots and special moments.',
+  'Confirm photography and video coverage': 'Confirm what the package includes.',
+  'Send pre-shoot questionnaire and reminder': 'Sent automatically about three weeks before the shoot.',
+  'Review final shoot information': "Check the client's answers before the day.",
+  'Schedule final planning call': 'Book a call about a week before the shoot.',
+  'Confirm final timeline and shoot details': 'Lock the final run sheet with the client.',
+  'Send final payment reminder': 'Sent automatically about two weeks before the shoot.',
+  'Conduct wedding photography': 'Shoot the day per the agreed coverage.',
+  'Back up all captured files': 'Copy every card to two drives before deleting.',
+  'Prepare preview images': 'Select and edit a small preview set.',
+  'Send preview gallery to client': 'Share a first look within a few days.',
+  'Cull wedding images': 'Choose the final selects from the full take.',
+  'Edit wedding images': 'Edit the selected images to the studio standard.',
+  'Review edited gallery': 'Quality-check the full gallery before delivery.',
+  'Finalise wedding gallery': 'Approve the gallery for delivery.',
+  'Prepare final client deliverables': 'Assemble the gallery, files, and any prints.',
+  'Send final gallery to client': 'Deliver the full gallery to the client.',
+  'Gallery delivered': 'Ticks itself when the gallery is published.',
+  'Confirm client received deliverables': 'Confirm the client has downloaded everything.',
+  'Confirm final payment received': 'Ticks itself when the balance is paid.',
+  'Send final thank-you email': 'Sent automatically after delivery.',
+  'Archive project files': 'Move the finished files to long-term storage.',
+  'Close project': 'Mark the job complete.',
+  // Optional stages
+  'Schedule pre-wedding shoot': 'Book the engagement or pre-wedding session.',
+  'Confirm pre-wedding shoot details': 'Confirm the date, location, and outfits.',
+  'Conduct pre-wedding shoot': 'Shoot the pre-wedding session.',
+  'Back up pre-wedding images': 'Copy every card to two drives.',
+  'Edit and send pre-wedding photos': 'Edit and deliver the pre-wedding gallery.',
+  'Prepare video footage for editing': 'Organise and back up the footage.',
+  'Edit wedding film': 'Cut the wedding film to the agreed length.',
+  'Colour grade wedding film': 'Grade the film to the studio look.',
+  'Review final wedding film': 'Quality-check the film before delivery.',
+  'Finalise wedding film': 'Approve the film for delivery.',
+  'Send film for processing and scanning': 'Send the rolls to the lab for developing.',
+  'Review film scans': 'Check the scans when they return.',
+  'Add film images to client gallery': 'Add the film selects to the gallery.',
+  'Prepare album design': "Design the album from the client's favourites.",
+  'Send album draft to client': 'Share the draft for review.',
+  'Review client album changes': 'Collect and note the requested changes.',
+  'Update album design': "Apply the client's changes.",
+  'Approve album for production': 'Get final sign-off before printing.',
+  'Send album to print': 'Order the album from the printer.',
+  'Quality check finished products': 'Inspect the album on arrival.',
+}
+
 export type TaskInput = {
   id: string
   title: string
@@ -121,6 +172,7 @@ export type BoardTaskRow = {
   title: string
   type: TaskType
   typeLabel: string
+  note: string | null
   editable: boolean
   done: boolean
   dueLabel: string | null
@@ -162,6 +214,7 @@ export function buildProjectBoard(
           title: t.title,
           type,
           typeLabel: TASK_TYPE_LABEL[type] ?? '',
+          note: PROJECT_TASK_NOTE[t.title] ?? null,
           editable: !isAuto,
           done,
           dueLabel: t.dueAt ? formatDate(t.dueAt) : null,

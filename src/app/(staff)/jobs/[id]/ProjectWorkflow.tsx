@@ -88,9 +88,12 @@ export function ProjectWorkflow({
                         >
                           ✓
                         </span>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`text-base ${t.done ? 'text-ink-muted' : 'text-ink'}`}>{t.title}</span>
-                          <TypeTag label={t.typeLabel} type={t.type} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`text-base ${t.done ? 'text-ink-muted' : 'text-ink'}`}>{t.title}</span>
+                            <TypeTag label={t.typeLabel} type={t.type} />
+                          </div>
+                          {t.note ? <div className="mt-0.5 text-sm text-muted">{t.note}</div> : null}
                         </div>
                       </div>
                     )

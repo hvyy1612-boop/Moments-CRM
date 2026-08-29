@@ -58,6 +58,21 @@ export const DEFAULT_ENQUIRY_TASKS: { stage: string; title: string; type: TaskTy
   { stage: 'quote', title: 'Send contract and deposit invoice', type: 'TODO' },
 ]
 
+/** A short, formal note under each default task - what it is and when it is done (matched by title). */
+export const ENQUIRY_TASK_NOTE: Record<string, string> = {
+  'Enquiry received': 'Logged automatically when the enquiry arrives.',
+  'Send initial enquiry response': 'Reply within 24 hours of the enquiry.',
+  'Follow up on enquiry': 'Follow up if there is no reply after 2 to 3 days.',
+  'Discuss shoot requirements': 'Confirm the date, location, and coverage.',
+  'Schedule client consultation': 'Book a call or meeting to talk through the shoot.',
+  'Confirm shoot date and requirements': 'Lock the date and scope before quoting.',
+  'Prepare client quote': 'Build the quote from the agreed package.',
+  'Send client quote': 'Send the quote and note when a reply is due.',
+  'Follow up on quote': 'Follow up if the quote is unanswered after 3 days.',
+  'Update quote based on client request': 'Revise and resend if the client asks for changes.',
+  'Send contract and deposit invoice': 'Send the contract and deposit to secure the booking.',
+}
+
 export type TaskInput = {
   id: string
   title: string
@@ -75,6 +90,7 @@ export type EnqTaskRow = {
   title: string
   type: TaskType
   typeLabel: string
+  note: string | null
   editable: boolean
   done: boolean
   dueLabel: string | null
@@ -102,6 +118,7 @@ export function buildEnquiryBoard(tasks: TaskInput[], formatDate: (d: Date) => s
           title: t.title,
           type,
           typeLabel: TASK_TYPE_LABEL[type] ?? '',
+          note: ENQUIRY_TASK_NOTE[t.title] ?? null,
           editable: type !== 'AUTO',
           done: t.status === 'COMPLETED',
           dueLabel: t.dueAt ? formatDate(t.dueAt) : null,
