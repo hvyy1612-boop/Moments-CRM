@@ -25,6 +25,8 @@ const envSchema = z
     // adapter falls back to recording intent only (dev). EMAIL_FROM must be a Resend-verified sender.
     RESEND_API_KEY: z.string().min(1).optional(),
     EMAIL_FROM: z.string().min(1).optional(),
+    // Authorises the Vercel Cron daily reminder call (Bearer token). Reminders run only when set.
+    CRON_SECRET: z.string().min(1).optional(),
     STRIPE_SECRET_KEY: z.string().min(1).optional(),
     STRIPE_WEBHOOK_SECRET: z.string().min(1).optional(),
     STRIPE_PUBLISHABLE_KEY: z.string().min(1).optional(),
