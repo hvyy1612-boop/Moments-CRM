@@ -71,6 +71,9 @@ export function EditableTaskRow({
           {task.dueLabel ? (
             <span className="rounded bg-paper px-1.5 py-0.5 text-xs text-ink-muted">{task.dueLabel}</span>
           ) : null}
+          {task.noDate ? (
+            <span className="rounded bg-sunk px-1.5 py-0.5 text-xs text-muted">No date</span>
+          ) : null}
         </div>
         {task.note ? <div className="mt-0.5 text-sm text-muted">{task.note}</div> : null}
         {done && task.completedByName ? <div className="text-sm text-muted">Done by {task.completedByName}</div> : null}

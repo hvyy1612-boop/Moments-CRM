@@ -55,6 +55,7 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
       companyId: true,
       invoices: { select: { total: true, amountPaid: true } },
       galleries: { select: { status: true } },
+      bookings: { orderBy: { startsAt: 'desc' }, take: 1, select: { startsAt: true } },
     },
   })
 
@@ -95,7 +96,7 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     completedAt: w.completedAt ?? null,
   }))
 
-  return buildProjectBoard(facts, tasks, formatSydneyDate)
+  return buildProjectBoard(facts, tasks, formatSydneyDate, project.bookings[0]?.startsAt ?? null)
 }
 
 async function loadTask(taskId: string) {

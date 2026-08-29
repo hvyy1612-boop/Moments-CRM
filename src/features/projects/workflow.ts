@@ -5,7 +5,7 @@
  * final payment), not toggled by staff. Optional stages (Pre-wedding, Video, Film, Album) are not
  * seeded by default; staff add their tasks per package.
  */
-import { TASK_TYPE_LABEL, type TaskType } from '@/features/enquiries/workflow'
+import { addDays, TASK_TYPE_LABEL, type TaskType } from '@/features/enquiries/workflow'
 
 export { ADDABLE_TASK_TYPES } from '@/features/enquiries/workflow'
 export type { TaskType } from '@/features/enquiries/workflow'
@@ -155,6 +155,57 @@ export const PROJECT_TASK_NOTE: Record<string, string> = {
   'Quality check finished products': 'Inspect the album on arrival.',
 }
 
+/** Relative due date for each project task: days from the shoot date (negative = before the shoot). */
+export const PROJECT_TASK_SCHEDULE: Record<string, number> = {
+  'Send client welcome email': -60,
+  'Collect wedding and shoot details': -45,
+  'Confirm timeline and venue details': -30,
+  'Record special requests': -30,
+  'Confirm photography and video coverage': -28,
+  'Send pre-shoot questionnaire and reminder': -21,
+  'Send final payment reminder': -14,
+  'Review final shoot information': -14,
+  'Schedule final planning call': -10,
+  'Confirm final timeline and shoot details': -7,
+  'Conduct wedding photography': 0,
+  'Back up all captured files': 1,
+  'Prepare preview images': 3,
+  'Send preview gallery to client': 5,
+  'Cull wedding images': 7,
+  'Edit wedding images': 21,
+  'Review edited gallery': 35,
+  'Finalise wedding gallery': 40,
+  'Prepare final client deliverables': 42,
+  'Send final gallery to client': 42,
+  'Gallery delivered': 42,
+  'Confirm client received deliverables': 45,
+  'Confirm final payment received': 49,
+  'Send final thank-you email': 50,
+  'Archive project files': 56,
+  'Close project': 56,
+  // Optional stages
+  'Schedule pre-wedding shoot': -90,
+  'Confirm pre-wedding shoot details': -75,
+  'Conduct pre-wedding shoot': -60,
+  'Back up pre-wedding images': -59,
+  'Edit and send pre-wedding photos': -45,
+  'Prepare video footage for editing': 3,
+  'Edit wedding film': 30,
+  'Colour grade wedding film': 45,
+  'Review final wedding film': 50,
+  'Finalise wedding film': 55,
+  'Send film for processing and scanning': 2,
+  'Review film scans': 14,
+  'Add film images to client gallery': 20,
+  'Prepare album design': 45,
+  'Send album draft to client': 50,
+  'Review client album changes': 57,
+  'Update album design': 60,
+  'Approve album for production': 63,
+  'Send album to print': 65,
+  'Quality check finished products': 75,
+}
+
 export type TaskInput = {
   id: string
   title: string
@@ -177,6 +228,7 @@ export type BoardTaskRow = {
   done: boolean
   dueLabel: string | null
   dueValue: string | null
+  noDate: boolean
   completedByName: string | null
   completedAt: Date | null
 }
@@ -198,6 +250,7 @@ export function buildProjectBoard(
   facts: ProjectFacts,
   tasks: TaskInput[],
   formatDate: (d: Date) => string,
+  shootDate: Date | null = null,
 ): ProjectBoard {
   let activeKey: string | null = null
   const stages: BoardStage[] = PROJECT_STAGES.map((stage) => {
@@ -209,6 +262,13 @@ export function buildProjectBoard(
         const isAuto = type === 'AUTO'
         const fact = isAuto ? AUTO_FACT_BY_TITLE[t.title] : undefined
         const done = isAuto ? (fact ? facts[fact] : false) : t.status === 'COMPLETED'
+        const offset = PROJECT_TASK_SCHEDULE[t.title]
+        let dueDate: Date | null = t.dueAt ?? null
+        let noDate = false
+        if (!dueDate && offset !== undefined) {
+          if (shootDate) dueDate = addDays(shootDate, offset)
+          else noDate = true
+        }
         return {
           id: t.id,
           title: t.title,
@@ -217,8 +277,9 @@ export function buildProjectBoard(
           note: PROJECT_TASK_NOTE[t.title] ?? null,
           editable: !isAuto,
           done,
-          dueLabel: t.dueAt ? formatDate(t.dueAt) : null,
-          dueValue: t.dueAt ? isoDate(t.dueAt) : null,
+          dueLabel: dueDate ? formatDate(dueDate) : null,
+          dueValue: dueDate ? isoDate(dueDate) : null,
+          noDate,
           completedByName: t.completedByName,
           completedAt: t.completedAt,
         }

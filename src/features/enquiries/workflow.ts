@@ -73,6 +73,26 @@ export const ENQUIRY_TASK_NOTE: Record<string, string> = {
   'Send contract and deposit invoice': 'Send the contract and deposit to secure the booking.',
 }
 
+/** Relative due date for each default enquiry task: days after the enquiry arrived. */
+export const ENQUIRY_TASK_SCHEDULE: Record<string, number> = {
+  'Send initial enquiry response': 1,
+  'Follow up on enquiry': 3,
+  'Discuss shoot requirements': 5,
+  'Schedule client consultation': 7,
+  'Confirm shoot date and requirements': 10,
+  'Prepare client quote': 12,
+  'Send client quote': 13,
+  'Follow up on quote': 16,
+  'Update quote based on client request': 18,
+  'Send contract and deposit invoice': 20,
+}
+
+export function addDays(base: Date, days: number): Date {
+  const d = new Date(base.getTime())
+  d.setDate(d.getDate() + days)
+  return d
+}
+
 export type TaskInput = {
   id: string
   title: string
@@ -95,6 +115,7 @@ export type EnqTaskRow = {
   done: boolean
   dueLabel: string | null
   dueValue: string | null
+  noDate: boolean
   completedByName: string | null
   completedAt: Date | null
 }
@@ -105,7 +126,11 @@ function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-export function buildEnquiryBoard(tasks: TaskInput[], formatDate: (d: Date) => string): EnquiryBoard {
+export function buildEnquiryBoard(
+  tasks: TaskInput[],
+  formatDate: (d: Date) => string,
+  anchorDate: Date | null = null,
+): EnquiryBoard {
   let activeKey: string | null = null
   const stages: EnqStage[] = ENQUIRY_STAGES.map((stage) => {
     const stageTasks: EnqTaskRow[] = tasks
@@ -113,6 +138,13 @@ export function buildEnquiryBoard(tasks: TaskInput[], formatDate: (d: Date) => s
       .sort((a, b) => a.order - b.order)
       .map((t) => {
         const type = (t.type as TaskType) ?? 'TODO'
+        const offset = ENQUIRY_TASK_SCHEDULE[t.title]
+        let dueDate: Date | null = t.dueAt ?? null
+        let noDate = false
+        if (!dueDate && offset !== undefined) {
+          if (anchorDate) dueDate = addDays(anchorDate, offset)
+          else noDate = true
+        }
         return {
           id: t.id,
           title: t.title,
@@ -121,8 +153,9 @@ export function buildEnquiryBoard(tasks: TaskInput[], formatDate: (d: Date) => s
           note: ENQUIRY_TASK_NOTE[t.title] ?? null,
           editable: type !== 'AUTO',
           done: t.status === 'COMPLETED',
-          dueLabel: t.dueAt ? formatDate(t.dueAt) : null,
-          dueValue: t.dueAt ? isoDate(t.dueAt) : null,
+          dueLabel: dueDate ? formatDate(dueDate) : null,
+          dueValue: dueDate ? isoDate(dueDate) : null,
+          noDate,
           completedByName: t.completedByName,
           completedAt: t.completedAt,
         }

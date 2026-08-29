@@ -81,7 +81,11 @@ export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> 
     completedByName: w.completedBy?.name ?? null,
     completedAt: w.completedAt ?? null,
   }))
-  return buildEnquiryBoard(tasks, formatSydneyDate)
+  const enquiry = await prisma.enquiry.findUnique({
+    where: { id: enquiryId },
+    select: { createdAt: true },
+  })
+  return buildEnquiryBoard(tasks, formatSydneyDate, enquiry?.createdAt ?? null)
 }
 
 /** Staff sends a reply: records an outbound message and moves the ball to the client. A brand-new lead
