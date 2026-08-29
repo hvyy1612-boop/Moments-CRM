@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
 import { Donut, Funnel } from '@/components/ui/charts'
 import { StatusTag, type StatusKind } from '@/components/ui/StatusTag'
+import { OPEN_STATUSES } from '@/features/enquiries/status'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
@@ -15,24 +16,20 @@ import { AppShell } from '../AppShell'
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Dashboard - Moments' }
 
-type AttnTone = 'new' | 'waiting' | 'money'
+type AttnTone = 'new' | 'money'
 type Attn = { id: string; who: string; what: string; tone: AttnTone; href: string }
 
-const PIPELINE: { label: string; stages: string[] }[] = [
-  { label: 'Enquiry', stages: ['ENQUIRY', 'QUALIFYING'] },
-  { label: 'Quoting', stages: ['QUOTING'] },
-  { label: 'Awaiting', stages: ['AWAITING_DECISION'] },
-  { label: 'Confirmed', stages: ['CONFIRMED', 'IN_PRODUCTION'] },
-  { label: 'Completed', stages: ['COMPLETED'] },
+// The lead-conversion funnel reads the Enquiry model (the pre-booking pipeline), including booked
+// leads as the final step, so it is the same source of truth as the Enquiries page.
+const ENQUIRY_FUNNEL: { label: string; statuses: string[] }[] = [
+  { label: 'New', statuses: ['NEW'] },
+  { label: 'Discussing', statuses: ['CONTACTED'] },
+  { label: 'Preparing quote', statuses: ['QUALIFIED'] },
+  { label: 'Booked', statuses: ['CONVERTED'] },
 ]
 
-// Which donut colour each lifecycle status contributes to.
-const DONUT_BUCKET: Record<string, 'enquiry' | 'quote' | 'booked' | 'editing' | 'delivered'> = {
-  ENQUIRY: 'enquiry',
-  QUALIFYING: 'enquiry',
-  QUOTING: 'quote',
-  AWAITING_DECISION: 'quote',
-  NEGOTIATION: 'quote',
+// Which donut colour each booked-job lifecycle status contributes to.
+const DONUT_BUCKET: Record<string, 'booked' | 'editing' | 'delivered'> = {
   BOOKING_REQUESTED: 'booked',
   CONFIRMED: 'booked',
   ON_HOLD: 'booked',
@@ -41,8 +38,8 @@ const DONUT_BUCKET: Record<string, 'enquiry' | 'quote' | 'booked' | 'editing' | 
   COMPLETED: 'delivered',
 }
 
-const ATTN_KIND: Record<AttnTone, StatusKind> = { new: 'enquiry', waiting: 'quote', money: 'lost' }
-const ATTN_LABEL: Record<AttnTone, string> = { new: 'New', waiting: 'Awaiting', money: 'Overdue' }
+const ATTN_KIND: Record<AttnTone, StatusKind> = { new: 'enquiry', money: 'lost' }
+const ATTN_LABEL: Record<AttnTone, string> = { new: 'Reply', money: 'Overdue' }
 
 export default async function DashboardPage() {
   const user = await requireRole('/dashboard')
@@ -50,14 +47,16 @@ export default async function DashboardPage() {
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
   const now = systemClock.now()
 
-  const [projects, unpaidInvoices, upcoming] = await Promise.all([
+  const [enquiries, projects, unpaidInvoices, upcoming] = await Promise.all([
+    prisma.enquiry.findMany({
+      select: { id: true, name: true, status: true, waitingOn: true },
+      orderBy: { updatedAt: 'asc' }, // oldest-waiting first
+    }),
     prisma.project.findMany({
       where: { lifecycleStatus: { not: 'CANCELLED' } },
       select: {
         id: true,
-        code: true,
         lifecycleStatus: true,
-        commercialStatus: true,
         client: { select: { displayName: true } },
       },
       orderBy: { enquiryReceivedAt: 'desc' },
@@ -66,7 +65,6 @@ export default async function DashboardPage() {
       where: { status: { in: ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'OVERDUE'] } },
       select: {
         id: true,
-        type: true,
         total: true,
         amountPaid: true,
         project: { select: { id: true, client: { select: { displayName: true } } } },
@@ -85,15 +83,13 @@ export default async function DashboardPage() {
     }),
   ])
 
+  const openEnquiries = enquiries.filter((e) => (OPEN_STATUSES as ReadonlySet<string>).has(e.status))
+  const needsReply = openEnquiries.filter((e) => e.waitingOn === 'STUDIO')
+  const withClient = openEnquiries.filter((e) => e.waitingOn === 'CLIENT')
+
   const attention: Attn[] = []
-  for (const p of projects) {
-    if (p.lifecycleStatus === 'ENQUIRY') {
-      attention.push({ id: p.id, who: p.client.displayName, what: 'New enquiry awaiting first reply.', tone: 'new', href: `/jobs/${p.id}` })
-    } else if (p.lifecycleStatus === 'AWAITING_DECISION' && p.commercialStatus === 'QUOTED') {
-      attention.push({ id: p.id, who: p.client.displayName, what: 'Quote sent, awaiting client response.', tone: 'waiting', href: `/jobs/${p.id}` })
-    } else if (p.lifecycleStatus === 'AWAITING_DECISION' && p.commercialStatus === 'ACCEPTED') {
-      attention.push({ id: p.id, who: p.client.displayName, what: 'Contract sent, awaiting signature.', tone: 'waiting', href: `/jobs/${p.id}` })
-    }
+  for (const e of needsReply) {
+    attention.push({ id: e.id, who: e.name, what: 'Open enquiry needs your reply.', tone: 'new', href: `/enquiries/${e.id}` })
   }
   let outstanding = new Prisma.Decimal(0)
   for (const inv of unpaidInvoices) {
@@ -102,44 +98,37 @@ export default async function DashboardPage() {
     attention.push({ id: inv.id, who: inv.project.client.displayName, what: `Invoice outstanding, ${formatAud(due)} due.`, tone: 'money', href: `/jobs/${inv.project.id}` })
   }
 
-  const newEnquiries = projects.filter((p) => p.lifecycleStatus === 'ENQUIRY').length
-  const quotesAwaiting = projects.filter((p) => p.lifecycleStatus === 'AWAITING_DECISION' && p.commercialStatus === 'QUOTED').length
-
   const tiles = [
-    { k: 'New enquiries', v: String(newEnquiries), sub: 'Awaiting first reply' },
-    { k: 'Quotes awaiting', v: String(quotesAwaiting), sub: 'Sent, awaiting response' },
+    { k: 'Needs your reply', v: String(needsReply.length), sub: 'Open enquiries' },
+    { k: 'With the client', v: String(withClient.length), sub: 'Awaiting their response' },
     { k: 'Unpaid invoices', v: String(unpaidInvoices.length), sub: `${formatAud(outstanding)} outstanding` },
     { k: 'Upcoming shoots', v: String(upcoming.length), sub: upcoming[0] ? `Next on ${formatSydneyDate(upcoming[0].startsAt)}` : 'None scheduled' },
   ]
 
   // Pie/donut uses the categorical palette A (D-23), the bright, high-contrast set chosen for charts.
   const donutSegments = [
-    { label: 'Enquiry', varName: '--color-cat-1', value: 0 },
-    { label: 'Quote', varName: '--color-cat-2', value: 0 },
     { label: 'Booked', varName: '--color-cat-3', value: 0 },
     { label: 'Editing', varName: '--color-cat-4', value: 0 },
     { label: 'Delivered', varName: '--color-cat-5', value: 0 },
   ]
   const byLabel: Record<string, (typeof donutSegments)[number]> = {
-    enquiry: donutSegments[0]!,
-    quote: donutSegments[1]!,
-    booked: donutSegments[2]!,
-    editing: donutSegments[3]!,
-    delivered: donutSegments[4]!,
+    booked: donutSegments[0]!,
+    editing: donutSegments[1]!,
+    delivered: donutSegments[2]!,
   }
   for (const p of projects) {
     const bucket = DONUT_BUCKET[p.lifecycleStatus]
     if (bucket) byLabel[bucket]!.value += 1
   }
 
-  const funnelSteps = PIPELINE.map((col) => ({
+  const funnelSteps = ENQUIRY_FUNNEL.map((col) => ({
     label: col.label,
-    value: projects.filter((p) => col.stages.includes(p.lifecycleStatus)).length,
+    value: enquiries.filter((e) => col.statuses.includes(e.status)).length,
   }))
 
   const action = (
-    <Link href="/jobs/new">
-      <Button size="sm">+ New job</Button>
+    <Link href="/clients/new">
+      <Button size="sm">+ Add client</Button>
     </Link>
   )
 
@@ -166,7 +155,7 @@ export default async function DashboardPage() {
           <Donut segments={donutSegments} />
         </section>
         <section className="rounded-md border border-line bg-surface p-5">
-          <h2 className="mb-4 text-lg font-bold text-ink">Pipeline conversion</h2>
+          <h2 className="mb-4 text-lg font-bold text-ink">Lead conversion</h2>
           <Funnel steps={funnelSteps} />
         </section>
       </div>
