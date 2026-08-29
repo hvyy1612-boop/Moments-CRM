@@ -76,6 +76,22 @@ export async function sendContractEmail(email: ContractEmail): Promise<void> {
   await deliver({ to: email.to, subject: 'Your Moments booking contract', html, event: 'email.contract_sent', devLink: email.contractLink })
 }
 
+export type TaskDigestEmail = { to: string; name: string; overdue: string[]; today: string[] }
+
+export async function sendTaskDigestEmail(email: TaskDigestEmail): Promise<void> {
+  const list = (items: string[]) =>
+    `<ul style="margin:6px 0 16px;padding-left:18px">${items
+      .map((i) => `<li style="margin:3px 0">${i}</li>`)
+      .join('')}</ul>`
+  const section = (title: string, items: string[]) =>
+    items.length ? `<h2 style="font-size:15px;font-weight:700;margin:16px 0 4px">${title}</h2>${list(items)}` : ''
+  const html = shell(
+    'What needs you today',
+    `<p>Hi ${email.name},</p>${section('Overdue', email.overdue)}${section('Due today', email.today)}`,
+  )
+  await deliver({ to: email.to, subject: 'Moments - tasks due today', html, event: 'email.task_digest' })
+}
+
 export type PasswordResetEmail = { to: string; resetLink: string }
 
 export async function sendPasswordResetEmail(email: PasswordResetEmail): Promise<void> {

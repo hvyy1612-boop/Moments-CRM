@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ADDABLE_TASK_TYPES, type EnqStage, type TaskType } from '@/features/enquiries/workflow'
 import { WorkflowProgress } from '@/components/WorkflowProgress'
+import { ReminderChip } from '@/components/ui/WorkflowChips'
 import { addEnquiryTaskAction, updateEnquiryTaskAction } from '../actions'
 import { EnquiryTaskRow } from './EnquiryTaskRow'
 
@@ -66,7 +67,23 @@ export function EnquiryWorkflow({
                 {stage.active && !allDone ? (
                   <span className="rounded bg-accent px-1.5 py-0.5 text-xs font-bold text-accent-ink">Now</span>
                 ) : null}
+                {stage.total > 0 && stage.done === stage.total ? (
+                  <span className="rounded bg-delivered px-1.5 py-0.5 text-xs font-bold text-delivered-ink">Complete</span>
+                ) : null}
+                {stage.total > 0 ? (
+                  <span className="tabular ml-auto text-xs text-muted">
+                    {stage.done}/{stage.total}
+                  </span>
+                ) : null}
               </div>
+              {stage.total > 0 ? (
+                <div className="mb-2 h-1 w-full overflow-hidden rounded-full bg-sunk">
+                  <div
+                    className="h-full rounded-full bg-accent transition-all"
+                    style={{ width: `${Math.round((stage.done / stage.total) * 100)}%` }}
+                  />
+                </div>
+              ) : null}
 
               <div className="flex flex-col gap-1.5">
                 {stage.tasks.map((t) => {
@@ -92,6 +109,7 @@ export function EnquiryWorkflow({
                             {t.noDate ? (
                               <span className="rounded bg-sunk px-1.5 py-0.5 text-xs text-muted">No date</span>
                             ) : null}
+                            {!t.done ? <ReminderChip tone={t.dueTone} /> : null}
                           </div>
                           {t.note ? <div className="mt-0.5 text-sm text-muted">{t.note}</div> : null}
                         </div>

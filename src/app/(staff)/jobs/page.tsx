@@ -13,6 +13,7 @@ import { stageLabel } from '@/features/projects/workflow'
 import { getCompanyStatusLabels } from '@/lib/domain/status-labels'
 import { StatusPicker } from '@/features/projects/components/StatusPicker'
 import { AppShell } from '../AppShell'
+import { JobsBoard, type BoardJob } from './JobsBoard'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Jobs - Moments' }
@@ -123,16 +124,23 @@ function Group({
   )
 }
 
-export default async function ProjectsPage() {
+export default async function ProjectsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>
+}) {
   const user = await requireRole('/jobs')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
+  const view = (await searchParams).view === 'board' ? 'board' : 'list'
 
   const [projects, labels] = await Promise.all([
     prisma.project.findMany({
       orderBy: { enquiryReceivedAt: 'desc' },
       include: {
         client: { select: { displayName: true } },
+        owner: { select: { name: true } },
+        bookings: { orderBy: { startsAt: 'desc' }, take: 1, select: { startsAt: true } },
         workItems: {
           where: { status: 'PENDING', type: { not: 'AUTO' } },
           orderBy: { order: 'asc' },
@@ -163,6 +171,21 @@ export default async function ProjectsPage() {
   const closed = rows.filter((r) => r.closed)
   const canEdit = can(user, 'PROJECT_EDIT')
 
+  const boardJobs: BoardJob[] = projects
+    .filter((p) => !isClosedLabel(resolveLabel(p, labels)))
+    .map((p) => {
+      const next = p.workItems[0]
+      return {
+        id: p.id,
+        client: p.client.displayName,
+        name: p.name,
+        stage: next?.stage ?? 'done',
+        nextTask: next?.title ?? null,
+        assignee: p.owner?.name ?? 'Unassigned',
+        shootDate: p.bookings[0]?.startsAt ?? null,
+      }
+    })
+
   const action = (
     <Link href="/clients/new">
       <Button size="sm">+ Add client</Button>
@@ -175,12 +198,37 @@ export default async function ProjectsPage() {
         Booked jobs in production - from planning through the shoot, editing, and delivery.
       </p>
 
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {(
+          [
+            { key: 'list', label: 'List', href: '/jobs' },
+            { key: 'board', label: 'Board', href: '/jobs?view=board' },
+          ] as const
+        ).map((v) => (
+          <Link
+            key={v.key}
+            href={v.href}
+            className={`rounded border px-3 py-1.5 text-sm transition-colors ${
+              view === v.key
+                ? 'border-ink bg-ink font-bold text-surface'
+                : 'border-line-strong text-ink-muted hover:text-ink'
+            }`}
+          >
+            {v.label}
+          </Link>
+        ))}
+      </div>
+
       {rows.length === 0 ? (
         <div className="mt-6">
           <EmptyState
             title="No jobs yet"
             description="Jobs appear here once you book an enquiry. Add a client to start one."
           />
+        </div>
+      ) : view === 'board' ? (
+        <div className="mt-2">
+          <JobsBoard jobs={boardJobs} />
         </div>
       ) : (
         <div className="mt-5">

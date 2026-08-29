@@ -81,7 +81,7 @@ export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> 
     where: { id: enquiryId },
     select: { createdAt: true },
   })
-  return buildEnquiryBoard(tasks, formatSydneyDate, enquiry?.createdAt ?? null)
+  return buildEnquiryBoard(tasks, formatSydneyDate, enquiry?.createdAt ?? null, new Date())
 }
 
 export async function sendStaffReply(enquiryId: string, body: string, actorUserId: string) {

@@ -13,6 +13,8 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/enquire': { public: true },
   '/api/health': { public: true },
 
+  '/api/cron/daily': { secret: true },
+
   '/login': { public: true },
   '/register': { public: true },
   '/forgot': { public: true },

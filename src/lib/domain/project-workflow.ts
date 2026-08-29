@@ -91,7 +91,7 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     completedAt: w.completedAt ?? null,
   }))
 
-  return buildProjectBoard(facts, tasks, formatSydneyDate, project.bookings[0]?.startsAt ?? null)
+  return buildProjectBoard(facts, tasks, formatSydneyDate, project.bookings[0]?.startsAt ?? null, new Date())
 }
 
 async function loadTask(taskId: string) {
