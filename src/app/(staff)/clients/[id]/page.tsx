@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
-import { Prisma } from '@prisma/client'
+import { Prisma, type EnquiryStatus } from '@prisma/client'
 import { StatusTag } from '@/components/ui/StatusTag'
 import { Button } from '@/components/ui/Button'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
@@ -13,7 +13,7 @@ import { formatAud } from '@/lib/money'
 import { titleCase } from '@/lib/text'
 import { formatSydneyDate } from '@/lib/time'
 import { statusKind, statusLabel } from '@/features/projects/lifecycle'
-import { ENQUIRY_STAGE_LABEL, ENQUIRY_STAGE_KIND, waitingLabel } from '@/features/enquiries/status'
+import { ENQUIRY_STAGE_LABEL, ENQUIRY_STAGE_KIND, OPEN_STATUSES, waitingLabel } from '@/features/enquiries/status'
 import { currentActionText } from '@/features/enquiries/workflow'
 import { AppShell } from '../../AppShell'
 import { archiveClientAction, deleteClientAction, restoreClientAction } from '../actions'
@@ -141,7 +141,11 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
   const [enquiries, communications, invoiceAgg] = await Promise.all([
     prisma.enquiry.findMany({
-      where: { OR: [{ convertedClientId: id }, { email: client.email }] },
+
+      where: {
+        status: { in: Array.from(OPEN_STATUSES) as EnquiryStatus[] },
+        OR: [{ convertedClientId: id }, { email: client.email }],
+      },
       orderBy: { createdAt: 'desc' },
       take: 10,
       select: {

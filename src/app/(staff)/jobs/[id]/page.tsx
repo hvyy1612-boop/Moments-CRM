@@ -203,7 +203,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     <AppShell user={user} csrf={csrf} active="jobs">
       <div className="mx-auto w-full max-w-5xl">
         <Link href="/jobs" className="text-sm text-ink-muted transition-colors hover:text-accent">
-          ← Projects
+          ← Jobs
         </Link>
         <div className="mt-3 flex flex-wrap items-baseline justify-between gap-3">
           <div>

@@ -34,7 +34,7 @@ type ViewMatch = (status: string, waitingOn: string | null) => boolean
 
 export const ENQUIRY_VIEWS: { key: string; label: string; match: ViewMatch }[] = [
 
-  { key: 'all', label: 'All open', match: () => true },
+  { key: 'all', label: 'All open', match: (s) => isOpenEnquiry(s) },
   {
     key: 'attention',
     label: 'Needs your reply',
@@ -45,6 +45,7 @@ export const ENQUIRY_VIEWS: { key: string; label: string; match: ViewMatch }[] =
     label: 'Waiting on client',
     match: (s, w) => isOpenEnquiry(s) && w === 'CLIENT',
   },
+  { key: 'archived', label: 'Lost or archived', match: (s) => s === 'LOST' || s === 'ARCHIVED' },
 ]
 
 export const ENQUIRY_EMPTY: Record<string, { title: string; description: string }> = {
@@ -59,5 +60,9 @@ export const ENQUIRY_EMPTY: Record<string, { title: string; description: string 
   waiting: {
     title: 'Nothing waiting on a client',
     description: 'No open enquiries are currently with a client for their response.',
+  },
+  archived: {
+    title: 'Nothing here',
+    description: 'Leads you mark as lost or archived show up here.',
   },
 }

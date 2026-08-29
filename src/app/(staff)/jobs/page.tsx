@@ -111,8 +111,8 @@ function Group({
             <tr>
               <td className="px-3 py-2.5" />
               <td colSpan={5} className="px-3 py-2.5 text-sm text-muted">
-                <Link href="/jobs/new" className="hover:text-accent-ink">
-                  + New job
+                <Link href="/clients/new" className="hover:text-accent-ink">
+                  + Add client
                 </Link>
               </td>
             </tr>
@@ -164,8 +164,8 @@ export default async function ProjectsPage() {
   const canEdit = can(user, 'PROJECT_EDIT')
 
   const action = (
-    <Link href="/jobs/new">
-      <Button size="sm">+ New job</Button>
+    <Link href="/clients/new">
+      <Button size="sm">+ Add client</Button>
     </Link>
   )
 
@@ -174,20 +174,12 @@ export default async function ProjectsPage() {
       <p className="mb-4 text-base text-ink-muted">
         Booked jobs in production - from planning through the shoot, editing, and delivery.
       </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded border border-line-strong px-3 py-1.5 text-sm text-ink-muted">
-          Group by: status
-        </span>
-        <span className="rounded border border-line-strong px-3 py-1.5 text-sm text-ink-muted">
-          Filter
-        </span>
-      </div>
 
       {rows.length === 0 ? (
         <div className="mt-6">
           <EmptyState
             title="No jobs yet"
-            description="Create your first job using the New job button above."
+            description="Jobs appear here once you book an enquiry. Add a client to start one."
           />
         </div>
       ) : (
