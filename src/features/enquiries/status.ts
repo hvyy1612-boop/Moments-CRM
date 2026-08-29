@@ -46,9 +46,8 @@ type ViewMatch = (status: string, waitingOn: string | null) => boolean
  * the two active views; they only show under All.
  */
 export const ENQUIRY_VIEWS: { key: string; label: string; match: ViewMatch }[] = [
-  // Default view first. Booked leads are excluded at the query level (they are Jobs now), so "All"
-  // here means every open lead in the pipeline - it is never blank while leads are waiting.
-  { key: 'all', label: 'All open', match: () => true },
+  // Default view first. A booked lead is a Job, so it never matches any of these open views.
+  { key: 'all', label: 'All open', match: (s) => isOpenEnquiry(s) },
   {
     key: 'attention',
     label: 'Needs your reply',
@@ -59,6 +58,7 @@ export const ENQUIRY_VIEWS: { key: string; label: string; match: ViewMatch }[] =
     label: 'Waiting on client',
     match: (s, w) => isOpenEnquiry(s) && w === 'CLIENT',
   },
+  { key: 'archived', label: 'Lost or archived', match: (s) => s === 'LOST' || s === 'ARCHIVED' },
 ]
 
 /** Empty-state copy per view, phrased as a status rather than a dead filter. */
@@ -74,5 +74,9 @@ export const ENQUIRY_EMPTY: Record<string, { title: string; description: string 
   waiting: {
     title: 'Nothing waiting on a client',
     description: 'No open enquiries are currently with a client for their response.',
+  },
+  archived: {
+    title: 'Nothing here',
+    description: 'Leads you mark as lost or archived show up here.',
   },
 }

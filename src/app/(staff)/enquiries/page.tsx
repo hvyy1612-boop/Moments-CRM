@@ -1,40 +1,29 @@
-import type { EnquiryStatus } from '@prisma/client'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
+import { BoardGroup } from '@/components/ui/BoardGroup'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StatusTag } from '@/components/ui/StatusTag'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { formatSydneyDate } from '@/lib/time'
+import { titleCase } from '@/lib/text'
 import {
   ENQUIRY_EMPTY,
   ENQUIRY_STAGE_KIND,
   ENQUIRY_STAGE_LABEL,
   ENQUIRY_VIEWS,
-  OPEN_STATUSES,
   isOpenEnquiry,
 } from '@/features/enquiries/status'
-import { currentActionText } from '@/features/enquiries/workflow'
 import { AppShell } from '../AppShell'
+import { ViewSelect } from './ViewSelect'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Enquiries - Moments' }
 
 const DAY_MS = 86_400_000
-
-function titleCase(value: string): string {
-  return value
-    .toLowerCase()
-    .split(/[_\s]+/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ')
-}
-
-function snippet(value: string, max = 70): string {
-  const clean = value.trim().replace(/\s+/g, ' ')
-  return clean.length > max ? `${clean.slice(0, max)}...` : clean
-}
+const HEAD = ['Client', 'Type', 'Stage', 'Waiting on', 'Next task', 'Shoot date']
 
 type Row = {
   id: string
@@ -43,9 +32,8 @@ type Row = {
   status: string
   waitingOn: string | null
   waitingDays: number
-  currentTask: string | null
-  latestWho: 'Client' | 'You' | null
-  latestText: string | null
+  nextTask: string | null
+  eventDate: Date | null
 }
 
 export default async function EnquiriesPage({
@@ -61,13 +49,12 @@ export default async function EnquiriesPage({
   const activeView = ENQUIRY_VIEWS.find((v) => v.key === requested) ?? ENQUIRY_VIEWS[0]!
 
   const enquiries = await prisma.enquiry.findMany({
-    // Enquiries is the not-yet-booked pipeline only. Booked leads are Jobs; lost/archived drop off.
-    where: { status: { in: Array.from(OPEN_STATUSES) as EnquiryStatus[] } },
     orderBy: { updatedAt: 'asc' }, // oldest-waiting first, so the most overdue rises to the top
     select: {
       id: true,
       name: true,
       eventType: true,
+      eventDate: true,
       status: true,
       waitingOn: true,
       updatedAt: true,
@@ -77,32 +64,31 @@ export default async function EnquiriesPage({
         take: 1,
         select: { title: true },
       },
-      communications: {
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        select: { direction: true, body: true },
-      },
     },
   })
 
   const now = Date.now()
-  const rows: Row[] = enquiries.map((e) => {
-    const last = e.communications[0]
-    return {
-      id: e.id,
-      name: e.name,
-      event: e.eventType ? titleCase(e.eventType) : 'Enquiry',
-      status: e.status,
-      waitingOn: e.waitingOn,
-      waitingDays: Math.max(0, Math.floor((now - e.updatedAt.getTime()) / DAY_MS)),
-      currentTask: e.workItems[0]?.title ?? null,
-      latestWho: last ? (last.direction === 'inbound' ? 'Client' : 'You') : null,
-      latestText: last?.body ?? null,
-    }
-  })
+  const rows: Row[] = enquiries.map((e) => ({
+    id: e.id,
+    name: e.name,
+    event: e.eventType ? titleCase(e.eventType) : '-',
+    status: e.status,
+    waitingOn: e.waitingOn,
+    waitingDays: Math.max(0, Math.floor((now - e.updatedAt.getTime()) / DAY_MS)),
+    nextTask: e.workItems[0]?.title ?? null,
+    eventDate: e.eventDate,
+  }))
 
   const shown = rows.filter((r) => activeView.match(r.status, r.waitingOn))
+  const options = ENQUIRY_VIEWS.map((v) => ({
+    key: v.key,
+    label: v.label,
+    count: rows.filter((r) => v.match(r.status, r.waitingOn)).length,
+  }))
   const empty = ENQUIRY_EMPTY[activeView.key] ?? ENQUIRY_EMPTY.all!
+
+  const open = rows.filter((r) => isOpenEnquiry(r.status))
+  const byStage = (s: string) => open.filter((r) => r.status === s).length
 
   return (
     <AppShell user={user} csrf={csrf} active="enquiries">
@@ -110,85 +96,58 @@ export default async function EnquiriesPage({
         Clients who have not booked yet - from first enquiry through consultation, quote, and booking.
       </p>
 
-      <div className="flex flex-wrap items-center gap-2">
-        {ENQUIRY_VIEWS.map((v) => {
-          const count = rows.filter((r) => v.match(r.status, r.waitingOn)).length
-          const isActive = v.key === activeView.key
-          return (
-            <Link
-              key={v.key}
-              href={v.key === 'all' ? '/enquiries' : `/enquiries?view=${v.key}`}
-              className={`rounded border px-3 py-1.5 text-sm transition-colors ${
-                isActive
-                  ? 'border-ink bg-ink font-bold text-surface'
-                  : 'border-line-strong text-ink-muted hover:text-ink'
-              }`}
-            >
-              {v.label}
-              <span className={isActive ? 'text-surface/70' : 'text-muted'}> · {count}</span>
-            </Link>
-          )
-        })}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <ViewSelect value={activeView.key} options={options} />
+        {open.length > 0 ? (
+          <div className="text-sm text-muted">
+            New <span className="font-bold text-ink">{byStage('NEW')}</span> · Discussing{' '}
+            <span className="font-bold text-ink">{byStage('CONTACTED')}</span> · Preparing quote{' '}
+            <span className="font-bold text-ink">{byStage('QUALIFIED')}</span>
+          </div>
+        ) : null}
       </div>
 
       {shown.length === 0 ? (
-        <div className="mt-6">
-          <EmptyState title={empty.title} description={empty.description} />
-        </div>
+        <EmptyState title={empty.title} description={empty.description} />
       ) : (
-        <div className="mt-5 flex flex-col gap-2">
+        <BoardGroup title={activeView.label} count={shown.length} spine="border-l-enquiry-ink" head={HEAD}>
           {shown.map((row) => (
-            <Link
-              key={row.id}
-              href={`/enquiries/${row.id}`}
-              className="group block rounded-md border border-line bg-surface px-4 py-3 transition-colors hover:border-line-strong hover:bg-paper"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate font-serif text-lg font-semibold text-ink transition-colors group-hover:text-accent-ink">
-                      {row.name}
-                    </span>
-                    <span className="shrink-0 text-sm text-ink-muted">· {row.event}</span>
-                  </div>
-                  {row.latestText ? (
-                    <div className="mt-0.5 truncate text-sm text-ink-muted">
-                      <span className="font-semibold text-ink">{row.latestWho}:</span>{' '}
-                      {snippet(row.latestText)}
-                    </div>
-                  ) : (
-                    <div className="mt-0.5 text-sm text-muted">No messages yet</div>
-                  )}
-                </div>
-
-                <div className="flex shrink-0 items-center gap-4">
-                  <div className="hidden text-right sm:block">
-                    <div className="text-sm">
-                      {row.waitingOn === 'STUDIO' ? (
-                        <span className="font-bold text-accent-ink">You</span>
-                      ) : row.waitingOn === 'CLIENT' ? (
-                        <span className="text-ink-muted">Client</span>
-                      ) : (
-                        <span className="text-muted">Closed</span>
-                      )}
-                      {isOpenEnquiry(row.status) && row.waitingDays > 0 ? (
-                        <span className="tabular text-muted"> · {row.waitingDays}d</span>
-                      ) : null}
-                    </div>
-                    <div className="text-sm text-ink-muted">
-                      {currentActionText(row.waitingOn, row.currentTask)}
-                    </div>
-                  </div>
-                  <div className="w-36 text-right">
-                    <StatusTag kind={ENQUIRY_STAGE_KIND[row.status] ?? 'hold'}>
-                      {ENQUIRY_STAGE_LABEL[row.status] ?? titleCase(row.status)}
-                    </StatusTag>
-                  </div>
-                </div>
-              </div>
-            </Link>
+            <tr key={row.id} className="group transition-colors hover:bg-paper">
+              <td className="border-b border-r border-line px-3 py-3">
+                <Link
+                  href={`/enquiries/${row.id}`}
+                  className="font-serif text-lg font-semibold text-ink transition-colors group-hover:text-accent-ink"
+                >
+                  {row.name}
+                </Link>
+              </td>
+              <td className="border-b border-r border-line px-3 py-3 text-base text-ink-muted">{row.event}</td>
+              <td className="border-b border-r border-line px-3 py-3">
+                <StatusTag kind={ENQUIRY_STAGE_KIND[row.status] ?? 'hold'}>
+                  {ENQUIRY_STAGE_LABEL[row.status] ?? titleCase(row.status)}
+                </StatusTag>
+              </td>
+              <td className="border-b border-r border-line px-3 py-3 text-base">
+                {row.waitingOn === 'STUDIO' ? (
+                  <span className="font-bold text-accent-ink">You</span>
+                ) : row.waitingOn === 'CLIENT' ? (
+                  <span className="text-ink-muted">Client</span>
+                ) : (
+                  <span className="text-muted">-</span>
+                )}
+                {isOpenEnquiry(row.status) && row.waitingDays > 0 ? (
+                  <span className="tabular text-muted"> · {row.waitingDays}d</span>
+                ) : null}
+              </td>
+              <td className="border-b border-r border-line px-3 py-3 text-base text-ink-muted">
+                {row.nextTask ?? '-'}
+              </td>
+              <td className="tabular border-b border-line px-3 py-3 text-base text-ink-muted">
+                {row.eventDate ? formatSydneyDate(row.eventDate) : '-'}
+              </td>
+            </tr>
           ))}
-        </div>
+        </BoardGroup>
       )}
     </AppShell>
   )
