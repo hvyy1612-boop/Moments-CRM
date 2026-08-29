@@ -93,6 +93,27 @@ export function addDays(base: Date, days: number): Date {
   return d
 }
 
+export const MS_PER_DAY = 86_400_000
+
+/** Reminder tone for a task's due date, relative to today. */
+export type DueTone = 'overdue' | 'today' | 'soon' | null
+
+export function dueToneFor(dueDate: Date | null, done: boolean, now: Date | null): DueTone {
+  if (done || !dueDate || !now) return null
+  const diff = Math.floor((dueDate.getTime() - now.getTime()) / MS_PER_DAY)
+  if (diff < 0) return 'overdue'
+  if (diff === 0) return 'today'
+  if (diff <= 3) return 'soon'
+  return null
+}
+
+/** Which task must be done before another can start (a light dependency, matched by title). */
+export const ENQUIRY_TASK_BLOCKED_BY: Record<string, string> = {
+  'Send client quote': 'Prepare client quote',
+  'Follow up on quote': 'Send client quote',
+  'Send contract and deposit invoice': 'Send client quote',
+}
+
 export type TaskInput = {
   id: string
   title: string
@@ -116,10 +137,21 @@ export type EnqTaskRow = {
   dueLabel: string | null
   dueValue: string | null
   noDate: boolean
+  dueTone: DueTone
+  blocked: boolean
+  blockedBy: string | null
   completedByName: string | null
   completedAt: Date | null
 }
-export type EnqStage = { key: string; label: string; color: string; active: boolean; tasks: EnqTaskRow[] }
+export type EnqStage = {
+  key: string
+  label: string
+  color: string
+  active: boolean
+  done: number
+  total: number
+  tasks: EnqTaskRow[]
+}
 export type EnquiryBoard = { stages: EnqStage[]; allDone: boolean }
 
 function isoDate(d: Date): string {
@@ -130,7 +162,9 @@ export function buildEnquiryBoard(
   tasks: TaskInput[],
   formatDate: (d: Date) => string,
   anchorDate: Date | null = null,
+  now: Date | null = null,
 ): EnquiryBoard {
+  const doneTitles = new Set(tasks.filter((t) => t.status === 'COMPLETED').map((t) => t.title))
   let activeKey: string | null = null
   const stages: EnqStage[] = ENQUIRY_STAGES.map((stage) => {
     const stageTasks: EnqTaskRow[] = tasks
@@ -138,6 +172,7 @@ export function buildEnquiryBoard(
       .sort((a, b) => a.order - b.order)
       .map((t) => {
         const type = (t.type as TaskType) ?? 'TODO'
+        const done = t.status === 'COMPLETED'
         const offset = ENQUIRY_TASK_SCHEDULE[t.title]
         let dueDate: Date | null = t.dueAt ?? null
         let noDate = false
@@ -145,6 +180,7 @@ export function buildEnquiryBoard(
           if (anchorDate) dueDate = addDays(anchorDate, offset)
           else noDate = true
         }
+        const blockedBy = ENQUIRY_TASK_BLOCKED_BY[t.title] ?? null
         return {
           id: t.id,
           title: t.title,
@@ -152,16 +188,27 @@ export function buildEnquiryBoard(
           typeLabel: TASK_TYPE_LABEL[type] ?? '',
           note: ENQUIRY_TASK_NOTE[t.title] ?? null,
           editable: type !== 'AUTO',
-          done: t.status === 'COMPLETED',
+          done,
           dueLabel: dueDate ? formatDate(dueDate) : null,
           dueValue: dueDate ? isoDate(dueDate) : null,
           noDate,
+          dueTone: dueToneFor(dueDate, done, now),
+          blocked: !done && blockedBy ? !doneTitles.has(blockedBy) : false,
+          blockedBy,
           completedByName: t.completedByName,
           completedAt: t.completedAt,
         }
       })
     if (stageTasks.some((t) => !t.done) && activeKey === null) activeKey = stage.key
-    return { key: stage.key, label: stage.label, color: stage.color, active: false, tasks: stageTasks }
+    return {
+      key: stage.key,
+      label: stage.label,
+      color: stage.color,
+      active: false,
+      done: stageTasks.filter((t) => t.done).length,
+      total: stageTasks.length,
+      tasks: stageTasks,
+    }
   })
   for (const s of stages) s.active = s.key === activeKey
   return { stages, allDone: activeKey === null }

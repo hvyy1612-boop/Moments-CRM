@@ -5,7 +5,7 @@
  * final payment), not toggled by staff. Optional stages (Pre-wedding, Video, Film, Album) are not
  * seeded by default; staff add their tasks per package.
  */
-import { addDays, TASK_TYPE_LABEL, type TaskType } from '@/features/enquiries/workflow'
+import { addDays, dueToneFor, TASK_TYPE_LABEL, type DueTone, type TaskType } from '@/features/enquiries/workflow'
 
 export { ADDABLE_TASK_TYPES } from '@/features/enquiries/workflow'
 export type { TaskType } from '@/features/enquiries/workflow'
@@ -206,6 +206,16 @@ export const PROJECT_TASK_SCHEDULE: Record<string, number> = {
   'Quality check finished products': 75,
 }
 
+/** Which task must be done before another can start (a light dependency, matched by title). */
+export const PROJECT_TASK_BLOCKED_BY: Record<string, string> = {
+  'Edit wedding images': 'Cull wedding images',
+  'Review edited gallery': 'Edit wedding images',
+  'Finalise wedding gallery': 'Review edited gallery',
+  'Send final gallery to client': 'Finalise wedding gallery',
+  'Send preview gallery to client': 'Prepare preview images',
+  'Confirm client received deliverables': 'Send final gallery to client',
+}
+
 export type TaskInput = {
   id: string
   title: string
@@ -229,6 +239,9 @@ export type BoardTaskRow = {
   dueLabel: string | null
   dueValue: string | null
   noDate: boolean
+  dueTone: DueTone
+  blocked: boolean
+  blockedBy: string | null
   completedByName: string | null
   completedAt: Date | null
 }
@@ -238,6 +251,8 @@ export type BoardStage = {
   color: string
   optional: boolean
   active: boolean
+  done: number
+  total: number
   tasks: BoardTaskRow[]
 }
 export type ProjectBoard = { stages: BoardStage[]; allDone: boolean }
@@ -251,7 +266,14 @@ export function buildProjectBoard(
   tasks: TaskInput[],
   formatDate: (d: Date) => string,
   shootDate: Date | null = null,
+  now: Date | null = null,
 ): ProjectBoard {
+  const isDone = (t: TaskInput): boolean => {
+    const isAuto = t.type === 'AUTO'
+    const fact = isAuto ? AUTO_FACT_BY_TITLE[t.title] : undefined
+    return isAuto ? (fact ? facts[fact] : false) : t.status === 'COMPLETED'
+  }
+  const doneTitles = new Set(tasks.filter(isDone).map((t) => t.title))
   let activeKey: string | null = null
   const stages: BoardStage[] = PROJECT_STAGES.map((stage) => {
     const stageTasks: BoardTaskRow[] = tasks
@@ -260,8 +282,7 @@ export function buildProjectBoard(
       .map((t) => {
         const type = (t.type as TaskType) ?? 'TODO'
         const isAuto = type === 'AUTO'
-        const fact = isAuto ? AUTO_FACT_BY_TITLE[t.title] : undefined
-        const done = isAuto ? (fact ? facts[fact] : false) : t.status === 'COMPLETED'
+        const done = isDone(t)
         const offset = PROJECT_TASK_SCHEDULE[t.title]
         let dueDate: Date | null = t.dueAt ?? null
         let noDate = false
@@ -269,6 +290,7 @@ export function buildProjectBoard(
           if (shootDate) dueDate = addDays(shootDate, offset)
           else noDate = true
         }
+        const blockedBy = PROJECT_TASK_BLOCKED_BY[t.title] ?? null
         return {
           id: t.id,
           title: t.title,
@@ -280,6 +302,9 @@ export function buildProjectBoard(
           dueLabel: dueDate ? formatDate(dueDate) : null,
           dueValue: dueDate ? isoDate(dueDate) : null,
           noDate,
+          dueTone: dueToneFor(dueDate, done, now),
+          blocked: !done && !isAuto && blockedBy ? !doneTitles.has(blockedBy) : false,
+          blockedBy,
           completedByName: t.completedByName,
           completedAt: t.completedAt,
         }
@@ -291,6 +316,8 @@ export function buildProjectBoard(
       color: stage.color,
       optional: stage.optional ?? false,
       active: false,
+      done: stageTasks.filter((t) => t.done).length,
+      total: stageTasks.length,
       tasks: stageTasks,
     }
   })

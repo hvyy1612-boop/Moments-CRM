@@ -1,6 +1,7 @@
 'use client'
 
 import { useOptimistic, useTransition } from 'react'
+import { BlockedChip, ReminderChip } from '@/components/ui/WorkflowChips'
 import type { BoardTaskRow, TaskType } from '@/features/projects/workflow'
 import { deleteProjectTaskAction, moveProjectTaskAction, toggleProjectTaskAction } from '../actions'
 
@@ -39,6 +40,7 @@ export function EditableTaskRow({
   const [, startTransition] = useTransition()
 
   function toggle() {
+    if (task.blocked && !done) return
     startTransition(async () => {
       setDone(!done)
       const data = new FormData()
@@ -54,12 +56,16 @@ export function EditableTaskRow({
       <button
         type="button"
         onClick={toggle}
+        disabled={task.blocked && !done}
         aria-label={done ? 'Reopen task' : 'Mark done'}
         aria-pressed={done}
+        title={task.blocked && !done ? `Complete "${task.blockedBy}" first` : undefined}
         className={`mt-0.5 flex h-4 w-4 items-center justify-center rounded border text-xs transition-colors ${
           done
             ? 'border-delivered-ink bg-delivered text-delivered-ink'
-            : 'border-line-strong text-transparent hover:border-ink'
+            : task.blocked
+              ? 'cursor-not-allowed border-line-strong text-transparent opacity-50'
+              : 'border-line-strong text-transparent hover:border-ink'
         }`}
       >
         ✓
@@ -74,6 +80,8 @@ export function EditableTaskRow({
           {task.noDate ? (
             <span className="rounded bg-sunk px-1.5 py-0.5 text-xs text-muted">No date</span>
           ) : null}
+          {!done ? <ReminderChip tone={task.dueTone} /> : null}
+          {task.blocked ? <BlockedChip blockedBy={task.blockedBy} /> : null}
         </div>
         {task.note ? <div className="mt-0.5 text-sm text-muted">{task.note}</div> : null}
         {done && task.completedByName ? <div className="text-sm text-muted">Done by {task.completedByName}</div> : null}
