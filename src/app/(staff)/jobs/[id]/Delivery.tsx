@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
+import { CopyLinkField } from '@/components/ui/CopyLinkField'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { Field, TextInput } from '@/components/ui/form'
 import {
@@ -151,9 +152,10 @@ export function Delivery({
           <p className="text-sm text-ink">
             {gallery.publishedLabel ? `Delivered on ${gallery.publishedLabel}.` : 'Delivered.'}
           </p>
-          <p className="mt-1 text-sm">
-            Client link: <span className="text-ink">/gallery/{gallery.accessToken}</span>
-          </p>
+          <div className="mt-1">
+            <p className="text-sm text-ink-muted">Client link</p>
+            <CopyLinkField path={`/gallery/${gallery.accessToken}`} />
+          </div>
         </div>
       )}
     </div>
