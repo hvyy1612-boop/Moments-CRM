@@ -299,6 +299,7 @@ model Company {
   bookings  Booking[]
   resources Resource[]
   workItems WorkItem[]
+  calendarEvents CalendarEvent[]
 
   @@map("companies")
 }
@@ -340,6 +341,7 @@ model User {
   requestedChanges        ChangeRequest[]      @relation("ChangeRequestedBy")
   approvedChanges         ChangeRequest[]      @relation("ChangeApprovedBy")
   completedWorkItems      WorkItem[]           @relation("WorkItemCompletedBy")
+  createdCalendarEvents   CalendarEvent[]      @relation("CalendarEventCreatedBy")
 
   @@index([companyId])
   @@index([role])
@@ -437,6 +439,7 @@ model Client {
   mergedFrom             Client[]        @relation("ClientMerge")
   contacts               Contact[]
   communications         Communication[]
+  calendarEvents         CalendarEvent[]
 
   @@index([companyId])
   @@index([status])
@@ -1008,6 +1011,33 @@ model WorkItem {
   @@index([enquiryId])
   @@index([projectId])
   @@map("work_items")
+}
+
+/// A calendar entry staff add directly, outside the workflow: an appointment, an extra shoot, or
+/// another studio event. Workflow shoots come from Booking and workflow appointments from WorkItem;
+/// this model covers everything staff want on the calendar without opening a case (BR-CAL).
+model CalendarEvent {
+  id              String    @id @default(cuid()) @db.VarChar(30)
+  companyId       String    @map("company_id") @db.VarChar(30)
+  kind            String    @default("APPOINTMENT") @db.VarChar(20) // APPOINTMENT | SHOOT | OTHER
+  title           String    @db.VarChar(200)
+  startsAt        DateTime  @map("starts_at") @db.Timestamptz
+  endsAt          DateTime? @map("ends_at") @db.Timestamptz
+  allDay          Boolean   @default(false) @map("all_day")
+  location        String?   @db.VarChar(255)
+  notes           String?   @db.Text
+  clientId        String?   @map("client_id") @db.VarChar(30)
+  createdByUserId String?   @map("created_by_user_id") @db.VarChar(30)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client    Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  createdBy User?   @relation("CalendarEventCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([startsAt])
+  @@map("calendar_events")
 }
 
 // Files on a project. v1 stores an external URL; real object storage is an env-flag later. Clients

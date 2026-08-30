@@ -75,6 +75,30 @@ export function sydneyMonth(date: Date): number {
   return part ? Number(part.value) : Number.NaN
 }
 
+/** Year, month (1 to 12) and day-of-month of an instant, all read in the Sydney zone (BR-X01). */
+export function sydneyYmd(date: Date): { year: number; month: number; day: number } {
+  const at: Record<string, string> = {}
+  for (const part of new Intl.DateTimeFormat('en-AU', {
+    timeZone: SYDNEY,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)) {
+    if (part.type !== 'literal') at[part.type] = part.value
+  }
+  return { year: Number(at.year), month: Number(at.month), day: Number(at.day) }
+}
+
+/** Format an instant as "2:00 pm" in the Sydney zone (time only). */
+export function formatSydneyTime(date: Date): string {
+  return new Intl.DateTimeFormat('en-AU', {
+    timeZone: SYDNEY,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(date)
+}
+
 // Peak season is the whole of March, April, May, September, October and November (BR-X05).
 const PEAK_MONTHS = new Set([3, 4, 5, 9, 10, 11])
 
