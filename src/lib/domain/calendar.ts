@@ -10,7 +10,7 @@ export type CalendarView = 'month' | 'week'
 
 export type CalItem = {
   id: string
-  kind: 'booking' | 'event' | 'appointment'
+  kind: 'booking' | 'event' | 'appointment' | 'task'
   refId: string
   dayKey: string
   startMin: number | null
@@ -148,6 +148,32 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
         timeLabel: timed ? formatSydneyTime(date) : null,
         href: isLead ? `/enquiries/${w.enquiry!.id}` : `/jobs/${w.project!.id}`,
         editable: false, location: null, status: null, conflict: false, done,
+      })
+    }
+  }
+
+  if (want('lead') || want('job')) {
+    const tasks = await prisma.workItem.findMany({
+      where: { type: { notIn: ['APPOINTMENT', 'AUTO'] }, status: 'PENDING' },
+      select: { id: true, title: true, dueAt: true,
+        enquiry: { select: { id: true, name: true, createdAt: true } },
+        project: { select: { id: true, client: { select: { displayName: true } }, bookings: { orderBy: { startsAt: 'desc' }, take: 1, select: { startsAt: true } } } } },
+    })
+    for (const w of tasks) {
+      const isLead = Boolean(w.enquiry)
+      const category: CalCategory = isLead ? 'lead' : 'job'
+      if (!want(category)) continue
+      const anchor = isLead ? w.enquiry!.createdAt : (w.project?.bookings[0]?.startsAt ?? null)
+      const offset = isLead ? ENQUIRY_TASK_SCHEDULE[w.title] : PROJECT_TASK_SCHEDULE[w.title]
+      const date = w.dueAt ?? (anchor && offset !== undefined ? addDays(anchor, offset) : null)
+      if (!date || date.getTime() < startUtc.getTime() || date.getTime() >= endUtc.getTime()) continue
+      items.push({
+        id: `t_${w.id}`, kind: 'task', refId: w.id, dayKey: sydneyDateKey(date),
+        startMin: null, endMin: null,
+        primary: w.title, secondary: isLead ? w.enquiry!.name : (w.project?.client.displayName ?? 'Job'),
+        category, tone: tone(date.getTime(), false, nowMs), timeLabel: null,
+        href: isLead ? `/enquiries/${w.enquiry!.id}` : `/jobs/${w.project!.id}`,
+        editable: false, location: null, status: null, conflict: false, done: false,
       })
     }
   }
