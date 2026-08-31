@@ -177,7 +177,7 @@ function MonthChip({ item, canManage, onPeek, onHide, onMove }: {
       <span className="block truncate text-xs opacity-80">{item.timeLabel ? `${item.timeLabel} - ` : ''}{item.secondary}</span>
     </>
   )
-  const cls = `block rounded px-1.5 py-1 leading-tight ${catClass(item)} ${item.conflict ? 'outline outline-2 outline-offset-1 outline-lost-ink' : ''} ${draggable ? 'cursor-grab' : ''}`
+  const cls = `block rounded px-1.5 py-1 leading-tight ${catClass(item)} ${item.kind === 'task' ? 'border-l-2 border-current' : ''} ${item.conflict ? 'outline outline-2 outline-offset-1 outline-lost-ink' : ''} ${draggable ? 'cursor-grab' : ''}`
   const handlers = {
     onMouseEnter: (e: ReactMouseEvent) => onPeek(item, e),
     onMouseLeave: onHide,
@@ -259,7 +259,7 @@ function WeekGrid({ data, canManage, onSlot, onPeek, onHide, onMove }: {
 }
 
 function WeekChipAllDay({ item, onPeek, onHide }: { item: CalItem; onPeek: (i: CalItem, e: { clientX: number; clientY: number }) => void; onHide: () => void }) {
-  const cls = `block rounded px-1.5 py-0.5 text-xs font-medium ${catClass(item)} ${item.conflict ? 'outline outline-2 outline-lost-ink' : ''}`
+  const cls = `block rounded px-1.5 py-0.5 text-xs font-medium ${catClass(item)} ${item.kind === 'task' ? 'border-l-2 border-current' : ''} ${item.conflict ? 'outline outline-2 outline-lost-ink' : ''}`
   const content = <span className="block truncate">{item.primary} - {item.secondary}</span>
   return item.href
     ? <Link href={item.href} className={cls} onMouseEnter={(e) => onPeek(item, e)} onMouseLeave={onHide}>{content}</Link>
