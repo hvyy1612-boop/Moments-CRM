@@ -213,20 +213,20 @@ function WeekGrid({ data, canManage, onSlot, onPeek, onHide, onMove }: {
   return (
     <div className="overflow-hidden rounded-md border border-line">
       {/* header */}
-      <div className="grid border-b border-line bg-sunk" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, 1fr)` }}>
+      <div className="grid border-b border-line bg-sunk" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, minmax(0, 1fr))` }}>
         <div className="border-r border-line" />
         {w.days.map((d) => (
-          <div key={d.dateKey} className="border-r border-line py-1.5 text-center last:border-r-0">
+          <div key={d.dateKey} className="min-w-0 border-r border-line py-1.5 text-center last:border-r-0">
             <div className="text-xs font-bold uppercase tracking-wide text-muted">{d.dow}</div>
             <div className={`text-sm ${d.isToday ? 'mx-auto mt-0.5 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-accent px-1 font-semibold text-paper' : 'text-ink'}`}>{d.dayNum}</div>
           </div>
         ))}
       </div>
       {/* all-day */}
-      <div className="grid border-b border-line" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, 1fr)` }}>
+      <div className="grid border-b border-line" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, minmax(0, 1fr))` }}>
         <div className="flex items-center justify-center border-r border-line text-xs text-muted">all-day</div>
         {allDayByCol.map((items, ci) => (
-          <div key={ci} className="min-h-9 border-r border-line p-1 last:border-r-0">
+          <div key={ci} className="min-w-0 min-h-9 border-r border-line p-1 last:border-r-0">
             <div className="flex flex-col gap-1">
               {items.map((it) => <WeekChipAllDay key={it.id} item={it} onPeek={onPeek} onHide={onHide} />)}
             </div>
@@ -234,7 +234,7 @@ function WeekGrid({ data, canManage, onSlot, onPeek, onHide, onMove }: {
         ))}
       </div>
       {/* timed body */}
-      <div className="grid overflow-y-auto" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, 1fr)`, maxHeight: 512 }}>
+      <div className="grid overflow-y-auto" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, minmax(0, 1fr))`, maxHeight: 512 }}>
         <div className="border-r border-line">
           {hours.map((h) => <div key={h} className="pr-1.5 pt-0.5 text-right text-xs text-muted" style={{ height: ROW_H }}>{minToLabel(h * 60)}</div>)}
         </div>
@@ -244,7 +244,7 @@ function WeekGrid({ data, canManage, onSlot, onPeek, onHide, onMove }: {
             data-datekey={d.dateKey}
             data-weekcol="1"
             onClick={(e) => { if (e.target === e.currentTarget) slotClick(d.dateKey, e) }}
-            className={`relative border-r border-line last:border-r-0 ${canManage ? 'cursor-pointer' : ''}`}
+            className={`relative min-w-0 border-r border-line last:border-r-0 ${canManage ? 'cursor-pointer' : ''}`}
             style={{ height: total }}
           >
             {hours.slice(0, -1).map((h) => <div key={h} className="border-b border-line" style={{ height: ROW_H }} />)}
