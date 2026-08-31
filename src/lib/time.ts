@@ -62,6 +62,28 @@ export function sydneyMonth(date: Date): number {
   return part ? Number(part.value) : Number.NaN
 }
 
+export function sydneyYmd(date: Date): { year: number; month: number; day: number } {
+  const at: Record<string, string> = {}
+  for (const part of new Intl.DateTimeFormat('en-AU', {
+    timeZone: SYDNEY,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)) {
+    if (part.type !== 'literal') at[part.type] = part.value
+  }
+  return { year: Number(at.year), month: Number(at.month), day: Number(at.day) }
+}
+
+export function formatSydneyTime(date: Date): string {
+  return new Intl.DateTimeFormat('en-AU', {
+    timeZone: SYDNEY,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(date)
+}
+
 const PEAK_MONTHS = new Set([3, 4, 5, 9, 10, 11])
 
 export function isPeakSeason(shootDate: Date): boolean {

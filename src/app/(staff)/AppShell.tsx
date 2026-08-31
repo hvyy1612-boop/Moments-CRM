@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
+import { CommandPalette } from '@/components/CommandPalette'
 import { can, type Permission } from '@/lib/auth/authz'
 import type { SessionUser } from '@/lib/auth/guard'
 import { signOut } from './actions'
@@ -160,13 +161,7 @@ export function AppShell({
             </div>
           </div>
           <div className="flex-1" />
-          <div className="hidden items-center gap-2 rounded border border-line bg-paper px-3 py-2 text-sm text-muted sm:flex">
-            <svg viewBox="0 0 24 24" className="h-4 w-4" {...S}>
-              <circle cx="11" cy="11" r="7" />
-              <path d="M21 21l-4-4" />
-            </svg>
-            Search
-          </div>
+          <CommandPalette />
           {action}
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-accent-tint font-serif text-sm text-accent-ink md:hidden">
             {initial}

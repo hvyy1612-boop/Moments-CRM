@@ -11,6 +11,7 @@ export type Permission =
   | 'QUOTE_EDIT'
   | 'FINANCE_VIEW'
   | 'CALENDAR_VIEW'
+  | 'CALENDAR_MANAGE'
   | 'USER_MANAGE'
   | 'AUTH_LOG_VIEW'
   | 'AUDIT_LOG_VIEW'
@@ -27,6 +28,7 @@ const STAFF_CRM: Permission[] = [
   'QUOTE_EDIT',
   'FINANCE_VIEW',
   'CALENDAR_VIEW',
+  'CALENDAR_MANAGE',
 ]
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {

@@ -14,6 +14,7 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/api/health': { public: true },
 
   '/api/cron/daily': { secret: true },
+  '/api/calendar/feed': { token: true },
 
   '/login': { public: true },
   '/register': { public: true },

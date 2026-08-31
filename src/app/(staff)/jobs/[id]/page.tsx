@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
+import { CopyLinkField } from '@/components/ui/CopyLinkField'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { Textarea } from '@/components/ui/form'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
@@ -373,10 +374,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 <span className="text-ink">Total</span>
                 <span className="tabular-nums text-ink">{formatAud(version.total)}</span>
               </div>
-              <p className="mt-4 text-sm text-ink-muted">
-                Client link:{' '}
-                <span className="text-ink">/quote/{quote.viewToken}</span>
-              </p>
+              <div className="mt-4">
+                <p className="text-sm text-ink-muted">Client link</p>
+                <CopyLinkField path={`/quote/${quote.viewToken}`} />
+              </div>
               {version.acceptedByClientAt ? (
                 <p className="mt-2 text-sm text-ink">
                   Accepted by {version.acceptedByClientName} on{' '}
@@ -422,9 +423,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             ) : (
               <div className="mt-4">
                 <p className="text-sm text-ink-muted">Waiting for the client to sign.</p>
-                <p className="mt-2 text-sm">
-                  Client link: <span className="text-ink">/contract/{contract.signToken}</span>
-                </p>
+                <div className="mt-2">
+                  <p className="text-sm text-ink-muted">Client link</p>
+                  <CopyLinkField path={`/contract/${contract.signToken}`} />
+                </div>
               </div>
             )}
           </section>
