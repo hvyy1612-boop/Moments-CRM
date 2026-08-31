@@ -19,6 +19,7 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/api/health': { public: true },
   // Vercel Cron endpoint: guarded by CRON_SECRET inside the route, not by a session.
   '/api/cron/daily': { secret: true },
+  '/api/calendar/feed': { token: true },
   // Staff entrance and account recovery: public by necessity (not signed in yet / token-authorised).
   '/login': { public: true },
   '/register': { public: true },
