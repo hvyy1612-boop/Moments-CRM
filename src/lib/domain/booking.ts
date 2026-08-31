@@ -50,6 +50,21 @@ export async function createBooking(
         notes: input.notes ?? null,
       },
     })
+    // Booking a shoot moves a confirmed job into production (Dubsado/HoneyBook: the scheduler kicks
+    // off the next workflow step). Only bump CONFIRMED -> IN_PRODUCTION; later stages are untouched.
+    if (project.lifecycleStatus === 'CONFIRMED') {
+      await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'IN_PRODUCTION' } })
+      await tx.auditLog.create({
+        data: {
+          companyId: project.companyId,
+          action: 'project.entered_production',
+          entityType: 'Project',
+          entityId: projectId,
+          actorUserId,
+          afterData: { reason: 'first shoot scheduled', bookingId: booking.id },
+        },
+      })
+    }
     await tx.auditLog.create({
       data: {
         action: 'booking.created',
