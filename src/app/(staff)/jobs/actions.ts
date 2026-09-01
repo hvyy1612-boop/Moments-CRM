@@ -20,12 +20,12 @@ import {
 import { enquirySchema } from '@/lib/validation/enquiry'
 import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/contract'
 import { addGalleryItem, createGallery, publishGallery } from '@/lib/domain/delivery'
-import { createInvoice, issueInvoice, recordPayment } from '@/lib/domain/finance'
+import { createInvoice, createInvoiceWithLines, issueInvoice, recordPayment } from '@/lib/domain/finance'
 import { createQuote, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 import { sendContractEmail, sendQuoteEmail } from '@/lib/email'
 import { assignResourceSchema, createBookingSchema } from '@/lib/validation/booking'
 import { addGalleryItemSchema, createGallerySchema } from '@/lib/validation/delivery'
-import { createInvoiceSchema, recordPaymentSchema } from '@/lib/validation/finance'
+import { createInvoiceLinesSchema, createInvoiceSchema, recordPaymentSchema } from '@/lib/validation/finance'
 import { saveQuoteSchema } from '@/lib/validation/quote'
 
 export type QuoteActionState =
@@ -239,6 +239,40 @@ export async function assignResourceAction(
 }
 
 /** Raise a draft invoice for a confirmed project. */
+export async function createInvoiceLinesAction(
+  _prev: QuoteActionState,
+  formData: FormData,
+): Promise<QuoteActionState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+
+  let lines: unknown = []
+  try {
+    lines = JSON.parse(String(formData.get('lines') ?? '[]'))
+  } catch {
+    return { status: 'error', message: 'Could not read the invoice items.' }
+  }
+  const parsed = createInvoiceLinesSchema.safeParse({
+    type: formData.get('type') ?? '',
+    discount: formData.get('discount') ?? '',
+    lines,
+  })
+  if (!parsed.success) {
+    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the invoice.' }
+  }
+  try {
+    await createInvoiceWithLines(projectId, parsed.data, user.id)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not raise the invoice.' }
+  }
+  revalidatePath(`/jobs/${projectId}`)
+  return { status: 'success' }
+}
+
 export async function createInvoiceAction(
   _prev: QuoteActionState,
   formData: FormData,

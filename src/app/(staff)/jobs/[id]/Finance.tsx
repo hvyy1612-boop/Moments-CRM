@@ -4,13 +4,13 @@ import { useActionState } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
-import { Field, Select, TextInput } from '@/components/ui/form'
+import { Select, TextInput } from '@/components/ui/form'
 import {
-  createInvoiceAction,
   issueInvoiceAction,
   recordPaymentAction,
   type QuoteActionState,
 } from '../actions'
+import { InvoiceEditor, type PackageOption } from './InvoiceEditor'
 
 const IDLE: QuoteActionState = { status: 'idle' }
 
@@ -78,47 +78,16 @@ function RecordPaymentForm({
   )
 }
 
-function CreateInvoiceForm({ csrf, projectId }: { csrf: string; projectId: string }) {
-  const [state, action, pending] = useActionState(createInvoiceAction, IDLE)
-
-  return (
-    <form action={action} className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
-      {state.status === 'error' ? <Alert tone="danger" title={state.message} /> : null}
-      {state.status === 'success' ? <Alert tone="success" title="Invoice raised" /> : null}
-      <input type="hidden" name="csrf" value={csrf} />
-      <input type="hidden" name="projectId" value={projectId} />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Invoice type" htmlFor="type">
-          <Select id="type" name="type" defaultValue="DEPOSIT">
-            <option value="DEPOSIT">Deposit</option>
-            <option value="BALANCE">Balance</option>
-            <option value="SUPPLEMENTARY">Supplementary</option>
-          </Select>
-        </Field>
-        <Field label="Amount (incl. GST)" htmlFor="amount">
-          <TextInput id="amount" name="amount" inputMode="decimal" placeholder="0.00" />
-        </Field>
-      </div>
-      <Field label="Description" htmlFor="description">
-        <TextInput id="description" name="description" placeholder="Booking deposit" />
-      </Field>
-      <div>
-        <Button type="submit" loading={pending}>
-          Raise invoice
-        </Button>
-      </div>
-    </form>
-  )
-}
-
 export function Finance({
   csrf,
   projectId,
   invoices,
+  packages,
 }: {
   csrf: string
   projectId: string
   invoices: InvoiceView[]
+  packages: PackageOption[]
 }) {
   return (
     <div className="mt-4 flex flex-col gap-4">
@@ -160,7 +129,7 @@ export function Finance({
         </ul>
       )}
 
-      <CreateInvoiceForm csrf={csrf} projectId={projectId} />
+      <InvoiceEditor csrf={csrf} projectId={projectId} packages={packages} />
     </div>
   )
 }

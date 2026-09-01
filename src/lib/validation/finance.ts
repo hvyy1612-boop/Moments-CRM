@@ -12,6 +12,18 @@ export const createInvoiceSchema = z.object({
   amount: money,
 })
 
+const invoiceLine = z.object({
+  description: z.string().trim().min(1, 'Add a description for each item.').max(500),
+  quantity: z.coerce.number().int().min(1, 'Quantity must be at least 1.').max(999),
+  unitPrice: money,
+})
+
+export const createInvoiceLinesSchema = z.object({
+  type: z.enum(['DEPOSIT', 'BALANCE', 'SUPPLEMENTARY']),
+  discount: money.optional().or(z.literal('')),
+  lines: z.array(invoiceLine).min(1, 'Add at least one item.').max(50),
+})
+
 export const recordPaymentSchema = z.object({
   paymentMethod: z.enum(['BANK_TRANSFER', 'CARD', 'CASH', 'OTHER']),
   amount: money,
@@ -25,4 +37,5 @@ export const recordPaymentSchema = z.object({
 })
 
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>
+export type CreateInvoiceLinesInput = z.infer<typeof createInvoiceLinesSchema>
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>
