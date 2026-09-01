@@ -118,21 +118,39 @@ export async function restoreClient(clientId: string, actorUserId: string) {
 }
 
 export async function deleteClient(clientId: string, actorUserId: string) {
-  const client = await prisma.client.findUnique({
-    where: { id: clientId },
-    select: { id: true, companyId: true, _count: { select: { projects: true } } },
-  })
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, companyId: true } })
   if (!client) throw new Error('Client not found.')
-  if (client._count.projects > 0) {
-    throw new Error('This client has projects. Archive them instead of deleting.')
-  }
+  const projects = await prisma.project.findMany({ where: { clientId }, select: { id: true } })
+  const projectIds = projects.map((p) => p.id)
+
   return prisma.$transaction(async (tx) => {
+    if (projectIds.length > 0) {
+      const inP = { projectId: { in: projectIds } }
+
+      await tx.payment.deleteMany({ where: inP })
+      await tx.invoice.deleteMany({ where: inP })
+      await tx.quote.deleteMany({ where: inP })
+      await tx.contract.deleteMany({ where: inP })
+      await tx.booking.deleteMany({ where: inP })
+      await tx.gallery.deleteMany({ where: inP })
+
+      await tx.project.deleteMany({ where: { id: { in: projectIds } } })
+    }
     await tx.communication.deleteMany({ where: { clientId } })
     await tx.contact.deleteMany({ where: { clientId } })
     await tx.client.delete({ where: { id: clientId } })
     await tx.auditLog.create({
       data: { companyId: client.companyId, actorUserId, action: 'client.deleted', entityType: 'Client', entityId: clientId },
     })
+  })
+}
+
+export async function updateClientNotes(clientId: string, notes: string, actorUserId: string) {
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, companyId: true } })
+  if (!client) throw new Error('Client not found.')
+  await prisma.client.update({ where: { id: clientId }, data: { notes: notes.trim() || null } })
+  await prisma.auditLog.create({
+    data: { companyId: client.companyId, actorUserId, action: 'client.notes_updated', entityType: 'Client', entityId: clientId },
   })
 }
 

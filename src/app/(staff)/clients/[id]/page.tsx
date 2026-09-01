@@ -7,6 +7,7 @@ import { Prisma, type EnquiryStatus } from '@prisma/client'
 import { StatusTag } from '@/components/ui/StatusTag'
 import { Button } from '@/components/ui/Button'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
+import { ClientNotes } from './ClientNotes'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
@@ -16,7 +17,8 @@ import { statusKind, statusLabel } from '@/features/projects/lifecycle'
 import { ENQUIRY_STAGE_LABEL, ENQUIRY_STAGE_KIND, OPEN_STATUSES, waitingLabel } from '@/features/enquiries/status'
 import { currentActionText } from '@/features/enquiries/workflow'
 import { AppShell } from '../../AppShell'
-import { archiveClientAction, deleteClientAction, restoreClientAction } from '../actions'
+import { archiveClientAction, restoreClientAction } from '../actions'
+import { DeleteClientButton } from './DeleteClientButton'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Client - Moments' }
@@ -177,7 +179,6 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const cityLine = [client.suburb, client.state, client.postcode].filter(Boolean).join(' ')
   const addressLines = [client.street, cityLine, client.country].filter(Boolean)
   const archived = client.status === 'ARCHIVED'
-  const hasProjects = client.projects.length > 0
   const invoiced = invoiceAgg._sum.total ?? new Prisma.Decimal(0)
   const paid = invoiceAgg._sum.amountPaid ?? new Prisma.Decimal(0)
   const due = invoiced.sub(paid)
@@ -271,7 +272,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                       Restore
                     </button>
                   </form>
-                ) : hasProjects ? (
+                ) : (
                   <form action={archiveClientAction}>
                     <input type="hidden" name="csrf" value={csrf} />
                     <input type="hidden" name="clientId" value={client.id} />
@@ -279,24 +280,15 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                       Archive
                     </button>
                   </form>
-                ) : (
-                  <form action={deleteClientAction}>
-                    <input type="hidden" name="csrf" value={csrf} />
-                    <input type="hidden" name="clientId" value={client.id} />
-                    <button type="submit" className="rounded border border-line-strong px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline">
-                      Delete
-                    </button>
-                  </form>
                 )}
+                {user.role === 'ADMIN' ? (
+                  <DeleteClientButton clientId={client.id} name={client.displayName} csrf={csrf} />
+                ) : null}
               </div>
             </section>
 
             <SectionCard title="Notes" icon={<IconMail />}>
-              {client.notes ? (
-                <p className="whitespace-pre-line text-base text-ink">{client.notes}</p>
-              ) : (
-                <p className="text-base text-ink-muted">No notes yet.</p>
-              )}
+              <ClientNotes clientId={client.id} notes={client.notes} csrf={csrf} />
             </SectionCard>
           </div>
 

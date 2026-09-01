@@ -12,6 +12,7 @@ import {
   deleteClient,
   restoreClient,
   updateClient,
+  updateClientNotes,
 } from '@/lib/domain/client'
 import { createEnquiry } from '@/lib/domain/enquiry'
 import { clientSchema } from '@/lib/validation/client'
@@ -121,14 +122,20 @@ export async function restoreClientAction(formData: FormData): Promise<void> {
 
 export async function deleteClientAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
+  if (user.role !== 'ADMIN') throw new Error('Only an admin can permanently delete a client.')
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
   const clientId = String(formData.get('clientId') ?? '')
   if (!clientId) return
-  try {
-    await deleteClient(clientId, user.id)
-  } catch {
-
-    await archiveClient(clientId, user.id)
-  }
+  await deleteClient(clientId, user.id)
   revalidatePath('/clients')
+  redirect('/clients')
+}
+
+export async function updateClientNotesAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const clientId = String(formData.get('clientId') ?? '')
+  if (!clientId) return
+  await updateClientNotes(clientId, String(formData.get('notes') ?? ''), user.id)
+  revalidatePath(`/clients/${clientId}`)
 }

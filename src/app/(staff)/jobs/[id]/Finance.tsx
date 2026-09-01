@@ -1,16 +1,18 @@
 'use client'
 
+import Link from 'next/link'
+
 import { useActionState } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
-import { Field, Select, TextInput } from '@/components/ui/form'
+import { Select, TextInput } from '@/components/ui/form'
 import {
-  createInvoiceAction,
   issueInvoiceAction,
   recordPaymentAction,
   type QuoteActionState,
 } from '../actions'
+import { InvoiceEditor, type PackageOption } from './InvoiceEditor'
 
 const IDLE: QuoteActionState = { status: 'idle' }
 
@@ -24,6 +26,13 @@ const INVOICE_TONE: Record<string, Tone> = {
   VOID: 'neutral',
 }
 
+export type InvoiceInstalmentView = {
+  id: string
+  label: string | null
+  dueLabel: string | null
+  amountLabel: string
+  status: string
+}
 export type InvoiceView = {
   id: string
   number: string
@@ -34,6 +43,9 @@ export type InvoiceView = {
   remainingLabel: string
   isDraft: boolean
   canPay: boolean
+  poNumber: string | null
+  notes: string | null
+  instalments: InvoiceInstalmentView[]
 }
 
 function RecordPaymentForm({
@@ -78,47 +90,16 @@ function RecordPaymentForm({
   )
 }
 
-function CreateInvoiceForm({ csrf, projectId }: { csrf: string; projectId: string }) {
-  const [state, action, pending] = useActionState(createInvoiceAction, IDLE)
-
-  return (
-    <form action={action} className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
-      {state.status === 'error' ? <Alert tone="danger" title={state.message} /> : null}
-      {state.status === 'success' ? <Alert tone="success" title="Invoice raised" /> : null}
-      <input type="hidden" name="csrf" value={csrf} />
-      <input type="hidden" name="projectId" value={projectId} />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Invoice type" htmlFor="type">
-          <Select id="type" name="type" defaultValue="DEPOSIT">
-            <option value="DEPOSIT">Deposit</option>
-            <option value="BALANCE">Balance</option>
-            <option value="SUPPLEMENTARY">Supplementary</option>
-          </Select>
-        </Field>
-        <Field label="Amount (incl. GST)" htmlFor="amount">
-          <TextInput id="amount" name="amount" inputMode="decimal" placeholder="0.00" />
-        </Field>
-      </div>
-      <Field label="Description" htmlFor="description">
-        <TextInput id="description" name="description" placeholder="Booking deposit" />
-      </Field>
-      <div>
-        <Button type="submit" loading={pending}>
-          Raise invoice
-        </Button>
-      </div>
-    </form>
-  )
-}
-
 export function Finance({
   csrf,
   projectId,
   invoices,
+  packages,
 }: {
   csrf: string
   projectId: string
   invoices: InvoiceView[]
+  packages: PackageOption[]
 }) {
   return (
     <div className="mt-4 flex flex-col gap-4">
@@ -143,6 +124,30 @@ export function Finance({
                 </StatusPill>
               </div>
 
+              {invoice.poNumber ? <p className="mt-1 text-xs text-ink-muted">PO: {invoice.poNumber}</p> : null}
+
+              {invoice.instalments.length > 1 ? (
+                <ul className="mt-2 flex flex-col gap-1 border-t border-line pt-2">
+                  {invoice.instalments.map((it) => (
+                    <li key={it.id} className="flex items-center justify-between gap-2 text-sm">
+                      <span className="text-ink-muted">{it.label ?? 'Instalment'}{it.dueLabel ? ` · due ${it.dueLabel}` : ''}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="tabular text-ink">{it.amountLabel}</span>
+                        <StatusPill tone={it.status === 'PAID' ? 'good' : 'neutral'}>{it.status.toLowerCase()}</StatusPill>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+
+              {invoice.notes ? <p className="mt-2 whitespace-pre-line border-t border-line pt-2 text-sm text-ink-muted">{invoice.notes}</p> : null}
+
+              <div className="mt-2">
+                <Link href={`/jobs/${projectId}/invoice/${invoice.id}`} target="_blank" className="text-sm font-bold text-accent hover:underline">
+                  View / PDF -&gt;
+                </Link>
+              </div>
+
               {invoice.isDraft ? (
                 <form action={issueInvoiceAction} className="mt-3 border-t border-line pt-3">
                   <input type="hidden" name="csrf" value={csrf} />
@@ -160,7 +165,7 @@ export function Finance({
         </ul>
       )}
 
-      <CreateInvoiceForm csrf={csrf} projectId={projectId} />
+      <InvoiceEditor csrf={csrf} projectId={projectId} packages={packages} />
     </div>
   )
 }

@@ -1,8 +1,8 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { splitGstInclusive } from '@/lib/money'
-import { systemClock } from '@/lib/time'
-import type { CreateInvoiceInput, RecordPaymentInput } from '@/lib/validation/finance'
+import { sydneyLocalToUtc, systemClock } from '@/lib/time'
+import type { CreateInvoiceInput, CreateInvoiceLinesInput, RecordPaymentInput } from '@/lib/validation/finance'
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
@@ -91,6 +91,107 @@ export async function createInvoice(
     } catch (error) {
       const isUnique =
         error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
+      if (isUnique && attempt < 4) continue
+      throw error
+    }
+  }
+}
+
+export async function createInvoiceWithLines(
+  projectId: string,
+  input: CreateInvoiceLinesInput,
+  actorUserId: string | null,
+) {
+  const now = systemClock.now()
+  let gross = new Prisma.Decimal(0)
+  for (const l of input.lines) gross = gross.plus(new Prisma.Decimal(l.unitPrice).times(l.quantity))
+  const discount = input.discount ? new Prisma.Decimal(input.discount) : new Prisma.Decimal(0)
+  if (discount.greaterThan(gross)) throw new Error('The discount cannot be more than the total.')
+  const total = gross.minus(discount)
+  if (total.lessThanOrEqualTo(0)) throw new Error('The invoice total must be greater than zero.')
+  const { subtotal, taxTotal } = splitGstInclusive(total)
+
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const project = await tx.project.findUnique({
+          where: { id: projectId },
+          select: { id: true, lifecycleStatus: true, client: { select: { displayName: true, email: true } } },
+        })
+        if (!project) throw new Error('Project not found.')
+        if (project.lifecycleStatus !== 'CONFIRMED' && project.lifecycleStatus !== 'IN_PRODUCTION') {
+          throw new Error('Confirm the project (sign the contract) before invoicing.')
+        }
+
+        const lineData = input.lines.map((l, i) => ({
+          description: l.description,
+          quantity: l.quantity,
+          unitPrice: new Prisma.Decimal(l.unitPrice),
+          tax: new Prisma.Decimal(0),
+          lineTotal: new Prisma.Decimal(l.unitPrice).times(l.quantity),
+          sortOrder: i,
+        }))
+        if (discount.greaterThan(0)) {
+          lineData.push({
+            description: 'Discount',
+            quantity: 1,
+            unitPrice: discount.negated(),
+            tax: new Prisma.Decimal(0),
+            lineTotal: discount.negated(),
+            sortOrder: lineData.length,
+          })
+        }
+
+        let instalmentData
+        if (input.instalments && input.instalments.length > 0) {
+          let sum = new Prisma.Decimal(0)
+          for (const it of input.instalments) sum = sum.plus(new Prisma.Decimal(it.amount))
+          if (!sum.equals(total)) throw new Error('The payment schedule must add up to the invoice total.')
+          instalmentData = input.instalments.map((it, i) => ({
+            label: it.label?.trim() || null,
+            dueAt: it.dueAt ? sydneyLocalToUtc(`${it.dueAt}T00:00`) : null,
+            amount: new Prisma.Decimal(it.amount),
+            status: 'UNPAID',
+            sortOrder: i,
+          }))
+        } else {
+          instalmentData = [{ label: 'Full payment', dueAt: null, amount: total, status: 'UNPAID', sortOrder: 0 }]
+        }
+
+        const invoice = await tx.invoice.create({
+          data: {
+            projectId,
+            invoiceNumber: await nextInvoiceNumber(tx, now.getFullYear()),
+            type: input.type,
+            status: 'DRAFT',
+            subtotal,
+            taxTotal,
+            total,
+            invoiceDate: input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now,
+            poNumber: input.poNumber?.trim() || null,
+            notes: input.notes?.trim() || null,
+            billingNameSnapshot: project.client.displayName,
+            billingEmailSnapshot: project.client.email,
+            lines: { create: lineData },
+            instalments: { create: instalmentData },
+          },
+        })
+        await tx.auditLog.create({
+          data: {
+            action: 'invoice.created',
+            entityType: 'Invoice',
+            entityId: invoice.id,
+            actorUserId,
+            afterData: { invoiceNumber: invoice.invoiceNumber, total: total.toString(), lines: input.lines.length },
+          },
+        })
+        await tx.outboxEvent.create({
+          data: { eventType: 'invoice.created', aggregateType: 'Invoice', aggregateId: invoice.id, payload: { invoiceId: invoice.id, projectId } },
+        })
+        return invoice
+      })
+    } catch (error) {
+      const isUnique = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
       if (isUnique && attempt < 4) continue
       throw error
     }

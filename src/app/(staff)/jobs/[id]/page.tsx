@@ -12,6 +12,7 @@ import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
 import { getProjectBoard } from '@/lib/domain/project-workflow'
+import { listActivePackages } from '@/lib/domain/package'
 import { AppShell } from '../../AppShell'
 import {
   createContractAction,
@@ -100,6 +101,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           status: true,
           total: true,
           amountPaid: true,
+          poNumber: true,
+          notes: true,
+          instalments: {
+            orderBy: { sortOrder: 'asc' },
+            select: { id: true, label: true, dueAt: true, amount: true, status: true },
+          },
         },
       },
       galleries: {
@@ -182,6 +189,21 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     remainingLabel: formatAud(invoice.total.sub(invoice.amountPaid)),
     isDraft: invoice.status === 'DRAFT',
     canPay: invoice.status !== 'DRAFT' && invoice.status !== 'PAID' && invoice.status !== 'VOID',
+    poNumber: invoice.poNumber,
+    notes: invoice.notes,
+    instalments: invoice.instalments.map((it) => ({
+      id: it.id,
+      label: it.label,
+      dueLabel: it.dueAt ? formatSydneyDate(it.dueAt) : null,
+      amountLabel: formatAud(it.amount),
+      status: it.status,
+    })),
+  }))
+
+  const packageOptions = (await listActivePackages()).map((p) => ({
+    id: p.id,
+    name: p.name,
+    price: p.basePriceInclGst.toString(),
   }))
 
   const gallery = project.galleries[0]
@@ -447,7 +469,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         {isConfirmed ? (
           <section className="mt-6 rounded border border-line bg-surface p-5">
             <h2 className="text-lg">Invoices &amp; payments</h2>
-            <Finance csrf={csrf} projectId={project.id} invoices={invoiceViews} />
+            <Finance csrf={csrf} projectId={project.id} invoices={invoiceViews} packages={packageOptions} />
           </section>
         ) : null}
 
