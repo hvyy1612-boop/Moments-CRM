@@ -15,6 +15,7 @@ const invoiceLine = z.object({
   description: z.string().trim().min(1, 'Add a description for each item.').max(500),
   quantity: z.coerce.number().int().min(1, 'Quantity must be at least 1.').max(999),
   unitPrice: money,
+  discount: money.optional().or(z.literal('')),
 })
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)

@@ -7,6 +7,8 @@ import { Prisma, type EnquiryStatus } from '@prisma/client'
 import { StatusTag } from '@/components/ui/StatusTag'
 import { Button } from '@/components/ui/Button'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
+import { ensureClientPortalToken } from '@/lib/domain/client'
+import { CopyLinkField } from '@/components/ui/CopyLinkField'
 import { ClientNotesList } from './ClientNotesList'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
@@ -147,6 +149,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     },
   })
   if (!client) notFound()
+  const portalToken = await ensureClientPortalToken(client.id)
 
   const [enquiries, communications, invoiceAgg, invoiceList] = await Promise.all([
     prisma.enquiry.findMany({
@@ -335,6 +338,11 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                   {client.marketingConsent ? 'Withdraw consent' : 'Mark consented'}
                 </Button>
               </form>
+            </SectionCard>
+
+            <SectionCard title="Client portal" icon={<IconMail />}>
+              <p className="text-sm text-ink-muted">One link for the client to see all their jobs, invoices, galleries and questionnaires.</p>
+              <CopyLinkField path={`/portal/${portalToken}`} />
             </SectionCard>
           </div>
 

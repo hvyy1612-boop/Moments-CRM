@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
 import { CommandPalette } from '@/components/CommandPalette'
+import { AddNewMenu } from '@/components/AddNewMenu'
 import { can, type Permission } from '@/lib/auth/authz'
 import type { SessionUser } from '@/lib/auth/guard'
 import { signOut } from './actions'
@@ -162,6 +163,7 @@ export function AppShell({
           </div>
           <div className="flex-1" />
           <CommandPalette />
+          <AddNewMenu />
           {action}
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-accent-tint font-serif text-sm text-accent-ink md:hidden">
             {initial}

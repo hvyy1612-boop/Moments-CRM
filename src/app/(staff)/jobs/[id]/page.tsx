@@ -26,6 +26,7 @@ import { HistoryLogModal, type HistoryEntry } from './HistoryLogModal'
 import { ProjectWorkflow } from './ProjectWorkflow'
 import { Delivery } from './Delivery'
 import { Finance } from './Finance'
+import { QuestionnairePanel } from './QuestionnairePanel'
 import { QuoteBuilder } from './QuoteBuilder'
 import { Scheduling } from './Scheduling'
 
@@ -109,6 +110,17 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             orderBy: { sortOrder: 'asc' },
             select: { id: true, label: true, dueAt: true, amount: true, status: true },
           },
+        },
+      },
+      questionnaires: {
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          accessToken: true,
+          completedAt: true,
+          answers: { orderBy: { sortOrder: 'asc' }, select: { question: true, answer: true } },
         },
       },
       galleries: {
@@ -477,6 +489,22 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             <Finance csrf={csrf} projectId={project.id} invoices={invoiceViews} packages={packageOptions} templates={invoiceTemplates} />
           </section>
         ) : null}
+
+        <section className="mt-6 rounded border border-line bg-surface p-5">
+          <h2 className="text-lg">Questionnaire</h2>
+          <QuestionnairePanel
+            csrf={csrf}
+            projectId={project.id}
+            questionnaires={project.questionnaires.map((q) => ({
+              id: q.id,
+              title: q.title,
+              status: q.status,
+              accessToken: q.accessToken,
+              completedLabel: q.completedAt ? formatSydneyDate(q.completedAt) : null,
+              answers: q.answers,
+            }))}
+          />
+        </section>
 
         {isConfirmed ? (
           <section className="mt-6 rounded border border-line bg-surface p-5">

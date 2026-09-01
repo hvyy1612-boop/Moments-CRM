@@ -395,6 +395,7 @@ model Client {
   consentUpdatedAt   DateTime?    @map("consent_updated_at") @db.Timestamptz
   anonymisedAt       DateTime?    @map("anonymised_at") @db.Timestamptz
   notes              String?      @db.Text
+  portalToken        String?      @unique @map("portal_token") @db.VarChar(64)
   createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz
   updatedAt          DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   archivedAt         DateTime?    @map("archived_at") @db.Timestamptz
@@ -809,6 +810,7 @@ model InvoiceLine {
   description String   @db.VarChar(500)
   quantity    Int      @default(1)
   unitPrice   Decimal  @default(0) @map("unit_price") @db.Decimal(12, 2)
+  discount    Decimal  @default(0) @db.Decimal(12, 2)
   tax         Decimal  @default(0) @db.Decimal(12, 2)
   lineTotal   Decimal  @default(0) @map("line_total") @db.Decimal(12, 2)
   sortOrder   Int      @default(0) @map("sort_order")
@@ -1029,6 +1031,8 @@ model Questionnaire {
   id          String              @id @default(cuid()) @db.VarChar(30)
   projectId   String              @map("project_id") @db.VarChar(30)
   status      QuestionnaireStatus @default(PENDING)
+  accessToken String?             @unique @map("access_token") @db.VarChar(64)
+  title       String?             @db.VarChar(150)
   sentAt      DateTime?           @map("sent_at") @db.Timestamptz
   completedAt DateTime?           @map("completed_at") @db.Timestamptz
   createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz

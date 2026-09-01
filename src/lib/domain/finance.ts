@@ -103,8 +103,12 @@ export async function createInvoiceWithLines(
   actorUserId: string | null,
 ) {
   const now = systemClock.now()
+  const lineNet = (l: { unitPrice: string; quantity: number; discount?: string }) => {
+    const net = new Prisma.Decimal(l.unitPrice).times(l.quantity).minus(new Prisma.Decimal(l.discount || '0'))
+    return net.lessThan(0) ? new Prisma.Decimal(0) : net
+  }
   let gross = new Prisma.Decimal(0)
-  for (const l of input.lines) gross = gross.plus(new Prisma.Decimal(l.unitPrice).times(l.quantity))
+  for (const l of input.lines) gross = gross.plus(lineNet(l))
   const discount = input.discount ? new Prisma.Decimal(input.discount) : new Prisma.Decimal(0)
   if (discount.greaterThan(gross)) throw new Error('The discount cannot be more than the total.')
   const total = gross.minus(discount)
@@ -134,8 +138,9 @@ export async function createInvoiceWithLines(
           description: l.description,
           quantity: l.quantity,
           unitPrice: new Prisma.Decimal(l.unitPrice),
+          discount: new Prisma.Decimal(l.discount || '0'),
           tax: new Prisma.Decimal(0),
-          lineTotal: new Prisma.Decimal(l.unitPrice).times(l.quantity),
+          lineTotal: lineNet(l),
           sortOrder: i,
         }))
         if (discount.greaterThan(0)) {
@@ -143,6 +148,7 @@ export async function createInvoiceWithLines(
             description: 'Discount',
             quantity: 1,
             unitPrice: discount.negated(),
+            discount: new Prisma.Decimal(0),
             tax: new Prisma.Decimal(0),
             lineTotal: discount.negated(),
             sortOrder: lineData.length,
@@ -348,7 +354,7 @@ export async function getInvoiceByToken(token: string) {
       invoiceNumber: true, type: true, status: true, subtotal: true, taxTotal: true, total: true,
       amountPaid: true, invoiceDate: true, poNumber: true, notes: true,
       billingNameSnapshot: true, billingEmailSnapshot: true,
-      lines: { orderBy: { sortOrder: 'asc' }, select: { description: true, quantity: true, unitPrice: true, lineTotal: true } },
+      lines: { orderBy: { sortOrder: 'asc' }, select: { description: true, quantity: true, unitPrice: true, discount: true, lineTotal: true } },
       instalments: { orderBy: { sortOrder: 'asc' }, select: { label: true, dueAt: true, amount: true, status: true } },
       project: {
         select: {
