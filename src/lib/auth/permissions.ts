@@ -48,4 +48,5 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/gallery/[token]': { token: true },
   '/invoice/[token]': { token: true },
   '/questionnaire/[token]': { token: true },
+  '/portal/[token]': { token: true },
 }

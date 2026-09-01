@@ -242,3 +242,40 @@ export async function deleteClientNote(noteId: string) {
 export async function setClientConsent(clientId: string, consent: boolean) {
   await prisma.client.update({ where: { id: clientId }, data: { marketingConsent: consent, consentUpdatedAt: new Date() } })
 }
+
+function portalTokenValue(): string {
+  const bytes = new Uint8Array(16)
+  globalThis.crypto.getRandomValues(bytes)
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** Ensure the client has a unified-portal token, creating one on first use. */
+export async function ensureClientPortalToken(clientId: string): Promise<string> {
+  const c = await prisma.client.findUnique({ where: { id: clientId }, select: { portalToken: true } })
+  if (c?.portalToken) return c.portalToken
+  const token = portalTokenValue()
+  await prisma.client.update({ where: { id: clientId }, data: { portalToken: token } })
+  return token
+}
+
+/** Everything a client can see in their portal (by token, no login): jobs, invoices, galleries, questionnaires. */
+export async function getClientPortalByToken(token: string) {
+  if (!token || token.length < 16) return null
+  return prisma.client.findUnique({
+    where: { portalToken: token },
+    select: {
+      displayName: true,
+      company: { select: { name: true } },
+      projects: {
+        orderBy: { enquiryReceivedAt: 'desc' },
+        select: {
+          id: true, name: true, code: true, lifecycleStatus: true,
+          bookings: { where: { status: { not: 'CANCELLED' } }, orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true } },
+          invoices: { orderBy: { createdAt: 'desc' }, select: { accessToken: true, invoiceNumber: true, total: true, amountPaid: true, status: true } },
+          galleries: { where: { status: 'PUBLISHED' }, orderBy: { createdAt: 'desc' }, select: { accessToken: true, title: true } },
+          questionnaires: { orderBy: { createdAt: 'desc' }, select: { accessToken: true, title: true, status: true } },
+        },
+      },
+    },
+  })
+}

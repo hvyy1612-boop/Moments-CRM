@@ -429,6 +429,7 @@ model Client {
   consentUpdatedAt   DateTime?    @map("consent_updated_at") @db.Timestamptz
   anonymisedAt       DateTime?    @map("anonymised_at") @db.Timestamptz
   notes              String?      @db.Text // ghi chú tự do, không giới hạn
+  portalToken        String?      @unique @map("portal_token") @db.VarChar(64) // unified client portal link
   createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz
   updatedAt          DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   archivedAt         DateTime?    @map("archived_at") @db.Timestamptz
