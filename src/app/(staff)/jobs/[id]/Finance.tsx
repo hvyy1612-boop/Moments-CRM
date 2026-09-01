@@ -12,7 +12,8 @@ import {
   recordPaymentAction,
   type QuoteActionState,
 } from '../actions'
-import { InvoiceEditor, type PackageOption } from './InvoiceEditor'
+import { CopyLinkField } from '@/components/ui/CopyLinkField'
+import { InvoiceEditor, type PackageOption, type TemplateOption } from './InvoiceEditor'
 
 const IDLE: QuoteActionState = { status: 'idle' }
 
@@ -45,6 +46,7 @@ export type InvoiceView = {
   canPay: boolean
   poNumber: string | null
   notes: string | null
+  accessToken: string | null
   instalments: InvoiceInstalmentView[]
 }
 
@@ -95,11 +97,13 @@ export function Finance({
   projectId,
   invoices,
   packages,
+  templates,
 }: {
   csrf: string
   projectId: string
   invoices: InvoiceView[]
   packages: PackageOption[]
+  templates: TemplateOption[]
 }) {
   return (
     <div className="mt-4 flex flex-col gap-4">
@@ -147,6 +151,12 @@ export function Finance({
                   View / PDF -&gt;
                 </Link>
               </div>
+              {invoice.accessToken ? (
+                <div className="mt-2">
+                  <p className="text-xs text-ink-muted">Client link</p>
+                  <CopyLinkField path={`/invoice/${invoice.accessToken}`} />
+                </div>
+              ) : null}
 
               {invoice.isDraft ? (
                 <form action={issueInvoiceAction} className="mt-3 border-t border-line pt-3">
@@ -165,7 +175,7 @@ export function Finance({
         </ul>
       )}
 
-      <InvoiceEditor csrf={csrf} projectId={projectId} packages={packages} />
+      <InvoiceEditor csrf={csrf} projectId={projectId} packages={packages} templates={templates} />
     </div>
   )
 }

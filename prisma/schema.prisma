@@ -271,6 +271,7 @@ model Company {
   resources Resource[]
   workItems WorkItem[]
   calendarEvents CalendarEvent[]
+  invoiceTemplates InvoiceTemplate[]
 
   @@map("companies")
 }
@@ -741,6 +742,7 @@ model Invoice {
   invoiceDate          DateTime?     @map("invoice_date") @db.Timestamptz
   poNumber             String?       @map("po_number") @db.VarChar(60)
   notes                String?       @db.Text
+  accessToken          String?       @unique @map("access_token") @db.VarChar(64)
   createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -769,6 +771,19 @@ model InvoiceInstalment {
 
   @@index([invoiceId])
   @@map("invoice_instalments")
+}
+
+model InvoiceTemplate {
+  id        String   @id @default(cuid()) @db.VarChar(30)
+  companyId String   @map("company_id") @db.VarChar(30)
+  name      String   @db.VarChar(150)
+  linesJson String   @map("lines_json") @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@map("invoice_templates")
 }
 
 model InvoiceLine {

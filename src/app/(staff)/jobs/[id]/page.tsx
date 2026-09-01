@@ -13,6 +13,7 @@ import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
 import { getProjectBoard } from '@/lib/domain/project-workflow'
 import { listActivePackages } from '@/lib/domain/package'
+import { listInvoiceTemplates } from '@/lib/domain/finance'
 import { AppShell } from '../../AppShell'
 import {
   createContractAction,
@@ -103,6 +104,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           amountPaid: true,
           poNumber: true,
           notes: true,
+          accessToken: true,
           instalments: {
             orderBy: { sortOrder: 'asc' },
             select: { id: true, label: true, dueAt: true, amount: true, status: true },
@@ -191,6 +193,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     canPay: invoice.status !== 'DRAFT' && invoice.status !== 'PAID' && invoice.status !== 'VOID',
     poNumber: invoice.poNumber,
     notes: invoice.notes,
+    accessToken: invoice.accessToken,
     instalments: invoice.instalments.map((it) => ({
       id: it.id,
       label: it.label,
@@ -205,6 +208,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     name: p.name,
     price: p.basePriceInclGst.toString(),
   }))
+  const invoiceTemplates = await listInvoiceTemplates()
 
   const gallery = project.galleries[0]
   const galleryView = gallery
@@ -372,6 +376,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 quantity: line.quantity,
                 unitPrice: line.unitPrice.toString(),
               }))}
+              packages={packageOptions}
             />
           ) : (
             <div className="mt-4">
@@ -467,9 +472,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         ) : null}
 
         {isConfirmed ? (
-          <section className="mt-6 rounded border border-line bg-surface p-5">
+          <section id="finance" className="mt-6 scroll-mt-20 rounded border border-line bg-surface p-5">
             <h2 className="text-lg">Invoices &amp; payments</h2>
-            <Finance csrf={csrf} projectId={project.id} invoices={invoiceViews} packages={packageOptions} />
+            <Finance csrf={csrf} projectId={project.id} invoices={invoiceViews} packages={packageOptions} templates={invoiceTemplates} />
           </section>
         ) : null}
 

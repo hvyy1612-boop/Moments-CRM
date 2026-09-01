@@ -141,7 +141,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   })
   if (!client) notFound()
 
-  const [enquiries, communications, invoiceAgg] = await Promise.all([
+  const [enquiries, communications, invoiceAgg, invoiceList] = await Promise.all([
     prisma.enquiry.findMany({
 
       where: {
@@ -173,6 +173,18 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     prisma.invoice.aggregate({
       where: { project: { clientId: id } },
       _sum: { total: true, amountPaid: true },
+    }),
+    prisma.invoice.findMany({
+      where: { project: { clientId: id } },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        invoiceNumber: true,
+        status: true,
+        total: true,
+        amountPaid: true,
+        project: { select: { id: true, code: true } },
+      },
     }),
   ])
 
@@ -376,6 +388,30 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                   <div className="tabular text-lg font-semibold text-ink">{formatAud(due)}</div>
                 </div>
               </div>
+
+              {invoiceList.length > 0 ? (
+                <ul className="mt-3 flex flex-col gap-2">
+                  {invoiceList.map((inv) => (
+                    <li key={inv.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm text-ink">
+                          {inv.invoiceNumber} <span className="text-ink-muted">· {inv.project.code}</span>
+                        </p>
+                        <p className="text-xs capitalize text-ink-muted">
+                          {inv.status.toLowerCase().replace(/_/g, ' ')} · balance {formatAud(inv.total.sub(inv.amountPaid))}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <span className="tabular text-sm text-ink">{formatAud(inv.total)}</span>
+                        <Link href={`/jobs/${inv.project.id}/invoice/${inv.id}`} target="_blank" className="text-sm font-bold text-accent hover:underline">View</Link>
+                        <Link href={`/jobs/${inv.project.id}#finance`} className="text-sm text-ink-muted hover:text-ink">Manage</Link>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 text-sm text-ink-muted">No invoices yet. Raise one from the job&apos;s Finance section.</p>
+              )}
             </SectionCard>
 
             <SectionCard title="Mail" icon={<IconMail />} count={communications.length}>

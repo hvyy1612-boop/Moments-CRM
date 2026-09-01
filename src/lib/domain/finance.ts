@@ -110,6 +110,13 @@ export async function createInvoiceWithLines(
   const total = gross.minus(discount)
   if (total.lessThanOrEqualTo(0)) throw new Error('The invoice total must be greater than zero.')
   const { subtotal, taxTotal } = splitGstInclusive(total)
+  const accessToken = invoiceToken()
+
+  const wantedNumber = input.invoiceNumber?.trim()
+  if (wantedNumber) {
+    const clash = await prisma.invoice.findFirst({ where: { invoiceNumber: wantedNumber }, select: { id: true } })
+    if (clash) throw new Error('That invoice number is already in use.')
+  }
 
   for (let attempt = 0; ; attempt++) {
     try {
@@ -161,7 +168,8 @@ export async function createInvoiceWithLines(
         const invoice = await tx.invoice.create({
           data: {
             projectId,
-            invoiceNumber: await nextInvoiceNumber(tx, now.getFullYear()),
+            invoiceNumber: wantedNumber || (await nextInvoiceNumber(tx, now.getFullYear())),
+            accessToken,
             type: input.type,
             status: 'DRAFT',
             subtotal,
@@ -323,5 +331,55 @@ export async function recordPayment(
     })
 
     return { paidInFull }
+  })
+}
+
+function invoiceToken(): string {
+  const bytes = new Uint8Array(16)
+  globalThis.crypto.getRandomValues(bytes)
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+export async function getInvoiceByToken(token: string) {
+  if (!token || token.length < 16) return null
+  return prisma.invoice.findUnique({
+    where: { accessToken: token },
+    select: {
+      invoiceNumber: true, type: true, status: true, subtotal: true, taxTotal: true, total: true,
+      amountPaid: true, invoiceDate: true, poNumber: true, notes: true,
+      billingNameSnapshot: true, billingEmailSnapshot: true,
+      lines: { orderBy: { sortOrder: 'asc' }, select: { description: true, quantity: true, unitPrice: true, lineTotal: true } },
+      instalments: { orderBy: { sortOrder: 'asc' }, select: { label: true, dueAt: true, amount: true, status: true } },
+      project: {
+        select: {
+          client: { select: { displayName: true, email: true, phone: true, street: true, suburb: true, state: true, postcode: true, country: true } },
+          company: { select: { name: true, abn: true } },
+        },
+      },
+    },
+  })
+}
+
+export async function saveInvoiceTemplate(name: string, lines: { description: string; quantity: number; unitPrice: string }[]) {
+  const company = await prisma.company.findFirst({ select: { id: true } })
+  if (!company) throw new Error('No company configured.')
+  if (!name.trim()) throw new Error('Give the template a name.')
+  if (lines.length === 0) throw new Error('Add at least one item before saving a template.')
+  await prisma.invoiceTemplate.create({
+    data: { companyId: company.id, name: name.trim().slice(0, 150), linesJson: JSON.stringify(lines) },
+  })
+}
+
+export type InvoiceTemplateOption = { id: string; name: string; lines: { description: string; quantity: number; unitPrice: string }[] }
+
+export async function listInvoiceTemplates(): Promise<InvoiceTemplateOption[]> {
+  const rows = await prisma.invoiceTemplate.findMany({ orderBy: { createdAt: 'desc' }, select: { id: true, name: true, linesJson: true } })
+  return rows.map((r) => {
+    let lines: InvoiceTemplateOption['lines'] = []
+    try {
+      const parsed = JSON.parse(r.linesJson)
+      if (Array.isArray(parsed)) lines = parsed
+    } catch { /* ignore malformed template */ }
+    return { id: r.id, name: r.name, lines }
   })
 }
