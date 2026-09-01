@@ -343,6 +343,7 @@ model User {
   approvedChanges         ChangeRequest[]      @relation("ChangeApprovedBy")
   completedWorkItems      WorkItem[]           @relation("WorkItemCompletedBy")
   createdCalendarEvents   CalendarEvent[]      @relation("CalendarEventCreatedBy")
+  clientNotes             ClientNote[]         @relation("ClientNoteCreatedBy")
 
   @@index([companyId])
   @@index([role])
@@ -441,6 +442,7 @@ model Client {
   contacts               Contact[]
   communications         Communication[]
   calendarEvents         CalendarEvent[]
+  noteEntries            ClientNote[]
 
   @@index([companyId])
   @@index([status])
@@ -845,6 +847,22 @@ model InvoiceInstalment {
 }
 
 /// A reusable set of invoice line items saved by the studio (Studio-Ninja "invoice template").
+/// A titled note on a client (Studio-Ninja "Client Notes" - a running list, not one field).
+model ClientNote {
+  id              String   @id @default(cuid()) @db.VarChar(30)
+  clientId        String   @map("client_id") @db.VarChar(30)
+  title           String?  @db.VarChar(150)
+  body            String   @db.Text
+  createdByUserId String?  @map("created_by_user_id") @db.VarChar(30)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  client    Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("ClientNoteCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@map("client_notes")
+}
+
 model InvoiceTemplate {
   id        String   @id @default(cuid()) @db.VarChar(30)
   companyId String   @map("company_id") @db.VarChar(30)

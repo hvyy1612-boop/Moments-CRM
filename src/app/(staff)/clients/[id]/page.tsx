@@ -7,17 +7,17 @@ import { Prisma, type EnquiryStatus } from '@prisma/client'
 import { StatusTag } from '@/components/ui/StatusTag'
 import { Button } from '@/components/ui/Button'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
-import { ClientNotes } from './ClientNotes'
+import { ClientNotesList } from './ClientNotesList'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
 import { titleCase } from '@/lib/text'
-import { formatSydneyDate } from '@/lib/time'
+import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
 import { statusKind, statusLabel } from '@/features/projects/lifecycle'
 import { ENQUIRY_STAGE_LABEL, ENQUIRY_STAGE_KIND, OPEN_STATUSES, waitingLabel } from '@/features/enquiries/status'
 import { currentActionText } from '@/features/enquiries/workflow'
 import { AppShell } from '../../AppShell'
-import { archiveClientAction, restoreClientAction } from '../actions'
+import { archiveClientAction, restoreClientAction, setClientConsentAction } from '../actions'
 import { DeleteClientButton } from './DeleteClientButton'
 
 export const runtime = 'nodejs'
@@ -121,7 +121,14 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       postcode: true,
       country: true,
       notes: true,
+      marketingConsent: true,
+      consentUpdatedAt: true,
       createdAt: true,
+      noteEntries: {
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        select: { id: true, title: true, body: true, createdAt: true, createdBy: { select: { name: true } } },
+      },
       projects: {
         orderBy: { enquiryReceivedAt: 'desc' },
         select: {
@@ -301,7 +308,34 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             </section>
 
             <SectionCard title="Notes" icon={<IconMail />}>
-              <ClientNotes clientId={client.id} notes={client.notes} csrf={csrf} />
+              <ClientNotesList
+                clientId={client.id}
+                csrf={csrf}
+                notes={client.noteEntries.map((n) => ({
+                  id: n.id,
+                  title: n.title,
+                  body: n.body,
+                  dateLabel: formatSydneyDateTime(n.createdAt),
+                  author: n.createdBy?.name ?? null,
+                }))}
+              />
+            </SectionCard>
+
+            <SectionCard title="Consent" icon={<IconMail />}>
+              <p className="text-sm text-ink">
+                Marketing consent: <span className="font-semibold">{client.marketingConsent ? 'Given' : 'Not given'}</span>
+              </p>
+              {client.consentUpdatedAt ? (
+                <p className="text-xs text-muted">Updated {formatSydneyDate(client.consentUpdatedAt)}</p>
+              ) : null}
+              <form action={setClientConsentAction} className="mt-3">
+                <input type="hidden" name="csrf" value={csrf} />
+                <input type="hidden" name="clientId" value={client.id} />
+                <input type="hidden" name="consent" value={client.marketingConsent ? 'false' : 'true'} />
+                <Button type="submit" variant="secondary" size="sm">
+                  {client.marketingConsent ? 'Withdraw consent' : 'Mark consented'}
+                </Button>
+              </form>
             </SectionCard>
           </div>
 
