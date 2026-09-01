@@ -22,6 +22,7 @@ import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/cont
 import { addGalleryItem, createGallery, publishGallery } from '@/lib/domain/delivery'
 import { createInvoice, createInvoiceWithLines, issueInvoice, recordPayment, saveInvoiceTemplate } from '@/lib/domain/finance'
 import { createQuote, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
+import { createQuestionnaire } from '@/lib/domain/questionnaire'
 import { sendContractEmail, sendQuoteEmail } from '@/lib/email'
 import { assignResourceSchema, createBookingSchema } from '@/lib/validation/booking'
 import { addGalleryItemSchema, createGallerySchema } from '@/lib/validation/delivery'
@@ -275,6 +276,27 @@ export async function createInvoiceLinesAction(
     await createInvoiceWithLines(projectId, parsed.data, user.id)
   } catch (error) {
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not raise the invoice.' }
+  }
+  revalidatePath(`/jobs/${projectId}`)
+  return { status: 'success' }
+}
+
+export async function createQuestionnaireAction(
+  _prev: QuoteActionState,
+  formData: FormData,
+): Promise<QuoteActionState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const title = String(formData.get('title') ?? '')
+  const questions = String(formData.get('questions') ?? '').split('\n')
+  try {
+    await createQuestionnaire(projectId, title, questions)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not create the questionnaire.' }
   }
   revalidatePath(`/jobs/${projectId}`)
   return { status: 'success' }

@@ -73,7 +73,7 @@ describe('files', () => {
 describe('questionnaires', () => {
   it('creates, then the client submits answers and it is COMPLETED', async () => {
     const projectId = await convertedProject()
-    const q = await createQuestionnaire(projectId, ['Venue?', 'Guest count?'])
+    const q = await createQuestionnaire(projectId, 'Details', ['Venue?', 'Guest count?'])
     const done = await submitQuestionnaire(q.id, [
       { question: 'Venue?', answer: 'Bronte Beach' },
       { question: 'Guest count?', answer: '60' },
