@@ -16,7 +16,7 @@ export type InvoiceDoc = {
   amountPaid: D
   billingNameSnapshot: string
   billingEmailSnapshot: string | null
-  lines: { description: string; quantity: number; unitPrice: D; lineTotal: D }[]
+  lines: { description: string; quantity: number; unitPrice: D; discount: D; lineTotal: D }[]
   instalments: { label: string | null; dueAt: Date | null; amount: D; status: string }[]
   project: {
     client: { phone: string | null; street: string | null; suburb: string | null; state: string | null; postcode: string | null; country: string | null }
@@ -65,6 +65,7 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
             <th className="py-2">Description</th>
             <th className="py-2 text-right">Qty</th>
             <th className="py-2 text-right">Unit</th>
+            <th className="py-2 text-right">Discount</th>
             <th className="py-2 text-right">Amount</th>
           </tr>
         </thead>
@@ -74,6 +75,7 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
               <td className="py-2 pr-2 text-ink">{l.description}</td>
               <td className="tabular py-2 text-right text-ink-muted">{l.quantity}</td>
               <td className="tabular py-2 text-right text-ink-muted">{formatAud(l.unitPrice)}</td>
+              <td className="tabular py-2 text-right text-ink-muted">{l.discount.greaterThan(0) ? `-${formatAud(l.discount)}` : '-'}</td>
               <td className="tabular py-2 text-right text-ink">{formatAud(l.lineTotal)}</td>
             </tr>
           ))}

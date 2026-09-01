@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState, useTransition } from 'react'
+import { useActionState, useRef, useState, useTransition } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Field, Select, Textarea, TextInput } from '@/components/ui/form'
@@ -10,7 +10,7 @@ const IDLE: QuoteActionState = { status: 'idle' }
 
 export type PackageOption = { id: string; name: string; price: string }
 export type TemplateOption = { id: string; name: string; lines: { description: string; quantity: number; unitPrice: string }[] }
-type Line = { id: number; description: string; quantity: number; unitPrice: string }
+type Line = { id: number; description: string; quantity: number; unitPrice: string; discount: string }
 type Instalment = { id: number; label: string; dueAt: string; amount: string }
 
 const aud = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
@@ -46,9 +46,31 @@ export function InvoiceEditor({
   const [nextInstId, setNextInstId] = useState(1)
   const [state, action, pending] = useActionState(createInvoiceLinesAction, IDLE)
 
+  const dragIndex = useRef<number | null>(null)
   function addLine(description = '', unitPrice = '') {
-    setLines((ls) => [...ls, { id: nextId, description, quantity: 1, unitPrice }])
+    setLines((ls) => [...ls, { id: nextId, description, quantity: 1, unitPrice, discount: '' }])
     setNextId((n) => n + 1)
+  }
+  function duplicate(id: number) {
+    setLines((ls) => {
+      const idx = ls.findIndex((l) => l.id === id)
+      if (idx < 0) return ls
+      const copy = [...ls]
+      copy.splice(idx + 1, 0, { ...ls[idx]!, id: nextId })
+      return copy
+    })
+    setNextId((n) => n + 1)
+  }
+  function reorder(target: number) {
+    const from = dragIndex.current
+    dragIndex.current = null
+    if (from === null || from === target) return
+    setLines((ls) => {
+      const copy = [...ls]
+      const [moved] = copy.splice(from, 1)
+      if (moved) copy.splice(target, 0, moved)
+      return copy
+    })
   }
   function addPackage(id: string) {
     const pkg = packages.find((p) => p.id === id)
@@ -64,7 +86,7 @@ export function InvoiceEditor({
     const t = templates.find((x) => x.id === id)
     if (!t) return
     let idc = nextId
-    setLines(t.lines.map((l) => ({ id: idc++, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice })))
+    setLines(t.lines.map((l) => ({ id: idc++, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: '' })))
     setNextId(idc)
   }
   function saveTemplate() {
@@ -78,7 +100,8 @@ export function InvoiceEditor({
     startSave(async () => { await saveInvoiceTemplateAction(fd) })
   }
 
-  const gross = lines.reduce((sum, l) => sum + (Number(l.unitPrice) || 0) * l.quantity, 0)
+  const lineAmount = (l: Line) => Math.max((Number(l.unitPrice) || 0) * l.quantity - (Number(l.discount) || 0), 0)
+  const gross = lines.reduce((sum, l) => sum + lineAmount(l), 0)
   const disc = Math.min(Number(discount) || 0, gross)
   const total = Math.max(gross - disc, 0)
   const gst = total / 11
@@ -111,7 +134,7 @@ export function InvoiceEditor({
   }
 
   const payload = JSON.stringify(
-    lines.map((l) => ({ description: l.description, quantity: l.quantity, unitPrice: l.unitPrice })),
+    lines.map((l) => ({ description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: l.discount || '' })),
   )
   const instalmentPayload = JSON.stringify(
     instalments.map((it) => ({ label: it.label, dueAt: it.dueAt, amount: it.amount || '0' })),
@@ -182,19 +205,45 @@ export function InvoiceEditor({
         </p>
       ) : (
         <div className="flex flex-col gap-2">
-          {lines.map((l) => (
-            <div key={l.id} className="grid grid-cols-1 gap-2 rounded border border-line p-2 sm:grid-cols-12 sm:items-center">
-              <div className="sm:col-span-6">
+          <div className="hidden px-2 text-xs font-bold uppercase tracking-wide text-muted sm:grid sm:grid-cols-12 sm:gap-2">
+            <span className="sm:col-span-5">Item</span>
+            <span className="sm:col-span-1 text-center">Qty</span>
+            <span className="sm:col-span-2 text-right">Unit</span>
+            <span className="sm:col-span-2 text-right">Discount</span>
+            <span className="sm:col-span-2 text-right">Amount</span>
+          </div>
+          {lines.map((l, index) => (
+            <div
+              key={l.id}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => reorder(index)}
+              className="grid grid-cols-1 gap-2 rounded border border-line p-2 sm:grid-cols-12 sm:items-center"
+            >
+              <div className="flex items-center gap-1 sm:col-span-5">
+                <span
+                  draggable
+                  onDragStart={() => { dragIndex.current = index }}
+                  aria-label="Drag to reorder"
+                  className="shrink-0 cursor-grab text-muted hover:text-ink"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" /><circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" /><circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" /></svg>
+                </span>
                 <TextInput aria-label="Item description" value={l.description} onChange={(e) => update(l.id, { description: e.target.value })} placeholder="Item / package" />
               </div>
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-1">
                 <TextInput aria-label="Quantity" type="number" min={1} value={l.quantity} onChange={(e) => update(l.id, { quantity: Math.max(1, Number(e.target.value) || 1) })} />
               </div>
               <div className="sm:col-span-2">
                 <TextInput aria-label="Unit price" inputMode="decimal" value={l.unitPrice} onChange={(e) => update(l.id, { unitPrice: e.target.value })} placeholder="0.00" />
               </div>
-              <div className="flex items-center justify-between gap-2 sm:col-span-2 sm:justify-end">
-                <span className="tabular text-sm text-ink">{money((Number(l.unitPrice) || 0) * l.quantity)}</span>
+              <div className="sm:col-span-2">
+                <TextInput aria-label="Line discount" inputMode="decimal" value={l.discount} onChange={(e) => update(l.id, { discount: e.target.value })} placeholder="0.00" />
+              </div>
+              <div className="flex items-center justify-between gap-1 sm:col-span-2 sm:justify-end">
+                <span className="tabular text-sm text-ink">{money(lineAmount(l))}</span>
+                <button type="button" onClick={() => duplicate(l.id)} aria-label="Duplicate item" className="rounded p-1 text-ink-muted hover:bg-sunk hover:text-ink">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+                </button>
                 <button type="button" onClick={() => remove(l.id)} aria-label="Remove item" className="rounded p-1 text-ink-muted hover:bg-sunk hover:text-lost-ink">
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
                 </button>
