@@ -13,7 +13,6 @@ import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
 import { getProjectBoard } from '@/lib/domain/project-workflow'
 import { listActivePackages } from '@/lib/domain/package'
-import { listInvoiceTemplates } from '@/lib/domain/finance'
 import { AppShell } from '../../AppShell'
 import {
   createContractAction,
@@ -222,7 +221,6 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     name: p.name,
     price: p.basePriceInclGst.toString(),
   }))
-  const invoiceTemplates = await listInvoiceTemplates()
 
   const gallery = project.galleries[0]
   const galleryView = gallery
@@ -488,7 +486,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         {isConfirmed ? (
           <section id="finance" className="mt-6 scroll-mt-20 rounded border border-line bg-surface p-5">
             <h2 className="text-lg">Invoices &amp; payments</h2>
-            <Finance csrf={csrf} projectId={project.id} invoices={invoiceViews} packages={packageOptions} templates={invoiceTemplates} />
+            <Finance csrf={csrf} projectId={project.id} invoices={invoiceViews} />
           </section>
         ) : null}
 

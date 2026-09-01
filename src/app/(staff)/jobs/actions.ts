@@ -278,6 +278,7 @@ export async function createInvoiceLinesAction(
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not raise the invoice.' }
   }
   revalidatePath(`/jobs/${projectId}`)
+  revalidatePath('/finance')
   return { status: 'success' }
 }
 

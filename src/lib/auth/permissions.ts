@@ -32,6 +32,7 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/jobs': { roles: ['ADMIN', 'STUDIO'] },
   '/jobs/[id]': { roles: ['ADMIN', 'STUDIO'] },
   '/jobs/[id]/invoice/[invoiceId]': { roles: ['ADMIN', 'STUDIO'] },
+  '/finance/new': { roles: ['ADMIN', 'STUDIO'] },
   '/clients': { roles: ['ADMIN', 'STUDIO'] },
   '/clients/new': { roles: ['ADMIN', 'STUDIO'] },
   '/clients/[id]': { roles: ['ADMIN', 'STUDIO'] },

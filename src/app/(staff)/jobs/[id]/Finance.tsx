@@ -13,7 +13,6 @@ import {
   type QuoteActionState,
 } from '../actions'
 import { CopyLinkField } from '@/components/ui/CopyLinkField'
-import { InvoiceEditor, type PackageOption, type TemplateOption } from './InvoiceEditor'
 
 const IDLE: QuoteActionState = { status: 'idle' }
 
@@ -96,14 +95,10 @@ export function Finance({
   csrf,
   projectId,
   invoices,
-  packages,
-  templates,
 }: {
   csrf: string
   projectId: string
   invoices: InvoiceView[]
-  packages: PackageOption[]
-  templates: TemplateOption[]
 }) {
   return (
     <div className="mt-4 flex flex-col gap-4">
@@ -175,7 +170,12 @@ export function Finance({
         </ul>
       )}
 
-      <InvoiceEditor csrf={csrf} projectId={projectId} packages={packages} templates={templates} />
+      <Link href={`/finance/new?job=${projectId}`} className="inline-block">
+        <Button size="sm">
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+          New invoice
+        </Button>
+      </Link>
     </div>
   )
 }
