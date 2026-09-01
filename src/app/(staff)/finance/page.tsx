@@ -14,7 +14,7 @@ import { INVOICE_KIND, invoiceGroup } from '@/features/finance/invoice-status'
 import { AppShell } from '../AppShell'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Finance - Moments' }
+export const metadata: Metadata = { title: 'Payments - Moments' }
 
 const HEAD = ['Invoice', 'Client', 'Issued', 'Due', 'Total', 'Balance', 'Status']
 
