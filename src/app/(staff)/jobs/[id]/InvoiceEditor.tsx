@@ -3,13 +3,14 @@
 import { useActionState, useState } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
-import { Field, Select, TextInput } from '@/components/ui/form'
+import { Field, Select, Textarea, TextInput } from '@/components/ui/form'
 import { createInvoiceLinesAction, type QuoteActionState } from '../actions'
 
 const IDLE: QuoteActionState = { status: 'idle' }
 
 export type PackageOption = { id: string; name: string; price: string }
 type Line = { id: number; description: string; quantity: number; unitPrice: string }
+type Instalment = { id: number; label: string; dueAt: string; amount: string }
 
 const aud = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
 function money(n: number): string {
@@ -33,6 +34,11 @@ export function InvoiceEditor({
   const [lines, setLines] = useState<Line[]>([])
   const [discount, setDiscount] = useState('')
   const [nextId, setNextId] = useState(1)
+  const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [poNumber, setPoNumber] = useState('')
+  const [notes, setNotes] = useState('')
+  const [instalments, setInstalments] = useState<Instalment[]>([])
+  const [nextInstId, setNextInstId] = useState(1)
   const [state, action, pending] = useActionState(createInvoiceLinesAction, IDLE)
 
   function addLine(description = '', unitPrice = '') {
@@ -56,8 +62,37 @@ export function InvoiceEditor({
   const gst = total / 11
   const subtotal = total - gst
 
+  const scheduled = instalments.reduce((s, it) => s + (Number(it.amount) || 0), 0)
+  const scheduleMismatch = instalments.length > 0 && Math.abs(scheduled - total) > 0.005
+
+  function genFull() {
+    setInstalments([{ id: nextInstId, label: 'Full payment', dueAt: invoiceDate, amount: total.toFixed(2) }])
+    setNextInstId((n) => n + 1)
+  }
+  function genDeposit() {
+    const half = Math.round((total / 2) * 100) / 100
+    setInstalments([
+      { id: nextInstId, label: 'Deposit (50%)', dueAt: invoiceDate, amount: half.toFixed(2) },
+      { id: nextInstId + 1, label: 'Balance (50%)', dueAt: '', amount: (total - half).toFixed(2) },
+    ])
+    setNextInstId((n) => n + 2)
+  }
+  function addInst() {
+    setInstalments((is) => [...is, { id: nextInstId, label: '', dueAt: '', amount: '' }])
+    setNextInstId((n) => n + 1)
+  }
+  function updateInst(id: number, patch: Partial<Instalment>) {
+    setInstalments((is) => is.map((it) => (it.id === id ? { ...it, ...patch } : it)))
+  }
+  function removeInst(id: number) {
+    setInstalments((is) => is.filter((it) => it.id !== id))
+  }
+
   const payload = JSON.stringify(
     lines.map((l) => ({ description: l.description, quantity: l.quantity, unitPrice: l.unitPrice })),
+  )
+  const instalmentPayload = JSON.stringify(
+    instalments.map((it) => ({ label: it.label, dueAt: it.dueAt, amount: it.amount || '0' })),
   )
 
   return (
@@ -68,6 +103,10 @@ export function InvoiceEditor({
       <input type="hidden" name="projectId" value={projectId} />
       <input type="hidden" name="lines" value={payload} />
       <input type="hidden" name="discount" value={disc > 0 ? String(disc) : ''} />
+      <input type="hidden" name="invoiceDate" value={invoiceDate} />
+      <input type="hidden" name="poNumber" value={poNumber} />
+      <input type="hidden" name="notes" value={notes} />
+      <input type="hidden" name="instalments" value={instalmentPayload} />
 
       <p className="text-sm font-semibold text-ink">New invoice</p>
 
@@ -86,6 +125,15 @@ export function InvoiceEditor({
               <option key={p.id} value={p.id}>{p.name} - {money(Number(p.price))}</option>
             ))}
           </Select>
+        </Field>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Issue date" htmlFor="inv-date">
+          <TextInput id="inv-date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+        </Field>
+        <Field label="PO number (optional)" htmlFor="inv-po">
+          <TextInput id="inv-po" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="-" maxLength={60} />
         </Field>
       </div>
 
@@ -137,8 +185,45 @@ export function InvoiceEditor({
         <div className="mt-1 flex justify-between border-t border-line pt-1 font-semibold text-ink"><span>Total (incl. GST)</span><span className="tabular">{money(total)}</span></div>
       </div>
 
+      {/* Payment schedule */}
+      <div className="border-t border-line pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-ink">Payment schedule</p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={genFull}>Full payment</Button>
+            <Button type="button" variant="secondary" size="sm" onClick={genDeposit}>50% + 50%</Button>
+            <Button type="button" variant="secondary" size="sm" onClick={addInst}>Add instalment</Button>
+          </div>
+        </div>
+        {instalments.length === 0 ? (
+          <p className="mt-2 text-sm text-ink-muted">No split - a single full payment on issue.</p>
+        ) : (
+          <div className="mt-2 flex flex-col gap-2">
+            {instalments.map((it) => (
+              <div key={it.id} className="grid grid-cols-1 gap-2 sm:grid-cols-12 sm:items-center">
+                <div className="sm:col-span-5"><TextInput aria-label="Instalment label" value={it.label} onChange={(e) => updateInst(it.id, { label: e.target.value })} placeholder="Deposit" /></div>
+                <div className="sm:col-span-4"><TextInput aria-label="Due date" type="date" value={it.dueAt} onChange={(e) => updateInst(it.id, { dueAt: e.target.value })} /></div>
+                <div className="sm:col-span-2"><TextInput aria-label="Instalment amount" inputMode="decimal" value={it.amount} onChange={(e) => updateInst(it.id, { amount: e.target.value })} placeholder="0.00" /></div>
+                <div className="flex justify-end sm:col-span-1">
+                  <button type="button" onClick={() => removeInst(it.id)} aria-label="Remove instalment" className="rounded p-1 text-ink-muted hover:bg-sunk hover:text-lost-ink">
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+            <p className={`text-xs ${scheduleMismatch ? 'font-bold text-lost-ink' : 'text-ink-muted'}`}>
+              Scheduled {money(scheduled)} of {money(total)}{scheduleMismatch ? ' - must match the total' : ''}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <Field label="Notes (optional)" htmlFor="inv-notes">
+        <Textarea id="inv-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} placeholder="Notes shown on the invoice..." />
+      </Field>
+
       <div>
-        <Button type="submit" loading={pending} disabled={lines.length === 0}>
+        <Button type="submit" loading={pending} disabled={lines.length === 0 || scheduleMismatch}>
           Raise invoice
         </Button>
       </div>

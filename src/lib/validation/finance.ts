@@ -18,10 +18,22 @@ const invoiceLine = z.object({
   unitPrice: money,
 })
 
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+
+const instalment = z.object({
+  label: z.string().trim().max(100).optional().or(z.literal('')),
+  dueAt: isoDate.optional().or(z.literal('')),
+  amount: money,
+})
+
 export const createInvoiceLinesSchema = z.object({
   type: z.enum(['DEPOSIT', 'BALANCE', 'SUPPLEMENTARY']),
+  invoiceDate: isoDate.optional().or(z.literal('')),
+  poNumber: z.string().trim().max(60).optional().or(z.literal('')),
+  notes: z.string().trim().max(2000).optional().or(z.literal('')),
   discount: money.optional().or(z.literal('')),
   lines: z.array(invoiceLine).min(1, 'Add at least one item.').max(50),
+  instalments: z.array(instalment).max(12).optional(),
 })
 
 export const recordPaymentSchema = z.object({

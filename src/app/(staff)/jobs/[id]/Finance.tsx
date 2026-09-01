@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+
 import { useActionState } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
@@ -24,6 +26,13 @@ const INVOICE_TONE: Record<string, Tone> = {
   VOID: 'neutral',
 }
 
+export type InvoiceInstalmentView = {
+  id: string
+  label: string | null
+  dueLabel: string | null
+  amountLabel: string
+  status: string
+}
 export type InvoiceView = {
   id: string
   number: string
@@ -34,6 +43,9 @@ export type InvoiceView = {
   remainingLabel: string
   isDraft: boolean
   canPay: boolean
+  poNumber: string | null
+  notes: string | null
+  instalments: InvoiceInstalmentView[]
 }
 
 function RecordPaymentForm({
@@ -110,6 +122,30 @@ export function Finance({
                 <StatusPill tone={INVOICE_TONE[invoice.status] ?? 'neutral'}>
                   {invoice.status.toLowerCase().replace(/_/g, ' ')}
                 </StatusPill>
+              </div>
+
+              {invoice.poNumber ? <p className="mt-1 text-xs text-ink-muted">PO: {invoice.poNumber}</p> : null}
+
+              {invoice.instalments.length > 1 ? (
+                <ul className="mt-2 flex flex-col gap-1 border-t border-line pt-2">
+                  {invoice.instalments.map((it) => (
+                    <li key={it.id} className="flex items-center justify-between gap-2 text-sm">
+                      <span className="text-ink-muted">{it.label ?? 'Instalment'}{it.dueLabel ? ` · due ${it.dueLabel}` : ''}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="tabular text-ink">{it.amountLabel}</span>
+                        <StatusPill tone={it.status === 'PAID' ? 'good' : 'neutral'}>{it.status.toLowerCase()}</StatusPill>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+
+              {invoice.notes ? <p className="mt-2 whitespace-pre-line border-t border-line pt-2 text-sm text-ink-muted">{invoice.notes}</p> : null}
+
+              <div className="mt-2">
+                <Link href={`/jobs/${projectId}/invoice/${invoice.id}`} target="_blank" className="text-sm font-bold text-accent hover:underline">
+                  View / PDF -&gt;
+                </Link>
               </div>
 
               {invoice.isDraft ? (

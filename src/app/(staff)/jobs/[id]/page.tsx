@@ -103,6 +103,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           status: true,
           total: true,
           amountPaid: true,
+          poNumber: true,
+          notes: true,
+          instalments: {
+            orderBy: { sortOrder: 'asc' },
+            select: { id: true, label: true, dueAt: true, amount: true, status: true },
+          },
         },
       },
       galleries: {
@@ -185,6 +191,15 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     remainingLabel: formatAud(invoice.total.sub(invoice.amountPaid)),
     isDraft: invoice.status === 'DRAFT',
     canPay: invoice.status !== 'DRAFT' && invoice.status !== 'PAID' && invoice.status !== 'VOID',
+    poNumber: invoice.poNumber,
+    notes: invoice.notes,
+    instalments: invoice.instalments.map((it) => ({
+      id: it.id,
+      label: it.label,
+      dueLabel: it.dueAt ? formatSydneyDate(it.dueAt) : null,
+      amountLabel: formatAud(it.amount),
+      status: it.status,
+    })),
   }))
 
   const packageOptions = (await listActivePackages()).map((p) => ({

@@ -251,15 +251,21 @@ export async function createInvoiceLinesAction(
   const projectId = String(formData.get('projectId') ?? '')
 
   let lines: unknown = []
+  let instalments: unknown = []
   try {
     lines = JSON.parse(String(formData.get('lines') ?? '[]'))
+    instalments = JSON.parse(String(formData.get('instalments') ?? '[]'))
   } catch {
     return { status: 'error', message: 'Could not read the invoice items.' }
   }
   const parsed = createInvoiceLinesSchema.safeParse({
     type: formData.get('type') ?? '',
+    invoiceDate: formData.get('invoiceDate') ?? '',
+    poNumber: formData.get('poNumber') ?? '',
+    notes: formData.get('notes') ?? '',
     discount: formData.get('discount') ?? '',
     lines,
+    instalments,
   })
   if (!parsed.success) {
     return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the invoice.' }

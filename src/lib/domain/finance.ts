@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { splitGstInclusive } from '@/lib/money'
-import { systemClock } from '@/lib/time'
+import { sydneyLocalToUtc, systemClock } from '@/lib/time'
 import type { CreateInvoiceInput, CreateInvoiceLinesInput, RecordPaymentInput } from '@/lib/validation/finance'
 
 /**
@@ -159,6 +159,23 @@ export async function createInvoiceWithLines(
           })
         }
 
+        // Payment schedule: use the given instalments (must sum to the total) or a single full one.
+        let instalmentData
+        if (input.instalments && input.instalments.length > 0) {
+          let sum = new Prisma.Decimal(0)
+          for (const it of input.instalments) sum = sum.plus(new Prisma.Decimal(it.amount))
+          if (!sum.equals(total)) throw new Error('The payment schedule must add up to the invoice total.')
+          instalmentData = input.instalments.map((it, i) => ({
+            label: it.label?.trim() || null,
+            dueAt: it.dueAt ? sydneyLocalToUtc(`${it.dueAt}T00:00`) : null,
+            amount: new Prisma.Decimal(it.amount),
+            status: 'UNPAID',
+            sortOrder: i,
+          }))
+        } else {
+          instalmentData = [{ label: 'Full payment', dueAt: null, amount: total, status: 'UNPAID', sortOrder: 0 }]
+        }
+
         const invoice = await tx.invoice.create({
           data: {
             projectId,
@@ -168,9 +185,13 @@ export async function createInvoiceWithLines(
             subtotal,
             taxTotal,
             total,
+            invoiceDate: input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now,
+            poNumber: input.poNumber?.trim() || null,
+            notes: input.notes?.trim() || null,
             billingNameSnapshot: project.client.displayName,
             billingEmailSnapshot: project.client.email,
             lines: { create: lineData },
+            instalments: { create: instalmentData },
           },
         })
         await tx.auditLog.create({
