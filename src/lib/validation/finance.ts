@@ -28,6 +28,13 @@ const instalment = z.object({
 
 export const createInvoiceLinesSchema = z.object({
   type: z.enum(['DEPOSIT', 'BALANCE', 'SUPPLEMENTARY']),
+  invoiceNumber: z
+    .string()
+    .trim()
+    .max(30)
+    .regex(/^[A-Za-z0-9\-/]+$/, 'Use letters, numbers, - or /.')
+    .optional()
+    .or(z.literal('')),
   invoiceDate: isoDate.optional().or(z.literal('')),
   poNumber: z.string().trim().max(60).optional().or(z.literal('')),
   notes: z.string().trim().max(2000).optional().or(z.literal('')),

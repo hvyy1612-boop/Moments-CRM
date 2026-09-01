@@ -20,7 +20,7 @@ import {
 import { enquirySchema } from '@/lib/validation/enquiry'
 import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/contract'
 import { addGalleryItem, createGallery, publishGallery } from '@/lib/domain/delivery'
-import { createInvoice, createInvoiceWithLines, issueInvoice, recordPayment } from '@/lib/domain/finance'
+import { createInvoice, createInvoiceWithLines, issueInvoice, recordPayment, saveInvoiceTemplate } from '@/lib/domain/finance'
 import { createQuote, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 import { sendContractEmail, sendQuoteEmail } from '@/lib/email'
 import { assignResourceSchema, createBookingSchema } from '@/lib/validation/booking'
@@ -260,6 +260,7 @@ export async function createInvoiceLinesAction(
   }
   const parsed = createInvoiceLinesSchema.safeParse({
     type: formData.get('type') ?? '',
+    invoiceNumber: formData.get('invoiceNumber') ?? '',
     invoiceDate: formData.get('invoiceDate') ?? '',
     poNumber: formData.get('poNumber') ?? '',
     notes: formData.get('notes') ?? '',
@@ -277,6 +278,25 @@ export async function createInvoiceLinesAction(
   }
   revalidatePath(`/jobs/${projectId}`)
   return { status: 'success' }
+}
+
+export async function saveInvoiceTemplateAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) throw new Error('Invalid request.')
+  await requireStaff()
+  let lines: unknown = []
+  try {
+    lines = JSON.parse(String(formData.get('lines') ?? '[]'))
+  } catch {
+    return
+  }
+  if (!Array.isArray(lines) || lines.length === 0) return
+  await saveInvoiceTemplate(
+    String(formData.get('name') ?? ''),
+    lines as { description: string; quantity: number; unitPrice: string }[],
+  )
+  const projectId = String(formData.get('projectId') ?? '')
+  if (projectId) revalidatePath(`/jobs/${projectId}`)
 }
 
 export async function createInvoiceAction(

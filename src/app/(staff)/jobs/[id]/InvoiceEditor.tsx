@@ -1,14 +1,15 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState, useState, useTransition } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Field, Select, Textarea, TextInput } from '@/components/ui/form'
-import { createInvoiceLinesAction, type QuoteActionState } from '../actions'
+import { createInvoiceLinesAction, saveInvoiceTemplateAction, type QuoteActionState } from '../actions'
 
 const IDLE: QuoteActionState = { status: 'idle' }
 
 export type PackageOption = { id: string; name: string; price: string }
+export type TemplateOption = { id: string; name: string; lines: { description: string; quantity: number; unitPrice: string }[] }
 type Line = { id: number; description: string; quantity: number; unitPrice: string }
 type Instalment = { id: number; label: string; dueAt: string; amount: string }
 
@@ -26,16 +27,20 @@ export function InvoiceEditor({
   csrf,
   projectId,
   packages,
+  templates,
 }: {
   csrf: string
   projectId: string
   packages: PackageOption[]
+  templates: TemplateOption[]
 }) {
   const [lines, setLines] = useState<Line[]>([])
   const [discount, setDiscount] = useState('')
   const [nextId, setNextId] = useState(1)
+  const [invoiceNumber, setInvoiceNumber] = useState('')
   const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [poNumber, setPoNumber] = useState('')
+  const [, startSave] = useTransition()
   const [notes, setNotes] = useState('')
   const [instalments, setInstalments] = useState<Instalment[]>([])
   const [nextInstId, setNextInstId] = useState(1)
@@ -54,6 +59,23 @@ export function InvoiceEditor({
   }
   function remove(id: number) {
     setLines((ls) => ls.filter((l) => l.id !== id))
+  }
+  function applyTemplate(id: string) {
+    const t = templates.find((x) => x.id === id)
+    if (!t) return
+    let idc = nextId
+    setLines(t.lines.map((l) => ({ id: idc++, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice })))
+    setNextId(idc)
+  }
+  function saveTemplate() {
+    const name = window.prompt('Save these items as a template. Template name:')
+    if (!name) return
+    const fd = new FormData()
+    fd.set('csrf', csrf)
+    fd.set('projectId', projectId)
+    fd.set('name', name)
+    fd.set('lines', JSON.stringify(lines.map((l) => ({ description: l.description, quantity: l.quantity, unitPrice: l.unitPrice }))))
+    startSave(async () => { await saveInvoiceTemplateAction(fd) })
   }
 
   const gross = lines.reduce((sum, l) => sum + (Number(l.unitPrice) || 0) * l.quantity, 0)
@@ -103,6 +125,7 @@ export function InvoiceEditor({
       <input type="hidden" name="projectId" value={projectId} />
       <input type="hidden" name="lines" value={payload} />
       <input type="hidden" name="discount" value={disc > 0 ? String(disc) : ''} />
+      <input type="hidden" name="invoiceNumber" value={invoiceNumber} />
       <input type="hidden" name="invoiceDate" value={invoiceDate} />
       <input type="hidden" name="poNumber" value={poNumber} />
       <input type="hidden" name="notes" value={notes} />
@@ -128,7 +151,10 @@ export function InvoiceEditor({
         </Field>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Field label="Invoice number" htmlFor="inv-num" hint="Blank = auto (INV-...).">
+          <TextInput id="inv-num" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Auto" maxLength={30} />
+        </Field>
         <Field label="Issue date" htmlFor="inv-date">
           <TextInput id="inv-date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
         </Field>
@@ -136,6 +162,18 @@ export function InvoiceEditor({
           <TextInput id="inv-po" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="-" maxLength={60} />
         </Field>
       </div>
+
+      {templates.length > 0 || lines.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {templates.length > 0 ? (
+            <Select aria-label="Apply a template" value="" onChange={(e) => { applyTemplate(e.target.value); e.currentTarget.value = '' }} className="h-8 max-w-xs">
+              <option value="" disabled>Apply a template...</option>
+              {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </Select>
+          ) : null}
+          <Button type="button" variant="secondary" size="sm" onClick={saveTemplate} disabled={lines.length === 0}>Save as template</Button>
+        </div>
+      ) : null}
 
       {/* Line items */}
       {lines.length === 0 ? (
