@@ -29,7 +29,7 @@ type Row = {
   archived: boolean
 }
 
-function Table({ rows, csrf }: { rows: Row[]; csrf: string }) {
+function Table({ rows, csrf, canDelete }: { rows: Row[]; csrf: string; canDelete: boolean }) {
   return (
     <>
       {rows.map((row) => (
@@ -51,10 +51,11 @@ function Table({ rows, csrf }: { rows: Row[]; csrf: string }) {
           <td className="border-b border-line px-2 py-3">
             <ClientRowMenu
               clientId={row.id}
+              name={row.name}
               email={row.email}
               csrf={csrf}
               archived={row.archived}
-              hasProjects={row.projects > 0}
+              canDelete={canDelete}
             />
           </td>
         </tr>
@@ -114,10 +115,10 @@ export default async function ClientsPage() {
       ) : (
         <div>
           <BoardGroup title="Active clients" count={active.length} spine="border-l-delivered-ink" head={HEAD}>
-            <Table rows={active} csrf={csrf} />
+            <Table rows={active} csrf={csrf} canDelete={user.role === 'ADMIN'} />
           </BoardGroup>
           <BoardGroup title="Archived" count={archived.length} spine="border-l-line-strong" head={HEAD}>
-            <Table rows={archived} csrf={csrf} />
+            <Table rows={archived} csrf={csrf} canDelete={user.role === 'ADMIN'} />
           </BoardGroup>
         </div>
       )}

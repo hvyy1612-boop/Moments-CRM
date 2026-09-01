@@ -12,6 +12,7 @@ import {
   deleteClient,
   restoreClient,
   updateClient,
+  updateClientNotes,
 } from '@/lib/domain/client'
 import { createEnquiry } from '@/lib/domain/enquiry'
 import { clientSchema } from '@/lib/validation/client'
@@ -127,17 +128,24 @@ export async function restoreClientAction(formData: FormData): Promise<void> {
   revalidatePath(`/clients/${clientId}`)
 }
 
-/** Delete a client for good (only when they have no projects; otherwise it archives). */
+/** Permanently delete a client and all their jobs/history (ADMIN only; the UI confirms first). */
 export async function deleteClientAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (user.role !== 'ADMIN') throw new Error('Only an admin can permanently delete a client.')
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const clientId = String(formData.get('clientId') ?? '')
+  if (!clientId) return
+  await deleteClient(clientId, user.id)
+  revalidatePath('/clients')
+  redirect('/clients')
+}
+
+/** Save the free-text note on a client (inline on the client page). */
+export async function updateClientNotesAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
   const clientId = String(formData.get('clientId') ?? '')
   if (!clientId) return
-  try {
-    await deleteClient(clientId, user.id)
-  } catch {
-    // Has projects: fall back to archiving so business records are never orphaned.
-    await archiveClient(clientId, user.id)
-  }
-  revalidatePath('/clients')
+  await updateClientNotes(clientId, String(formData.get('notes') ?? ''), user.id)
+  revalidatePath(`/clients/${clientId}`)
 }

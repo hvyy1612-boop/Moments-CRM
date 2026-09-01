@@ -126,22 +126,48 @@ export async function restoreClient(clientId: string, actorUserId: string) {
  * Delete a client for good. Only when nothing references them (no projects) - a client with real work
  * must be archived instead, so business records are never orphaned. The caller decides which to offer.
  */
+/**
+ * Permanently delete a client AND everything under them - jobs, bookings, quotes, contracts,
+ * invoices, payments, galleries, tasks, communications and contacts (Studio-Ninja style hard delete).
+ * Runs in one transaction; the FK-restricted children are removed before their project, so a failure
+ * rolls back and the client is left untouched. This is irreversible - the UI confirms first and it is
+ * ADMIN-only.
+ */
 export async function deleteClient(clientId: string, actorUserId: string) {
-  const client = await prisma.client.findUnique({
-    where: { id: clientId },
-    select: { id: true, companyId: true, _count: { select: { projects: true } } },
-  })
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, companyId: true } })
   if (!client) throw new Error('Client not found.')
-  if (client._count.projects > 0) {
-    throw new Error('This client has projects. Archive them instead of deleting.')
-  }
+  const projects = await prisma.project.findMany({ where: { clientId }, select: { id: true } })
+  const projectIds = projects.map((p) => p.id)
+
   return prisma.$transaction(async (tx) => {
+    if (projectIds.length > 0) {
+      const inP = { projectId: { in: projectIds } }
+      // Restrict children first (must go before the project itself)...
+      await tx.payment.deleteMany({ where: inP })
+      await tx.invoice.deleteMany({ where: inP })
+      await tx.quote.deleteMany({ where: inP })
+      await tx.contract.deleteMany({ where: inP })
+      await tx.booking.deleteMany({ where: inP })
+      await tx.gallery.deleteMany({ where: inP })
+      // ...then the projects (cascades work items, communications, files, questionnaires, change requests).
+      await tx.project.deleteMany({ where: { id: { in: projectIds } } })
+    }
     await tx.communication.deleteMany({ where: { clientId } })
     await tx.contact.deleteMany({ where: { clientId } })
     await tx.client.delete({ where: { id: clientId } })
     await tx.auditLog.create({
       data: { companyId: client.companyId, actorUserId, action: 'client.deleted', entityType: 'Client', entityId: clientId },
     })
+  })
+}
+
+/** Update the free-text note on a client (staff-controlled, inline on the client page). */
+export async function updateClientNotes(clientId: string, notes: string, actorUserId: string) {
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, companyId: true } })
+  if (!client) throw new Error('Client not found.')
+  await prisma.client.update({ where: { id: clientId }, data: { notes: notes.trim() || null } })
+  await prisma.auditLog.create({
+    data: { companyId: client.companyId, actorUserId, action: 'client.notes_updated', entityType: 'Client', entityId: clientId },
   })
 }
 
