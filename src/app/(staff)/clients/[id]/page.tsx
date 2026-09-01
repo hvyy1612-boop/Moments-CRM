@@ -76,7 +76,7 @@ function SectionCard({
   children: ReactNode
 }) {
   return (
-    <section className="rounded-lg border border-line bg-surface p-5">
+    <section className="rounded-lg border border-line bg-surface p-5 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
           <span className="text-accent-ink">{icon}</span>
