@@ -36,7 +36,7 @@ function Rows({ rows }: { rows: Row[] }) {
       {rows.map((row) => (
         <tr key={row.id} className="transition-colors hover:bg-paper">
           <td className="tabular border-b border-r border-line px-3 py-3 text-base text-ink">
-            <Link href={`/jobs/${row.projectId}`} className="font-bold text-accent-ink hover:underline">
+            <Link href={`/jobs/${row.projectId}/invoice/${row.id}`} className="font-bold text-accent-ink hover:underline">
               {row.number}
             </Link>
           </td>

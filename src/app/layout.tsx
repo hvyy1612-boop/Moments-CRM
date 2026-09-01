@@ -1,21 +1,16 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import { Cormorant_Garamond, Lato } from 'next/font/google'
+import { Poppins } from 'next/font/google'
 import './globals.css'
 
-// Brand fonts (D-05), self-hosted by next/font: files are downloaded at build and served from our
-// own domain, so the browser never calls Google and the strict CSP (font-src 'self') is satisfied.
-// Each exposes a CSS variable that globals.css maps to --font-serif / --font-sans.
-const cormorant = Cormorant_Garamond({
+// Single UI font (self-hosted by next/font so the browser never calls Google and the strict CSP
+// font-src 'self' is satisfied). One clean, readable geometric sans across the whole app - headings
+// and body - for a modern, easy-to-read look. Exposed as --font-poppins; globals.css maps both
+// --font-sans and --font-serif to it.
+const poppins = Poppins({
   subsets: ['latin'],
-  weight: ['500', '600'],
-  variable: '--font-cormorant',
-  display: 'swap',
-})
-const lato = Lato({
-  subsets: ['latin'],
-  weight: ['400', '700', '900'],
-  variable: '--font-lato',
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-poppins',
   display: 'swap',
 })
 
@@ -32,7 +27,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en-AU" className={`${lato.variable} ${cormorant.variable}`}>
+    <html lang="en-AU" className={poppins.variable}>
       <body>{children}</body>
     </html>
   )

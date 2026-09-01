@@ -79,11 +79,12 @@
   --text-2xl: 30px;
   --text-3xl: 36px;
 
-  /* Typefaces (D-05) - real brand fonts, self-hosted by next/font (see app/layout.tsx). The CSS
-     variables (--font-cormorant / --font-lato) are injected on <html> by next/font. */
-  --font-sans: var(--font-lato), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+  /* Typeface (D-05) - one readable geometric sans (Poppins), self-hosted by next/font (app/layout.tsx).
+     Both --font-sans and --font-serif point to it so headings and body share the same clean font. */
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
     Helvetica, Arial, sans-serif;
-  --font-serif: var(--font-cormorant), ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+  --font-serif: var(--font-poppins), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
 }
 
 /*
