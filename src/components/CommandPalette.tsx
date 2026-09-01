@@ -81,17 +81,17 @@ export function CommandPalette() {
                   else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)) }
                   else if (e.key === 'Enter') { e.preventDefault(); go(hits[active]) }
                 }}
-                placeholder="Tìm client, job, enquiry..."
+                placeholder="Search clients, jobs, enquiries..."
                 className="w-full bg-transparent text-base text-ink outline-none placeholder:text-muted"
               />
             </div>
             <div className="max-h-80 overflow-y-auto py-1">
               {query.trim().length < 2 ? (
-                <p className="px-4 py-6 text-center text-sm text-muted">Gõ ít nhất 2 ký tự để tìm.</p>
+                <p className="px-4 py-6 text-center text-sm text-muted">Type at least 2 characters to search.</p>
               ) : loading ? (
-                <p className="px-4 py-6 text-center text-sm text-muted">Đang tìm...</p>
+                <p className="px-4 py-6 text-center text-sm text-muted">Searching...</p>
               ) : hits.length === 0 ? (
-                <p className="px-4 py-6 text-center text-sm text-muted">Không có kết quả.</p>
+                <p className="px-4 py-6 text-center text-sm text-muted">No results.</p>
               ) : (
                 hits.map((h, i) => (
                   <button

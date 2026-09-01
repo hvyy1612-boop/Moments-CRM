@@ -48,7 +48,7 @@ function Card({ title, count, children }: { title: string; count?: number; child
   )
 }
 
-const EMPTY = <p className="py-4 text-center text-sm text-ink-muted">Không có gì - bạn đang gọn gàng.</p>
+const EMPTY = <p className="py-4 text-center text-sm text-ink-muted">Nothing here - you are all caught up.</p>
 
 export default async function TodayPage() {
   const user = await requireRole('/today')
@@ -62,25 +62,25 @@ export default async function TodayPage() {
     <AppShell user={user} csrf={csrf} active="today">
       <div className="mb-5">
         <h1 className="font-serif text-2xl font-semibold text-ink">Today</h1>
-        <p className="text-sm text-ink-muted">{c.dateLabel} - bảng điều hành buổi sáng của studio.</p>
+        <p className="text-sm text-ink-muted">{c.dateLabel} - your morning briefing for the studio.</p>
         <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
-          <span className="rounded-full bg-lost px-3 py-1 text-lost-ink">{c.counts.overdue} quá hạn</span>
-          <span className="rounded-full bg-accent-tint px-3 py-1 text-accent-ink">{c.counts.today} hôm nay</span>
-          <span className="rounded-full bg-sunk px-3 py-1 text-ink-muted">{c.counts.shoots} shoot</span>
-          <span className="rounded-full bg-sunk px-3 py-1 text-ink-muted">{c.counts.waiting} khách đang chờ</span>
+          <span className="rounded-full bg-lost px-3 py-1 text-lost-ink">{c.counts.overdue} overdue</span>
+          <span className="rounded-full bg-accent-tint px-3 py-1 text-accent-ink">{c.counts.today} today</span>
+          <span className="rounded-full bg-sunk px-3 py-1 text-ink-muted">{c.counts.shoots} shoots</span>
+          <span className="rounded-full bg-sunk px-3 py-1 text-ink-muted">{c.counts.waiting} waiting on you</span>
         </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="lg:col-span-2">
-          <Card title="Cần xử lý" count={needAction.length}>
+          <Card title="Needs action" count={needAction.length}>
             {needAction.length === 0 ? EMPTY : needAction.map((l) => <TaskRow key={l.id} line={l} csrf={csrf} />)}
           </Card>
         </div>
 
-        <Card title="Buổi chụp hôm nay" count={c.counts.shoots}>
+        <Card title="Today's shoots" count={c.counts.shoots}>
           {c.shootsToday.length === 0 ? (
-            <p className="py-4 text-center text-sm text-ink-muted">Hôm nay không có buổi chụp.</p>
+            <p className="py-4 text-center text-sm text-ink-muted">No shoots today.</p>
           ) : (
             c.shootsToday.map((s) => (
               <Link key={s.id} href={s.href} className="flex items-center gap-3 border-b border-line py-2.5 last:border-b-0">
@@ -91,21 +91,21 @@ export default async function TodayPage() {
           )}
         </Card>
 
-        <Card title="Khách đang chờ bạn" count={c.counts.waiting}>
+        <Card title="Leads waiting on you" count={c.counts.waiting}>
           {c.waitingLeads.length === 0 ? (
-            <p className="py-4 text-center text-sm text-ink-muted">Không có khách nào đang chờ bạn trả lời.</p>
+            <p className="py-4 text-center text-sm text-ink-muted">No leads are waiting on your reply.</p>
           ) : (
             c.waitingLeads.map((w) => (
               <Link key={w.id} href={w.href} className="flex items-center justify-between gap-3 border-b border-line py-2.5 last:border-b-0">
                 <span className="min-w-0 truncate text-sm text-ink">{w.name}</span>
-                <span className="shrink-0 text-xs text-ink-muted">từ {w.sinceLabel}</span>
+                <span className="shrink-0 text-xs text-ink-muted">since {w.sinceLabel}</span>
               </Link>
             ))
           )}
         </Card>
 
         <div className="lg:col-span-2">
-          <Card title="Sắp tới (7 ngày)" count={c.upcoming.length}>
+          <Card title="Upcoming (7 days)" count={c.upcoming.length}>
             {c.upcoming.length === 0 ? EMPTY : c.upcoming.map((l) => <TaskRow key={l.id} line={l} csrf={csrf} />)}
           </Card>
         </div>
