@@ -88,7 +88,7 @@ export function CalendarClient({
           <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
           </svg>
-          {data.conflictCount === 1 ? '1 shoot clashes with another' : `${data.conflictCount} shoots clash with another`} - please double-check.
+          {data.conflictCount === 1 ? '1 shoot clashes with another' : `${data.conflictCount} shoots clash with another`} - please check for a double-booking.
         </div>
       ) : null}
       {moveErr ? <Alert tone="danger" title={moveErr} /> : null}
@@ -395,13 +395,13 @@ export function SyncButton({ feedPath }: { feedPath: string }) {
       {open ? (
         <div className="absolute right-0 top-10 z-40 w-80 rounded-md border border-line bg-surface p-4 shadow-lg">
           <p className="text-sm font-semibold text-ink">Sync to your phone</p>
-          <p className="mt-1 text-xs text-ink-muted">Subscribe to this link so every shoot &amp; appointment lands in your calendar.</p>
+          <p className="mt-1 text-xs text-ink-muted">Subscribe to this link so every shoot &amp; appointment appears in your calendar.</p>
           <div className="mt-2 flex items-center gap-2">
             <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} aria-label="Calendar feed URL" className="h-8 min-w-0 flex-1 rounded border border-line-strong bg-paper px-2 text-xs text-ink" />
             <button type="button" onClick={copy} className="h-8 shrink-0 rounded border border-line-strong px-3 text-xs font-bold text-ink-muted hover:text-ink">{copied ? 'Copied' : 'Copy'}</button>
           </div>
           <a href={webcal} className="mt-2 block text-xs font-bold text-accent hover:underline">Open in Apple Calendar (.ics)</a>
-          <p className="mt-2 text-xs text-ink-muted">Google Calendar: Other calendars → From URL → paste the link.</p>
+          <p className="mt-2 text-xs text-ink-muted">Google Calendar: Other calendars -&gt; From URL -&gt; paste the link.</p>
         </div>
       ) : null}
     </div>

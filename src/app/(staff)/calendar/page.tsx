@@ -11,8 +11,10 @@ import {
   type CalendarFilter,
   type CalendarView,
 } from '@/lib/domain/calendar'
+import { getTodayCockpit } from '@/lib/domain/today'
 import { AppShell } from '../AppShell'
 import { AddEventButton, CalendarClient, SyncButton } from './CalendarClient'
+import { AgendaView } from './AgendaView'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Calendar - Moments' }
@@ -23,6 +25,8 @@ const FILTERS: { key: CalendarFilter; label: string }[] = [
   { key: 'job', label: 'Jobs' },
   { key: 'event', label: 'Events' },
 ]
+type ViewKey = 'month' | 'week' | 'agenda'
+const VIEWS: ViewKey[] = ['month', 'week', 'agenda']
 
 export default async function CalendarPage({
   searchParams,
@@ -31,12 +35,15 @@ export default async function CalendarPage({
 }) {
   const user = await requireRole('/calendar')
   const sp = await searchParams
-  const view: CalendarView = sp.view === 'week' ? 'week' : 'month'
+  const view: ViewKey = sp.view === 'week' ? 'week' : sp.view === 'agenda' ? 'agenda' : 'month'
   const filter: CalendarFilter = (['all', 'lead', 'job', 'event'] as const).includes(sp.filter as CalendarFilter)
     ? (sp.filter as CalendarFilter)
     : 'all'
 
-  const data = await getCalendarView(view, sp.date, filter)
+  const isAgenda = view === 'agenda'
+  const gridView: CalendarView = view === 'week' ? 'week' : 'month'
+  const data = isAgenda ? null : await getCalendarView(gridView, sp.date, filter)
+  const cockpit = isAgenda ? await getTodayCockpit() : null
 
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
@@ -47,12 +54,15 @@ export default async function CalendarPage({
   const feedToken = await getOrCreateFeedToken()
   const feedPath = `/api/calendar/feed?token=${feedToken}`
 
-  const stay = sp.date ?? data.todayDateKey
-  const href = (p: { view?: CalendarView; date?: string; filter?: CalendarFilter }) => {
+  const stay = sp.date ?? data?.todayDateKey ?? ''
+  const href = (p: { view?: ViewKey; date?: string; filter?: CalendarFilter }) => {
     const v = p.view ?? view
     const d = p.date ?? stay
     const f = p.filter ?? filter
-    return `/calendar?view=${v}&date=${d}${f === 'all' ? '' : `&filter=${f}`}`
+    const q = new URLSearchParams({ view: v })
+    if (d) q.set('date', d)
+    if (f !== 'all') q.set('filter', f)
+    return `/calendar?${q.toString()}`
   }
 
   return (
@@ -63,47 +73,55 @@ export default async function CalendarPage({
       action={
         <div className="flex items-center gap-2">
           <SyncButton feedPath={feedPath} />
-          {canManage ? <AddEventButton csrf={csrf} clients={clients} date={data.todayDateKey} /> : null}
+          {canManage ? <AddEventButton csrf={csrf} clients={clients} date={cockpit ? '' : (data?.todayDateKey ?? '')} /> : null}
         </div>
       }
     >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <h1 className="min-w-40 font-serif text-2xl font-semibold text-ink">{data.label}</h1>
-          <div className="ml-1 flex items-center gap-1">
-            <Link href={href({ date: data.prevKey })} aria-label="Previous" className="flex h-8 w-8 items-center justify-center rounded border border-line bg-surface text-ink-muted hover:bg-paper hover:text-ink">
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
-            </Link>
-            <Link href={href({ date: data.nextKey })} aria-label="Next" className="flex h-8 w-8 items-center justify-center rounded border border-line bg-surface text-ink-muted hover:bg-paper hover:text-ink">
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
-            </Link>
-            <Link href={href({ date: data.todayKey })} className="flex h-8 items-center rounded border border-line bg-surface px-3 text-sm text-ink-muted hover:bg-paper hover:text-ink">Today</Link>
-          </div>
-          {/* Month / Week selector */}
+          <h1 className="min-w-40 font-serif text-2xl font-semibold text-ink">{isAgenda ? `Today - ${cockpit!.dateLabel}` : data!.label}</h1>
+          {!isAgenda ? (
+            <div className="ml-1 flex items-center gap-1">
+              <Link href={href({ date: data!.prevKey })} aria-label="Previous" className="flex h-8 w-8 items-center justify-center rounded border border-line bg-surface text-ink-muted hover:bg-paper hover:text-ink">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
+              </Link>
+              <Link href={href({ date: data!.nextKey })} aria-label="Next" className="flex h-8 w-8 items-center justify-center rounded border border-line bg-surface text-ink-muted hover:bg-paper hover:text-ink">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+              </Link>
+              <Link href={href({ date: data!.todayKey })} className="flex h-8 items-center rounded border border-line bg-surface px-3 text-sm text-ink-muted hover:bg-paper hover:text-ink">Today</Link>
+            </div>
+          ) : null}
           <div className="ml-1 flex items-center rounded border border-line bg-surface p-0.5">
-            {(['month', 'week'] as const).map((v) => (
+            {VIEWS.map((v) => (
               <Link key={v} href={href({ view: v })} aria-current={view === v ? 'true' : undefined} className={`rounded px-3 py-1 text-sm capitalize transition-colors ${view === v ? 'bg-sunk font-medium text-ink' : 'text-ink-muted hover:text-ink'}`}>{v}</Link>
             ))}
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted">Filter by:</span>
-          <div className="flex items-center rounded border border-line bg-surface p-0.5">
-            {FILTERS.map((f) => (
-              <Link key={f.key} href={href({ filter: f.key })} aria-current={filter === f.key ? 'true' : undefined} className={`rounded px-3 py-1 text-sm transition-colors ${filter === f.key ? 'bg-sunk font-medium text-ink' : 'text-ink-muted hover:text-ink'}`}>{f.label}</Link>
-            ))}
+        {!isAgenda ? (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted">Filter by:</span>
+            <div className="flex items-center rounded border border-line bg-surface p-0.5">
+              {FILTERS.map((f) => (
+                <Link key={f.key} href={href({ filter: f.key })} aria-current={filter === f.key ? 'true' : undefined} className={`rounded px-3 py-1 text-sm transition-colors ${filter === f.key ? 'bg-sunk font-medium text-ink' : 'text-ink-muted hover:text-ink'}`}>{f.label}</Link>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
 
-      <CalendarClient data={data} csrf={csrf} canManage={canManage} clients={clients} />
-
-      {data.items.length === 0 ? (
-        <p className="mt-4 rounded-md border border-dashed border-line bg-surface px-4 py-6 text-center text-sm text-ink-muted">
-          Nothing scheduled in {data.label}. Shoots, appointments and due dates appear here as soon as staff enter them{canManage ? ', or use Add event' : ''}.
-        </p>
-      ) : null}
+      {isAgenda ? (
+        <AgendaView cockpit={cockpit!} csrf={csrf} />
+      ) : (
+        <>
+          <CalendarClient data={data!} csrf={csrf} canManage={canManage} clients={clients} />
+          {data!.items.length === 0 ? (
+            <p className="mt-4 rounded-md border border-dashed border-line bg-surface px-4 py-6 text-center text-sm text-ink-muted">
+              Nothing scheduled in {data!.label}. Shoots, appointments and due dates appear here as soon as staff enter them{canManage ? ', or use Add event' : ''}.
+            </p>
+          ) : null}
+        </>
+      )}
     </AppShell>
   )
 }
