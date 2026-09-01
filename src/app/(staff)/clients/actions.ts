@@ -7,10 +7,13 @@ import { redirect } from 'next/navigation'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
 import {
+  addClientNote,
   archiveClient,
   createClient,
   deleteClient,
+  deleteClientNote,
   restoreClient,
+  setClientConsent,
   updateClient,
   updateClientNotes,
 } from '@/lib/domain/client'
@@ -129,6 +132,34 @@ export async function deleteClientAction(formData: FormData): Promise<void> {
   await deleteClient(clientId, user.id)
   revalidatePath('/clients')
   redirect('/clients')
+}
+
+export async function addClientNoteAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const clientId = String(formData.get('clientId') ?? '')
+  if (!clientId) return
+  await addClientNote(clientId, String(formData.get('title') ?? ''), String(formData.get('body') ?? ''), user.id)
+  revalidatePath(`/clients/${clientId}`)
+}
+
+export async function deleteClientNoteAction(formData: FormData): Promise<void> {
+  await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const noteId = String(formData.get('noteId') ?? '')
+  const clientId = String(formData.get('clientId') ?? '')
+  if (!noteId) return
+  await deleteClientNote(noteId)
+  if (clientId) revalidatePath(`/clients/${clientId}`)
+}
+
+export async function setClientConsentAction(formData: FormData): Promise<void> {
+  await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const clientId = String(formData.get('clientId') ?? '')
+  if (!clientId) return
+  await setClientConsent(clientId, formData.get('consent') === 'true')
+  revalidatePath(`/clients/${clientId}`)
 }
 
 export async function updateClientNotesAction(formData: FormData): Promise<void> {

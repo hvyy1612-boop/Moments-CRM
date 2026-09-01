@@ -60,9 +60,10 @@
   --text-2xl: 30px;
   --text-3xl: 36px;
 
-  --font-sans: var(--font-lato), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
     Helvetica, Arial, sans-serif;
-  --font-serif: var(--font-cormorant), ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+  --font-serif: var(--font-poppins), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
 }
 
 :root {

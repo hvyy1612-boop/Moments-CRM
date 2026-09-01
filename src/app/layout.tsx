@@ -1,18 +1,12 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import { Cormorant_Garamond, Lato } from 'next/font/google'
+import { Poppins } from 'next/font/google'
 import './globals.css'
 
-const cormorant = Cormorant_Garamond({
+const poppins = Poppins({
   subsets: ['latin'],
-  weight: ['500', '600'],
-  variable: '--font-cormorant',
-  display: 'swap',
-})
-const lato = Lato({
-  subsets: ['latin'],
-  weight: ['400', '700', '900'],
-  variable: '--font-lato',
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-poppins',
   display: 'swap',
 })
 
@@ -25,7 +19,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en-AU" className={`${lato.variable} ${cormorant.variable}`}>
+    <html lang="en-AU" className={poppins.variable}>
       <body>{children}</body>
     </html>
   )

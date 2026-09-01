@@ -199,3 +199,20 @@ export async function mergeClients(
     return { survivorId, duplicateId, movedProjects: moved.count }
   })
 }
+
+export async function addClientNote(clientId: string, title: string, body: string, actorUserId: string) {
+  if (!body.trim()) throw new Error('Write a note.')
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true } })
+  if (!client) throw new Error('Client not found.')
+  await prisma.clientNote.create({
+    data: { clientId, title: title.trim().slice(0, 150) || null, body: body.trim().slice(0, 5000), createdByUserId: actorUserId },
+  })
+}
+
+export async function deleteClientNote(noteId: string) {
+  await prisma.clientNote.delete({ where: { id: noteId } })
+}
+
+export async function setClientConsent(clientId: string, consent: boolean) {
+  await prisma.client.update({ where: { id: clientId }, data: { marketingConsent: consent, consentUpdatedAt: new Date() } })
+}
