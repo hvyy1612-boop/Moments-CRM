@@ -378,6 +378,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 quantity: line.quantity,
                 unitPrice: line.unitPrice.toString(),
               }))}
+              packages={packageOptions}
             />
           ) : (
             <div className="mt-4">
