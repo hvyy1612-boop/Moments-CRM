@@ -7,6 +7,8 @@ import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
 import { createCalendarEvent, moveCalendarItem } from '@/lib/domain/calendar'
+import { toggleEnquiryTask } from '@/lib/domain/enquiry-workflow'
+import { toggleProjectTask } from '@/lib/domain/project-workflow'
 import { prisma } from '@/lib/db'
 
 export type CalendarActionState = { status: 'idle' | 'success' | 'error'; message?: string }
@@ -74,6 +76,27 @@ export async function moveCalendarItemAction(formData: FormData): Promise<Calend
   await moveCalendarItem(parsed.data.kind, parsed.data.refId, parsed.data.date, parsed.data.startMin)
   revalidatePath('/calendar')
   return { status: 'success' }
+}
+
+/** Mark a to-do complete straight from the calendar's Agenda view; routes to the right toggle. */
+export async function markTaskDoneAction(formData: FormData): Promise<void> {
+  const user = await getSessionUser()
+  if (!user) throw new Error('Not authorised.')
+  const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value
+  if (!verifyCsrf(cookieValue, formData.get('csrf'))) throw new Error('Invalid request.')
+
+  const taskId = String(formData.get('taskId') ?? '')
+  if (!taskId) return
+  const wi = await prisma.workItem.findUnique({ where: { id: taskId }, select: { enquiryId: true, projectId: true } })
+  if (!wi) return
+  if (wi.enquiryId) {
+    if (!can(user, 'ENQUIRY_CONVERT')) throw new Error('Not authorised.')
+    await toggleEnquiryTask(taskId, user.id)
+  } else if (wi.projectId) {
+    if (!can(user, 'PROJECT_EDIT')) throw new Error('Not authorised.')
+    await toggleProjectTask(taskId, user.id)
+  }
+  revalidatePath('/calendar')
 }
 
 export type SearchHit = { type: 'Client' | 'Job' | 'Enquiry'; label: string; sub: string | null; href: string }

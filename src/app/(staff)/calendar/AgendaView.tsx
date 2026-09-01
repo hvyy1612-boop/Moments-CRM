@@ -1,15 +1,13 @@
-import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { cookies } from 'next/headers'
-import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
-import { requireRole } from '@/lib/auth/guard'
-import { getTodayCockpit, type TaskLine } from '@/lib/domain/today'
-import { AppShell } from '../AppShell'
+import type { TaskLine, TodayCockpit } from '@/lib/domain/today'
 import { markTaskDoneAction } from './actions'
 
-export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Today - Moments' }
+/**
+ * Agenda view - the studio's morning cockpit, living inside the Calendar as a third view next to
+ * Month and Week (no separate nav item). Shows what needs action today, today's shoots, leads
+ * waiting on a reply, and what's upcoming.
+ */
 
 function TaskRow({ line, csrf }: { line: TaskLine; csrf: string }) {
   return (
@@ -17,12 +15,8 @@ function TaskRow({ line, csrf }: { line: TaskLine; csrf: string }) {
       <form action={markTaskDoneAction}>
         <input type="hidden" name="csrf" value={csrf} />
         <input type="hidden" name="taskId" value={line.id} />
-        <button
-          type="submit"
-          title="Mark done"
-          aria-label={`Mark "${line.title}" done`}
-          className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-line-strong text-transparent hover:border-accent hover:text-accent"
-        >
+        <button type="submit" title="Mark done" aria-label={`Mark "${line.title}" done`}
+          className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-line-strong text-transparent hover:border-accent hover:text-accent">
           <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
         </button>
       </form>
@@ -50,25 +44,16 @@ function Card({ title, count, children }: { title: string; count?: number; child
 
 const EMPTY = <p className="py-4 text-center text-sm text-ink-muted">Nothing here - you are all caught up.</p>
 
-export default async function TodayPage() {
-  const user = await requireRole('/today')
-  const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
-  const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
-  const c = await getTodayCockpit()
-
+export function AgendaView({ cockpit, csrf }: { cockpit: TodayCockpit; csrf: string }) {
+  const c = cockpit
   const needAction = [...c.overdue, ...c.todayTasks]
-
   return (
-    <AppShell user={user} csrf={csrf} active="today">
-      <div className="mb-5">
-        <h1 className="font-serif text-2xl font-semibold text-ink">Today</h1>
-        <p className="text-sm text-ink-muted">{c.dateLabel} - your morning briefing for the studio.</p>
-        <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold">
-          <span className="rounded-full bg-lost px-3 py-1 text-lost-ink">{c.counts.overdue} overdue</span>
-          <span className="rounded-full bg-accent-tint px-3 py-1 text-accent-ink">{c.counts.today} today</span>
-          <span className="rounded-full bg-sunk px-3 py-1 text-ink-muted">{c.counts.shoots} shoots</span>
-          <span className="rounded-full bg-sunk px-3 py-1 text-ink-muted">{c.counts.waiting} waiting on you</span>
-        </div>
+    <div>
+      <div className="mb-3 flex flex-wrap gap-2 text-xs font-bold">
+        <span className="rounded-full bg-lost px-3 py-1 text-lost-ink">{c.counts.overdue} overdue</span>
+        <span className="rounded-full bg-accent-tint px-3 py-1 text-accent-ink">{c.counts.today} today</span>
+        <span className="rounded-full bg-sunk px-3 py-1 text-ink-muted">{c.counts.shoots} shoots</span>
+        <span className="rounded-full bg-sunk px-3 py-1 text-ink-muted">{c.counts.waiting} waiting on you</span>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -110,6 +95,6 @@ export default async function TodayPage() {
           </Card>
         </div>
       </div>
-    </AppShell>
+    </div>
   )
 }
