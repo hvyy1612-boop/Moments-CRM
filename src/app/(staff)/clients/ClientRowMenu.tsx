@@ -72,13 +72,28 @@ export function ClientRowMenu({
             </Link>
 
             {archived ? (
-              <form action={restoreClientAction}>
-                <input type="hidden" name="csrf" value={csrf} />
-                <input type="hidden" name="clientId" value={clientId} />
-                <button type="submit" role="menuitem" className={itemClass}>
-                  Restore client
-                </button>
-              </form>
+              <>
+                <form action={restoreClientAction}>
+                  <input type="hidden" name="csrf" value={csrf} />
+                  <input type="hidden" name="clientId" value={clientId} />
+                  <button type="submit" role="menuitem" className={itemClass}>
+                    Restore client
+                  </button>
+                </form>
+                {!hasProjects ? (
+                  <form action={deleteClientAction}>
+                    <input type="hidden" name="csrf" value={csrf} />
+                    <input type="hidden" name="clientId" value={clientId} />
+                    <button
+                      type="submit"
+                      role="menuitem"
+                      className="block w-full px-4 py-2 text-left text-sm text-lost-ink hover:bg-paper"
+                    >
+                      Delete permanently
+                    </button>
+                  </form>
+                ) : null}
+              </>
             ) : hasProjects ? (
               <form action={archiveClientAction}>
                 <input type="hidden" name="csrf" value={csrf} />
