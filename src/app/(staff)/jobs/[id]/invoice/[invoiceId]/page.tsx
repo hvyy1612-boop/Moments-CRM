@@ -23,7 +23,7 @@ export default async function InvoicePrintPage({
       invoiceNumber: true, type: true, subtotal: true, taxTotal: true, total: true,
       amountPaid: true, invoiceDate: true, poNumber: true, notes: true,
       billingNameSnapshot: true, billingEmailSnapshot: true,
-      lines: { orderBy: { sortOrder: 'asc' }, select: { description: true, quantity: true, unitPrice: true, discount: true, lineTotal: true } },
+      lines: { orderBy: { sortOrder: 'asc' }, select: { itemName: true, description: true, quantity: true, unitPrice: true, discount: true, lineTotal: true } },
       instalments: { orderBy: { sortOrder: 'asc' }, select: { label: true, dueAt: true, amount: true, status: true } },
       project: {
         select: {

@@ -16,7 +16,7 @@ export type InvoiceDoc = {
   amountPaid: D
   billingNameSnapshot: string
   billingEmailSnapshot: string | null
-  lines: { description: string; quantity: number; unitPrice: D; discount: D; lineTotal: D }[]
+  lines: { itemName: string | null; description: string; quantity: number; unitPrice: D; discount: D; lineTotal: D }[]
   instalments: { label: string | null; dueAt: Date | null; amount: D; status: string }[]
   project: {
     client: { phone: string | null; street: string | null; suburb: string | null; state: string | null; postcode: string | null; country: string | null }
@@ -71,7 +71,16 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
         <tbody>
           {invoice.lines.map((l, i) => (
             <tr key={i} className="border-b border-line align-top">
-              <td className="py-2 pr-2 text-ink">{l.description}</td>
+              <td className="py-2 pr-2">
+                {l.itemName ? (
+                  <>
+                    <div className="font-semibold text-ink">{l.itemName}</div>
+                    {l.description ? <div className="mt-0.5 whitespace-pre-line text-sm text-ink-muted">{l.description}</div> : null}
+                  </>
+                ) : (
+                  <div className="whitespace-pre-line text-ink">{l.description || '-'}</div>
+                )}
+              </td>
               <td className="tabular py-2 text-right text-ink-muted">{l.quantity}</td>
               <td className="tabular py-2 text-right text-ink-muted">{formatAud(l.unitPrice)}</td>
               <td className="tabular py-2 text-right text-ink-muted">{l.discount.greaterThan(0) ? `-${formatAud(l.discount)}` : '-'}</td>

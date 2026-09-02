@@ -308,7 +308,7 @@ export async function saveInvoiceTemplateAction(formData: FormData): Promise<voi
   if (!Array.isArray(lines) || lines.length === 0) return
   await saveInvoiceTemplate(
     String(formData.get('name') ?? ''),
-    lines as { description: string; quantity: number; unitPrice: string }[],
+    lines as { itemName?: string; description: string; quantity: number; unitPrice: string }[],
   )
   const projectId = String(formData.get('projectId') ?? '')
   if (projectId) revalidatePath(`/jobs/${projectId}`)

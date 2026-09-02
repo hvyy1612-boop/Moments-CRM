@@ -29,7 +29,14 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
       select: { id: true, name: true, code: true, lifecycleStatus: true, client: { select: { displayName: true } } },
     })
     if (!project) notFound()
-    const packages = (await listActivePackages()).map((p) => ({ id: p.id, name: p.name, price: p.basePriceInclGst.toString() }))
+    const packages = (await listActivePackages()).map((p) => ({
+      id: p.id,
+      name: p.name,
+      price: p.basePriceInclGst.toString(),
+      description: p.description,
+      inclusions: p.inclusions,
+      isAddOn: p.isAddOn,
+    }))
     const templates = await listInvoiceTemplates()
     const isClosed = CLOSED.includes(project.lifecycleStatus)
 

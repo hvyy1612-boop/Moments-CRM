@@ -132,7 +132,8 @@ export async function createInvoiceWithLines(
         }
 
         const lineData = input.lines.map((l, i) => ({
-          description: l.description,
+          itemName: l.itemName?.trim() || null,
+          description: l.description?.trim() || '',
           quantity: l.quantity,
           unitPrice: new Prisma.Decimal(l.unitPrice),
           discount: new Prisma.Decimal(l.discount || '0'),
@@ -142,7 +143,8 @@ export async function createInvoiceWithLines(
         }))
         if (discount.greaterThan(0)) {
           lineData.push({
-            description: 'Discount',
+            itemName: 'Discount',
+            description: '',
             quantity: 1,
             unitPrice: discount.negated(),
             discount: new Prisma.Decimal(0),
@@ -375,7 +377,7 @@ export async function getInvoiceByToken(token: string) {
       invoiceNumber: true, type: true, status: true, subtotal: true, taxTotal: true, total: true,
       amountPaid: true, invoiceDate: true, poNumber: true, notes: true,
       billingNameSnapshot: true, billingEmailSnapshot: true,
-      lines: { orderBy: { sortOrder: 'asc' }, select: { description: true, quantity: true, unitPrice: true, discount: true, lineTotal: true } },
+      lines: { orderBy: { sortOrder: 'asc' }, select: { itemName: true, description: true, quantity: true, unitPrice: true, discount: true, lineTotal: true } },
       instalments: { orderBy: { sortOrder: 'asc' }, select: { label: true, dueAt: true, amount: true, status: true } },
       project: {
         select: {
@@ -387,7 +389,7 @@ export async function getInvoiceByToken(token: string) {
   })
 }
 
-export async function saveInvoiceTemplate(name: string, lines: { description: string; quantity: number; unitPrice: string }[]) {
+export async function saveInvoiceTemplate(name: string, lines: { itemName?: string; description: string; quantity: number; unitPrice: string }[]) {
   const company = await prisma.company.findFirst({ select: { id: true } })
   if (!company) throw new Error('No company configured.')
   if (!name.trim()) throw new Error('Give the template a name.')
@@ -397,7 +399,7 @@ export async function saveInvoiceTemplate(name: string, lines: { description: st
   })
 }
 
-export type InvoiceTemplateOption = { id: string; name: string; lines: { description: string; quantity: number; unitPrice: string }[] }
+export type InvoiceTemplateOption = { id: string; name: string; lines: { itemName?: string; description: string; quantity: number; unitPrice: string }[] }
 
 export async function listInvoiceTemplates(): Promise<InvoiceTemplateOption[]> {
   const rows = await prisma.invoiceTemplate.findMany({ orderBy: { createdAt: 'desc' }, select: { id: true, name: true, linesJson: true } })
