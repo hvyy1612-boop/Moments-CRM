@@ -100,6 +100,21 @@ export async function refundPayment(
       },
     })
 
+    const invoice = await tx.invoice.findUnique({
+      where: { id: payment.invoiceId },
+      select: { id: true, total: true, amountPaid: true, status: true },
+    })
+    if (invoice && invoice.status !== 'VOID') {
+      const newPaid = invoice.amountPaid.sub(refundAmount)
+      const clamped = newPaid.lessThan(0) ? new Prisma.Decimal(0) : newPaid
+      const status = clamped.lessThanOrEqualTo(0)
+        ? 'ISSUED'
+        : clamped.lessThan(invoice.total)
+          ? 'PARTIALLY_PAID'
+          : 'PAID'
+      await tx.invoice.update({ where: { id: invoice.id }, data: { amountPaid: clamped, status } })
+    }
+
     const project = await tx.project.findUnique({
       where: { id: payment.projectId },
       select: { companyId: true },

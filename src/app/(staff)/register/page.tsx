@@ -2,8 +2,12 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { AuthCard } from '@/components/auth/AuthCard'
+import { AuthDivider } from '@/components/auth/AuthDivider'
+import { GoogleButton } from '@/components/auth/GoogleButton'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
+import { googleEnabled } from '@/lib/env'
 import { RegisterForm } from './RegisterForm'
 
 export const runtime = 'nodejs'
@@ -17,20 +21,19 @@ export default async function RegisterPage() {
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm">
-        <p className="text-sm text-ink-muted">Moments Photography and Film</p>
-        <h1 className="mt-1 text-2xl">Create an account</h1>
-        <p className="mt-2 text-sm text-ink-muted">
-          An admin approves new accounts before you can sign in.
-        </p>
-        <div className="mt-6 flex flex-col gap-5">
-          <RegisterForm csrf={csrf} />
-          <Link href="/login" className="text-sm font-bold text-accent-ink hover:underline">
-            Already have an account? Sign in
-          </Link>
-        </div>
-      </div>
-    </main>
+    <AuthCard heading="Create your account" subtitle="An admin approves new accounts before you can sign in.">
+      <RegisterForm csrf={csrf} />
+
+      {googleEnabled ? (
+        <>
+          <AuthDivider />
+          <GoogleButton label="Sign up with Google" />
+        </>
+      ) : null}
+
+      <Link href="/login" className="text-center text-sm font-bold text-accent-ink hover:underline">
+        Already have an account? Sign in
+      </Link>
+    </AuthCard>
   )
 }

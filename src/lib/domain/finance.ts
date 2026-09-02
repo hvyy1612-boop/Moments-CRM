@@ -181,6 +181,7 @@ export async function createInvoiceWithLines(
             taxTotal,
             total,
             invoiceDate: input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now,
+            dueAt: instalmentData.reduce<Date | null>((m, it) => (it.dueAt && (!m || it.dueAt > m) ? it.dueAt : m), null),
             poNumber: input.poNumber?.trim() || null,
             notes: input.notes?.trim() || null,
             billingNameSnapshot: project.client.displayName,
@@ -209,6 +210,121 @@ export async function createInvoiceWithLines(
       throw error
     }
   }
+}
+
+export async function updateInvoiceWithLines(
+  invoiceId: string,
+  input: CreateInvoiceLinesInput,
+  actorUserId: string | null,
+) {
+  const now = systemClock.now()
+  const lineNet = (l: { unitPrice: string; quantity: number; discount?: string }) => {
+    const net = new Prisma.Decimal(l.unitPrice).times(l.quantity).minus(new Prisma.Decimal(l.discount || '0'))
+    return net.lessThan(0) ? new Prisma.Decimal(0) : net
+  }
+  let gross = new Prisma.Decimal(0)
+  for (const l of input.lines) gross = gross.plus(lineNet(l))
+  const discount = input.discount ? new Prisma.Decimal(input.discount) : new Prisma.Decimal(0)
+  if (discount.greaterThan(gross)) throw new Error('The discount cannot be more than the total.')
+  const total = gross.minus(discount)
+  if (total.lessThanOrEqualTo(0)) throw new Error('The invoice total must be greater than zero.')
+  const { subtotal, taxTotal } = splitGstInclusive(total)
+  const wantedNumber = input.invoiceNumber?.trim()
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { id: true, status: true, amountPaid: true, invoiceNumber: true },
+    })
+    if (!existing) throw new Error('Invoice not found.')
+    if (existing.amountPaid.gt(0) || existing.status === 'PAID' || existing.status === 'PARTIALLY_PAID' || existing.status === 'VOID') {
+      throw new Error('This invoice has payments or is closed. It can no longer be edited.')
+    }
+    if (wantedNumber && wantedNumber !== existing.invoiceNumber) {
+      const clash = await tx.invoice.findFirst({ where: { invoiceNumber: wantedNumber, id: { not: invoiceId } }, select: { id: true } })
+      if (clash) throw new Error('That invoice number is already in use.')
+    }
+
+    const lineData = input.lines.map((l, i) => ({
+      itemName: l.itemName?.trim() || null,
+      description: l.description?.trim() || '',
+      quantity: l.quantity,
+      unitPrice: new Prisma.Decimal(l.unitPrice),
+      discount: new Prisma.Decimal(l.discount || '0'),
+      tax: new Prisma.Decimal(0),
+      lineTotal: lineNet(l),
+      sortOrder: i,
+    }))
+    if (discount.greaterThan(0)) {
+      lineData.push({
+        itemName: 'Discount',
+        description: '',
+        quantity: 1,
+        unitPrice: discount.negated(),
+        discount: new Prisma.Decimal(0),
+        tax: new Prisma.Decimal(0),
+        lineTotal: discount.negated(),
+        sortOrder: lineData.length,
+      })
+    }
+
+    let instalmentData
+    if (input.instalments && input.instalments.length > 0) {
+      let sum = new Prisma.Decimal(0)
+      for (const it of input.instalments) sum = sum.plus(new Prisma.Decimal(it.amount))
+      if (!sum.equals(total)) throw new Error('The payment schedule must add up to the invoice total.')
+      instalmentData = input.instalments.map((it, i) => ({
+        label: it.label?.trim() || null,
+        dueAt: it.dueAt ? sydneyLocalToUtc(`${it.dueAt}T00:00`) : null,
+        amount: new Prisma.Decimal(it.amount),
+        status: 'UNPAID',
+        sortOrder: i,
+      }))
+    } else {
+      instalmentData = [{ label: 'Full payment', dueAt: null, amount: total, status: 'UNPAID', sortOrder: 0 }]
+    }
+
+    await tx.invoiceLine.deleteMany({ where: { invoiceId } })
+    await tx.invoiceInstalment.deleteMany({ where: { invoiceId } })
+    const invoice = await tx.invoice.update({
+      where: { id: invoiceId },
+      data: {
+        invoiceNumber: wantedNumber || existing.invoiceNumber,
+        type: input.type,
+        subtotal,
+        taxTotal,
+        total,
+        invoiceDate: input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now,
+        dueAt: instalmentData.reduce<Date | null>((m, it) => (it.dueAt && (!m || it.dueAt > m) ? it.dueAt : m), null),
+        poNumber: input.poNumber?.trim() || null,
+        notes: input.notes?.trim() || null,
+        lines: { create: lineData },
+        instalments: { create: instalmentData },
+      },
+    })
+    await tx.auditLog.create({
+      data: {
+        action: 'invoice.updated',
+        entityType: 'Invoice',
+        entityId: invoiceId,
+        actorUserId,
+        afterData: { total: total.toString(), lines: input.lines.length },
+      },
+    })
+    return invoice
+  })
+}
+
+export async function voidInvoice(invoiceId: string, actorUserId: string | null) {
+  return prisma.$transaction(async (tx) => {
+    const inv = await tx.invoice.findUnique({ where: { id: invoiceId }, select: { id: true, status: true, amountPaid: true } })
+    if (!inv) throw new Error('Invoice not found.')
+    if (inv.amountPaid.gt(0)) throw new Error('This invoice has payments recorded. Refund it instead of voiding.')
+    if (inv.status === 'VOID') return inv
+    await tx.invoice.update({ where: { id: invoiceId }, data: { status: 'VOID' } })
+    await tx.auditLog.create({ data: { action: 'invoice.voided', entityType: 'Invoice', entityId: invoiceId, actorUserId } })
+    return inv
+  })
 }
 
 export async function issueInvoice(invoiceId: string, actorUserId: string | null) {
@@ -411,4 +527,15 @@ export async function listInvoiceTemplates(): Promise<InvoiceTemplateOption[]> {
     } catch { /* ignore malformed template */ }
     return { id: r.id, name: r.name, lines }
   })
+}
+
+export async function markOverdueInvoices(now: Date = systemClock.now()) {
+  const candidates = await prisma.invoice.findMany({
+    where: { status: { in: ['ISSUED', 'SENT', 'PARTIALLY_PAID'] }, dueAt: { lt: now } },
+    select: { id: true, total: true, amountPaid: true },
+  })
+  const ids = candidates.filter((i) => i.total.greaterThan(i.amountPaid)).map((i) => i.id)
+  if (ids.length === 0) return { marked: 0 }
+  const res = await prisma.invoice.updateMany({ where: { id: { in: ids } }, data: { status: 'OVERDUE' } })
+  return { marked: res.count }
 }

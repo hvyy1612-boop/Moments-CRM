@@ -20,7 +20,8 @@ import {
 import { enquirySchema } from '@/lib/validation/enquiry'
 import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/contract'
 import { addGalleryItem, createGallery, publishGallery } from '@/lib/domain/delivery'
-import { createInvoice, createInvoiceWithLines, deleteInvoice, issueInvoice, recordPayment, saveInvoiceTemplate } from '@/lib/domain/finance'
+import { createInvoice, createInvoiceWithLines, deleteInvoice, issueInvoice, recordPayment, saveInvoiceTemplate, updateInvoiceWithLines, voidInvoice } from '@/lib/domain/finance'
+import { refundPayment } from '@/lib/domain/refund'
 import { createQuote, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 import { createQuestionnaire } from '@/lib/domain/questionnaire'
 import { sendContractEmail, sendQuoteEmail } from '@/lib/email'
@@ -264,14 +265,96 @@ export async function createInvoiceLinesAction(
   if (!parsed.success) {
     return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the invoice.' }
   }
+  let created
   try {
-    await createInvoiceWithLines(projectId, parsed.data, user.id)
+    created = await createInvoiceWithLines(projectId, parsed.data, user.id)
   } catch (error) {
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not raise the invoice.' }
   }
   revalidatePath(`/jobs/${projectId}`)
   revalidatePath('/finance')
+
+  redirect(`/finance/${created.id}`)
+}
+
+export async function updateInvoiceLinesAction(
+  _prev: QuoteActionState,
+  formData: FormData,
+): Promise<QuoteActionState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  const user = await requireStaff()
+  const invoiceId = String(formData.get('invoiceId') ?? '')
+  if (!invoiceId) return { status: 'error', message: 'Missing invoice.' }
+
+  let lines: unknown = []
+  let instalments: unknown = []
+  try {
+    lines = JSON.parse(String(formData.get('lines') ?? '[]'))
+    instalments = JSON.parse(String(formData.get('instalments') ?? '[]'))
+  } catch {
+    return { status: 'error', message: 'Could not read the invoice items.' }
+  }
+  const parsed = createInvoiceLinesSchema.safeParse({
+    type: formData.get('type') ?? '',
+    invoiceNumber: formData.get('invoiceNumber') ?? '',
+    invoiceDate: formData.get('invoiceDate') ?? '',
+    poNumber: formData.get('poNumber') ?? '',
+    notes: formData.get('notes') ?? '',
+    discount: formData.get('discount') ?? '',
+    lines,
+    instalments,
+  })
+  if (!parsed.success) {
+    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the invoice.' }
+  }
+  try {
+    await updateInvoiceWithLines(invoiceId, parsed.data, user.id)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not save the invoice.' }
+  }
+  revalidatePath('/finance')
+  revalidatePath(`/finance/${invoiceId}`)
+  redirect(`/finance/${invoiceId}`)
+}
+
+export async function refundPaymentAction(
+  _prev: QuoteActionState,
+  formData: FormData,
+): Promise<QuoteActionState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  const user = await requireStaff()
+  const paymentId = String(formData.get('paymentId') ?? '')
+  const invoiceId = String(formData.get('invoiceId') ?? '')
+  const amount = String(formData.get('amount') ?? '')
+  const reason = String(formData.get('reason') ?? '').trim() || undefined
+  if (!paymentId || !amount) return { status: 'error', message: 'Missing refund details.' }
+  try {
+    await refundPayment(paymentId, amount, { reason }, user.id)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not process the refund.' }
+  }
+  revalidatePath('/finance')
+  if (invoiceId) revalidatePath(`/finance/${invoiceId}`)
   return { status: 'success' }
+}
+
+export async function voidInvoiceAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const invoiceId = String(formData.get('invoiceId') ?? '')
+  if (!invoiceId) return
+  await voidInvoice(invoiceId, user.id)
+  revalidatePath('/finance')
+  revalidatePath(`/finance/${invoiceId}`)
+  const projectId = String(formData.get('projectId') ?? '')
+  if (projectId) revalidatePath(`/jobs/${projectId}`)
 }
 
 export async function createQuestionnaireAction(

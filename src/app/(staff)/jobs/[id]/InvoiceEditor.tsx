@@ -4,12 +4,22 @@ import { useActionState, useRef, useState, useTransition } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Field, Select, Textarea, TextInput } from '@/components/ui/form'
-import { createInvoiceLinesAction, saveInvoiceTemplateAction, type QuoteActionState } from '../actions'
+import { createInvoiceLinesAction, saveInvoiceTemplateAction, updateInvoiceLinesAction, type QuoteActionState } from '../actions'
 
 const IDLE: QuoteActionState = { status: 'idle' }
 
 export type PackageOption = { id: string; name: string; price: string; description: string | null; inclusions: string | null; isAddOn: boolean }
 export type TemplateOption = { id: string; name: string; lines: { itemName?: string; description: string; quantity: number; unitPrice: string }[] }
+export type InitialInvoice = {
+  type: string
+  invoiceNumber: string
+  invoiceDate: string
+  poNumber: string
+  notes: string
+  discount: string
+  lines: { name: string; description: string; quantity: number; unitPrice: string; discount: string }[]
+  instalments: { label: string; dueAt: string; amount: string }[]
+}
 type Line = { id: number; name: string; description: string; quantity: number; unitPrice: string; discount: string }
 type Instalment = { id: number; label: string; dueAt: string; amount: string }
 
@@ -23,23 +33,28 @@ export function InvoiceEditor({
   projectId,
   packages,
   templates,
+  invoiceId,
+  initial,
 }: {
   csrf: string
   projectId: string
   packages: PackageOption[]
   templates: TemplateOption[]
+  invoiceId?: string
+  initial?: InitialInvoice
 }) {
-  const [lines, setLines] = useState<Line[]>([])
-  const [discount, setDiscount] = useState('')
-  const [nextId, setNextId] = useState(1)
-  const [invoiceNumber, setInvoiceNumber] = useState('')
-  const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [poNumber, setPoNumber] = useState('')
+  const editing = Boolean(invoiceId)
+  const [lines, setLines] = useState<Line[]>(() => (initial?.lines ?? []).map((l, i) => ({ id: i + 1, ...l })))
+  const [discount, setDiscount] = useState(initial?.discount ?? '')
+  const [nextId, setNextId] = useState((initial?.lines.length ?? 0) + 1)
+  const [invoiceNumber, setInvoiceNumber] = useState(initial?.invoiceNumber ?? '')
+  const [invoiceDate, setInvoiceDate] = useState(initial?.invoiceDate || new Date().toISOString().slice(0, 10))
+  const [poNumber, setPoNumber] = useState(initial?.poNumber ?? '')
   const [, startSave] = useTransition()
-  const [notes, setNotes] = useState('')
-  const [instalments, setInstalments] = useState<Instalment[]>([])
-  const [nextInstId, setNextInstId] = useState(1)
-  const [state, action, pending] = useActionState(createInvoiceLinesAction, IDLE)
+  const [notes, setNotes] = useState(initial?.notes ?? '')
+  const [instalments, setInstalments] = useState<Instalment[]>(() => (initial?.instalments ?? []).map((it, i) => ({ id: i + 1, ...it })))
+  const [nextInstId, setNextInstId] = useState((initial?.instalments.length ?? 0) + 1)
+  const [state, action, pending] = useActionState(editing ? updateInvoiceLinesAction : createInvoiceLinesAction, IDLE)
 
   const basePackages = packages.filter((p) => !p.isAddOn)
   const addOns = packages.filter((p) => p.isAddOn)
@@ -146,6 +161,7 @@ export function InvoiceEditor({
       {state.status === 'success' ? <Alert tone="success" title="Invoice raised" /> : null}
       <input type="hidden" name="csrf" value={csrf} />
       <input type="hidden" name="projectId" value={projectId} />
+      {editing ? <input type="hidden" name="invoiceId" value={invoiceId} /> : null}
       <input type="hidden" name="lines" value={payload} />
       <input type="hidden" name="discount" value={disc > 0 ? String(disc) : ''} />
       <input type="hidden" name="invoiceNumber" value={invoiceNumber} />
@@ -154,11 +170,11 @@ export function InvoiceEditor({
       <input type="hidden" name="notes" value={notes} />
       <input type="hidden" name="instalments" value={instalmentPayload} />
 
-      <p className="text-sm font-semibold text-ink">New invoice</p>
+      <p className="text-sm font-semibold text-ink">{editing ? 'Edit invoice' : 'New invoice'}</p>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Field label="Invoice type" htmlFor="inv-type">
-          <Select id="inv-type" name="type" defaultValue="DEPOSIT">
+          <Select id="inv-type" name="type" defaultValue={initial?.type ?? 'DEPOSIT'}>
             <option value="DEPOSIT">Deposit</option>
             <option value="BALANCE">Balance</option>
             <option value="SUPPLEMENTARY">Supplementary</option>
@@ -322,7 +338,7 @@ export function InvoiceEditor({
 
       <div>
         <Button type="submit" loading={pending} disabled={lines.length === 0 || scheduleMismatch}>
-          Raise invoice
+          {editing ? 'Save changes' : 'Raise invoice'}
         </Button>
       </div>
     </form>
