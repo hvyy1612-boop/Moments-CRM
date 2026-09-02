@@ -19,9 +19,9 @@ export type WClient = { name: string; email: string | null; phone: string | null
 export type WPaymentRow = { id: string; dateLabel: string; amountLabel: string; refundedLabel: string | null; method: string; reference: string | null; statusLabel: string; refundable: string; canRefund: boolean }
 
 type Line = WLine & { id: number }
-type Draft = { name: string; description: string; quantity: number; unitPrice: string; discount: string }
+type Draft = { name: string; description: string; quantity: number; unitPrice: string; discount: string; discountMode: 'percent' | 'fixed' }
 type SchedRow = { id: number; label: string; percent: string; dueAt: string }
-const EMPTY_DRAFT: Draft = { name: '', description: '', quantity: 1, unitPrice: '', discount: '' }
+const EMPTY_DRAFT: Draft = { name: '', description: '', quantity: 1, unitPrice: '', discount: '', discountMode: 'percent' }
 
 const PRESETS: { key: string; label: string; percents: number[] }[] = [
   { key: 'full', label: 'Full payment', percents: [] },
@@ -163,7 +163,15 @@ export function InvoiceWorkspace(props: {
 
   // ---- item actions ----
   function openAdd(pkg: boolean, note = false) { setItemEditId(null); setWithPackages(pkg); setSaveReuse(false); setDraft(note ? { ...EMPTY_DRAFT, unitPrice: '0' } : EMPTY_DRAFT); setItemOpen(true); setAddMenu(false) }
-  function openEdit(l: Line) { setItemEditId(l.id); setWithPackages(true); setSaveReuse(false); setDraft({ name: l.name, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: l.discount }); setItemOpen(true) }
+  function openEdit(l: Line) { setItemEditId(l.id); setWithPackages(true); setSaveReuse(false); setDraft({ name: l.name, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: l.discount, discountMode: 'fixed' }); setItemOpen(true) }
+  // Item discount: percent (of this line's gross) or a fixed dollar amount. Returns the $ taken off.
+  function draftDiscountOff(): number {
+    const g = (Number(draft.unitPrice) || 0) * draft.quantity
+    const v = Number(draft.discount) || 0
+    const off = draft.discountMode === 'percent' ? (g * v) / 100 : v
+    return Math.min(Math.max(Math.round(off * 100) / 100, 0), g)
+  }
+  const draftAmount = () => Math.max((Number(draft.unitPrice) || 0) * draft.quantity - draftDiscountOff(), 0)
   function addQuick(id: string) {
     const p = packages.find((x) => x.id === id); if (!p) return
     const nLines = [...lines, { id: nextId, name: p.name, description: [p.description, p.inclusions].filter(Boolean).join('\n'), quantity: 1, unitPrice: p.price, discount: '' }]
@@ -175,9 +183,10 @@ export function InvoiceWorkspace(props: {
   }
   function saveItem() {
     if (!draft.name.trim()) return
+    const built = { name: draft.name, description: draft.description, quantity: draft.quantity, unitPrice: draft.unitPrice, discount: String(draftDiscountOff()) }
     const nLines = itemEditId === null
-      ? [...lines, { id: nextId, ...draft }]
-      : lines.map((l) => (l.id === itemEditId ? { ...l, ...draft } : l))
+      ? [...lines, { id: nextId, ...built }]
+      : lines.map((l) => (l.id === itemEditId ? { ...l, ...built } : l))
     if (itemEditId === null) setNextId((n) => n + 1)
     if (saveReuse && /^\d+(\.\d{1,2})?$/.test(draft.unitPrice.trim())) {
       const rfd = new FormData()
@@ -550,12 +559,20 @@ export function InvoiceWorkspace(props: {
               <div className="grid grid-cols-3 gap-3">
                 <Field label="Quantity" htmlFor="ws-qty"><TextInput id="ws-qty" type="number" min={1} value={draft.quantity} onChange={(e) => setDraft((d) => ({ ...d, quantity: Math.max(1, Number(e.target.value) || 1) }))} /></Field>
                 <Field label="Unit price" htmlFor="ws-unit"><TextInput id="ws-unit" inputMode="decimal" value={draft.unitPrice} onChange={(e) => setDraft((d) => ({ ...d, unitPrice: e.target.value }))} placeholder="0.00" /></Field>
-                <Field label="Discount" htmlFor="ws-disc"><TextInput id="ws-disc" inputMode="decimal" value={draft.discount} onChange={(e) => setDraft((d) => ({ ...d, discount: e.target.value }))} placeholder="0.00" /></Field>
+                <Field label="Discount" htmlFor="ws-disc">
+                  <div className="flex items-stretch gap-1">
+                    <TextInput id="ws-disc" inputMode="decimal" value={draft.discount} onChange={(e) => setDraft((d) => ({ ...d, discount: e.target.value }))} placeholder="0" className="min-w-0 flex-1" />
+                    <div className="inline-flex shrink-0 items-center rounded-md border border-line p-0.5">
+                      <button type="button" aria-label="Percent discount" onClick={() => setDraft((d) => ({ ...d, discountMode: 'percent' }))} className={`rounded px-2 py-1 text-sm ${draft.discountMode === 'percent' ? 'bg-accent text-surface' : 'text-ink-muted hover:text-ink'}`}>%</button>
+                      <button type="button" aria-label="Fixed amount discount" onClick={() => setDraft((d) => ({ ...d, discountMode: 'fixed' }))} className={`rounded px-2 py-1 text-sm ${draft.discountMode === 'fixed' ? 'bg-accent text-surface' : 'text-ink-muted hover:text-ink'}`}>$</button>
+                    </div>
+                  </div>
+                </Field>
               </div>
               <Checkbox label="Save this item to the catalogue for reuse" checked={saveReuse} onChange={(e) => setSaveReuse(e.target.checked)} />
               <p className="text-xs text-ink-muted">Changes apply to this invoice only - the original package is not changed.</p>
               <div className="flex items-center justify-between border-t border-line pt-3">
-                <span className="text-sm text-ink-muted">Amount <span className="tabular ml-1 font-semibold text-ink">{money(amountOf(draft))}</span></span>
+                <span className="text-sm text-ink-muted">Amount <span className="tabular ml-1 font-semibold text-ink">{money(draftAmount())}</span>{draftDiscountOff() > 0 ? <span className="ml-1 text-xs text-danger">(-{money(draftDiscountOff())})</span> : null}</span>
                 <div className="flex items-center gap-2">
                   <Button type="button" variant="secondary" size="sm" onClick={() => setItemOpen(false)}>Cancel</Button>
                   <Button type="button" size="sm" onClick={saveItem} loading={saving} disabled={!draft.name.trim()}>Save item</Button>

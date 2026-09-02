@@ -24,9 +24,9 @@ export type JobContext = { name: string; type: string | null; shootLabel: string
 export type ClientContext = { name: string; email: string | null; phone: string | null; address: string | null }
 type Line = { id: number; name: string; description: string; quantity: number; unitPrice: string; discount: string }
 type Instalment = { id: number; label: string; dueAt: string; amount: string }
-type Draft = { name: string; description: string; quantity: number; unitPrice: string; discount: string }
+type Draft = { name: string; description: string; quantity: number; unitPrice: string; discount: string; discountMode: 'percent' | 'fixed' }
 
-const EMPTY_DRAFT: Draft = { name: '', description: '', quantity: 1, unitPrice: '', discount: '' }
+const EMPTY_DRAFT: Draft = { name: '', description: '', quantity: 1, unitPrice: '', discount: '', discountMode: 'percent' }
 
 const aud = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
 function money(n: number): string {
@@ -95,7 +95,7 @@ export function InvoiceEditor({
   }
   function openEdit(l: Line) {
     setEditId(l.id)
-    setDraft({ name: l.name, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: l.discount })
+    setDraft({ name: l.name, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: l.discount, discountMode: 'fixed' })
     setModalOpen(true)
   }
   function closeModal() {
@@ -107,13 +107,22 @@ export function InvoiceEditor({
     const detail = [pkg.description, pkg.inclusions].filter(Boolean).join('\n')
     setDraft((d) => ({ ...d, name: pkg.name, description: detail, unitPrice: pkg.price }))
   }
+  // Item discount: percent (of this line's gross) or a fixed dollar amount. Returns the $ taken off.
+  function draftDiscountOff(): number {
+    const g = (Number(draft.unitPrice) || 0) * draft.quantity
+    const v = Number(draft.discount) || 0
+    const off = draft.discountMode === 'percent' ? (g * v) / 100 : v
+    return Math.min(Math.max(Math.round(off * 100) / 100, 0), g)
+  }
+  const draftAmount = () => Math.max((Number(draft.unitPrice) || 0) * draft.quantity - draftDiscountOff(), 0)
   function saveItem() {
     if (!draft.name.trim()) return
+    const built = { name: draft.name, description: draft.description, quantity: draft.quantity, unitPrice: draft.unitPrice, discount: String(draftDiscountOff()) }
     if (editId === null) {
-      setLines((ls) => [...ls, { id: nextId, ...draft }])
+      setLines((ls) => [...ls, { id: nextId, ...built }])
       setNextId((n) => n + 1)
     } else {
-      setLines((ls) => ls.map((l) => (l.id === editId ? { ...l, ...draft } : l)))
+      setLines((ls) => ls.map((l) => (l.id === editId ? { ...l, ...built } : l)))
     }
     setModalOpen(false)
   }
@@ -494,12 +503,18 @@ export function InvoiceEditor({
                   <TextInput id="modal-unit" inputMode="decimal" value={draft.unitPrice} onChange={(e) => setDraft((d) => ({ ...d, unitPrice: e.target.value }))} placeholder="0.00" />
                 </Field>
                 <Field label="Discount" htmlFor="modal-disc">
-                  <TextInput id="modal-disc" inputMode="decimal" value={draft.discount} onChange={(e) => setDraft((d) => ({ ...d, discount: e.target.value }))} placeholder="0.00" />
+                  <div className="flex items-stretch gap-1">
+                    <TextInput id="modal-disc" inputMode="decimal" value={draft.discount} onChange={(e) => setDraft((d) => ({ ...d, discount: e.target.value }))} placeholder="0" className="min-w-0 flex-1" />
+                    <div className="inline-flex shrink-0 items-center rounded-md border border-line p-0.5">
+                      <button type="button" aria-label="Percent discount" onClick={() => setDraft((d) => ({ ...d, discountMode: 'percent' }))} className={`rounded px-2 py-1 text-sm ${draft.discountMode === 'percent' ? 'bg-accent text-surface' : 'text-ink-muted hover:text-ink'}`}>%</button>
+                      <button type="button" aria-label="Fixed amount discount" onClick={() => setDraft((d) => ({ ...d, discountMode: 'fixed' }))} className={`rounded px-2 py-1 text-sm ${draft.discountMode === 'fixed' ? 'bg-accent text-surface' : 'text-ink-muted hover:text-ink'}`}>$</button>
+                    </div>
+                  </div>
                 </Field>
               </div>
 
               <div className="flex items-center justify-between border-t border-line pt-3">
-                <span className="text-sm text-ink-muted">Amount <span className="tabular ml-1 font-semibold text-ink">{money(amountOf(draft))}</span></span>
+                <span className="text-sm text-ink-muted">Amount <span className="tabular ml-1 font-semibold text-ink">{money(draftAmount())}</span>{draftDiscountOff() > 0 ? <span className="ml-1 text-xs text-lost-ink">(-{money(draftDiscountOff())})</span> : null}</span>
                 <div className="flex items-center gap-2">
                   <Button type="button" variant="secondary" size="sm" onClick={closeModal}>Cancel</Button>
                   <Button type="button" size="sm" onClick={saveItem} disabled={!draft.name.trim()}>Save item</Button>
