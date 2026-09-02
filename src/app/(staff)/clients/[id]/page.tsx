@@ -58,6 +58,23 @@ const IconMail = () => (
     <path d="m4 7 8 6 8-6" />
   </svg>
 )
+const IconPencil = () => (
+  <svg className="h-4 w-4" {...svg}>
+    <path d="M4 20h4l10-10-4-4L4 16v4z" />
+    <path d="m13.5 6.5 4 4" />
+  </svg>
+)
+const IconArchive = () => (
+  <svg className="h-4 w-4" {...svg}>
+    <rect x="3" y="4" width="18" height="4" rx="1" />
+    <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" />
+  </svg>
+)
+const IconRestore = () => (
+  <svg className="h-4 w-4" {...svg}>
+    <path d="M4 12a8 8 0 1 0 2.3-5.6M4 3v4h4" />
+  </svg>
+)
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).slice(0, 2)
@@ -336,23 +353,19 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
               <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
                 <Link href={`/clients/${client.id}/edit`}>
-                  <Button size="sm">Edit client</Button>
+                  <Button variant="secondary" size="sm"><IconPencil /> Edit client</Button>
                 </Link>
                 {archived ? (
                   <form action={restoreClientAction}>
                     <input type="hidden" name="csrf" value={csrf} />
                     <input type="hidden" name="clientId" value={client.id} />
-                    <button type="submit" className="rounded border border-line-strong px-3 py-1.5 text-sm font-bold text-ink-muted hover:text-ink">
-                      Restore
-                    </button>
+                    <Button variant="secondary" size="sm" type="submit"><IconRestore /> Restore</Button>
                   </form>
                 ) : (
                   <form action={archiveClientAction}>
                     <input type="hidden" name="csrf" value={csrf} />
                     <input type="hidden" name="clientId" value={client.id} />
-                    <button type="submit" className="rounded border border-line-strong px-3 py-1.5 text-sm font-bold text-ink-muted hover:text-ink">
-                      Archive
-                    </button>
+                    <Button variant="secondary" size="sm" type="submit"><IconArchive /> Archive</Button>
                   </form>
                 )}
                 {user.role === 'ADMIN' ? (
