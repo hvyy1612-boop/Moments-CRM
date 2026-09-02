@@ -272,14 +272,16 @@ export async function createInvoiceLinesAction(
   if (!parsed.success) {
     return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the invoice.' }
   }
+  let created
   try {
-    await createInvoiceWithLines(projectId, parsed.data, user.id)
+    created = await createInvoiceWithLines(projectId, parsed.data, user.id)
   } catch (error) {
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not raise the invoice.' }
   }
   revalidatePath(`/jobs/${projectId}`)
   revalidatePath('/finance')
-  return { status: 'success' }
+  // Land on the invoice's own page - inline preview + Download PDF, no jumping around.
+  redirect(`/finance/${created.id}`)
 }
 
 export async function createQuestionnaireAction(
