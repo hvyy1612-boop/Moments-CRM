@@ -107,6 +107,7 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
     poNumber: inv.poNumber ?? '',
     notes: inv.notes ?? '',
     discount: discountLine ? discountLine.unitPrice.abs().toString() : '',
+    discountReason: discountLine?.description ?? '',
     lines: realLines.map((l) => ({
       name: l.itemName ?? '',
       description: l.description,

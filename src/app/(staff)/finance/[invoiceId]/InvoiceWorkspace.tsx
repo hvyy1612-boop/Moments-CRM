@@ -63,7 +63,7 @@ export function InvoiceWorkspace(props: {
   editable: boolean
   canPay: boolean
   amountPaid: number
-  initial: { type: string; invoiceNumber: string; invoiceDate: string; poNumber: string; notes: string; discount: string; lines: WLine[]; instalments: { label: string; dueAt: string; amount: string }[] }
+  initial: { type: string; invoiceNumber: string; invoiceDate: string; poNumber: string; notes: string; discount: string; discountReason: string; lines: WLine[]; instalments: { label: string; dueAt: string; amount: string }[] }
   shootDate?: string | null
   job: WJob
   client: WClient
@@ -76,6 +76,11 @@ export function InvoiceWorkspace(props: {
   const [lines, setLines] = useState<Line[]>(() => initial.lines.map((l, i) => ({ id: i + 1, ...l })))
   const [nextId, setNextId] = useState(initial.lines.length + 1)
   const [discount, setDiscount] = useState(initial.discount)
+  const [discountReason, setDiscountReason] = useState(initial.discountReason)
+  const [discountOpen, setDiscountOpen] = useState(false)
+  const [discType, setDiscType] = useState<'percent' | 'fixed'>('fixed')
+  const [discValue, setDiscValue] = useState('')
+  const [discName, setDiscName] = useState('')
   const [type, setType] = useState(initial.type)
   const [invoiceNumber, setInvoiceNumber] = useState(initial.invoiceNumber)
   const [invoiceDate, setInvoiceDate] = useState(initial.invoiceDate)
@@ -111,7 +116,6 @@ export function InvoiceWorkspace(props: {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
   const [saveReuse, setSaveReuse] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const [showDiscount, setShowDiscount] = useState(Number(initial.discount) > 0)
 
   const dragIndex = useRef<number | null>(null)
   const basePackages = packages.filter((p) => !p.isAddOn)
@@ -130,7 +134,7 @@ export function InvoiceWorkspace(props: {
     return sched.map((r, i) => ({ label: r.label || `Payment ${i + 1}`, dueAt: r.dueAt, amount: centsToAmount(amts[i] ?? 0) }))
   }
 
-  function persist(next: Partial<{ lines: Line[]; discount: string; type: string; invoiceNumber: string; invoiceDate: string; poNumber: string; schedule: SchedRow[] }>) {
+  function persist(next: Partial<{ lines: Line[]; discount: string; discountReason: string; type: string; invoiceNumber: string; invoiceDate: string; poNumber: string; schedule: SchedRow[] }>) {
     const nLines = next.lines ?? lines
     const nDiscount = next.discount ?? discount
     const nSched = next.schedule ?? schedule
@@ -146,6 +150,7 @@ export function InvoiceWorkspace(props: {
     fd.set('poNumber', next.poNumber ?? poNumber)
     fd.set('notes', notes)
     fd.set('discount', nDisc > 0 ? String(nDisc) : '')
+    fd.set('discountReason', nDisc > 0 ? (next.discountReason ?? discountReason) : '')
     fd.set('lines', JSON.stringify(nLines.map((l) => ({ itemName: l.name, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: l.discount || '' }))))
     fd.set('instalments', JSON.stringify(scheduleToInstalments(nSched, Math.round(nTotal * 100))))
     setError(null)
@@ -230,6 +235,33 @@ export function InvoiceWorkspace(props: {
       default: return ''
     }
   }
+  // ---- invoice-level discount ----
+  function openDiscount() {
+    setDiscType('fixed')
+    setDiscValue(Number(discount) > 0 ? discount : '')
+    setDiscName(discountReason)
+    setAddMenu(false)
+    setDiscountOpen(true)
+  }
+  // Discount amount from the drawer draft, against the pre-discount gross (GST-inclusive).
+  function draftDiscountAmount(): number {
+    const v = Number(discValue) || 0
+    if (v <= 0) return 0
+    const amt = discType === 'percent' ? (gross * v) / 100 : v
+    return Math.min(Math.round(amt * 100) / 100, gross)
+  }
+  function applyDiscount() {
+    const amt = draftDiscountAmount()
+    if (amt <= 0) return
+    const reason = discName.trim() || (discType === 'percent' ? `${discValue}% discount` : 'Discount')
+    setDiscount(String(amt)); setDiscountReason(reason); setDiscountOpen(false)
+    persist({ discount: String(amt), discountReason: reason })
+  }
+  function removeDiscount() {
+    setDiscount(''); setDiscountReason(''); setDiscountOpen(false)
+    persist({ discount: '', discountReason: '' })
+  }
+
   function openSchedule() { schedBackup.current = schedule; setEditingSchedule(true) }
   function cancelSchedule() { setSchedule(schedBackup.current); setEditingSchedule(false) }
   function saveSchedule() {
@@ -244,10 +276,10 @@ export function InvoiceWorkspace(props: {
     document.addEventListener('mousedown', onDoc); return () => document.removeEventListener('mousedown', onDoc)
   }, [addMenu])
   useEffect(() => {
-    if (!itemOpen && !detailsOpen && !editingSchedule) return
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') { setItemOpen(false); setDetailsOpen(false); setEditingSchedule(false) } }
+    if (!itemOpen && !detailsOpen && !editingSchedule && !discountOpen) return
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') { setItemOpen(false); setDetailsOpen(false); setEditingSchedule(false); setDiscountOpen(false) } }
     document.addEventListener('keydown', onKey); return () => document.removeEventListener('keydown', onKey)
-  }, [itemOpen, detailsOpen, editingSchedule])
+  }, [itemOpen, detailsOpen, editingSchedule, discountOpen])
 
   const totalCents = Math.round(total * 100)
   const schedPercents = schedule.map((r) => Number(r.percent) || 0)
@@ -343,7 +375,7 @@ export function InvoiceWorkspace(props: {
                     <div className="mt-1 border-t border-line px-3 pb-1 pt-2 text-xs font-bold uppercase tracking-wide text-muted">One-off</div>
                     <button type="button" onClick={() => openAdd(false)} className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper">Custom charge</button>
                     <button type="button" onClick={() => openAdd(false, true)} className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper">Custom text / note</button>
-                    <button type="button" onClick={() => { setShowDiscount(true); setAddMenu(false) }} className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper">Discount</button>
+                    <button type="button" onClick={openDiscount} className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper">Discount</button>
                   </div>
                 ) : null}
               </div>
@@ -396,18 +428,30 @@ export function InvoiceWorkspace(props: {
               </tbody>
             </table>
           </div>
-          {editable && showDiscount ? (
-            <div className="flex items-center gap-2 border-t border-line px-4 py-3">
-              <label htmlFor="ws-discount" className="text-sm text-ink-muted">Whole-invoice discount</label>
-              <TextInput id="ws-discount" inputMode="decimal" value={discount} onChange={(e) => setDiscount(e.target.value)} onBlur={() => persist({ discount })} placeholder="0.00" className="h-8 w-28" />
-            </div>
-          ) : null}
         </div>
 
         <div className="w-full rounded-lg border border-line bg-surface p-4 text-sm lg:w-72 lg:shrink-0">
           <div className="flex justify-between py-0.5 text-ink-muted"><span>Subtotal (excl. GST)</span><span className="tabular">{money(subtotal)}</span></div>
-          {disc > 0 ? <div className="flex justify-between py-0.5 text-ink-muted"><span>Discount</span><span className="tabular">-{money(disc)}</span></div> : null}
           <div className="flex justify-between py-0.5 text-ink-muted"><span>GST (10%)</span><span className="tabular">{money(gst)}</span></div>
+          {disc > 0 ? (
+            <div className="py-1">
+              <div className="flex justify-between"><span className="text-ink-muted">Discount</span><span className="tabular text-danger">-{money(disc)}</span></div>
+              <div className="mt-0.5 flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate text-xs text-ink-muted">{discountReason || 'Invoice discount'}</span>
+                {editable ? (
+                  <span className="flex shrink-0 gap-2 text-xs">
+                    <button type="button" onClick={openDiscount} className="font-semibold text-accent hover:underline">Edit</button>
+                    <button type="button" onClick={removeDiscount} className="text-ink-muted hover:text-danger">Remove</button>
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          ) : editable ? (
+            <div className="flex items-center justify-between py-0.5">
+              <span className="text-ink-muted">Discount</span>
+              <button type="button" onClick={openDiscount} className="text-xs font-semibold text-accent hover:underline">+ Add</button>
+            </div>
+          ) : null}
           <div className="mt-1 flex justify-between border-t border-line pt-2 text-base font-semibold text-ink"><span>Total due</span><span className="tabular">{money(total)}</span></div>
           <div className="mt-1 flex justify-between py-0.5 text-ink-muted"><span>Paid</span><span className="tabular text-delivered-ink">{money(amountPaid)}</span></div>
           <div className="flex justify-between py-0.5 font-semibold text-ink"><span>Balance</span><span className="tabular">{money(balance)}</span></div>
@@ -624,6 +668,53 @@ export function InvoiceWorkspace(props: {
             <div className="mt-4 flex items-center justify-end gap-2 border-t border-line pt-3">
               <Button type="button" variant="secondary" size="sm" onClick={cancelSchedule}>Cancel</Button>
               <Button type="button" size="sm" onClick={saveSchedule} disabled={!schedValid}>Save schedule</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Invoice-level discount drawer (right side) */}
+      {discountOpen ? (
+        <div className="fixed inset-0 z-50 flex justify-end bg-ink/40" onClick={() => setDiscountOpen(false)}>
+          <div role="dialog" aria-modal="true" aria-label="Invoice discount" className="h-full w-full max-w-sm overflow-y-auto border-l border-line bg-surface p-5 shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-serif text-xl font-semibold text-ink">Discount</h2>
+              <button type="button" onClick={() => setDiscountOpen(false)} aria-label="Close" className="rounded px-2 py-1 text-lg text-ink-muted hover:text-ink">×</button>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted">Apply to</div>
+                <div className="mt-1 text-sm text-ink">Entire invoice</div>
+              </div>
+
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted">Type</div>
+                <div className="mt-1 inline-flex rounded-md border border-line p-0.5">
+                  <button type="button" onClick={() => setDiscType('percent')} className={`rounded px-3 py-1 text-sm ${discType === 'percent' ? 'bg-accent text-surface' : 'text-ink-muted hover:text-ink'}`}>Percentage</button>
+                  <button type="button" onClick={() => setDiscType('fixed')} className={`rounded px-3 py-1 text-sm ${discType === 'fixed' ? 'bg-accent text-surface' : 'text-ink-muted hover:text-ink'}`}>Fixed</button>
+                </div>
+              </div>
+
+              <Field label="Name / reason (optional)" htmlFor="disc-name">
+                <TextInput id="disc-name" value={discName} onChange={(e) => setDiscName(e.target.value)} placeholder="e.g. Wedding promotion" maxLength={100} />
+              </Field>
+
+              <Field label={discType === 'percent' ? 'Discount (%)' : 'Amount ($)'} htmlFor="disc-value">
+                <TextInput id="disc-value" inputMode="decimal" value={discValue} onChange={(e) => setDiscValue(e.target.value)} placeholder={discType === 'percent' ? '10' : '0.00'} />
+              </Field>
+
+              <div className="rounded-md bg-paper p-3 text-sm">
+                <div className="flex justify-between py-0.5 text-ink-muted"><span>Subtotal</span><span className="tabular">{money(gross)}</span></div>
+                <div className="flex justify-between py-0.5 text-ink-muted"><span>Discount</span><span className="tabular text-danger">-{money(draftDiscountAmount())}</span></div>
+                <div className="mt-1 flex justify-between border-t border-line pt-1 font-semibold text-ink"><span>New total</span><span className="tabular">{money(Math.max(gross - draftDiscountAmount(), 0))}</span></div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-line pt-3">
+                {Number(discount) > 0 ? <Button type="button" variant="secondary" size="sm" onClick={removeDiscount}>Remove</Button> : null}
+                <Button type="button" variant="secondary" size="sm" onClick={() => setDiscountOpen(false)}>Cancel</Button>
+                <Button type="button" size="sm" onClick={applyDiscount} disabled={draftDiscountAmount() <= 0}>Apply discount</Button>
+              </div>
             </div>
           </div>
         </div>
