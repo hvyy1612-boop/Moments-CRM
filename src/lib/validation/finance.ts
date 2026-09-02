@@ -13,7 +13,8 @@ export const createInvoiceSchema = z.object({
 })
 
 const invoiceLine = z.object({
-  description: z.string().trim().min(1, 'Add a description for each item.').max(500),
+  itemName: z.string().trim().min(1, 'Add a name for each item.').max(200),
+  description: z.string().trim().max(500).optional().or(z.literal('')),
   quantity: z.coerce.number().int().min(1, 'Quantity must be at least 1.').max(999),
   unitPrice: money,
   discount: money.optional().or(z.literal('')),

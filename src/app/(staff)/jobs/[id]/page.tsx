@@ -189,6 +189,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     id: p.id,
     name: p.name,
     price: p.basePriceInclGst.toString(),
+    description: p.description,
+    inclusions: p.inclusions,
+    isAddOn: p.isAddOn,
   }))
 
   const gallery = project.galleries[0]
