@@ -7,6 +7,7 @@ import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Checkbox, Field, Select, Textarea, TextInput } from '@/components/ui/form'
 import { recordPaymentAction, saveInvoiceContentAction, saveReusableItemAction, type QuoteActionState } from '../../jobs/actions'
+import { centsToAmount, computeAmountsCents, isFullyAllocated, sumPercents, toCents } from '@/lib/finance/instalments'
 import { RefundButton } from './RefundButton'
 
 const IDLE: QuoteActionState = { status: 'idle' }
@@ -19,7 +20,23 @@ export type WPaymentRow = { id: string; dateLabel: string; amountLabel: string; 
 
 type Line = WLine & { id: number }
 type Draft = { name: string; description: string; quantity: number; unitPrice: string; discount: string }
+type SchedRow = { id: number; label: string; percent: string; dueAt: string }
 const EMPTY_DRAFT: Draft = { name: '', description: '', quantity: 1, unitPrice: '', discount: '' }
+
+const PRESETS: { key: string; label: string; percents: number[] }[] = [
+  { key: 'full', label: 'Full payment', percents: [] },
+  { key: '2575', label: '25% + 75%', percents: [25, 75] },
+  { key: '5050', label: '50% + 50%', percents: [50, 50] },
+  { key: '303040', label: '30% + 30% + 40%', percents: [30, 30, 40] },
+]
+
+/** Add N days to a yyyy-mm-dd string (UTC-safe, display only). */
+function shiftDate(ymd: string, days: number): string {
+  if (!ymd) return ''
+  const d = new Date(`${ymd}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
 
 const aud = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
 const money = (n: number) => aud.format(Number.isFinite(n) ? n : 0)
@@ -46,13 +63,14 @@ export function InvoiceWorkspace(props: {
   editable: boolean
   canPay: boolean
   amountPaid: number
-  initial: { type: string; invoiceNumber: string; invoiceDate: string; poNumber: string; notes: string; discount: string; lines: WLine[]; split: boolean }
+  initial: { type: string; invoiceNumber: string; invoiceDate: string; poNumber: string; notes: string; discount: string; lines: WLine[]; instalments: { label: string; dueAt: string; amount: string }[] }
+  shootDate?: string | null
   job: WJob
   client: WClient
   packages: WPackage[]
   paymentRows: WPaymentRow[]
 }) {
-  const { csrf, invoiceId, projectId, editable, canPay, amountPaid, initial, job, client, packages, paymentRows } = props
+  const { csrf, invoiceId, projectId, editable, canPay, amountPaid, initial, shootDate, job, client, packages, paymentRows } = props
   const router = useRouter()
 
   const [lines, setLines] = useState<Line[]>(() => initial.lines.map((l, i) => ({ id: i + 1, ...l })))
@@ -63,7 +81,25 @@ export function InvoiceWorkspace(props: {
   const [invoiceDate, setInvoiceDate] = useState(initial.invoiceDate)
   const [poNumber, setPoNumber] = useState(initial.poNumber)
   const [notes] = useState(initial.notes)
-  const [split, setSplit] = useState(initial.split)
+  const [schedule, setSchedule] = useState<SchedRow[]>(() => {
+    if (initial.instalments.length === 0) return []
+    const g = initial.lines.reduce((s, l) => s + amountOf(l), 0)
+    const d = Math.min(Number(initial.discount) || 0, g)
+    const totalC = Math.round((g - d) * 100)
+    const rows: SchedRow[] = initial.instalments.map((it, i) => ({ id: i + 1, label: it.label || `Payment ${i + 1}`, percent: '0', dueAt: it.dueAt }))
+    if (totalC > 0) {
+      let acc = 0
+      for (let i = 0; i < rows.length; i++) {
+        if (i === rows.length - 1) rows[i]!.percent = String(Math.round((100 - acc) * 100) / 100)
+        else { const p = Math.round((toCents(initial.instalments[i]!.amount) / totalC) * 10000) / 100; rows[i]!.percent = String(p); acc += p }
+      }
+    }
+    return rows
+  })
+  const [editingSchedule, setEditingSchedule] = useState(false)
+  const [nextSchedId, setNextSchedId] = useState(initial.instalments.length + 1)
+  const scheduleDragIndex = useRef<number | null>(null)
+  const schedBackup = useRef<SchedRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [saving, startSave] = useTransition()
 
@@ -88,19 +124,16 @@ export function InvoiceWorkspace(props: {
   const subtotal = total - gst
   const balance = Math.max(total - amountPaid, 0)
 
-  function scheduleFor(useSplit: boolean, forTotal: number) {
-    if (!useSplit) return [] as { label: string; dueAt: string; amount: string }[]
-    const half = Math.round((forTotal / 2) * 100) / 100
-    return [
-      { label: 'Deposit (50%)', dueAt: invoiceDate, amount: half.toFixed(2) },
-      { label: 'Balance (50%)', dueAt: '', amount: (forTotal - half).toFixed(2) },
-    ]
+  function scheduleToInstalments(sched: SchedRow[], totalCents: number) {
+    if (sched.length === 0) return [] as { label: string; dueAt: string; amount: string }[]
+    const amts = computeAmountsCents(totalCents, sched.map((r) => Number(r.percent) || 0))
+    return sched.map((r, i) => ({ label: r.label || `Payment ${i + 1}`, dueAt: r.dueAt, amount: centsToAmount(amts[i] ?? 0) }))
   }
 
-  function persist(next: Partial<{ lines: Line[]; discount: string; type: string; invoiceNumber: string; invoiceDate: string; poNumber: string; split: boolean }>) {
+  function persist(next: Partial<{ lines: Line[]; discount: string; type: string; invoiceNumber: string; invoiceDate: string; poNumber: string; schedule: SchedRow[] }>) {
     const nLines = next.lines ?? lines
     const nDiscount = next.discount ?? discount
-    const nSplit = next.split ?? split
+    const nSched = next.schedule ?? schedule
     const nGross = nLines.reduce((s, l) => s + amountOf(l), 0)
     const nDisc = Math.min(Number(nDiscount) || 0, nGross)
     const nTotal = Math.max(nGross - nDisc, 0)
@@ -114,7 +147,7 @@ export function InvoiceWorkspace(props: {
     fd.set('notes', notes)
     fd.set('discount', nDisc > 0 ? String(nDisc) : '')
     fd.set('lines', JSON.stringify(nLines.map((l) => ({ itemName: l.name, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: l.discount || '' }))))
-    fd.set('instalments', JSON.stringify(scheduleFor(nSplit, nTotal)))
+    fd.set('instalments', JSON.stringify(scheduleToInstalments(nSched, Math.round(nTotal * 100))))
     setError(null)
     startSave(async () => {
       const res = await saveInvoiceContentAction(IDLE, fd)
@@ -163,18 +196,74 @@ export function InvoiceWorkspace(props: {
     setLines(copy); persist({ lines: copy })
   }
 
+  // ---- schedule builder ----
+  function applyPreset(percents: number[]) {
+    const rows: SchedRow[] = percents.map((p, i) => ({
+      id: nextSchedId + i,
+      label: i === 0 ? 'Deposit' : i === percents.length - 1 ? 'Final payment' : `Payment ${i + 1}`,
+      percent: String(p),
+      dueAt: i === 0 ? invoiceDate : '',
+    }))
+    setNextSchedId((n) => n + percents.length)
+    setSchedule(rows)
+  }
+  function addSched() {
+    setSchedule((s) => [...s, { id: nextSchedId, label: `Payment ${s.length + 1}`, percent: '0', dueAt: '' }])
+    setNextSchedId((n) => n + 1)
+  }
+  function updateSched(id: number, patch: Partial<SchedRow>) { setSchedule((s) => s.map((r) => (r.id === id ? { ...r, ...patch } : r))) }
+  function removeSched(id: number) { setSchedule((s) => s.filter((r) => r.id !== id)) }
+  function reorderSched(target: number) {
+    const from = scheduleDragIndex.current; scheduleDragIndex.current = null
+    if (from === null || from === target) return
+    setSchedule((s) => { const c = [...s]; const [m] = c.splice(from, 1); if (m) c.splice(target, 0, m); return c })
+  }
+  function relativeDue(opt: string): string {
+    switch (opt) {
+      case 'invoice': return invoiceDate
+      case 'd7': return shiftDate(invoiceDate, 7)
+      case 'd14': return shiftDate(invoiceDate, 14)
+      case 'd30': return shiftDate(invoiceDate, 30)
+      case 'shoot': return shootDate ?? ''
+      case 'shoot-7': return shootDate ? shiftDate(shootDate, -7) : ''
+      case 'shoot-14': return shootDate ? shiftDate(shootDate, -14) : ''
+      default: return ''
+    }
+  }
+  function openSchedule() { schedBackup.current = schedule; setEditingSchedule(true) }
+  function cancelSchedule() { setSchedule(schedBackup.current); setEditingSchedule(false) }
+  function saveSchedule() {
+    if (!schedValid) return
+    setEditingSchedule(false)
+    persist({ schedule })
+  }
+
   useEffect(() => {
     if (!addMenu) return
     function onDoc(e: MouseEvent) { if (addWrap.current && !addWrap.current.contains(e.target as Node)) setAddMenu(false) }
     document.addEventListener('mousedown', onDoc); return () => document.removeEventListener('mousedown', onDoc)
   }, [addMenu])
   useEffect(() => {
-    if (!itemOpen && !detailsOpen) return
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') { setItemOpen(false); setDetailsOpen(false) } }
+    if (!itemOpen && !detailsOpen && !editingSchedule) return
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') { setItemOpen(false); setDetailsOpen(false); setEditingSchedule(false) } }
     document.addEventListener('keydown', onKey); return () => document.removeEventListener('keydown', onKey)
-  }, [itemOpen, detailsOpen])
+  }, [itemOpen, detailsOpen, editingSchedule])
 
-  const scheduleRows = split ? scheduleFor(true, total) : [{ label: 'Full payment', dueAt: invoiceDate, amount: total.toFixed(2) }]
+  const totalCents = Math.round(total * 100)
+  const schedPercents = schedule.map((r) => Number(r.percent) || 0)
+  const schedSum = sumPercents(schedPercents)
+  const schedValid = schedule.length === 0 || isFullyAllocated(schedPercents)
+  const schedAmounts = computeAmountsCents(totalCents, schedPercents)
+  const todayYmd = new Date().toISOString().slice(0, 10)
+  const readRows = schedule.length === 0
+    ? [{ label: 'Full payment', percent: 100, dueAt: invoiceDate, amountC: totalCents }]
+    : schedule.map((r, i) => ({ label: r.label || `Payment ${i + 1}`, percent: Number(r.percent) || 0, dueAt: r.dueAt, amountC: schedAmounts[i] ?? 0 }))
+  let remCents = Math.round(amountPaid * 100)
+  const scheduleView = readRows.map((r) => {
+    const pay = Math.max(Math.min(remCents, r.amountC), 0); remCents -= pay
+    const status = r.amountC > 0 && pay >= r.amountC ? 'Paid' : pay > 0 ? 'Partially paid' : r.dueAt && r.dueAt < todayYmd ? 'Overdue' : 'Upcoming'
+    return { ...r, status }
+  })
 
   return (
     <div className="flex flex-col gap-4">
@@ -192,7 +281,7 @@ export function InvoiceWorkspace(props: {
             <Row label="Invoice ID" value={invoiceNumber || 'Auto'} />
             <Row label="Issue date" value={invoiceDate || '-'} />
             <Row label="PO number" value={poNumber || '-'} />
-            <Row label="Due date" value={split ? '25% deposit + balance' : (invoiceDate || 'On issue')} />
+            <Row label="Due date" value={schedule.length > 0 ? 'Per schedule' : (invoiceDate || 'On issue')} />
             <Row label="Type" value={type.toLowerCase()} valueClass="capitalize" />
           </dl>
         </div>
@@ -328,21 +417,27 @@ export function InvoiceWorkspace(props: {
       {/* Bottom: Schedule | History | Record */}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-lg border border-line bg-surface">
-          <CardHeader icon={<svg {...svg}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /></svg>} title="Payment schedule" />
+          <CardHeader
+            icon={<svg {...svg}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /></svg>}
+            title="Payment schedule"
+            action={editable ? <button type="button" onClick={openSchedule} className="text-xs font-semibold text-accent hover:underline">Edit schedule</button> : null}
+          />
           <div className="p-4">
-            <Select aria-label="Payment schedule" value={split ? 'deposit' : 'none'} disabled={!editable} onChange={(e) => { const s = e.target.value === 'deposit'; setSplit(s); persist({ split: s }) }} className="h-9">
-              <option value="none">No split payments</option>
-              <option value="deposit">50% deposit + 50% balance</option>
-            </Select>
-            <table className="mt-3 w-full text-sm">
-              <thead><tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted"><th className="py-2">#</th><th className="py-2">Due</th><th className="py-2 text-right">Amount</th></tr></thead>
-              <tbody>
-                {scheduleRows.map((r, i) => (
-                  <tr key={i} className="border-b border-line last:border-b-0"><td className="py-2 text-ink-muted">{i + 1}</td><td className="py-2 text-ink-muted">{r.dueAt || 'On issue'}</td><td className="tabular py-2 text-right text-ink">{money(Number(r.amount))}</td></tr>
-                ))}
-                <tr><td className="py-2 font-semibold text-ink" colSpan={2}>Total</td><td className="tabular py-2 text-right font-semibold text-ink">{money(total)}</td></tr>
-              </tbody>
-            </table>
+            <ul className="flex flex-col gap-2">
+              {scheduleView.map((r, i) => (
+                <li key={i} className="flex items-start justify-between gap-2 border-b border-line pb-2 text-sm last:border-b-0">
+                  <div className="min-w-0">
+                    <div className="font-medium text-ink">{String(i + 1).padStart(2, '0')} · {r.label}</div>
+                    <div className="text-xs text-ink-muted">{r.percent}% · {r.dueAt || 'On issue'}</div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="tabular text-ink">{money(r.amountC / 100)}</div>
+                    <div className={`text-xs ${r.status === 'Paid' ? 'text-delivered-ink' : r.status === 'Overdue' ? 'text-danger' : 'text-ink-muted'}`}>{r.status}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-2 flex justify-between pt-1 text-sm font-semibold text-ink"><span>Total</span><span className="tabular">{money(total)}</span></div>
           </div>
         </div>
 
@@ -450,6 +545,85 @@ export function InvoiceWorkspace(props: {
                 <Button type="button" variant="secondary" size="sm" onClick={() => setDetailsOpen(false)}>Cancel</Button>
                 <Button type="button" size="sm" loading={saving} onClick={() => { setDetailsOpen(false); persist({ type, invoiceNumber, invoiceDate, poNumber }) }}>Save details</Button>
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Payment schedule builder modal */}
+      {editingSchedule ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/40 p-4" onClick={cancelSchedule}>
+          <div role="dialog" aria-modal="true" className="my-8 w-full max-w-2xl rounded-md border border-line bg-surface p-5 shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-1 flex items-center justify-between">
+              <h2 className="font-serif text-xl font-semibold text-ink">Payment schedule</h2>
+              <button type="button" onClick={cancelSchedule} aria-label="Close" className="rounded px-2 py-1 text-lg text-ink-muted hover:text-ink">×</button>
+            </div>
+            <p className="mb-4 text-sm text-ink-muted">Enter a percentage for each instalment - the amount is calculated from the invoice total ({money(total)}). Changes apply to this invoice only.</p>
+
+            <div className="mb-3 flex flex-wrap gap-2">
+              {PRESETS.map((p) => (
+                <Button key={p.key} type="button" variant="secondary" size="sm" onClick={() => applyPreset(p.percents)}>{p.label}</Button>
+              ))}
+            </div>
+
+            {schedule.length === 0 ? (
+              <p className="rounded border border-dashed border-line px-3 py-6 text-center text-sm text-ink-muted">Full payment on issue. Pick a preset above or add an instalment to split it.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {schedule.map((r, index) => (
+                  <div key={r.id} onDragOver={(e) => e.preventDefault()} onDrop={() => reorderSched(index)} className="flex flex-wrap items-end gap-2 rounded-md border border-line p-2">
+                    <span draggable onDragStart={() => { scheduleDragIndex.current = index }} aria-label="Drag to reorder" className="mb-2 shrink-0 cursor-grab text-muted hover:text-ink">
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" /><circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" /><circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" /></svg>
+                    </span>
+                    <label className="flex min-w-40 flex-1 flex-col text-xs text-ink-muted">Payment
+                      <TextInput value={r.label} onChange={(e) => updateSched(r.id, { label: e.target.value })} placeholder={`Payment ${index + 1}`} className="mt-1 h-9" />
+                    </label>
+                    <label className="flex w-20 flex-col text-xs text-ink-muted">%
+                      <TextInput inputMode="decimal" value={r.percent} onChange={(e) => updateSched(r.id, { percent: e.target.value })} className="mt-1 h-9" />
+                    </label>
+                    <div className="flex w-24 flex-col text-xs text-ink-muted">Amount
+                      <span className="tabular mt-1 flex h-9 items-center justify-end pr-1 font-medium text-ink">{money((schedAmounts[index] ?? 0) / 100)}</span>
+                    </div>
+                    <label className="flex flex-col text-xs text-ink-muted">Due date
+                      <TextInput type="date" value={r.dueAt} onChange={(e) => updateSched(r.id, { dueAt: e.target.value })} className="mt-1 h-9" />
+                    </label>
+                    <Select aria-label="Quick due date" value="" onChange={(e) => { if (e.target.value) updateSched(r.id, { dueAt: relativeDue(e.target.value) }); e.currentTarget.value = '' }} className="h-9 w-40">
+                      <option value="">Quick set...</option>
+                      <option value="invoice">Invoice date</option>
+                      <option value="d7">In 7 days</option>
+                      <option value="d14">In 14 days</option>
+                      <option value="d30">In 30 days</option>
+                      {shootDate ? <option value="shoot">Main shoot date</option> : null}
+                      {shootDate ? <option value="shoot-7">7 days before shoot</option> : null}
+                      {shootDate ? <option value="shoot-14">14 days before shoot</option> : null}
+                    </Select>
+                    <button type="button" onClick={() => removeSched(r.id)} aria-label="Remove instalment" className="mb-1 rounded p-1 text-ink-muted hover:bg-paper hover:text-danger">
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button type="button" onClick={addSched} className="mt-3 flex items-center gap-1.5 text-sm font-semibold text-accent hover:underline">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+              Add instalment
+            </button>
+
+            {schedule.length > 0 ? (
+              <div className="mt-4 rounded-md bg-paper p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-ink-muted">Allocated <span className={`font-semibold ${schedValid ? 'text-delivered-ink' : 'text-danger'}`}>{schedSum}%</span> of 100%</span>
+                  {schedValid
+                    ? <span className="font-semibold text-delivered-ink">Fully allocated · {money(total)}</span>
+                    : <span className="font-semibold text-danger">{schedSum < 100 ? `${Math.round((100 - schedSum) * 100) / 100}% still to allocate` : `${Math.round((schedSum - 100) * 100) / 100}% over`}</span>}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-4 flex items-center justify-end gap-2 border-t border-line pt-3">
+              <Button type="button" variant="secondary" size="sm" onClick={cancelSchedule}>Cancel</Button>
+              <Button type="button" size="sm" onClick={saveSchedule} disabled={!schedValid}>Save schedule</Button>
             </div>
           </div>
         </div>

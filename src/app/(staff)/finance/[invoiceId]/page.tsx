@@ -114,8 +114,11 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
       unitPrice: l.unitPrice.toString(),
       discount: l.discount.greaterThan(0) ? l.discount.toString() : '',
     })),
-    split: inv.instalments.length > 1,
+    instalments: inv.instalments.length > 1
+      ? inv.instalments.map((it) => ({ label: it.label ?? '', dueAt: it.dueAt ? ymd(it.dueAt) : '', amount: it.amount.toString() }))
+      : [],
   }
+  const shootDate = booking ? ymd(booking.startsAt) : null
   const jobContext = { id: inv.project.id, name: inv.project.name, subtype: booking?.title ?? null, shootLabel, location: booking?.location ?? null }
   const clientContext = { name: c.displayName, email: inv.billingEmailSnapshot ?? c.email, phone: c.phone, address: clientAddress }
 
@@ -174,6 +177,7 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
             canPay={canPay}
             amountPaid={inv.amountPaid.toNumber()}
             initial={wsInitial}
+            shootDate={shootDate}
             job={jobContext}
             client={clientContext}
             packages={packages}
