@@ -416,7 +416,15 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               )}
             </SectionCard>
 
-            <SectionCard title="Invoices" icon={<IconInvoice />}>
+            <SectionCard
+              title="Invoices"
+              icon={<IconInvoice />}
+              action={
+                <Link href={`/finance/new?client=${client.id}`}>
+                  <Button size="sm">+ New invoice</Button>
+                </Link>
+              }
+            >
               <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-md bg-paper p-3">
                   <div className="text-sm text-muted">Invoiced</div>
@@ -453,7 +461,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                   ))}
                 </ul>
               ) : (
-                <p className="mt-3 text-sm text-ink-muted">No invoices yet. Raise one from the job&apos;s Finance section.</p>
+                <p className="mt-3 text-sm text-ink-muted">No invoices yet. Use + New invoice to raise one in Payments.</p>
               )}
             </SectionCard>
 
