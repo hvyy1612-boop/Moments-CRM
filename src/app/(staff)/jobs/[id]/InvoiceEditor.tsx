@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useRef, useState, useTransition } from 'react'
+import { useActionState, useEffect, useRef, useState, useTransition } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Field, Select, Textarea, TextInput } from '@/components/ui/form'
@@ -22,16 +22,23 @@ export type InitialInvoice = {
 }
 type Line = { id: number; name: string; description: string; quantity: number; unitPrice: string; discount: string }
 type Instalment = { id: number; label: string; dueAt: string; amount: string }
+type Draft = { name: string; description: string; quantity: number; unitPrice: string; discount: string }
+
+const EMPTY_DRAFT: Draft = { name: '', description: '', quantity: 1, unitPrice: '', discount: '' }
 
 const aud = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
 function money(n: number): string {
   return aud.format(Number.isFinite(n) ? n : 0)
 }
+function amountOf(l: { unitPrice: string; quantity: number; discount: string }): number {
+  return Math.max((Number(l.unitPrice) || 0) * l.quantity - (Number(l.discount) || 0), 0)
+}
 
 /**
- * Multi-line invoice builder (Studio-Ninja style): add packages from the catalogue or custom lines,
- * set quantity, apply a whole-invoice discount, and see the GST-inclusive totals live. The server
- * recomputes every amount with Decimal, so this preview never drives the stored figures.
+ * Invoice builder (Studio-Ninja style). Items live in a Products & Packages table; the "Add Products
+ * & Packages" button opens an Add Item modal where choosing a catalogue package fills the name,
+ * description and price. The server recomputes every amount with Decimal, so this preview never
+ * drives the stored figures.
  */
 export function InvoiceEditor({
   csrf,
@@ -61,13 +68,44 @@ export function InvoiceEditor({
   const [nextInstId, setNextInstId] = useState((initial?.instalments.length ?? 0) + 1)
   const [state, action, pending] = useActionState(editing ? updateInvoiceLinesAction : createInvoiceLinesAction, IDLE)
 
+  // Add Item modal
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editId, setEditId] = useState<number | null>(null)
+  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
+
   const basePackages = packages.filter((p) => !p.isAddOn)
   const addOns = packages.filter((p) => p.isAddOn)
 
   const dragIndex = useRef<number | null>(null)
-  function addLine(name = '', description = '', unitPrice = '') {
-    setLines((ls) => [...ls, { id: nextId, name, description, quantity: 1, unitPrice, discount: '' }])
-    setNextId((n) => n + 1)
+
+  function openAdd() {
+    setEditId(null)
+    setDraft(EMPTY_DRAFT)
+    setModalOpen(true)
+  }
+  function openEdit(l: Line) {
+    setEditId(l.id)
+    setDraft({ name: l.name, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: l.discount })
+    setModalOpen(true)
+  }
+  function closeModal() {
+    setModalOpen(false)
+  }
+  function choosePackage(id: string) {
+    const pkg = packages.find((p) => p.id === id)
+    if (!pkg) return
+    const detail = [pkg.description, pkg.inclusions].filter(Boolean).join('\n')
+    setDraft((d) => ({ ...d, name: pkg.name, description: detail, unitPrice: pkg.price }))
+  }
+  function saveItem() {
+    if (!draft.name.trim()) return
+    if (editId === null) {
+      setLines((ls) => [...ls, { id: nextId, ...draft }])
+      setNextId((n) => n + 1)
+    } else {
+      setLines((ls) => ls.map((l) => (l.id === editId ? { ...l, ...draft } : l)))
+    }
+    setModalOpen(false)
   }
   function duplicate(id: number) {
     setLines((ls) => {
@@ -90,15 +128,6 @@ export function InvoiceEditor({
       return copy
     })
   }
-  function addPackage(id: string) {
-    const pkg = packages.find((p) => p.id === id)
-    if (!pkg) return
-    const detail = [pkg.description, pkg.inclusions].filter(Boolean).join('\n')
-    addLine(pkg.name, detail, pkg.price)
-  }
-  function update(id: number, patch: Partial<Line>) {
-    setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)))
-  }
   function remove(id: number) {
     setLines((ls) => ls.filter((l) => l.id !== id))
   }
@@ -120,8 +149,7 @@ export function InvoiceEditor({
     startSave(async () => { await saveInvoiceTemplateAction(fd) })
   }
 
-  const lineAmount = (l: Line) => Math.max((Number(l.unitPrice) || 0) * l.quantity - (Number(l.discount) || 0), 0)
-  const gross = lines.reduce((sum, l) => sum + lineAmount(l), 0)
+  const gross = lines.reduce((sum, l) => sum + amountOf(l), 0)
   const disc = Math.min(Number(discount) || 0, gross)
   const total = Math.max(gross - disc, 0)
   const gst = total / 11
@@ -153,6 +181,13 @@ export function InvoiceEditor({
     setInstalments((is) => is.filter((it) => it.id !== id))
   }
 
+  useEffect(() => {
+    if (!modalOpen) return
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setModalOpen(false) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [modalOpen])
+
   const payload = JSON.stringify(
     lines.map((l) => ({ itemName: l.name, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: l.discount || '' })),
   )
@@ -161,191 +196,249 @@ export function InvoiceEditor({
   )
 
   return (
-    <form action={action} className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
-      {state.status === 'error' ? <Alert tone="danger" title={state.message} /> : null}
-      {state.status === 'success' ? <Alert tone="success" title="Invoice raised" /> : null}
-      <input type="hidden" name="csrf" value={csrf} />
-      <input type="hidden" name="projectId" value={projectId} />
-      {editing ? <input type="hidden" name="invoiceId" value={invoiceId} /> : null}
-      <input type="hidden" name="lines" value={payload} />
-      <input type="hidden" name="discount" value={disc > 0 ? String(disc) : ''} />
-      <input type="hidden" name="invoiceNumber" value={invoiceNumber} />
-      <input type="hidden" name="invoiceDate" value={invoiceDate} />
-      <input type="hidden" name="poNumber" value={poNumber} />
-      <input type="hidden" name="notes" value={notes} />
-      <input type="hidden" name="instalments" value={instalmentPayload} />
+    <>
+      <form action={action} className="mt-4 flex flex-col gap-4 border-t border-line pt-4">
+        {state.status === 'error' ? <Alert tone="danger" title={state.message} /> : null}
+        <input type="hidden" name="csrf" value={csrf} />
+        <input type="hidden" name="projectId" value={projectId} />
+        {editing ? <input type="hidden" name="invoiceId" value={invoiceId} /> : null}
+        <input type="hidden" name="lines" value={payload} />
+        <input type="hidden" name="discount" value={disc > 0 ? String(disc) : ''} />
+        <input type="hidden" name="invoiceNumber" value={invoiceNumber} />
+        <input type="hidden" name="invoiceDate" value={invoiceDate} />
+        <input type="hidden" name="poNumber" value={poNumber} />
+        <input type="hidden" name="notes" value={notes} />
+        <input type="hidden" name="instalments" value={instalmentPayload} />
 
-      <p className="text-sm font-semibold text-ink">{editing ? 'Edit invoice' : 'New invoice'}</p>
+        <p className="text-sm font-semibold text-ink">{editing ? 'Edit invoice' : 'New invoice'}</p>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Field label="Invoice type" htmlFor="inv-type">
-          <Select id="inv-type" name="type" defaultValue={initial?.type ?? 'DEPOSIT'}>
-            <option value="DEPOSIT">Deposit</option>
-            <option value="BALANCE">Balance</option>
-            <option value="SUPPLEMENTARY">Supplementary</option>
-          </Select>
-        </Field>
-        <Field label="Add a package" htmlFor="inv-pkg" hint="Fills the name, description and price.">
-          <Select id="inv-pkg" value="" onChange={(e) => { addPackage(e.target.value); e.currentTarget.value = '' }}>
-            <option value="" disabled>Choose a package...</option>
-            {basePackages.map((p) => (
-              <option key={p.id} value={p.id}>{p.name} - {money(Number(p.price))}</option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Add an add-on" htmlFor="inv-addon" hint="Film, Super 8, album, video add-on...">
-          <Select id="inv-addon" value="" onChange={(e) => { addPackage(e.target.value); e.currentTarget.value = '' }}>
-            <option value="" disabled>Choose an add-on...</option>
-            {addOns.map((p) => (
-              <option key={p.id} value={p.id}>{p.name} - {money(Number(p.price))}</option>
-            ))}
-          </Select>
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Field label="Invoice number" htmlFor="inv-num" hint="Blank = auto (INV-...).">
-          <TextInput id="inv-num" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Auto" maxLength={30} />
-        </Field>
-        <Field label="Issue date" htmlFor="inv-date">
-          <TextInput id="inv-date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
-        </Field>
-        <Field label="PO number (optional)" htmlFor="inv-po">
-          <TextInput id="inv-po" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="-" maxLength={60} />
-        </Field>
-      </div>
-
-      {templates.length > 0 || lines.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2">
-          {templates.length > 0 ? (
-            <Select aria-label="Apply a template" value="" onChange={(e) => { applyTemplate(e.target.value); e.currentTarget.value = '' }} className="h-8 max-w-xs">
-              <option value="" disabled>Apply a template...</option>
-              {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        {/* Invoice details */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+          <Field label="Invoice type" htmlFor="inv-type">
+            <Select id="inv-type" name="type" defaultValue={initial?.type ?? 'DEPOSIT'}>
+              <option value="DEPOSIT">Deposit</option>
+              <option value="BALANCE">Balance</option>
+              <option value="SUPPLEMENTARY">Supplementary</option>
             </Select>
-          ) : null}
-          <Button type="button" variant="secondary" size="sm" onClick={saveTemplate} disabled={lines.length === 0}>Save as template</Button>
+          </Field>
+          <Field label="Invoice number" htmlFor="inv-num" hint="Blank = auto (INV-...).">
+            <TextInput id="inv-num" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Auto" maxLength={30} />
+          </Field>
+          <Field label="Issue date" htmlFor="inv-date">
+            <TextInput id="inv-date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+          </Field>
+          <Field label="PO number (optional)" htmlFor="inv-po">
+            <TextInput id="inv-po" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="-" maxLength={60} />
+          </Field>
         </div>
-      ) : null}
 
-      {/* Line items */}
-      {lines.length === 0 ? (
-        <p className="rounded border border-dashed border-line px-3 py-4 text-center text-sm text-ink-muted">
-          No items yet. Add a package or add-on above, or a custom line below.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {lines.map((l, index) => (
-            <div
-              key={l.id}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => reorder(index)}
-              className="flex flex-col gap-2 rounded border border-line p-3"
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  draggable
-                  onDragStart={() => { dragIndex.current = index }}
-                  aria-label="Drag to reorder"
-                  className="shrink-0 cursor-grab text-muted hover:text-ink"
-                >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" /><circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" /><circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" /></svg>
-                </span>
-                <TextInput aria-label="Item name" value={l.name} onChange={(e) => update(l.id, { name: e.target.value })} placeholder="Item / package name" className="flex-1" />
-                <button type="button" onClick={() => duplicate(l.id)} aria-label="Duplicate item" className="rounded p-1 text-ink-muted hover:bg-sunk hover:text-ink">
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
-                </button>
-                <button type="button" onClick={() => remove(l.id)} aria-label="Remove item" className="rounded p-1 text-ink-muted hover:bg-sunk hover:text-lost-ink">
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-                </button>
+        {/* Products & Packages */}
+        <div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-ink">Products &amp; packages</p>
+            {templates.length > 0 ? (
+              <Select aria-label="Apply a template" value="" onChange={(e) => { applyTemplate(e.target.value); e.currentTarget.value = '' }} className="h-8 max-w-xs">
+                <option value="" disabled>Apply a template...</option>
+                {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </Select>
+            ) : null}
+          </div>
+
+          {lines.length === 0 ? (
+            <p className="mt-2 rounded border border-dashed border-line px-3 py-6 text-center text-sm text-ink-muted">
+              No items yet. Use <span className="font-semibold text-ink">Add products &amp; packages</span> to add one.
+            </p>
+          ) : (
+            <div className="mt-2 overflow-x-auto rounded-md border border-line">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line-strong text-left text-xs uppercase tracking-wide text-muted">
+                    <th className="px-3 py-2">Item</th>
+                    <th className="px-3 py-2">Description</th>
+                    <th className="px-3 py-2 text-right">Unit price</th>
+                    <th className="px-3 py-2 text-center">Qty</th>
+                    <th className="px-3 py-2 text-right">Discount</th>
+                    <th className="px-3 py-2 text-right">Amount</th>
+                    <th className="px-3 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((l, index) => (
+                    <tr
+                      key={l.id}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={() => reorder(index)}
+                      className="border-b border-line align-top last:border-b-0"
+                    >
+                      <td className="px-3 py-2">
+                        <div className="flex items-start gap-1.5">
+                          <span
+                            draggable
+                            onDragStart={() => { dragIndex.current = index }}
+                            aria-label="Drag to reorder"
+                            className="mt-0.5 shrink-0 cursor-grab text-muted hover:text-ink"
+                          >
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" /><circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" /><circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" /></svg>
+                          </span>
+                          <span className="font-medium text-ink">{l.name || <span className="text-ink-muted">Untitled item</span>}</span>
+                        </div>
+                      </td>
+                      <td className="max-w-sm whitespace-pre-line px-3 py-2 text-ink-muted">{l.description || '-'}</td>
+                      <td className="tabular px-3 py-2 text-right text-ink-muted">{money(Number(l.unitPrice) || 0)}</td>
+                      <td className="tabular px-3 py-2 text-center text-ink-muted">{l.quantity}</td>
+                      <td className="tabular px-3 py-2 text-right text-ink-muted">{Number(l.discount) > 0 ? `-${money(Number(l.discount))}` : '-'}</td>
+                      <td className="tabular px-3 py-2 text-right font-medium text-ink">{money(amountOf(l))}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center justify-end gap-1">
+                          <button type="button" onClick={() => openEdit(l)} aria-label="Edit item" className="rounded p-1 text-ink-muted hover:bg-paper hover:text-ink">
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h4l10-10-4-4L4 16v4z" /><path d="m13.5 6.5 4 4" /></svg>
+                          </button>
+                          <button type="button" onClick={() => duplicate(l.id)} aria-label="Duplicate item" className="rounded p-1 text-ink-muted hover:bg-paper hover:text-ink">
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+                          </button>
+                          <button type="button" onClick={() => remove(l.id)} aria-label="Remove item" className="rounded p-1 text-ink-muted hover:bg-paper hover:text-danger">
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Button type="button" onClick={openAdd}>
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+              Add products &amp; packages
+            </Button>
+            {lines.length > 0 ? (
+              <Button type="button" variant="secondary" size="sm" onClick={saveTemplate}>Save as template</Button>
+            ) : null}
+            <div className="flex items-center gap-2">
+              <label htmlFor="inv-discount" className="text-sm text-ink-muted">Discount</label>
+              <TextInput id="inv-discount" inputMode="decimal" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="0.00" className="h-8 w-28" />
+            </div>
+          </div>
+        </div>
+
+        {/* Totals */}
+        <div className="ml-auto w-full max-w-xs border-t border-line pt-2 text-sm">
+          <div className="flex justify-between py-0.5 text-ink-muted"><span>Subtotal (excl. GST)</span><span className="tabular">{money(subtotal)}</span></div>
+          <div className="flex justify-between py-0.5 text-ink-muted"><span>GST (10%)</span><span className="tabular">{money(gst)}</span></div>
+          {disc > 0 ? <div className="flex justify-between py-0.5 text-ink-muted"><span>Discount</span><span className="tabular">-{money(disc)}</span></div> : null}
+          <div className="mt-1 flex justify-between border-t border-line pt-1 font-semibold text-ink"><span>Total (incl. GST)</span><span className="tabular">{money(total)}</span></div>
+        </div>
+
+        {/* Payment schedule */}
+        <div className="border-t border-line pt-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-ink">Payment schedule</p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" size="sm" onClick={genFull}>Full payment</Button>
+              <Button type="button" variant="secondary" size="sm" onClick={genDeposit}>50% + 50%</Button>
+              <Button type="button" variant="secondary" size="sm" onClick={addInst}>Add instalment</Button>
+            </div>
+          </div>
+          {instalments.length === 0 ? (
+            <p className="mt-2 text-sm text-ink-muted">No split - a single full payment on issue.</p>
+          ) : (
+            <div className="mt-2 flex flex-col gap-2">
+              {instalments.map((it) => (
+                <div key={it.id} className="grid grid-cols-1 gap-2 sm:grid-cols-12 sm:items-center">
+                  <div className="sm:col-span-5"><TextInput aria-label="Instalment label" value={it.label} onChange={(e) => updateInst(it.id, { label: e.target.value })} placeholder="Deposit" /></div>
+                  <div className="sm:col-span-4"><TextInput aria-label="Due date" type="date" value={it.dueAt} onChange={(e) => updateInst(it.id, { dueAt: e.target.value })} /></div>
+                  <div className="sm:col-span-2"><TextInput aria-label="Instalment amount" inputMode="decimal" value={it.amount} onChange={(e) => updateInst(it.id, { amount: e.target.value })} placeholder="0.00" /></div>
+                  <div className="flex justify-end sm:col-span-1">
+                    <button type="button" onClick={() => removeInst(it.id)} aria-label="Remove instalment" className="rounded p-1 text-ink-muted hover:bg-paper hover:text-danger">
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <p className={`text-xs ${scheduleMismatch ? 'font-bold text-danger' : 'text-ink-muted'}`}>
+                Scheduled {money(scheduled)} of {money(total)}{scheduleMismatch ? ' - must match the total' : ''}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <Field label="Notes (optional)" htmlFor="inv-notes">
+          <Textarea id="inv-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} placeholder="Notes shown on the invoice..." />
+        </Field>
+
+        <div>
+          <Button type="submit" loading={pending} disabled={lines.length === 0 || scheduleMismatch}>
+            {editing ? 'Save changes' : 'Raise invoice'}
+          </Button>
+        </div>
+      </form>
+
+      {/* Add Item modal */}
+      {modalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/40 p-4" onClick={closeModal}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={editId === null ? 'Add item' : 'Edit item'}
+            className="my-8 w-full max-w-xl rounded-md border border-line bg-surface p-5 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-1 flex items-center justify-between">
+              <h2 className="font-serif text-xl font-semibold text-ink">{editId === null ? 'Add item' : 'Edit item'}</h2>
+              <button type="button" onClick={closeModal} aria-label="Close" className="rounded px-2 py-1 text-lg text-ink-muted hover:text-ink">×</button>
+            </div>
+            <p className="mb-4 text-sm text-ink-muted">Add a product or package to your invoice.</p>
+
+            <div className="flex flex-col gap-3">
+              <Field label="Choose existing product / package" htmlFor="modal-pkg" hint="Fills the name, description and price - you can still edit them.">
+                <Select id="modal-pkg" value="" onChange={(e) => { choosePackage(e.target.value); e.currentTarget.value = '' }}>
+                  <option value="">Choose existing product / package...</option>
+                  {basePackages.length > 0 ? (
+                    <optgroup label="Packages">
+                      {basePackages.map((p) => <option key={p.id} value={p.id}>{p.name} - {money(Number(p.price))}</option>)}
+                    </optgroup>
+                  ) : null}
+                  {addOns.length > 0 ? (
+                    <optgroup label="Add-ons">
+                      {addOns.map((p) => <option key={p.id} value={p.id}>{p.name} - {money(Number(p.price))}</option>)}
+                    </optgroup>
+                  ) : null}
+                </Select>
+              </Field>
+
+              <Field label="Product / package name" htmlFor="modal-name">
+                <TextInput id="modal-name" value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Enter a product / package name" maxLength={200} />
+              </Field>
+
+              <Field label="Description" htmlFor="modal-desc" hint="One inclusion per line - shown on the invoice.">
+                <Textarea id="modal-desc" value={draft.description} onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))} rows={7} maxLength={500} placeholder="What's included..." />
+              </Field>
+
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="Quantity" htmlFor="modal-qty">
+                  <TextInput id="modal-qty" type="number" min={1} value={draft.quantity} onChange={(e) => setDraft((d) => ({ ...d, quantity: Math.max(1, Number(e.target.value) || 1) }))} />
+                </Field>
+                <Field label="Unit price" htmlFor="modal-unit">
+                  <TextInput id="modal-unit" inputMode="decimal" value={draft.unitPrice} onChange={(e) => setDraft((d) => ({ ...d, unitPrice: e.target.value }))} placeholder="0.00" />
+                </Field>
+                <Field label="Discount" htmlFor="modal-disc">
+                  <TextInput id="modal-disc" inputMode="decimal" value={draft.discount} onChange={(e) => setDraft((d) => ({ ...d, discount: e.target.value }))} placeholder="0.00" />
+                </Field>
               </div>
-              <Textarea
-                aria-label="Item description"
-                value={l.description}
-                onChange={(e) => update(l.id, { description: e.target.value })}
-                rows={l.description ? Math.min(l.description.split('\n').length + 1, 10) : 2}
-                placeholder="Description - what's included (one point per line)"
-              />
-              <div className="flex flex-wrap items-end justify-end gap-3">
-                <label className="flex flex-col text-xs text-ink-muted">Qty
-                  <TextInput aria-label="Quantity" type="number" min={1} value={l.quantity} onChange={(e) => update(l.id, { quantity: Math.max(1, Number(e.target.value) || 1) })} className="mt-1 w-20" />
-                </label>
-                <label className="flex flex-col text-xs text-ink-muted">Unit price
-                  <TextInput aria-label="Unit price" inputMode="decimal" value={l.unitPrice} onChange={(e) => update(l.id, { unitPrice: e.target.value })} placeholder="0.00" className="mt-1 w-28" />
-                </label>
-                <label className="flex flex-col text-xs text-ink-muted">Discount
-                  <TextInput aria-label="Line discount" inputMode="decimal" value={l.discount} onChange={(e) => update(l.id, { discount: e.target.value })} placeholder="0.00" className="mt-1 w-28" />
-                </label>
-                <div className="pb-1.5 text-right">
-                  <div className="text-xs text-muted">Amount</div>
-                  <div className="tabular text-sm font-semibold text-ink">{money(lineAmount(l))}</div>
+
+              <div className="flex items-center justify-between border-t border-line pt-3">
+                <span className="text-sm text-ink-muted">Amount <span className="tabular ml-1 font-semibold text-ink">{money(amountOf(draft))}</span></span>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="secondary" size="sm" onClick={closeModal}>Cancel</Button>
+                  <Button type="button" size="sm" onClick={saveItem} disabled={!draft.name.trim()}>Save item</Button>
                 </div>
               </div>
             </div>
-          ))}
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" variant="secondary" size="sm" onClick={() => addLine()}>
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-          Add custom line
-        </Button>
-        <div className="flex items-center gap-2">
-          <label htmlFor="inv-discount" className="text-sm text-ink-muted">Discount</label>
-          <TextInput id="inv-discount" inputMode="decimal" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="0.00" className="h-8 w-28" />
-        </div>
-      </div>
-
-      {/* Totals */}
-      <div className="ml-auto w-full max-w-xs border-t border-line pt-2 text-sm">
-        <div className="flex justify-between py-0.5 text-ink-muted"><span>Subtotal (excl. GST)</span><span className="tabular">{money(subtotal)}</span></div>
-        <div className="flex justify-between py-0.5 text-ink-muted"><span>GST (10%)</span><span className="tabular">{money(gst)}</span></div>
-        {disc > 0 ? <div className="flex justify-between py-0.5 text-ink-muted"><span>Discount</span><span className="tabular">-{money(disc)}</span></div> : null}
-        <div className="mt-1 flex justify-between border-t border-line pt-1 font-semibold text-ink"><span>Total (incl. GST)</span><span className="tabular">{money(total)}</span></div>
-      </div>
-
-      {/* Payment schedule */}
-      <div className="border-t border-line pt-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-ink">Payment schedule</p>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={genFull}>Full payment</Button>
-            <Button type="button" variant="secondary" size="sm" onClick={genDeposit}>50% + 50%</Button>
-            <Button type="button" variant="secondary" size="sm" onClick={addInst}>Add instalment</Button>
           </div>
         </div>
-        {instalments.length === 0 ? (
-          <p className="mt-2 text-sm text-ink-muted">No split - a single full payment on issue.</p>
-        ) : (
-          <div className="mt-2 flex flex-col gap-2">
-            {instalments.map((it) => (
-              <div key={it.id} className="grid grid-cols-1 gap-2 sm:grid-cols-12 sm:items-center">
-                <div className="sm:col-span-5"><TextInput aria-label="Instalment label" value={it.label} onChange={(e) => updateInst(it.id, { label: e.target.value })} placeholder="Deposit" /></div>
-                <div className="sm:col-span-4"><TextInput aria-label="Due date" type="date" value={it.dueAt} onChange={(e) => updateInst(it.id, { dueAt: e.target.value })} /></div>
-                <div className="sm:col-span-2"><TextInput aria-label="Instalment amount" inputMode="decimal" value={it.amount} onChange={(e) => updateInst(it.id, { amount: e.target.value })} placeholder="0.00" /></div>
-                <div className="flex justify-end sm:col-span-1">
-                  <button type="button" onClick={() => removeInst(it.id)} aria-label="Remove instalment" className="rounded p-1 text-ink-muted hover:bg-sunk hover:text-lost-ink">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-                  </button>
-                </div>
-              </div>
-            ))}
-            <p className={`text-xs ${scheduleMismatch ? 'font-bold text-lost-ink' : 'text-ink-muted'}`}>
-              Scheduled {money(scheduled)} of {money(total)}{scheduleMismatch ? ' - must match the total' : ''}
-            </p>
-          </div>
-        )}
-      </div>
-
-      <Field label="Notes (optional)" htmlFor="inv-notes">
-        <Textarea id="inv-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} placeholder="Notes shown on the invoice..." />
-      </Field>
-
-      <div>
-        <Button type="submit" loading={pending} disabled={lines.length === 0 || scheduleMismatch}>
-          {editing ? 'Save changes' : 'Raise invoice'}
-        </Button>
-      </div>
-    </form>
+      ) : null}
+    </>
   )
 }
