@@ -20,6 +20,8 @@ export type InitialInvoice = {
   lines: { name: string; description: string; quantity: number; unitPrice: string; discount: string }[]
   instalments: { label: string; dueAt: string; amount: string }[]
 }
+export type JobContext = { name: string; type: string | null; shootLabel: string | null; location: string | null }
+export type ClientContext = { name: string; email: string | null; phone: string | null; address: string | null }
 type Line = { id: number; name: string; description: string; quantity: number; unitPrice: string; discount: string }
 type Instalment = { id: number; label: string; dueAt: string; amount: string }
 type Draft = { name: string; description: string; quantity: number; unitPrice: string; discount: string }
@@ -47,6 +49,9 @@ export function InvoiceEditor({
   templates,
   invoiceId,
   initial,
+  job,
+  client,
+  amountPaid,
 }: {
   csrf: string
   projectId: string
@@ -54,8 +59,13 @@ export function InvoiceEditor({
   templates: TemplateOption[]
   invoiceId?: string
   initial?: InitialInvoice
+  job?: JobContext
+  client?: ClientContext
+  amountPaid?: string
 }) {
   const editing = Boolean(invoiceId)
+  const workspace = Boolean(job || client)
+  const paidNum = Number(amountPaid) || 0
   const [lines, setLines] = useState<Line[]>(() => (initial?.lines ?? []).map((l, i) => ({ id: i + 1, ...l })))
   const [discount, setDiscount] = useState(initial?.discount ?? '')
   const [nextId, setNextId] = useState((initial?.lines.length ?? 0) + 1)
@@ -154,6 +164,8 @@ export function InvoiceEditor({
   const total = Math.max(gross - disc, 0)
   const gst = total / 11
   const subtotal = total - gst
+  const dueDates = instalments.map((it) => it.dueAt).filter(Boolean).sort()
+  const dueDisplay = dueDates.length > 0 ? dueDates[dueDates.length - 1]! : 'On issue'
 
   const scheduled = instalments.reduce((s, it) => s + (Number(it.amount) || 0), 0)
   const scheduleMismatch = instalments.length > 0 && Math.abs(scheduled - total) > 0.005
@@ -210,27 +222,77 @@ export function InvoiceEditor({
         <input type="hidden" name="notes" value={notes} />
         <input type="hidden" name="instalments" value={instalmentPayload} />
 
-        <p className="text-sm font-semibold text-ink">{editing ? 'Edit invoice' : 'New invoice'}</p>
+        {workspace ? null : <p className="text-sm font-semibold text-ink">{editing ? 'Edit invoice' : 'New invoice'}</p>}
 
-        {/* Invoice details */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-          <Field label="Invoice type" htmlFor="inv-type">
-            <Select id="inv-type" name="type" defaultValue={initial?.type ?? 'DEPOSIT'}>
-              <option value="DEPOSIT">Deposit</option>
-              <option value="BALANCE">Balance</option>
-              <option value="SUPPLEMENTARY">Supplementary</option>
-            </Select>
-          </Field>
-          <Field label="Invoice number" htmlFor="inv-num" hint="Blank = auto (INV-...).">
-            <TextInput id="inv-num" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Auto" maxLength={30} />
-          </Field>
-          <Field label="Issue date" htmlFor="inv-date">
-            <TextInput id="inv-date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
-          </Field>
-          <Field label="PO number (optional)" htmlFor="inv-po">
-            <TextInput id="inv-po" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="-" maxLength={60} />
-          </Field>
-        </div>
+        {workspace ? (
+          /* Invoice · Job · Client context grid */
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            <div className="rounded-md border border-line bg-surface p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-muted">Invoice</div>
+              <div className="mt-3 flex flex-col gap-3">
+                <label className="flex flex-col text-xs text-ink-muted">Type
+                  <Select name="type" defaultValue={initial?.type ?? 'DEPOSIT'} className="mt-1 h-9">
+                    <option value="DEPOSIT">Deposit</option>
+                    <option value="BALANCE">Balance</option>
+                    <option value="SUPPLEMENTARY">Supplementary</option>
+                  </Select>
+                </label>
+                <label className="flex flex-col text-xs text-ink-muted">Invoice number
+                  <TextInput value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Auto (INV-...)" maxLength={30} className="mt-1 h-9" />
+                </label>
+                <label className="flex flex-col text-xs text-ink-muted">Issue date
+                  <TextInput type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="mt-1 h-9" />
+                </label>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-xs text-ink-muted">Due date</span>
+                  <span className="text-sm text-ink">{dueDisplay}</span>
+                </div>
+                <label className="flex flex-col text-xs text-ink-muted">PO number
+                  <TextInput value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="-" maxLength={60} className="mt-1 h-9" />
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-md border border-line bg-surface p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-muted">Job</div>
+              <div className="mt-3 flex flex-col gap-2 text-sm">
+                <div className="font-medium text-ink">{job?.name}</div>
+                {job?.type ? <div><span className="text-ink-muted">Type</span> · <span className="text-ink">{job.type}</span></div> : null}
+                {job?.shootLabel ? <div><span className="text-ink-muted">Main shoot</span><br /><span className="text-ink">{job.shootLabel}</span></div> : null}
+                {job?.location ? <div><span className="text-ink-muted">Location</span><br /><span className="text-ink">{job.location}</span></div> : null}
+              </div>
+            </div>
+
+            <div className="rounded-md border border-line bg-surface p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-muted">Client</div>
+              <div className="mt-3 flex flex-col gap-1 text-sm">
+                <div className="font-medium text-ink">{client?.name}</div>
+                {client?.email ? <div className="text-ink-muted">{client.email}</div> : null}
+                {client?.phone ? <div className="text-ink-muted">{client.phone}</div> : null}
+                {client?.address ? <div className="whitespace-pre-line text-ink-muted">{client.address}</div> : null}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <Field label="Invoice type" htmlFor="inv-type">
+              <Select id="inv-type" name="type" defaultValue={initial?.type ?? 'DEPOSIT'}>
+                <option value="DEPOSIT">Deposit</option>
+                <option value="BALANCE">Balance</option>
+                <option value="SUPPLEMENTARY">Supplementary</option>
+              </Select>
+            </Field>
+            <Field label="Invoice number" htmlFor="inv-num" hint="Blank = auto (INV-...).">
+              <TextInput id="inv-num" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Auto" maxLength={30} />
+            </Field>
+            <Field label="Issue date" htmlFor="inv-date">
+              <TextInput id="inv-date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+            </Field>
+            <Field label="PO number (optional)" htmlFor="inv-po">
+              <TextInput id="inv-po" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="-" maxLength={60} />
+            </Field>
+          </div>
+        )}
 
         {/* Products & Packages */}
         <div>
@@ -329,6 +391,12 @@ export function InvoiceEditor({
           <div className="flex justify-between py-0.5 text-ink-muted"><span>GST (10%)</span><span className="tabular">{money(gst)}</span></div>
           {disc > 0 ? <div className="flex justify-between py-0.5 text-ink-muted"><span>Discount</span><span className="tabular">-{money(disc)}</span></div> : null}
           <div className="mt-1 flex justify-between border-t border-line pt-1 font-semibold text-ink"><span>Total (incl. GST)</span><span className="tabular">{money(total)}</span></div>
+          {workspace ? (
+            <>
+              <div className="flex justify-between py-0.5 text-ink-muted"><span>Paid</span><span className="tabular text-delivered-ink">{money(paidNum)}</span></div>
+              <div className="flex justify-between py-0.5 font-semibold text-ink"><span>Balance</span><span className="tabular">{money(Math.max(total - paidNum, 0))}</span></div>
+            </>
+          ) : null}
         </div>
 
         {/* Payment schedule */}

@@ -11,14 +11,17 @@ import { PrintButton } from '@/components/PrintButton'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { listActivePackages } from '@/lib/domain/package'
+import { listInvoiceTemplates } from '@/lib/domain/finance'
 import { formatAud } from '@/lib/money'
-import { formatSydneyDate } from '@/lib/time'
+import { formatSydneyDate, formatSydneyTime, sydneyYmd } from '@/lib/time'
 import { titleCase } from '@/lib/text'
 import { AppShell } from '../../AppShell'
-import { issueInvoiceAction } from '../../jobs/actions'
+import { InvoiceEditor, type InitialInvoice } from '../../jobs/[id]/InvoiceEditor'
 import { RecordPaymentForm } from '../../jobs/[id]/Finance'
-import { InvoiceAdminActions } from './InvoiceAdminActions'
 import { RefundButton } from './RefundButton'
+import { CollapsiblePreview } from './CollapsiblePreview'
+import { InvoiceMoreMenu } from './InvoiceMoreMenu'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Invoice - Moments' }
@@ -26,12 +29,15 @@ export const metadata: Metadata = { title: 'Invoice - Moments' }
 const TONE: Record<string, Tone> = {
   DRAFT: 'neutral', ISSUED: 'info', SENT: 'info', PARTIALLY_PAID: 'warn', PAID: 'good', OVERDUE: 'bad', VOID: 'neutral',
 }
-
-// Isolate the invoice sheet when printing to PDF, whatever page chrome surrounds it.
 const PRINT_CSS =
-  '@media print{body *{visibility:hidden}#invoice-print,#invoice-print *{visibility:visible}#invoice-print{position:absolute;left:0;top:0;width:100%}}'
+  '@media print{body *{visibility:hidden}#invoice-print,#invoice-print *{visibility:visible}#invoice-print{position:absolute;left:0;top:0;width:100%;max-height:none;overflow:visible}}'
 
-export default async function InvoiceManagePage({ params }: { params: Promise<{ invoiceId: string }> }) {
+function ymd(date: Date): string {
+  const { year, month, day } = sydneyYmd(date)
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+export default async function InvoiceWorkspacePage({ params }: { params: Promise<{ invoiceId: string }> }) {
   const user = await requireRole('/finance/[invoiceId]')
   const { invoiceId } = await params
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
@@ -56,14 +62,30 @@ export default async function InvoiceManagePage({ params }: { params: Promise<{ 
       project: {
         select: {
           id: true, name: true,
-          client: { select: { displayName: true, phone: true, street: true, suburb: true, state: true, postcode: true, country: true } },
+          client: { select: { displayName: true, email: true, phone: true, street: true, suburb: true, state: true, postcode: true, country: true } },
           company: { select: { name: true, abn: true } },
+          bookings: { orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true, endsAt: true, location: true, title: true } },
         },
       },
     },
   })
   if (!inv) notFound()
 
+  const balance = inv.total.sub(inv.amountPaid)
+  const isDraft = inv.status === 'DRAFT'
+  const canPay = inv.status !== 'DRAFT' && inv.status !== 'PAID' && inv.status !== 'VOID'
+  const unpaid = inv.amountPaid.lte(0)
+  const isEditable = unpaid && inv.status !== 'VOID' && inv.status !== 'PAID' && inv.status !== 'PARTIALLY_PAID'
+  const canVoid = unpaid && inv.status !== 'VOID' && inv.status !== 'DRAFT'
+
+  const c = inv.project.client
+  const booking = inv.project.bookings[0]
+  const shootLabel = booking
+    ? `${formatSydneyDate(booking.startsAt)} · ${formatSydneyTime(booking.startsAt)}-${formatSydneyTime(booking.endsAt)}`
+    : null
+  const clientAddress = [c.street, [c.suburb, c.state, c.postcode].filter(Boolean).join(' '), c.country].filter(Boolean).join('\n') || null
+
+  // Payment history rows
   const paymentRows = inv.payments.map((p) => {
     const refunded = p.refunds.reduce((s, r) => s.add(r.amount), new Prisma.Decimal(0))
     const refundable = p.amount.sub(refunded)
@@ -82,84 +104,87 @@ export default async function InvoiceManagePage({ params }: { params: Promise<{ 
     }
   })
 
-  const isDraft = inv.status === 'DRAFT'
-  const canPay = inv.status !== 'DRAFT' && inv.status !== 'PAID' && inv.status !== 'VOID'
-  const balance = inv.total.sub(inv.amountPaid)
-  const unpaid = inv.amountPaid.lte(0)
-  const isEditable = unpaid && inv.status !== 'VOID' && inv.status !== 'PAID' && inv.status !== 'PARTIALLY_PAID'
-  const canVoid = unpaid && inv.status !== 'VOID' && inv.status !== 'DRAFT'
+  // Editor initial (separate the whole-invoice discount out of its negative line)
+  const discountLine = inv.lines.find((l) => l.itemName === 'Discount' && l.unitPrice.lessThan(0))
+  const realLines = inv.lines.filter((l) => l !== discountLine)
+  const initial: InitialInvoice = {
+    type: inv.type,
+    invoiceNumber: inv.invoiceNumber,
+    invoiceDate: inv.invoiceDate ? ymd(inv.invoiceDate) : '',
+    poNumber: inv.poNumber ?? '',
+    notes: inv.notes ?? '',
+    discount: discountLine ? discountLine.unitPrice.abs().toString() : '',
+    lines: realLines.map((l) => ({
+      name: l.itemName ?? '',
+      description: l.description,
+      quantity: l.quantity,
+      unitPrice: l.unitPrice.toString(),
+      discount: l.discount.greaterThan(0) ? l.discount.toString() : '',
+    })),
+    instalments: inv.instalments.length > 1
+      ? inv.instalments.map((it) => ({ label: it.label ?? '', dueAt: it.dueAt ? ymd(it.dueAt) : '', amount: it.amount.toString() }))
+      : [],
+  }
+  const jobContext = { name: inv.project.name, type: booking?.title ?? null, shootLabel, location: booking?.location ?? null }
+  const clientContext = { name: c.displayName, email: inv.billingEmailSnapshot ?? c.email, phone: c.phone, address: clientAddress }
+
+  const packages = isEditable
+    ? (await listActivePackages()).map((p) => ({ id: p.id, name: p.name, price: p.basePriceInclGst.toString(), description: p.description, inclusions: p.inclusions, isAddOn: p.isAddOn }))
+    : []
+  const templates = isEditable ? await listInvoiceTemplates() : []
 
   return (
     <AppShell user={user} csrf={csrf} active="finance">
-      <div className="print:hidden">
+      <div>
+        {/* Header */}
         <Link href="/finance" className="text-sm font-bold text-accent hover:underline">&lt;- Payments</Link>
-
         <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="font-serif text-2xl font-semibold text-ink">{inv.invoiceNumber}</h1>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="font-serif text-2xl font-semibold text-ink">Invoice {inv.invoiceNumber}</h1>
+              <StatusPill tone={TONE[inv.status] ?? 'neutral'}>{inv.status.toLowerCase().replace(/_/g, ' ')}</StatusPill>
+            </div>
             <p className="mt-1 text-sm text-ink-muted">
-              {inv.project.client.displayName} · <Link href={`/jobs/${inv.project.id}`} className="text-accent hover:underline">{inv.project.name}</Link> · {titleCase(inv.type.toLowerCase())}
+              {c.displayName} · <Link href={`/jobs/${inv.project.id}`} className="text-accent hover:underline">{inv.project.name}</Link>
+              {shootLabel ? ` · ${formatSydneyDate(booking!.startsAt)}` : ''} · {titleCase(inv.type.toLowerCase())}
             </p>
           </div>
-          <StatusPill tone={TONE[inv.status] ?? 'neutral'}>{inv.status.toLowerCase().replace(/_/g, ' ')}</StatusPill>
-        </div>
-
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <div className="rounded-md border border-line bg-surface p-4 shadow-sm">
-            <div className="text-sm text-muted">Total</div>
-            <div className="tabular text-lg font-semibold text-ink">{formatAud(inv.total)}</div>
-          </div>
-          <div className="rounded-md border border-line bg-surface p-4 shadow-sm">
-            <div className="text-sm text-muted">Paid</div>
-            <div className="tabular text-lg font-semibold text-delivered-ink">{formatAud(inv.amountPaid)}</div>
-          </div>
-          <div className="rounded-md border border-line bg-surface p-4 shadow-sm">
-            <div className="text-sm text-muted">Balance</div>
-            <div className="tabular text-lg font-semibold text-ink">{formatAud(balance)}</div>
+          <div className="flex items-center gap-2">
+            {inv.accessToken ? (
+              <Link href={`/invoice/${inv.accessToken}`} target="_blank"><Button variant="secondary" size="sm">Client view</Button></Link>
+            ) : null}
+            <PrintButton label="Download PDF" />
+            <InvoiceMoreMenu csrf={csrf} invoiceId={inv.id} projectId={inv.project.id} isDraft={isDraft} canVoid={canVoid} canDelete={unpaid} />
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <PrintButton label="Download PDF" />
+        <div className="mt-5">
           {isEditable ? (
-            <Link href={`/finance/${inv.id}/edit`}><Button variant="secondary" size="sm">Edit</Button></Link>
-          ) : null}
-          {isDraft ? (
-            <form action={issueInvoiceAction}>
-              <input type="hidden" name="csrf" value={csrf} />
-              <input type="hidden" name="projectId" value={inv.project.id} />
-              <input type="hidden" name="invoiceId" value={inv.id} />
-              <Button type="submit" variant="secondary" size="sm">Issue invoice</Button>
-            </form>
-          ) : null}
-          <InvoiceAdminActions csrf={csrf} invoiceId={inv.id} projectId={inv.project.id} canVoid={canVoid} canDelete={unpaid} />
-          {inv.accessToken ? (
-            <Link href={`/invoice/${inv.accessToken}`} target="_blank" className="text-sm font-bold text-accent hover:underline">Open client view -&gt;</Link>
-          ) : null}
+            <InvoiceEditor
+              csrf={csrf}
+              projectId={inv.project.id}
+              packages={packages}
+              templates={templates}
+              invoiceId={inv.id}
+              initial={initial}
+              job={jobContext}
+              client={clientContext}
+              amountPaid={inv.amountPaid.toString()}
+            />
+          ) : (
+            <p className="rounded-md border border-dashed border-line bg-surface px-4 py-3 text-sm text-ink-muted">
+              This invoice has payments recorded or is closed, so its items are locked. Refund or void it to make changes. The full invoice is in the preview below.
+            </p>
+          )}
         </div>
 
-        {inv.accessToken ? (
-          <div className="mt-4 max-w-md">
-            <p className="text-xs text-ink-muted">Client link (send this to the client)</p>
-            <CopyLinkField path={`/invoice/${inv.accessToken}`} />
-          </div>
-        ) : null}
-
-        {canPay ? (
-          <section className="mt-4 max-w-2xl rounded-md border border-line bg-surface p-4 shadow-sm">
-            <div className="text-xs font-bold uppercase tracking-wide text-muted">Record a payment</div>
-            <RecordPaymentForm csrf={csrf} projectId={inv.project.id} invoiceId={inv.id} />
-          </section>
-        ) : null}
-
-        <section className="mt-6">
-          <div className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Payment history</div>
+        {/* Payments received */}
+        <section className="mt-8">
+          <h2 className="text-sm font-semibold text-ink">Payments received</h2>
           {paymentRows.length === 0 ? (
-            <p className="rounded-md border border-dashed border-line bg-surface px-4 py-6 text-center text-sm text-ink-muted">
-              No payments recorded yet.
-            </p>
+            <p className="mt-2 rounded-md border border-dashed border-line bg-surface px-4 py-6 text-center text-sm text-ink-muted">No payments recorded yet.</p>
           ) : (
-            <div className="overflow-x-auto rounded-md border border-line bg-surface shadow-sm">
+            <div className="mt-2 overflow-x-auto rounded-md border border-line bg-surface">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
@@ -183,11 +208,7 @@ export default async function InvoiceManagePage({ params }: { params: Promise<{ 
                       <td className="px-3 py-2 text-ink-muted">{p.reference ?? '-'}</td>
                       <td className="px-3 py-2 capitalize text-ink-muted">{p.statusLabel}</td>
                       <td className="px-3 py-2 text-right">
-                        {p.canRefund ? (
-                          <RefundButton csrf={csrf} paymentId={p.id} invoiceId={inv.id} refundable={p.refundable} />
-                        ) : (
-                          <span className="text-ink-muted">-</span>
-                        )}
+                        {p.canRefund ? <RefundButton csrf={csrf} paymentId={p.id} invoiceId={inv.id} refundable={p.refundable} /> : <span className="text-ink-muted">-</span>}
                       </td>
                     </tr>
                   ))}
@@ -195,14 +216,40 @@ export default async function InvoiceManagePage({ params }: { params: Promise<{ 
               </table>
             </div>
           )}
+
+          {canPay ? (
+            <div className="mt-3 max-w-2xl rounded-md border border-line bg-surface p-4">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-bold uppercase tracking-wide text-muted">Record a payment</div>
+                <div className="text-sm text-ink-muted">Balance <span className="tabular font-semibold text-ink">{formatAud(balance)}</span></div>
+              </div>
+              <RecordPaymentForm csrf={csrf} projectId={inv.project.id} invoiceId={inv.id} />
+            </div>
+          ) : isDraft ? (
+            <p className="mt-3 text-sm text-ink-muted">Issue the invoice (••• menu) before recording a payment.</p>
+          ) : null}
         </section>
 
-        <div className="mt-6 mb-2 text-xs font-bold uppercase tracking-wide text-muted">Preview</div>
+        {/* Client invoice link */}
+        {inv.accessToken ? (
+          <section className="mt-8 max-w-2xl">
+            <div className="text-xs font-bold uppercase tracking-wide text-muted">Client invoice link</div>
+            <div className="mt-2 flex items-center gap-2">
+              <div className="min-w-0 flex-1"><CopyLinkField path={`/invoice/${inv.accessToken}`} /></div>
+              <Link href={`/invoice/${inv.accessToken}`} target="_blank"><Button variant="secondary" size="sm">Open</Button></Link>
+            </div>
+          </section>
+        ) : null}
+
+        {/* Invoice preview (demoted) */}
+        <div className="mt-8">
+          <CollapsiblePreview>
+            <div id="invoice-print"><InvoiceDocument invoice={inv} /></div>
+          </CollapsiblePreview>
+        </div>
       </div>
 
-      <div id="invoice-print">
-        <InvoiceDocument invoice={inv} />
-      </div>
+      {/* Locked invoices: the sheet is the record, so keep it printable even when the preview toggle is closed. */}
       <style>{PRINT_CSS}</style>
     </AppShell>
   )

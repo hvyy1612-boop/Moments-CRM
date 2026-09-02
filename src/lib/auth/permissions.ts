@@ -20,6 +20,9 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   // Vercel Cron endpoint: guarded by CRON_SECRET inside the route, not by a session.
   '/api/cron/daily': { secret: true },
   '/api/calendar/feed': { token: true },
+  // Google staff sign-in OAuth: reached before a session exists; guarded internally by OAuth state.
+  '/api/auth/google': { public: true },
+  '/api/auth/google/callback': { public: true },
   // Staff entrance and account recovery: public by necessity (not signed in yet / token-authorised).
   '/login': { public: true },
   '/register': { public: true },
@@ -34,7 +37,6 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/jobs/[id]/invoice/[invoiceId]': { roles: ['ADMIN', 'STUDIO'] },
   '/finance/new': { roles: ['ADMIN', 'STUDIO'] },
   '/finance/[invoiceId]': { roles: ['ADMIN', 'STUDIO'] },
-  '/finance/[invoiceId]/edit': { roles: ['ADMIN', 'STUDIO'] },
   '/clients': { roles: ['ADMIN', 'STUDIO'] },
   '/clients/new': { roles: ['ADMIN', 'STUDIO'] },
   '/clients/[id]': { roles: ['ADMIN', 'STUDIO'] },
