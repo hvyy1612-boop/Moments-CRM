@@ -258,6 +258,35 @@ export async function issueInvoice(invoiceId: string, actorUserId: string | null
 }
 
 /**
+ * Delete an invoice (lines and instalments cascade). Refused once any money has been recorded
+ * against it - a paid or part-paid invoice must be refunded/voided, not deleted, so the financial
+ * ledger stays intact (blueprint invariant 3).
+ */
+export async function deleteInvoice(invoiceId: string, actorUserId: string | null) {
+  return prisma.$transaction(async (tx) => {
+    const invoice = await tx.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { id: true, status: true, amountPaid: true, invoiceNumber: true },
+    })
+    if (!invoice) throw new Error('Invoice not found.')
+    if (invoice.amountPaid.gt(0) || invoice.status === 'PAID' || invoice.status === 'PARTIALLY_PAID') {
+      throw new Error('This invoice has payments recorded. Void or refund it instead of deleting.')
+    }
+    await tx.invoice.delete({ where: { id: invoiceId } })
+    await tx.auditLog.create({
+      data: {
+        action: 'invoice.deleted',
+        entityType: 'Invoice',
+        entityId: invoiceId,
+        actorUserId,
+        metadata: { invoiceNumber: invoice.invoiceNumber } as Prisma.InputJsonValue,
+      },
+    })
+    return { deleted: true as const }
+  })
+}
+
+/**
  * Record a manual payment against an invoice. Writes a Payment plus its append-only charge
  * transaction, refreshes the invoice's cached amountPaid and status, and advances the project's
  * commercial status when the invoice is fully paid.
