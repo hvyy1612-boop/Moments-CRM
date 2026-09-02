@@ -15,6 +15,7 @@ import { titleCase } from '@/lib/text'
 import { AppShell } from '../../AppShell'
 import { issueInvoiceAction } from '../../jobs/actions'
 import { RecordPaymentForm } from '../../jobs/[id]/Finance'
+import { InvoiceAdminActions } from './InvoiceAdminActions'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Invoice - Moments' }
@@ -55,6 +56,9 @@ export default async function InvoiceManagePage({ params }: { params: Promise<{ 
   const isDraft = inv.status === 'DRAFT'
   const canPay = inv.status !== 'DRAFT' && inv.status !== 'PAID' && inv.status !== 'VOID'
   const balance = inv.total.sub(inv.amountPaid)
+  const unpaid = inv.amountPaid.lte(0)
+  const isEditable = unpaid && inv.status !== 'VOID' && inv.status !== 'PAID' && inv.status !== 'PARTIALLY_PAID'
+  const canVoid = unpaid && inv.status !== 'VOID' && inv.status !== 'DRAFT'
 
   return (
     <AppShell user={user} csrf={csrf} active="finance">
@@ -88,6 +92,9 @@ export default async function InvoiceManagePage({ params }: { params: Promise<{ 
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <PrintButton label="Download PDF" />
+          {isEditable ? (
+            <Link href={`/finance/${inv.id}/edit`}><Button variant="secondary" size="sm">Edit</Button></Link>
+          ) : null}
           {isDraft ? (
             <form action={issueInvoiceAction}>
               <input type="hidden" name="csrf" value={csrf} />
@@ -96,6 +103,7 @@ export default async function InvoiceManagePage({ params }: { params: Promise<{ 
               <Button type="submit" variant="secondary" size="sm">Issue invoice</Button>
             </form>
           ) : null}
+          <InvoiceAdminActions csrf={csrf} invoiceId={inv.id} projectId={inv.project.id} canVoid={canVoid} canDelete={unpaid} />
           {inv.accessToken ? (
             <Link href={`/invoice/${inv.accessToken}`} target="_blank" className="text-sm font-bold text-accent hover:underline">Open client view -&gt;</Link>
           ) : null}
