@@ -329,6 +329,53 @@ export async function updateInvoiceLinesAction(
   redirect(`/finance/${invoiceId}`)
 }
 
+/**
+ * Contextual save for the invoice workspace: same as updateInvoiceLinesAction but returns success
+ * instead of redirecting, so the client can router.refresh() and keep scroll/section state.
+ */
+export async function saveInvoiceContentAction(
+  _prev: QuoteActionState,
+  formData: FormData,
+): Promise<QuoteActionState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  const user = await requireStaff()
+  const invoiceId = String(formData.get('invoiceId') ?? '')
+  if (!invoiceId) return { status: 'error', message: 'Missing invoice.' }
+
+  let lines: unknown = []
+  let instalments: unknown = []
+  try {
+    lines = JSON.parse(String(formData.get('lines') ?? '[]'))
+    instalments = JSON.parse(String(formData.get('instalments') ?? '[]'))
+  } catch {
+    return { status: 'error', message: 'Could not read the invoice items.' }
+  }
+  const parsed = createInvoiceLinesSchema.safeParse({
+    type: formData.get('type') ?? '',
+    invoiceNumber: formData.get('invoiceNumber') ?? '',
+    invoiceDate: formData.get('invoiceDate') ?? '',
+    poNumber: formData.get('poNumber') ?? '',
+    notes: formData.get('notes') ?? '',
+    discount: formData.get('discount') ?? '',
+    lines,
+    instalments,
+  })
+  if (!parsed.success) {
+    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the invoice.' }
+  }
+  try {
+    await updateInvoiceWithLines(invoiceId, parsed.data, user.id)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not save the invoice.' }
+  }
+  revalidatePath('/finance')
+  revalidatePath(`/finance/${invoiceId}`)
+  return { status: 'success' }
+}
+
 /** Refund all or part of a recorded payment. Reverts the invoice balance (domain handles it). */
 export async function refundPaymentAction(
   _prev: QuoteActionState,
