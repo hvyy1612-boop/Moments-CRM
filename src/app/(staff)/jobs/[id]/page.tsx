@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { Prisma } from '@prisma/client'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
@@ -13,7 +14,6 @@ import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
 import { getProjectBoard } from '@/lib/domain/project-workflow'
 import { listActivePackages } from '@/lib/domain/package'
-import { listInvoiceTemplates } from '@/lib/domain/finance'
 import { AppShell } from '../../AppShell'
 import {
   createContractAction,
@@ -25,7 +25,6 @@ import { ContractSend } from './ContractSend'
 import { HistoryLogModal, type HistoryEntry } from './HistoryLogModal'
 import { ProjectWorkflow } from './ProjectWorkflow'
 import { Delivery } from './Delivery'
-import { Finance } from './Finance'
 import { QuestionnairePanel } from './QuestionnairePanel'
 import { QuoteBuilder } from './QuoteBuilder'
 import { Scheduling } from './Scheduling'
@@ -94,24 +93,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           },
         },
       },
-      invoices: {
-        orderBy: { createdAt: 'asc' },
-        select: {
-          id: true,
-          invoiceNumber: true,
-          type: true,
-          status: true,
-          total: true,
-          amountPaid: true,
-          poNumber: true,
-          notes: true,
-          accessToken: true,
-          instalments: {
-            orderBy: { sortOrder: 'asc' },
-            select: { id: true, label: true, dueAt: true, amount: true, status: true },
-          },
-        },
-      },
+      invoices: { select: { id: true, total: true, amountPaid: true } },
       questionnaires: {
         orderBy: { createdAt: 'desc' },
         select: {
@@ -193,34 +175,17 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     })),
   }))
 
-  const invoiceViews = project.invoices.map((invoice) => ({
-    id: invoice.id,
-    number: invoice.invoiceNumber,
-    typeLabel: invoice.type.toLowerCase(),
-    status: invoice.status,
-    totalLabel: formatAud(invoice.total),
-    paidLabel: formatAud(invoice.amountPaid),
-    remainingLabel: formatAud(invoice.total.sub(invoice.amountPaid)),
-    isDraft: invoice.status === 'DRAFT',
-    canPay: invoice.status !== 'DRAFT' && invoice.status !== 'PAID' && invoice.status !== 'VOID',
-    poNumber: invoice.poNumber,
-    notes: invoice.notes,
-    accessToken: invoice.accessToken,
-    instalments: invoice.instalments.map((it) => ({
-      id: it.id,
-      label: it.label,
-      dueLabel: it.dueAt ? formatSydneyDate(it.dueAt) : null,
-      amountLabel: formatAud(it.amount),
-      status: it.status,
-    })),
-  }))
+  const invoiceCount = project.invoices.length
+  const invoiceOutstanding = project.invoices.reduce(
+    (sum, i) => sum.add(i.total).sub(i.amountPaid),
+    new Prisma.Decimal(0),
+  )
 
   const packageOptions = (await listActivePackages()).map((p) => ({
     id: p.id,
     name: p.name,
     price: p.basePriceInclGst.toString(),
   }))
-  const invoiceTemplates = await listInvoiceTemplates()
 
   const gallery = project.galleries[0]
   const galleryView = gallery
@@ -484,9 +449,19 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         ) : null}
 
         {isConfirmed ? (
-          <section id="finance" className="mt-6 scroll-mt-20 rounded border border-line bg-surface p-5">
-            <h2 className="text-lg">Invoices &amp; payments</h2>
-            <Finance csrf={csrf} projectId={project.id} invoices={invoiceViews} packages={packageOptions} templates={invoiceTemplates} />
+          <section className="mt-6 rounded border border-line bg-surface p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg">Invoices &amp; payments</h2>
+                <p className="mt-1 text-sm text-ink-muted">
+                  {invoiceCount} invoice{invoiceCount === 1 ? '' : 's'} · {formatAud(invoiceOutstanding)} outstanding · managed in Payments.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Link href="/finance"><Button variant="secondary" size="sm">Open Payments</Button></Link>
+                <Link href={`/finance/new?job=${project.id}`}><Button size="sm">New invoice</Button></Link>
+              </div>
+            </div>
           </section>
         ) : null}
 

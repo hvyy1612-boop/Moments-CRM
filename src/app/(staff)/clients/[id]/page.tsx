@@ -76,7 +76,7 @@ function SectionCard({
   children: ReactNode
 }) {
   return (
-    <section className="rounded-lg border border-line bg-surface p-5">
+    <section className="rounded-lg border border-line bg-surface p-5 shadow-sm">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
           <span className="text-accent-ink">{icon}</span>
@@ -446,7 +446,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                       <div className="flex shrink-0 items-center gap-3">
                         <span className="tabular text-sm text-ink">{formatAud(inv.total)}</span>
                         <Link href={`/jobs/${inv.project.id}/invoice/${inv.id}`} target="_blank" className="text-sm font-bold text-accent hover:underline">View</Link>
-                        <Link href={`/jobs/${inv.project.id}#finance`} className="text-sm text-ink-muted hover:text-ink">Manage</Link>
+                        <Link href={`/finance/${inv.id}`} className="text-sm text-ink-muted hover:text-ink">Manage</Link>
                       </div>
                     </li>
                   ))}

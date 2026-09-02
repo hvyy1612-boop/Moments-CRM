@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { BoardGroup } from '@/components/ui/BoardGroup'
+import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StatusTag } from '@/components/ui/StatusTag'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
@@ -36,7 +37,7 @@ function Rows({ rows }: { rows: Row[] }) {
       {rows.map((row) => (
         <tr key={row.id} className="transition-colors hover:bg-paper">
           <td className="tabular border-b border-r border-line px-3 py-3 text-base text-ink">
-            <Link href={`/jobs/${row.projectId}/invoice/${row.id}`} className="font-bold text-accent-ink hover:underline">
+            <Link href={`/finance/${row.id}`} className="font-bold text-accent-ink hover:underline">
               {row.number}
             </Link>
           </td>
@@ -93,9 +94,18 @@ export default async function FinancePage() {
   const other = rows.filter((r) => invoiceGroup(r.status) === 'other')
 
   return (
-    <AppShell user={user} csrf={csrf} active="finance">
+    <AppShell
+      user={user}
+      csrf={csrf}
+      active="finance"
+      action={
+        <Link href="/finance/new">
+          <Button size="sm">+ New invoice</Button>
+        </Link>
+      }
+    >
       {rows.length === 0 ? (
-        <EmptyState title="No invoices yet" description="Invoices raised on a job appear here." />
+        <EmptyState title="No invoices yet" description="Create one with + New invoice, or raise it from a job." />
       ) : (
         <div>
           <BoardGroup title="Outstanding" count={outstanding.length} spine="border-l-lost-ink" head={HEAD}>
