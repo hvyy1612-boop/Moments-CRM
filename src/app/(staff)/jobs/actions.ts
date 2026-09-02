@@ -260,6 +260,7 @@ export async function createInvoiceLinesAction(
     poNumber: formData.get('poNumber') ?? '',
     notes: formData.get('notes') ?? '',
     discount: formData.get('discount') ?? '',
+    discountReason: formData.get('discountReason') ?? '',
     lines,
     instalments,
   })
@@ -305,6 +306,7 @@ export async function updateInvoiceLinesAction(
     poNumber: formData.get('poNumber') ?? '',
     notes: formData.get('notes') ?? '',
     discount: formData.get('discount') ?? '',
+    discountReason: formData.get('discountReason') ?? '',
     lines,
     instalments,
   })
@@ -348,6 +350,7 @@ export async function saveInvoiceContentAction(
     poNumber: formData.get('poNumber') ?? '',
     notes: formData.get('notes') ?? '',
     discount: formData.get('discount') ?? '',
+    discountReason: formData.get('discountReason') ?? '',
     lines,
     instalments,
   })

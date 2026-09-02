@@ -144,7 +144,7 @@ export async function createInvoiceWithLines(
         if (discount.greaterThan(0)) {
           lineData.push({
             itemName: 'Discount',
-            description: '',
+            description: input.discountReason?.trim() || '',
             quantity: 1,
             unitPrice: discount.negated(),
             discount: new Prisma.Decimal(0),
@@ -258,7 +258,7 @@ export async function updateInvoiceWithLines(
     if (discount.greaterThan(0)) {
       lineData.push({
         itemName: 'Discount',
-        description: '',
+        description: input.discountReason?.trim() || '',
         quantity: 1,
         unitPrice: discount.negated(),
         discount: new Prisma.Decimal(0),

@@ -40,6 +40,7 @@ export const createInvoiceLinesSchema = z.object({
   poNumber: z.string().trim().max(60).optional().or(z.literal('')),
   notes: z.string().trim().max(2000).optional().or(z.literal('')),
   discount: money.optional().or(z.literal('')),
+  discountReason: z.string().trim().max(100).optional().or(z.literal('')),
   lines: z.array(invoiceLine).min(1, 'Add at least one item.').max(50),
   instalments: z.array(instalment).max(12).optional(),
 })
