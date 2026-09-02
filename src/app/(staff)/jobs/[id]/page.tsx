@@ -123,6 +123,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const isConfirmed = (['CONFIRMED', 'IN_PRODUCTION', 'COMPLETED'] as const).some(
     (s) => s === project.lifecycleStatus,
   )
+  // Invoicing is allowed at any active stage (SN-style); only closed jobs are excluded.
+  const canInvoice = project.lifecycleStatus !== 'CANCELLED' && project.lifecycleStatus !== 'LOST'
 
   const resources = isConfirmed
     ? await prisma.resource.findMany({
@@ -450,7 +452,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           </section>
         ) : null}
 
-        {isConfirmed ? (
+        {canInvoice ? (
           <section className="mt-6 rounded border border-line bg-surface p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>

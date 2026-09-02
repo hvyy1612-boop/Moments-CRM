@@ -51,11 +51,8 @@ export async function createInvoice(
           },
         })
         if (!project) throw new Error('Project not found.')
-        if (
-          project.lifecycleStatus !== 'CONFIRMED' &&
-          project.lifecycleStatus !== 'IN_PRODUCTION'
-        ) {
-          throw new Error('Confirm the project (sign the contract) before invoicing.')
+        if (project.lifecycleStatus === 'CANCELLED' || project.lifecycleStatus === 'LOST') {
+          throw new Error('This job is closed. Reopen it before invoicing.')
         }
 
         const invoice = await tx.invoice.create({
@@ -147,8 +144,8 @@ export async function createInvoiceWithLines(
           select: { id: true, lifecycleStatus: true, client: { select: { displayName: true, email: true } } },
         })
         if (!project) throw new Error('Project not found.')
-        if (project.lifecycleStatus !== 'CONFIRMED' && project.lifecycleStatus !== 'IN_PRODUCTION') {
-          throw new Error('Confirm the project (sign the contract) before invoicing.')
+        if (project.lifecycleStatus === 'CANCELLED' || project.lifecycleStatus === 'LOST') {
+          throw new Error('This job is closed. Reopen it before invoicing.')
         }
 
         const lineData = input.lines.map((l, i) => ({
