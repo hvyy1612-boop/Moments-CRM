@@ -16,6 +16,9 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/api/cron/daily': { secret: true },
   '/api/calendar/feed': { token: true },
 
+  '/api/auth/google': { public: true },
+  '/api/auth/google/callback': { public: true },
+
   '/login': { public: true },
   '/register': { public: true },
   '/forgot': { public: true },
@@ -29,7 +32,6 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/jobs/[id]/invoice/[invoiceId]': { roles: ['ADMIN', 'STUDIO'] },
   '/finance/new': { roles: ['ADMIN', 'STUDIO'] },
   '/finance/[invoiceId]': { roles: ['ADMIN', 'STUDIO'] },
-  '/finance/[invoiceId]/edit': { roles: ['ADMIN', 'STUDIO'] },
   '/clients': { roles: ['ADMIN', 'STUDIO'] },
   '/clients/new': { roles: ['ADMIN', 'STUDIO'] },
   '/clients/[id]': { roles: ['ADMIN', 'STUDIO'] },
