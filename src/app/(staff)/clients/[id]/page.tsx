@@ -447,7 +447,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                       <div className="flex shrink-0 items-center gap-3">
                         <span className="tabular text-sm text-ink">{formatAud(inv.total)}</span>
                         <Link href={`/jobs/${inv.project.id}/invoice/${inv.id}`} target="_blank" className="text-sm font-bold text-accent hover:underline">View</Link>
-                        <Link href={`/jobs/${inv.project.id}#finance`} className="text-sm text-ink-muted hover:text-ink">Manage</Link>
+                        <Link href={`/finance/${inv.id}`} className="text-sm text-ink-muted hover:text-ink">Manage</Link>
                       </div>
                     </li>
                   ))}

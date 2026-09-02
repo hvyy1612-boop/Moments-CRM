@@ -49,7 +49,7 @@ export type InvoiceView = {
   instalments: InvoiceInstalmentView[]
 }
 
-function RecordPaymentForm({
+export function RecordPaymentForm({
   csrf,
   projectId,
   invoiceId,

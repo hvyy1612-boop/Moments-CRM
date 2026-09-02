@@ -364,6 +364,8 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
     // A double submit ("already issued") is a no-op here; the re-render shows the real state.
   }
   revalidatePath(`/jobs/${projectId}`)
+  revalidatePath('/finance')
+  revalidatePath(`/finance/${invoiceId}`)
 }
 
 /** Record a manual payment against an invoice. */
@@ -393,6 +395,8 @@ export async function recordPaymentAction(
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not record the payment.' }
   }
   revalidatePath(`/jobs/${projectId}`)
+  revalidatePath('/finance')
+  revalidatePath(`/finance/${invoiceId}`)
   return { status: 'success' }
 }
 
