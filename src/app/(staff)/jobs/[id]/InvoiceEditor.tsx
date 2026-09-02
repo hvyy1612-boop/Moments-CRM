@@ -221,7 +221,7 @@ export function InvoiceEditor({
 
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             <div className="rounded-md border border-line bg-surface p-4">
-              <div className="text-xs font-bold uppercase tracking-wide text-muted">Invoice</div>
+              <div className="text-xs font-bold uppercase tracking-wide text-muted">Invoice details</div>
               <div className="mt-3 flex flex-col gap-3">
                 <label className="flex flex-col text-xs text-ink-muted">Type
                   <Select name="type" defaultValue={initial?.type ?? 'DEPOSIT'} className="mt-1 h-9">
@@ -247,7 +247,7 @@ export function InvoiceEditor({
             </div>
 
             <div className="rounded-md border border-line bg-surface p-4">
-              <div className="text-xs font-bold uppercase tracking-wide text-muted">Job</div>
+              <div className="text-xs font-bold uppercase tracking-wide text-muted">Job details</div>
               <div className="mt-3 flex flex-col gap-2 text-sm">
                 <div className="font-medium text-ink">{job?.name}</div>
                 {job?.type ? <div><span className="text-ink-muted">Type</span> · <span className="text-ink">{job.type}</span></div> : null}
@@ -287,8 +287,9 @@ export function InvoiceEditor({
           </div>
         )}
 
-        {/* Products & Packages */}
-        <div>
+        {/* Products & Packages (table left, totals right) */}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-semibold text-ink">Products &amp; packages</p>
             {templates.length > 0 ? (
@@ -378,18 +379,19 @@ export function InvoiceEditor({
           </div>
         </div>
 
-        {/* Totals */}
-        <div className="ml-auto w-full max-w-xs border-t border-line pt-2 text-sm">
+        {/* Totals (right column) */}
+        <div className="w-full rounded-md border border-line bg-surface p-4 text-sm lg:w-72 lg:shrink-0">
           <div className="flex justify-between py-0.5 text-ink-muted"><span>Subtotal (excl. GST)</span><span className="tabular">{money(subtotal)}</span></div>
           <div className="flex justify-between py-0.5 text-ink-muted"><span>GST (10%)</span><span className="tabular">{money(gst)}</span></div>
           {disc > 0 ? <div className="flex justify-between py-0.5 text-ink-muted"><span>Discount</span><span className="tabular">-{money(disc)}</span></div> : null}
-          <div className="mt-1 flex justify-between border-t border-line pt-1 font-semibold text-ink"><span>Total (incl. GST)</span><span className="tabular">{money(total)}</span></div>
+          <div className="mt-1 flex justify-between border-t border-line pt-2 text-base font-semibold text-ink"><span>Total (incl. GST)</span><span className="tabular">{money(total)}</span></div>
           {workspace ? (
             <>
-              <div className="flex justify-between py-0.5 text-ink-muted"><span>Paid</span><span className="tabular text-delivered-ink">{money(paidNum)}</span></div>
+              <div className="mt-1 flex justify-between py-0.5 text-ink-muted"><span>Paid</span><span className="tabular text-delivered-ink">{money(paidNum)}</span></div>
               <div className="flex justify-between py-0.5 font-semibold text-ink"><span>Balance</span><span className="tabular">{money(Math.max(total - paidNum, 0))}</span></div>
             </>
           ) : null}
+        </div>
         </div>
 
         {/* Payment schedule */}

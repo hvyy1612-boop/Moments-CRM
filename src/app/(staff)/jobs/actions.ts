@@ -22,6 +22,7 @@ import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/cont
 import { addGalleryItem, createGallery, publishGallery } from '@/lib/domain/delivery'
 import { createInvoice, createInvoiceWithLines, deleteInvoice, issueInvoice, recordPayment, saveInvoiceTemplate, updateInvoiceWithLines, voidInvoice } from '@/lib/domain/finance'
 import { refundPayment } from '@/lib/domain/refund'
+import { createPackage } from '@/lib/domain/package'
 import { createQuote, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 import { createQuestionnaire } from '@/lib/domain/questionnaire'
 import { sendContractEmail, sendQuoteEmail } from '@/lib/email'
@@ -320,6 +321,49 @@ export async function updateInvoiceLinesAction(
   redirect(`/finance/${invoiceId}`)
 }
 
+export async function saveInvoiceContentAction(
+  _prev: QuoteActionState,
+  formData: FormData,
+): Promise<QuoteActionState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  const user = await requireStaff()
+  const invoiceId = String(formData.get('invoiceId') ?? '')
+  if (!invoiceId) return { status: 'error', message: 'Missing invoice.' }
+
+  let lines: unknown = []
+  let instalments: unknown = []
+  try {
+    lines = JSON.parse(String(formData.get('lines') ?? '[]'))
+    instalments = JSON.parse(String(formData.get('instalments') ?? '[]'))
+  } catch {
+    return { status: 'error', message: 'Could not read the invoice items.' }
+  }
+  const parsed = createInvoiceLinesSchema.safeParse({
+    type: formData.get('type') ?? '',
+    invoiceNumber: formData.get('invoiceNumber') ?? '',
+    invoiceDate: formData.get('invoiceDate') ?? '',
+    poNumber: formData.get('poNumber') ?? '',
+    notes: formData.get('notes') ?? '',
+    discount: formData.get('discount') ?? '',
+    lines,
+    instalments,
+  })
+  if (!parsed.success) {
+    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the invoice.' }
+  }
+  try {
+    await updateInvoiceWithLines(invoiceId, parsed.data, user.id)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not save the invoice.' }
+  }
+  revalidatePath('/finance')
+  revalidatePath(`/finance/${invoiceId}`)
+  return { status: 'success' }
+}
+
 export async function refundPaymentAction(
   _prev: QuoteActionState,
   formData: FormData,
@@ -395,6 +439,18 @@ export async function saveInvoiceTemplateAction(formData: FormData): Promise<voi
   )
   const projectId = String(formData.get('projectId') ?? '')
   if (projectId) revalidatePath(`/jobs/${projectId}`)
+}
+
+export async function saveReusableItemAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const name = String(formData.get('name') ?? '').trim()
+  const price = String(formData.get('unitPrice') ?? '').trim()
+  if (!name || !/^\d+(\.\d{1,2})?$/.test(price)) return
+  const description = String(formData.get('description') ?? '').trim()
+  await createPackage({ name, inclusions: description || null, basePriceInclGst: price }, user.id)
+  revalidatePath('/finance')
 }
 
 export async function createInvoiceAction(
