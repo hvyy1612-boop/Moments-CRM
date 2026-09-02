@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
-import { Field, Select, Textarea, TextInput } from '@/components/ui/form'
-import { recordPaymentAction, saveInvoiceContentAction, type QuoteActionState } from '../../jobs/actions'
+import { Checkbox, Field, Select, Textarea, TextInput } from '@/components/ui/form'
+import { recordPaymentAction, saveInvoiceContentAction, saveReusableItemAction, type QuoteActionState } from '../../jobs/actions'
 import { RefundButton } from './RefundButton'
 
 const IDLE: QuoteActionState = { status: 'idle' }
@@ -73,6 +73,7 @@ export function InvoiceWorkspace(props: {
   const [itemEditId, setItemEditId] = useState<number | null>(null)
   const [withPackages, setWithPackages] = useState(true)
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
+  const [saveReuse, setSaveReuse] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [showDiscount, setShowDiscount] = useState(Number(initial.discount) > 0)
 
@@ -123,8 +124,13 @@ export function InvoiceWorkspace(props: {
   }
 
   // ---- item actions ----
-  function openAdd(pkg: boolean) { setItemEditId(null); setWithPackages(pkg); setDraft(EMPTY_DRAFT); setItemOpen(true); setAddMenu(false) }
-  function openEdit(l: Line) { setItemEditId(l.id); setWithPackages(true); setDraft({ name: l.name, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: l.discount }); setItemOpen(true) }
+  function openAdd(pkg: boolean, note = false) { setItemEditId(null); setWithPackages(pkg); setSaveReuse(false); setDraft(note ? { ...EMPTY_DRAFT, unitPrice: '0' } : EMPTY_DRAFT); setItemOpen(true); setAddMenu(false) }
+  function openEdit(l: Line) { setItemEditId(l.id); setWithPackages(true); setSaveReuse(false); setDraft({ name: l.name, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: l.discount }); setItemOpen(true) }
+  function addQuick(id: string) {
+    const p = packages.find((x) => x.id === id); if (!p) return
+    const nLines = [...lines, { id: nextId, name: p.name, description: [p.description, p.inclusions].filter(Boolean).join('\n'), quantity: 1, unitPrice: p.price, discount: '' }]
+    setNextId((n) => n + 1); setLines(nLines); setAddMenu(false); persist({ lines: nLines })
+  }
   function choosePackage(id: string) {
     const p = packages.find((x) => x.id === id); if (!p) return
     setDraft((d) => ({ ...d, name: p.name, description: [p.description, p.inclusions].filter(Boolean).join('\n'), unitPrice: p.price }))
@@ -135,6 +141,11 @@ export function InvoiceWorkspace(props: {
       ? [...lines, { id: nextId, ...draft }]
       : lines.map((l) => (l.id === itemEditId ? { ...l, ...draft } : l))
     if (itemEditId === null) setNextId((n) => n + 1)
+    if (saveReuse && /^\d+(\.\d{1,2})?$/.test(draft.unitPrice.trim())) {
+      const rfd = new FormData()
+      rfd.set('csrf', csrf); rfd.set('name', draft.name); rfd.set('description', draft.description); rfd.set('unitPrice', draft.unitPrice)
+      void saveReusableItemAction(rfd)
+    }
     setLines(nLines); setItemOpen(false); persist({ lines: nLines })
   }
   function duplicate(id: number) {
@@ -227,9 +238,22 @@ export function InvoiceWorkspace(props: {
                   <svg {...svg} className="h-3.5 w-3.5"><path d="m6 9 6 6 6-6" /></svg>
                 </Button>
                 {addMenu ? (
-                  <div className="absolute right-0 top-full z-10 mt-1 w-52 overflow-hidden rounded-md border border-line bg-surface py-1 shadow-lg">
+                  <div className="absolute right-0 top-full z-20 mt-1 w-72 overflow-hidden rounded-md border border-line bg-surface py-1 shadow-lg">
+                    {packages.length > 0 ? (
+                      <div className="border-b border-line pb-2">
+                        <div className="px-3 pb-1 pt-2 text-xs font-bold uppercase tracking-wide text-muted">Quick add</div>
+                        <div className="flex flex-wrap gap-1.5 px-3">
+                          {packages.slice(0, 6).map((p) => (
+                            <button key={p.id} type="button" onClick={() => addQuick(p.id)} className="rounded-full border border-line px-2.5 py-1 text-xs text-ink hover:border-accent hover:text-accent-ink">{p.name}</button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="px-3 pb-1 pt-2 text-xs font-bold uppercase tracking-wide text-muted">From catalogue</div>
                     <button type="button" onClick={() => openAdd(true)} className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper">Product or package</button>
+                    <div className="mt-1 border-t border-line px-3 pb-1 pt-2 text-xs font-bold uppercase tracking-wide text-muted">One-off</div>
                     <button type="button" onClick={() => openAdd(false)} className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper">Custom charge</button>
+                    <button type="button" onClick={() => openAdd(false, true)} className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper">Custom text / note</button>
                     <button type="button" onClick={() => { setShowDiscount(true); setAddMenu(false) }} className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper">Discount</button>
                   </div>
                 ) : null}
@@ -389,6 +413,8 @@ export function InvoiceWorkspace(props: {
                 <Field label="Unit price" htmlFor="ws-unit"><TextInput id="ws-unit" inputMode="decimal" value={draft.unitPrice} onChange={(e) => setDraft((d) => ({ ...d, unitPrice: e.target.value }))} placeholder="0.00" /></Field>
                 <Field label="Discount" htmlFor="ws-disc"><TextInput id="ws-disc" inputMode="decimal" value={draft.discount} onChange={(e) => setDraft((d) => ({ ...d, discount: e.target.value }))} placeholder="0.00" /></Field>
               </div>
+              <Checkbox label="Save this item to the catalogue for reuse" checked={saveReuse} onChange={(e) => setSaveReuse(e.target.checked)} />
+              <p className="text-xs text-ink-muted">Changes apply to this invoice only - the original package is not changed.</p>
               <div className="flex items-center justify-between border-t border-line pt-3">
                 <span className="text-sm text-ink-muted">Amount <span className="tabular ml-1 font-semibold text-ink">{money(amountOf(draft))}</span></span>
                 <div className="flex items-center gap-2">

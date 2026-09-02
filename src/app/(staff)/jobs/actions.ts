@@ -22,6 +22,7 @@ import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/cont
 import { addGalleryItem, createGallery, publishGallery } from '@/lib/domain/delivery'
 import { createInvoice, createInvoiceWithLines, deleteInvoice, issueInvoice, recordPayment, saveInvoiceTemplate, updateInvoiceWithLines, voidInvoice } from '@/lib/domain/finance'
 import { refundPayment } from '@/lib/domain/refund'
+import { createPackage } from '@/lib/domain/package'
 import { createQuote, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 import { createQuestionnaire } from '@/lib/domain/questionnaire'
 import { sendContractEmail, sendQuoteEmail } from '@/lib/email'
@@ -453,6 +454,19 @@ export async function saveInvoiceTemplateAction(formData: FormData): Promise<voi
   )
   const projectId = String(formData.get('projectId') ?? '')
   if (projectId) revalidatePath(`/jobs/${projectId}`)
+}
+
+/** Save a one-off custom charge back to the reusable package catalogue ("Save this item for reuse"). */
+export async function saveReusableItemAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const name = String(formData.get('name') ?? '').trim()
+  const price = String(formData.get('unitPrice') ?? '').trim()
+  if (!name || !/^\d+(\.\d{1,2})?$/.test(price)) return
+  const description = String(formData.get('description') ?? '').trim()
+  await createPackage({ name, inclusions: description || null, basePriceInclGst: price }, user.id)
+  revalidatePath('/finance')
 }
 
 export async function createInvoiceAction(
