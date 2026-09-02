@@ -24,12 +24,12 @@ export const metadata: Metadata = { title: 'Sign in - Moments' }
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ reset?: string; registered?: string }>
+  searchParams: Promise<{ reset?: string; registered?: string; pending?: string; error?: string }>
 }) {
   const user = await getSessionUser()
   if (user) redirect('/dashboard')
 
-  const { reset, registered } = await searchParams
+  const { reset, registered, pending, error } = await searchParams
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
@@ -43,6 +43,16 @@ export default async function LoginPage({
       {registered === '1' ? (
         <Alert tone="success" title="Account created">
           An admin will approve it before you can sign in.
+        </Alert>
+      ) : null}
+      {pending === '1' ? (
+        <Alert tone="info" title="Account awaiting approval">
+          Your Google account is set up. An admin needs to approve it before you can sign in.
+        </Alert>
+      ) : null}
+      {error === 'google' ? (
+        <Alert tone="danger" title="Couldn't sign in with Google">
+          Please try again, or sign in with your email and password.
         </Alert>
       ) : null}
 
