@@ -19,7 +19,7 @@ import { statusKind, statusLabel } from '@/features/projects/lifecycle'
 import { ENQUIRY_STAGE_LABEL, ENQUIRY_STAGE_KIND, OPEN_STATUSES, waitingLabel } from '@/features/enquiries/status'
 import { currentActionText } from '@/features/enquiries/workflow'
 import { AppShell } from '../../AppShell'
-import { archiveClientAction, restoreClientAction, setClientConsentAction } from '../actions'
+import { setClientConsentAction } from '../actions'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { DeleteClientButton } from './DeleteClientButton'
 import { InvoiceActions } from './InvoiceActions'
@@ -62,17 +62,6 @@ const IconPencil = () => (
   <svg className="h-4 w-4" {...svg}>
     <path d="M4 20h4l10-10-4-4L4 16v4z" />
     <path d="m13.5 6.5 4 4" />
-  </svg>
-)
-const IconArchive = () => (
-  <svg className="h-4 w-4" {...svg}>
-    <rect x="3" y="4" width="18" height="4" rx="1" />
-    <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" />
-  </svg>
-)
-const IconRestore = () => (
-  <svg className="h-4 w-4" {...svg}>
-    <path d="M4 12a8 8 0 1 0 2.3-5.6M4 3v4h4" />
   </svg>
 )
 
@@ -355,19 +344,6 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 <Link href={`/clients/${client.id}/edit`}>
                   <Button variant="secondary" size="sm"><IconPencil /> Edit client</Button>
                 </Link>
-                {archived ? (
-                  <form action={restoreClientAction}>
-                    <input type="hidden" name="csrf" value={csrf} />
-                    <input type="hidden" name="clientId" value={client.id} />
-                    <Button variant="secondary" size="sm" type="submit"><IconRestore /> Restore</Button>
-                  </form>
-                ) : (
-                  <form action={archiveClientAction}>
-                    <input type="hidden" name="csrf" value={csrf} />
-                    <input type="hidden" name="clientId" value={client.id} />
-                    <Button variant="secondary" size="sm" type="submit"><IconArchive /> Archive</Button>
-                  </form>
-                )}
                 {user.role === 'ADMIN' ? (
                   <DeleteClientButton clientId={client.id} name={client.displayName} csrf={csrf} />
                 ) : null}
