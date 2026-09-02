@@ -199,6 +199,7 @@ export async function createInvoiceWithLines(
             taxTotal,
             total,
             invoiceDate: input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now,
+            dueAt: instalmentData.reduce<Date | null>((m, it) => (it.dueAt && (!m || it.dueAt > m) ? it.dueAt : m), null),
             poNumber: input.poNumber?.trim() || null,
             notes: input.notes?.trim() || null,
             billingNameSnapshot: project.client.displayName,
@@ -317,6 +318,7 @@ export async function updateInvoiceWithLines(
         taxTotal,
         total,
         invoiceDate: input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now,
+        dueAt: instalmentData.reduce<Date | null>((m, it) => (it.dueAt && (!m || it.dueAt > m) ? it.dueAt : m), null),
         poNumber: input.poNumber?.trim() || null,
         notes: input.notes?.trim() || null,
         lines: { create: lineData },
@@ -564,4 +566,20 @@ export async function listInvoiceTemplates(): Promise<InvoiceTemplateOption[]> {
     } catch { /* ignore malformed template */ }
     return { id: r.id, name: r.name, lines }
   })
+}
+
+/**
+ * Mark outstanding invoices OVERDUE once their due date (the last scheduled payment) has passed and
+ * they are not fully paid. Called by the daily cron. Recording a payment later flips the status back
+ * to PARTIALLY_PAID/PAID, and the next run re-marks anything still overdue.
+ */
+export async function markOverdueInvoices(now: Date = systemClock.now()) {
+  const candidates = await prisma.invoice.findMany({
+    where: { status: { in: ['ISSUED', 'SENT', 'PARTIALLY_PAID'] }, dueAt: { lt: now } },
+    select: { id: true, total: true, amountPaid: true },
+  })
+  const ids = candidates.filter((i) => i.total.greaterThan(i.amountPaid)).map((i) => i.id)
+  if (ids.length === 0) return { marked: 0 }
+  const res = await prisma.invoice.updateMany({ where: { id: { in: ids } }, data: { status: 'OVERDUE' } })
+  return { marked: res.count }
 }

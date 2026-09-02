@@ -3,6 +3,7 @@ import type { EnquiryStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { getEnquiryBoard } from '@/lib/domain/enquiry-workflow'
 import { getProjectBoard } from '@/lib/domain/project-workflow'
+import { markOverdueInvoices } from '@/lib/domain/finance'
 import { sendTaskDigestEmail } from '@/lib/email'
 import { OPEN_STATUSES } from '@/features/enquiries/status'
 import { CLOSED_STATUSES } from '@/features/projects/lifecycle'
@@ -19,6 +20,9 @@ export async function GET(req: Request): Promise<Response> {
   if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
+
+  // Flip outstanding, past-due invoices to OVERDUE before the digest runs.
+  const overdueInvoices = await markOverdueInvoices()
 
   const overdue: string[] = []
   const today: string[] = []
@@ -54,7 +58,7 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   if (overdue.length === 0 && today.length === 0) {
-    return NextResponse.json({ ok: true, sent: 0 })
+    return NextResponse.json({ ok: true, sent: 0, invoicesMarkedOverdue: overdueInvoices.marked })
   }
 
   const staff = await prisma.user.findMany({

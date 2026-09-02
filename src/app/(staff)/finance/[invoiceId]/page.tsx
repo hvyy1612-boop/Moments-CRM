@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { Prisma } from '@prisma/client'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
@@ -11,11 +12,13 @@ import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
+import { formatSydneyDate } from '@/lib/time'
 import { titleCase } from '@/lib/text'
 import { AppShell } from '../../AppShell'
 import { issueInvoiceAction } from '../../jobs/actions'
 import { RecordPaymentForm } from '../../jobs/[id]/Finance'
 import { InvoiceAdminActions } from './InvoiceAdminActions'
+import { RefundButton } from './RefundButton'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Invoice - Moments' }
@@ -42,6 +45,14 @@ export default async function InvoiceManagePage({ params }: { params: Promise<{ 
       billingNameSnapshot: true, billingEmailSnapshot: true,
       lines: { orderBy: { sortOrder: 'asc' }, select: { itemName: true, description: true, quantity: true, unitPrice: true, discount: true, lineTotal: true } },
       instalments: { orderBy: { sortOrder: 'asc' }, select: { label: true, dueAt: true, amount: true, status: true } },
+      payments: {
+        orderBy: { receivedAt: 'desc' },
+        select: {
+          id: true, amount: true, paymentMethod: true, receivedAt: true, status: true,
+          transactions: { where: { type: 'CHARGE' }, take: 1, select: { metadata: true } },
+          refunds: { where: { status: { not: 'FAILED' } }, select: { amount: true } },
+        },
+      },
       project: {
         select: {
           id: true, name: true,
@@ -52,6 +63,24 @@ export default async function InvoiceManagePage({ params }: { params: Promise<{ 
     },
   })
   if (!inv) notFound()
+
+  const paymentRows = inv.payments.map((p) => {
+    const refunded = p.refunds.reduce((s, r) => s.add(r.amount), new Prisma.Decimal(0))
+    const refundable = p.amount.sub(refunded)
+    const meta = p.transactions[0]?.metadata as Record<string, unknown> | null | undefined
+    const reference = meta && typeof meta.reference === 'string' ? meta.reference : null
+    return {
+      id: p.id,
+      dateLabel: p.receivedAt ? formatSydneyDate(p.receivedAt) : '-',
+      amountLabel: formatAud(p.amount),
+      refundedLabel: refunded.greaterThan(0) ? formatAud(refunded) : null,
+      method: titleCase(p.paymentMethod.toLowerCase().replace(/_/g, ' ')),
+      reference,
+      statusLabel: p.status.toLowerCase().replace(/_/g, ' '),
+      refundable: refundable.toString(),
+      canRefund: refundable.greaterThan(0) && inv.status !== 'VOID',
+    }
+  })
 
   const isDraft = inv.status === 'DRAFT'
   const canPay = inv.status !== 'DRAFT' && inv.status !== 'PAID' && inv.status !== 'VOID'
@@ -122,6 +151,51 @@ export default async function InvoiceManagePage({ params }: { params: Promise<{ 
             <RecordPaymentForm csrf={csrf} projectId={inv.project.id} invoiceId={inv.id} />
           </section>
         ) : null}
+
+        <section className="mt-6">
+          <div className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Payment history</div>
+          {paymentRows.length === 0 ? (
+            <p className="rounded-md border border-dashed border-line bg-surface px-4 py-6 text-center text-sm text-ink-muted">
+              No payments recorded yet.
+            </p>
+          ) : (
+            <div className="overflow-x-auto rounded-md border border-line bg-surface shadow-sm">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
+                    <th className="px-3 py-2">Date</th>
+                    <th className="px-3 py-2 text-right">Amount</th>
+                    <th className="px-3 py-2">Method</th>
+                    <th className="px-3 py-2">Reference</th>
+                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paymentRows.map((p) => (
+                    <tr key={p.id} className="border-b border-line align-top last:border-b-0">
+                      <td className="tabular px-3 py-2 text-ink-muted">{p.dateLabel}</td>
+                      <td className="tabular px-3 py-2 text-right text-ink">
+                        {p.amountLabel}
+                        {p.refundedLabel ? <div className="text-xs text-danger">-{p.refundedLabel} refunded</div> : null}
+                      </td>
+                      <td className="px-3 py-2 text-ink-muted">{p.method}</td>
+                      <td className="px-3 py-2 text-ink-muted">{p.reference ?? '-'}</td>
+                      <td className="px-3 py-2 capitalize text-ink-muted">{p.statusLabel}</td>
+                      <td className="px-3 py-2 text-right">
+                        {p.canRefund ? (
+                          <RefundButton csrf={csrf} paymentId={p.id} invoiceId={inv.id} refundable={p.refundable} />
+                        ) : (
+                          <span className="text-ink-muted">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
         <div className="mt-6 mb-2 text-xs font-bold uppercase tracking-wide text-muted">Preview</div>
       </div>

@@ -21,6 +21,7 @@ import { enquirySchema } from '@/lib/validation/enquiry'
 import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/contract'
 import { addGalleryItem, createGallery, publishGallery } from '@/lib/domain/delivery'
 import { createInvoice, createInvoiceWithLines, deleteInvoice, issueInvoice, recordPayment, saveInvoiceTemplate, updateInvoiceWithLines, voidInvoice } from '@/lib/domain/finance'
+import { refundPayment } from '@/lib/domain/refund'
 import { createQuote, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 import { createQuestionnaire } from '@/lib/domain/questionnaire'
 import { sendContractEmail, sendQuoteEmail } from '@/lib/email'
@@ -326,6 +327,31 @@ export async function updateInvoiceLinesAction(
   revalidatePath('/finance')
   revalidatePath(`/finance/${invoiceId}`)
   redirect(`/finance/${invoiceId}`)
+}
+
+/** Refund all or part of a recorded payment. Reverts the invoice balance (domain handles it). */
+export async function refundPaymentAction(
+  _prev: QuoteActionState,
+  formData: FormData,
+): Promise<QuoteActionState> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  }
+  const user = await requireStaff()
+  const paymentId = String(formData.get('paymentId') ?? '')
+  const invoiceId = String(formData.get('invoiceId') ?? '')
+  const amount = String(formData.get('amount') ?? '')
+  const reason = String(formData.get('reason') ?? '').trim() || undefined
+  if (!paymentId || !amount) return { status: 'error', message: 'Missing refund details.' }
+  try {
+    await refundPayment(paymentId, amount, { reason }, user.id)
+  } catch (error) {
+    return { status: 'error', message: error instanceof Error ? error.message : 'Could not process the refund.' }
+  }
+  revalidatePath('/finance')
+  if (invoiceId) revalidatePath(`/finance/${invoiceId}`)
+  return { status: 'success' }
 }
 
 /** Void an invoice (issued, unpaid). Refused once any payment exists (domain guards this). */
