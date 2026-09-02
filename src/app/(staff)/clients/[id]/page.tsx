@@ -20,7 +20,9 @@ import { ENQUIRY_STAGE_LABEL, ENQUIRY_STAGE_KIND, OPEN_STATUSES, waitingLabel } 
 import { currentActionText } from '@/features/enquiries/workflow'
 import { AppShell } from '../../AppShell'
 import { archiveClientAction, restoreClientAction, setClientConsentAction } from '../actions'
+import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { DeleteClientButton } from './DeleteClientButton'
+import { InvoiceActions } from './InvoiceActions'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Client - Moments' }
@@ -60,6 +62,10 @@ const IconMail = () => (
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).slice(0, 2)
   return parts.map((p) => p.charAt(0).toUpperCase()).join('') || '?'
+}
+
+const INVOICE_TONE: Record<string, Tone> = {
+  DRAFT: 'neutral', ISSUED: 'info', SENT: 'info', PARTIALLY_PAID: 'warn', PAID: 'good', OVERDUE: 'bad', VOID: 'neutral',
 }
 
 function SectionCard({
@@ -193,7 +199,15 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         status: true,
         total: true,
         amountPaid: true,
+        dueAt: true,
+        accessToken: true,
         project: { select: { id: true, code: true } },
+        instalments: {
+          where: { status: { not: 'PAID' } },
+          orderBy: { dueAt: 'asc' },
+          take: 1,
+          select: { dueAt: true },
+        },
       },
     }),
   ])
@@ -204,6 +218,43 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const invoiced = invoiceAgg._sum.total ?? new Prisma.Decimal(0)
   const paid = invoiceAgg._sum.amountPaid ?? new Prisma.Decimal(0)
   const due = invoiced.sub(paid)
+
+  const nowMs = Date.now()
+  const invoiceRows = invoiceList.map((inv) => {
+    const balance = inv.total.sub(inv.amountPaid)
+    const paidInFull = balance.lte(0)
+    const nextDueAt = inv.instalments[0]?.dueAt ?? inv.dueAt ?? null
+    let dueLabel: string
+    let overdue = false
+    if (paidInFull) {
+      dueLabel = 'Paid in full'
+    } else if (nextDueAt) {
+      const days = Math.round((nextDueAt.getTime() - nowMs) / 86_400_000)
+      const rel =
+        days < 0
+          ? `(${-days} day${days === -1 ? '' : 's'} ago)`
+          : days === 0
+            ? '(due today)'
+            : `(in ${days} day${days === 1 ? '' : 's'})`
+      dueLabel = `Next payment due ${formatSydneyDate(nextDueAt)} ${rel}`
+      overdue = days < 0
+    } else {
+      dueLabel = 'No due date set'
+    }
+    return {
+      id: inv.id,
+      number: inv.invoiceNumber,
+      code: inv.project.code,
+      projectId: inv.project.id,
+      status: inv.status,
+      totalLabel: formatAud(inv.total),
+      balanceLabel: formatAud(balance),
+      dueLabel,
+      overdue,
+      portalPath: inv.accessToken ? `/invoice/${inv.accessToken}` : null,
+      canDelete: inv.amountPaid.lte(0),
+    }
+  })
 
   return (
     <AppShell user={user} csrf={csrf} active="clients">
@@ -415,7 +466,15 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               )}
             </SectionCard>
 
-            <SectionCard title="Invoices" icon={<IconInvoice />}>
+            <SectionCard
+              title="Invoices"
+              icon={<IconInvoice />}
+              action={
+                <Link href={`/finance/new?client=${client.id}`}>
+                  <Button size="sm">+ New invoice</Button>
+                </Link>
+              }
+            >
               <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-md bg-paper p-3">
                   <div className="text-sm text-muted">Invoiced</div>
@@ -431,28 +490,45 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 </div>
               </div>
 
-              {invoiceList.length > 0 ? (
+              {invoiceRows.length > 0 ? (
                 <ul className="mt-3 flex flex-col gap-2">
-                  {invoiceList.map((inv) => (
-                    <li key={inv.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line px-3 py-2">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm text-ink">
-                          {inv.invoiceNumber} <span className="text-ink-muted">· {inv.project.code}</span>
-                        </p>
-                        <p className="text-xs capitalize text-ink-muted">
-                          {inv.status.toLowerCase().replace(/_/g, ' ')} · balance {formatAud(inv.total.sub(inv.amountPaid))}
-                        </p>
+                  {invoiceRows.map((row) => (
+                    <li key={row.id} className="flex flex-col gap-2 rounded-md border border-line px-3.5 py-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="truncate text-sm font-semibold text-ink">{row.number}</p>
+                            <StatusPill tone={INVOICE_TONE[row.status] ?? 'neutral'}>
+                              {row.status.toLowerCase().replace(/_/g, ' ')}
+                            </StatusPill>
+                          </div>
+                          <p className={`mt-1 text-xs ${row.overdue ? 'font-semibold text-danger' : 'text-ink-muted'}`}>
+                            {row.dueLabel}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="tabular text-sm font-semibold text-ink">Total {row.totalLabel}</p>
+                          <p className="tabular text-xs text-ink-muted">Balance {row.balanceLabel}</p>
+                        </div>
                       </div>
-                      <div className="flex shrink-0 items-center gap-3">
-                        <span className="tabular text-sm text-ink">{formatAud(inv.total)}</span>
-                        <Link href={`/jobs/${inv.project.id}/invoice/${inv.id}`} target="_blank" className="text-sm font-bold text-accent hover:underline">View</Link>
-                        <Link href={`/finance/${inv.id}`} className="text-sm text-ink-muted hover:text-ink">Manage</Link>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-ink-muted">{row.code}</span>
+                        <InvoiceActions
+                          csrf={csrf}
+                          invoiceId={row.id}
+                          projectId={row.projectId}
+                          clientId={client.id}
+                          viewHref={`/jobs/${row.projectId}/invoice/${row.id}`}
+                          manageHref={`/finance/${row.id}`}
+                          portalPath={row.portalPath}
+                          canDelete={row.canDelete}
+                        />
                       </div>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="mt-3 text-sm text-ink-muted">No invoices yet. Raise one from the job&apos;s Finance section.</p>
+                <p className="mt-3 text-sm text-ink-muted">No invoices yet. Use + New invoice to raise one in Payments.</p>
               )}
             </SectionCard>
 

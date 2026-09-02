@@ -39,11 +39,8 @@ export async function createInvoice(
           },
         })
         if (!project) throw new Error('Project not found.')
-        if (
-          project.lifecycleStatus !== 'CONFIRMED' &&
-          project.lifecycleStatus !== 'IN_PRODUCTION'
-        ) {
-          throw new Error('Confirm the project (sign the contract) before invoicing.')
+        if (project.lifecycleStatus === 'CANCELLED' || project.lifecycleStatus === 'LOST') {
+          throw new Error('This job is closed. Reopen it before invoicing.')
         }
 
         const invoice = await tx.invoice.create({
@@ -130,8 +127,8 @@ export async function createInvoiceWithLines(
           select: { id: true, lifecycleStatus: true, client: { select: { displayName: true, email: true } } },
         })
         if (!project) throw new Error('Project not found.')
-        if (project.lifecycleStatus !== 'CONFIRMED' && project.lifecycleStatus !== 'IN_PRODUCTION') {
-          throw new Error('Confirm the project (sign the contract) before invoicing.')
+        if (project.lifecycleStatus === 'CANCELLED' || project.lifecycleStatus === 'LOST') {
+          throw new Error('This job is closed. Reopen it before invoicing.')
         }
 
         const lineData = input.lines.map((l, i) => ({
@@ -238,6 +235,30 @@ export async function issueInvoice(invoiceId: string, actorUserId: string | null
       },
     })
     return { status: 'ISSUED' as const }
+  })
+}
+
+export async function deleteInvoice(invoiceId: string, actorUserId: string | null) {
+  return prisma.$transaction(async (tx) => {
+    const invoice = await tx.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { id: true, status: true, amountPaid: true, invoiceNumber: true },
+    })
+    if (!invoice) throw new Error('Invoice not found.')
+    if (invoice.amountPaid.gt(0) || invoice.status === 'PAID' || invoice.status === 'PARTIALLY_PAID') {
+      throw new Error('This invoice has payments recorded. Void or refund it instead of deleting.')
+    }
+    await tx.invoice.delete({ where: { id: invoiceId } })
+    await tx.auditLog.create({
+      data: {
+        action: 'invoice.deleted',
+        entityType: 'Invoice',
+        entityId: invoiceId,
+        actorUserId,
+        metadata: { invoiceNumber: invoice.invoiceNumber } as Prisma.InputJsonValue,
+      },
+    })
+    return { deleted: true as const }
   })
 }
 

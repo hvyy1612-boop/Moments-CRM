@@ -20,7 +20,7 @@ import {
 import { enquirySchema } from '@/lib/validation/enquiry'
 import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/contract'
 import { addGalleryItem, createGallery, publishGallery } from '@/lib/domain/delivery'
-import { createInvoice, createInvoiceWithLines, issueInvoice, recordPayment, saveInvoiceTemplate } from '@/lib/domain/finance'
+import { createInvoice, createInvoiceWithLines, deleteInvoice, issueInvoice, recordPayment, saveInvoiceTemplate } from '@/lib/domain/finance'
 import { createQuote, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 import { createQuestionnaire } from '@/lib/domain/questionnaire'
 import { sendContractEmail, sendQuoteEmail } from '@/lib/email'
@@ -357,6 +357,22 @@ export async function issueInvoiceAction(formData: FormData): Promise<void> {
   revalidatePath(`/jobs/${projectId}`)
   revalidatePath('/finance')
   revalidatePath(`/finance/${invoiceId}`)
+}
+
+export async function deleteInvoiceAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const invoiceId = String(formData.get('invoiceId') ?? '')
+  if (!invoiceId) return
+  await deleteInvoice(invoiceId, user.id)
+  revalidatePath('/finance')
+  const projectId = String(formData.get('projectId') ?? '')
+  if (projectId) revalidatePath(`/jobs/${projectId}`)
+  const clientId = String(formData.get('clientId') ?? '')
+  if (clientId) revalidatePath(`/clients/${clientId}`)
+  const back = String(formData.get('back') ?? '')
+  if (back) redirect(back)
 }
 
 export async function recordPaymentAction(

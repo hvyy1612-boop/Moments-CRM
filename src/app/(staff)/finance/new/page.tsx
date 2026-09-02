@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { ProjectLifecycle } from '@prisma/client'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
@@ -15,9 +15,9 @@ import { InvoiceEditor } from '../../jobs/[id]/InvoiceEditor'
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'New invoice - Moments' }
 
-const CAN_INVOICE: ProjectLifecycle[] = ['CONFIRMED', 'IN_PRODUCTION']
+const CLOSED: ProjectLifecycle[] = ['CANCELLED', 'LOST']
 
-export default async function NewInvoicePage({ searchParams }: { searchParams: Promise<{ job?: string }> }) {
+export default async function NewInvoicePage({ searchParams }: { searchParams: Promise<{ job?: string; client?: string }> }) {
   const user = await requireRole('/finance/new')
   const sp = await searchParams
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
@@ -31,38 +31,46 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
     if (!project) notFound()
     const packages = (await listActivePackages()).map((p) => ({ id: p.id, name: p.name, price: p.basePriceInclGst.toString() }))
     const templates = await listInvoiceTemplates()
-    const canInvoice = CAN_INVOICE.includes(project.lifecycleStatus)
+    const isClosed = CLOSED.includes(project.lifecycleStatus)
 
     return (
       <AppShell user={user} csrf={csrf} active="finance">
         <Link href="/finance" className="text-sm font-bold text-accent hover:underline">&lt;- Payments</Link>
         <h1 className="mt-2 font-serif text-2xl font-semibold text-ink">New invoice</h1>
         <p className="mt-1 text-sm text-ink-muted">{project.client.displayName} · {project.name} ({project.code})</p>
-        {canInvoice ? (
-          <InvoiceEditor csrf={csrf} projectId={project.id} packages={packages} templates={templates} />
-        ) : (
+        {isClosed ? (
           <p className="mt-4 rounded-md border border-dashed border-line bg-surface px-4 py-6 text-sm text-ink-muted">
-            Confirm the job (sign the contract) before invoicing. Current status: {titleCase(project.lifecycleStatus.replace(/_/g, ' '))}.
+            This job is closed ({titleCase(project.lifecycleStatus.replace(/_/g, ' '))}). Reopen it before invoicing.
           </p>
+        ) : (
+          <InvoiceEditor csrf={csrf} projectId={project.id} packages={packages} templates={templates} />
         )}
       </AppShell>
     )
   }
 
   const jobs = await prisma.project.findMany({
-    where: { lifecycleStatus: { in: CAN_INVOICE } },
+    where: { lifecycleStatus: { notIn: CLOSED }, archivedAt: null, ...(sp.client ? { clientId: sp.client } : {}) },
     orderBy: { updatedAt: 'desc' },
     select: { id: true, name: true, code: true, client: { select: { displayName: true } } },
   })
+
+  if (sp.client && jobs.length === 1 && jobs[0]) {
+    redirect(`/finance/new?job=${jobs[0].id}`)
+  }
+
+  const clientName = sp.client ? jobs[0]?.client.displayName : null
 
   return (
     <AppShell user={user} csrf={csrf} active="finance">
       <Link href="/finance" className="text-sm font-bold text-accent hover:underline">&lt;- Payments</Link>
       <h1 className="mt-2 font-serif text-2xl font-semibold text-ink">New invoice</h1>
-      <p className="mt-1 text-sm text-ink-muted">Choose a confirmed job to invoice.</p>
+      <p className="mt-1 text-sm text-ink-muted">{clientName ? `Choose a job for ${clientName} to invoice.` : 'Choose a job to invoice.'}</p>
       {jobs.length === 0 ? (
         <p className="mt-4 rounded-md border border-dashed border-line bg-surface px-4 py-6 text-center text-sm text-ink-muted">
-          No confirmed jobs yet. A job can be invoiced once the contract is signed.
+          {sp.client
+            ? 'This client has no active jobs. Create a job (or convert an enquiry) first, then invoice it here.'
+            : 'No jobs yet. Create a job (or convert an enquiry) first, then invoice it here.'}
         </p>
       ) : (
         <ul className="mt-4 flex flex-col gap-2">

@@ -122,6 +122,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     (s) => s === project.lifecycleStatus,
   )
 
+  const canInvoice = project.lifecycleStatus !== 'CANCELLED' && project.lifecycleStatus !== 'LOST'
+
   const resources = isConfirmed
     ? await prisma.resource.findMany({
         where: { companyId: project.companyId, status: 'active' },
@@ -448,7 +450,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           </section>
         ) : null}
 
-        {isConfirmed ? (
+        {canInvoice ? (
           <section className="mt-6 rounded border border-line bg-surface p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
