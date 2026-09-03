@@ -28,6 +28,9 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/register': { public: true },
   '/forgot': { public: true },
   '/reset/[token]': { public: true },
+  // First-run profile step after Google sign-in: any signed-in staff member, before they pick up a
+  // full role-gated area. No admin approval - access is gated by the Google Test users list.
+  '/onboarding': { roles: ['ADMIN', 'STUDIO', 'EDITOR'] },
   // Staff workspace: the dashboard, enquiries, projects, and the project detail.
   '/dashboard': { roles: ['ADMIN', 'STUDIO'] },
   '/enquiries': { roles: ['ADMIN', 'STUDIO'] },

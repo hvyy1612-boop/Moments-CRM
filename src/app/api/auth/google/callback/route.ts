@@ -16,14 +16,19 @@ import { requestMeta } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
-const USER_SELECT = { id: true, isActive: true, googleSub: true, lockedUntil: true } as const
+const USER_SELECT = { id: true, isActive: true, status: true, googleSub: true, lockedUntil: true } as const
 
 /**
  * Google sign-in callback (§8.5, BR-G). Verifies state + PKCE (BR-G09), exchanges the code and
- * requires a Google-verified email (BR-G01). An unknown email becomes a PENDING account awaiting the
- * same admin approval as self-registration; a known active account gets a normal session with the
- * standard lifetimes (BR-G08). Roles come from our own record, never from Google (BR-G04); the
- * account lockout applies here too (BR-G12); and only the subject id is stored, never a token (BR-G03).
+ * requires a Google-verified email (BR-G01).
+ *
+ * Staff self-onboard: a Google-verified account is created ACTIVE (no admin approval) and sent to
+ * /onboarding to set their display name; a returning account gets a normal session straight to the
+ * dashboard. Access is gated UPSTREAM by the Google "Test users" list - keep the OAuth app in Testing
+ * mode with only staff listed, so an arbitrary Google account can never reach this callback. Roles
+ * come from our own record, never from Google (BR-G04); the account lockout applies here too
+ * (BR-G12); only the subject id is stored, never a token (BR-G03). A deliberately disabled/rejected
+ * account (isActive=false with a non-PENDING status) stays blocked - Google never re-enables it.
  */
 export async function GET(request: NextRequest) {
   const origin = request.nextUrl.origin
@@ -49,6 +54,36 @@ export async function GET(request: NextRequest) {
       },
     })
 
+  // Issue a fresh session for the user and redirect. Rotates any existing session first (SEC-S03).
+  const signIn = async (userId: string, email: string, destination: string) => {
+    const previous = request.cookies.get(SESSION_COOKIE)?.value
+    if (previous) await revokeSessionByToken(previous)
+    const session = await createSession(userId, {
+      userAgent: meta.userAgent,
+      ipAddress: meta.ipAddress,
+      remember: false,
+    })
+    await prisma.user.update({ where: { id: userId }, data: { lastLoginAt: new Date() } })
+    await prisma.signInLog.create({
+      data: {
+        eventType: 'google_login_success',
+        userId,
+        emailAttempted: email,
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+        outcome: 'SUCCESS',
+      },
+    })
+    const res = clearTemp(NextResponse.redirect(new URL(destination, origin)))
+    res.cookies.set(SESSION_COOKIE, session.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+    })
+    return res
+  }
+
   const params = request.nextUrl.searchParams
   const code = params.get('code')
   const returnedState = params.get('state')
@@ -73,8 +108,9 @@ export async function GET(request: NextRequest) {
     (await prisma.user.findUnique({ where: { googleSub: identity.sub }, select: USER_SELECT })) ??
     (await prisma.user.findUnique({ where: { email: identity.email }, select: USER_SELECT }))
 
-  // Unknown Google account -> create a PENDING record and wait for admin approval (same gate as
-  // self-registration). It gets an unusable random password; Google is its way in once approved.
+  // Unknown Google account -> self-onboard: create an ACTIVE staff account (no admin approval) and
+  // send them to /onboarding to set their name. It gets an unusable random password; Google is its
+  // way in. (Gated upstream by the Google Test users list - see the file header.)
   if (!existing) {
     const unusable = await hashPassword(randomBytes(32).toString('base64url'))
     let newUserId = ''
@@ -89,8 +125,8 @@ export async function GET(request: NextRequest) {
           passwordHash: unusable.hash,
           passwordAlgo: unusable.algo,
           role: 'STUDIO',
-          isActive: false,
-          status: 'PENDING',
+          isActive: true,
+          status: 'ACTIVE',
         },
       })
       newUserId = created.id
@@ -104,17 +140,7 @@ export async function GET(request: NextRequest) {
         },
       })
     })
-    await prisma.signInLog.create({
-      data: {
-        eventType: 'google_login_pending',
-        userId: newUserId,
-        emailAttempted: identity.email,
-        ipAddress: meta.ipAddress,
-        userAgent: meta.userAgent,
-        outcome: 'FAILURE',
-      },
-    })
-    return toLogin('?pending=1')
+    return signIn(newUserId, identity.email, '/onboarding')
   }
 
   // A different Google account already claims this person's email row: refuse rather than relink.
@@ -129,43 +155,25 @@ export async function GET(request: NextRequest) {
     return toLogin('?error=google')
   }
 
-  // Known but not yet approved (PENDING / REJECTED): same await-approval outcome, no session.
+  // Inactive account: a never-activated one (status PENDING - e.g. an older Google sign-up made under
+  // the previous admin-approval model) now self-onboards; a deliberately disabled/rejected one stays
+  // blocked so Google can never re-enable someone an admin turned off.
   if (!existing.isActive) {
-    await logFailure(existing.id)
-    return toLogin('?pending=1')
+    if (existing.status !== 'PENDING') {
+      await logFailure(existing.id)
+      return toLogin('?error=google')
+    }
+    await prisma.user.update({
+      where: { id: existing.id },
+      data: { isActive: true, status: 'ACTIVE', googleSub: existing.googleSub ?? identity.sub },
+    })
+    return signIn(existing.id, identity.email, '/onboarding')
   }
 
-  // First Google sign-in for a password account with this verified email: link the subject id.
+  // Active account. First Google sign-in for a password account with this verified email: link the
+  // subject id, then straight to the dashboard.
   if (!existing.googleSub) {
     await prisma.user.update({ where: { id: existing.id }, data: { googleSub: identity.sub } })
   }
-
-  // Success: rotate the old session (SEC-S03) and issue a new one with the standard lifetimes.
-  const previous = request.cookies.get(SESSION_COOKIE)?.value
-  if (previous) await revokeSessionByToken(previous)
-  const session = await createSession(existing.id, {
-    userAgent: meta.userAgent,
-    ipAddress: meta.ipAddress,
-    remember: false,
-  })
-  await prisma.user.update({ where: { id: existing.id }, data: { lastLoginAt: new Date() } })
-  await prisma.signInLog.create({
-    data: {
-      eventType: 'google_login_success',
-      userId: existing.id,
-      emailAttempted: identity.email,
-      ipAddress: meta.ipAddress,
-      userAgent: meta.userAgent,
-      outcome: 'SUCCESS',
-    },
-  })
-
-  const res = clearTemp(NextResponse.redirect(new URL('/dashboard', origin)))
-  res.cookies.set(SESSION_COOKIE, session.token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    path: '/',
-  })
-  return res
+  return signIn(existing.id, identity.email, '/dashboard')
 }
