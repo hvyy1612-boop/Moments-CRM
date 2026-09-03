@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { getSessionUser } from '@/lib/auth/guard'
 import { WelcomeHero } from '@/features/landing/components/WelcomeHero'
-import { WorkspaceHighlights } from '@/features/landing/components/WorkspaceHighlights'
 
 export const runtime = 'nodejs'
 
@@ -13,9 +12,16 @@ export default async function LandingPage() {
   if (user) redirect('/dashboard')
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col items-center justify-center px-4 py-12">
-      <WelcomeHero />
-      <WorkspaceHighlights />
+    <main className="flex min-h-screen flex-col bg-paper">
+      <section className="flex flex-1 flex-col items-center justify-center px-6 py-16 sm:py-20">
+        <WelcomeHero />
+      </section>
+      <div
+        role="img"
+        aria-label="A bride and groom dancing together on their wedding day"
+        style={{ backgroundImage: 'url(/landing/hero.jpg)' }}
+        className="h-[42vh] w-full bg-sunk bg-cover bg-center sm:h-[52vh]"
+      />
     </main>
   )
 }

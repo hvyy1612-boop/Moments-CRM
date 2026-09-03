@@ -1,12 +1,19 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import { Poppins } from 'next/font/google'
+import { Poppins, Bodoni_Moda } from 'next/font/google'
 import './globals.css'
 
 const poppins = Poppins({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
   variable: '--font-poppins',
+  display: 'swap',
+})
+
+const bodoni = Bodoni_Moda({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-bodoni',
   display: 'swap',
 })
 
@@ -19,7 +26,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en-AU" className={poppins.variable}>
+    <html lang="en-AU" className={`${poppins.variable} ${bodoni.variable}`}>
       <body>{children}</body>
     </html>
   )

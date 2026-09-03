@@ -28,7 +28,7 @@ export type InvoiceDoc = {
   }
 }
 
-const PAGE_CSS = '@media print{@page{size:A4;margin:12mm}.inv-doc{box-shadow:none!important}}'
+const PAGE_CSS = '@media print{@page{size:A4;margin:10mm}.inv-doc{box-shadow:none!important}}'
 
 function text(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
@@ -84,16 +84,16 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
   const badge = status === 'PAID' ? 'Paid in full' : status === 'VOID' ? 'Void' : null
 
   return (
-    <div className="inv-doc mx-auto w-full max-w-[210mm] rounded-md border border-line bg-surface p-[14mm] text-ink shadow-sm print:max-w-none print:rounded-none print:border-0 print:p-0 print:shadow-none">
+    <div className="inv-doc mx-auto w-full max-w-[210mm] rounded-md border border-line bg-surface p-[12mm] text-ink shadow-sm print:max-w-none print:rounded-none print:border-0 print:p-0 print:shadow-none">
       {/* Header: wordmark | TAX INVOICE + meta */}
-      <div className="flex flex-wrap items-start justify-between gap-6 border-b border-line-strong pb-6">
+      <div className="flex flex-wrap items-start justify-between gap-6 border-b border-line-strong pb-3">
         <div>
           <div className="text-3xl font-semibold uppercase leading-none tracking-tight text-ink">{markPrimary}</div>
           {markSecondary ? <div className="mt-1 text-xs font-medium uppercase tracking-[0.34em] text-accent">{markSecondary}</div> : null}
         </div>
         <div className="min-w-[62mm] text-right">
           <div className="text-xl font-semibold uppercase tracking-[0.14em] text-ink">Tax Invoice</div>
-          <div className="mt-3 space-y-1 text-sm">
+          <div className="mt-2 space-y-0.5 text-sm">
             <Field label="Invoice no.">{invoice.invoiceNumber}</Field>
             <Field label="Issue date">{formatSydneyDate(invoice.invoiceDate ?? new Date())}</Field>
             {invoice.dueAt ? <Field label="Due date">{formatSydneyDate(invoice.dueAt)}</Field> : null}
@@ -106,7 +106,7 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
       </div>
 
       {/* FROM / BILL TO / JOB DETAILS */}
-      <div className="grid grid-cols-1 gap-6 border-b border-line py-6 text-sm sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 border-b border-line py-3 text-sm sm:grid-cols-3">
         <div className="min-w-0 break-words">
           <div className="text-xs font-semibold uppercase tracking-wide text-muted">From</div>
           <div className="mt-2 font-semibold text-ink">{co.name}</div>
@@ -144,23 +144,23 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
           in a fixed table the separation between them comes from column width, not from padding, so
           large values like $12,500.00 never collide. Uniform vertical padding keeps every row's
           first line on one baseline. */}
-      <table className="mt-6 w-full table-fixed border-collapse text-sm">
+      <table className="mt-4 w-full table-fixed border-collapse text-sm">
         <colgroup>
           <col style={{ width: '18%' }} />
-          <col style={{ width: '32%' }} />
-          <col style={{ width: '7%' }} />
+          <col style={{ width: '31%' }} />
+          <col style={{ width: '6%' }} />
           <col style={{ width: '15%' }} />
-          <col style={{ width: '13%' }} />
+          <col style={{ width: '15%' }} />
           <col style={{ width: '15%' }} />
         </colgroup>
         <thead>
           <tr className="border-y border-line-strong text-xs font-bold uppercase tracking-wider text-ink-muted">
-            <th className="py-2.5 pr-3 text-left">Item</th>
-            <th className="py-2.5 pl-3 pr-4 text-left">Description</th>
-            <th className="px-2 py-2.5 text-center">Qty</th>
-            <th className="whitespace-nowrap px-2 py-2.5 text-right">Unit price</th>
-            <th className="px-2 py-2.5 text-right">GST</th>
-            <th className="py-2.5 pl-3 text-right">Amount</th>
+            <th className="py-2 pr-3 text-left">Item</th>
+            <th className="py-2 pl-3 pr-4 text-left">Description</th>
+            <th className="px-2 py-2 text-center">Qty</th>
+            <th className="whitespace-nowrap px-2 py-2 text-right">Unit price</th>
+            <th className="px-2 py-2 text-right">GST</th>
+            <th className="py-2 pl-3 text-right">Amount</th>
           </tr>
         </thead>
         <tbody>
@@ -169,21 +169,21 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
             const descBody = descTail.join('\n')
             return (
               <tr key={i} className="border-b border-line align-top">
-                <td className="break-words py-3.5 pr-3 font-semibold text-ink">{r.itemName ?? ''}</td>
-                <td className="py-3.5 pl-3 pr-4">
+                <td className="break-words py-2 pr-3 font-semibold text-ink">{r.itemName ?? ''}</td>
+                <td className="py-2 pl-3 pr-4">
                   {r.description ? (
                     <>
                       <div className="break-words text-ink">{descHead}</div>
-                      {descBody ? <div className="mt-1 whitespace-pre-line break-words text-xs leading-normal text-ink-muted">{descBody}</div> : null}
+                      {descBody ? <div className="mt-0.5 whitespace-pre-line break-words text-xs leading-snug text-ink-muted">{descBody}</div> : null}
                     </>
                   ) : (
                     <span className="text-ink-muted">{r.itemName ? '' : '-'}</span>
                   )}
                 </td>
-                <td className="tabular px-2 py-3.5 text-center text-ink">{r.quantity}</td>
-                <td className="tabular px-2 py-3.5 text-right text-ink">{formatAud(r.unitEx)}</td>
-                <td className="tabular px-2 py-3.5 text-right text-ink">{formatAud(r.gst)}</td>
-                <td className="tabular py-3.5 pl-3 text-right font-semibold text-ink">{formatAud(r.ex)}</td>
+                <td className="tabular px-2 py-2 text-center text-ink">{r.quantity}</td>
+                <td className="tabular px-2 py-2 text-right text-ink">{formatAud(r.unitEx)}</td>
+                <td className="tabular px-2 py-2 text-right text-ink">{formatAud(r.gst)}</td>
+                <td className="tabular py-2 pl-3 text-right font-semibold text-ink">{formatAud(r.ex)}</td>
               </tr>
             )
           })}
@@ -191,20 +191,20 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
       </table>
 
       {/* Summary */}
-      <div className="mt-5 flex justify-end">
+      <div className="mt-4 flex justify-end">
         <div className="w-full max-w-[80mm] text-sm">
-          <div className="flex justify-between py-1 text-ink-muted"><span>Subtotal (ex GST)</span><span className="tabular text-ink">{formatAud(subtotalEx)}</span></div>
-          <div className="flex justify-between py-1 text-ink-muted"><span>GST 10%</span><span className="tabular text-ink">{formatAud(gstTotal)}</span></div>
+          <div className="flex justify-between py-0.5 text-ink-muted"><span>Subtotal (ex GST)</span><span className="tabular text-ink">{formatAud(subtotalEx)}</span></div>
+          <div className="flex justify-between py-0.5 text-ink-muted"><span>GST 10%</span><span className="tabular text-ink">{formatAud(gstTotal)}</span></div>
           <div className="mt-1 flex justify-between border-t border-line-strong pt-2 text-base font-semibold text-ink"><span>Total (inc GST)</span><span className="tabular">{formatAud(total)}</span></div>
           {paid.greaterThan(0) ? (
-            <div className="flex justify-between py-1 text-ink-muted"><span>Amount paid</span><span className="tabular text-ink">-{formatAud(paid)}</span></div>
+            <div className="flex justify-between py-0.5 text-ink-muted"><span>Amount paid</span><span className="tabular text-ink">-{formatAud(paid)}</span></div>
           ) : null}
           <div className="mt-1 flex justify-between border-t border-line pt-2 text-base font-semibold text-accent"><span className="text-ink">Balance due</span><span className="tabular">{formatAud(balance)}</span></div>
         </div>
       </div>
 
       {/* Payment instructions + notes */}
-      <div className="mt-8 grid grid-cols-1 gap-6 border-t border-line pt-5 text-sm sm:grid-cols-2">
+      <div className="mt-5 grid grid-cols-1 gap-5 border-t border-line pt-4 text-sm sm:grid-cols-2">
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-muted">Payment instructions</div>
           <div className="mt-2 space-y-0.5 text-ink-muted">
@@ -233,7 +233,7 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
       </div>
 
       {/* Footer */}
-      <div className="mt-8 border-t border-line pt-4 text-center text-xs text-muted">
+      <div className="mt-4 border-t border-line pt-2 text-center text-xs text-muted">
         {co.name}{abn ? ` · ABN ${abn}` : ''} · {website} · Thank you for choosing us.
       </div>
 
