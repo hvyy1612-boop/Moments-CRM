@@ -40,7 +40,7 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
     where: { id: invoiceId },
     select: {
       id: true, invoiceNumber: true, type: true, status: true, subtotal: true, taxTotal: true, total: true,
-      amountPaid: true, invoiceDate: true, poNumber: true, notes: true, accessToken: true,
+      amountPaid: true, invoiceDate: true, dueAt: true, poNumber: true, notes: true, accessToken: true,
       billingNameSnapshot: true, billingEmailSnapshot: true,
       lines: { orderBy: { sortOrder: 'asc' }, select: { itemName: true, description: true, quantity: true, unitPrice: true, discount: true, lineTotal: true } },
       instalments: { orderBy: { sortOrder: 'asc' }, select: { label: true, dueAt: true, amount: true, status: true } },
@@ -54,9 +54,9 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
       },
       project: {
         select: {
-          id: true, name: true,
+          id: true, name: true, code: true,
           client: { select: { displayName: true, email: true, phone: true, street: true, suburb: true, state: true, postcode: true, country: true } },
-          company: { select: { name: true, abn: true } },
+          company: { select: { name: true, abn: true, settings: true } },
           bookings: { orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true, endsAt: true, location: true, title: true } },
         },
       },

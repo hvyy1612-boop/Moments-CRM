@@ -527,15 +527,16 @@ export async function getInvoiceByToken(token: string) {
   return prisma.invoice.findUnique({
     where: { accessToken: token },
     select: {
-      invoiceNumber: true, type: true, status: true, subtotal: true, taxTotal: true, total: true,
-      amountPaid: true, invoiceDate: true, poNumber: true, notes: true,
+      invoiceNumber: true, type: true, status: true, total: true,
+      amountPaid: true, invoiceDate: true, dueAt: true, poNumber: true, notes: true,
       billingNameSnapshot: true, billingEmailSnapshot: true,
       lines: { orderBy: { sortOrder: 'asc' }, select: { itemName: true, description: true, quantity: true, unitPrice: true, discount: true, lineTotal: true } },
-      instalments: { orderBy: { sortOrder: 'asc' }, select: { label: true, dueAt: true, amount: true, status: true } },
       project: {
         select: {
-          client: { select: { displayName: true, email: true, phone: true, street: true, suburb: true, state: true, postcode: true, country: true } },
-          company: { select: { name: true, abn: true } },
+          name: true, code: true,
+          client: { select: { phone: true, street: true, suburb: true, state: true, postcode: true, country: true } },
+          company: { select: { name: true, abn: true, settings: true } },
+          bookings: { orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true, endsAt: true, location: true, title: true } },
         },
       },
     },
