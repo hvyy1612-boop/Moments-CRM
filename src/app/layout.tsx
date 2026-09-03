@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import { Poppins, Bodoni_Moda } from 'next/font/google'
+import { Poppins, Bodoni_Moda, Cormorant_Garamond, Manrope } from 'next/font/google'
 import './globals.css'
 
 // Single UI font (self-hosted by next/font so the browser never calls Google and the strict CSP
@@ -25,6 +25,22 @@ const bodoni = Bodoni_Moda({
   display: 'swap',
 })
 
+// Landing masthead type (reference-matched, public page only): Cormorant Garamond for the welcome
+// heading, Manrope for the subtitle, description and button. Self-hosted by next/font (CSP-safe).
+const cormorant = Cormorant_Garamond({
+  subsets: ['latin'],
+  weight: ['500'],
+  variable: '--font-cormorant',
+  display: 'swap',
+})
+
+const manrope = Manrope({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-manrope',
+  display: 'swap',
+})
+
 // Every page renders per request so the per-request CSP nonce applies to every script tag
 // (SEC-A05: strict CSP, no unsafe-inline). A statically prerendered page cannot carry a nonce,
 // which would force 'unsafe-inline'; giving up static optimisation is the cheaper concession for
@@ -38,7 +54,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en-AU" className={`${poppins.variable} ${bodoni.variable}`}>
+    <html lang="en-AU" className={`${poppins.variable} ${bodoni.variable} ${cormorant.variable} ${manrope.variable}`}>
       <body>{children}</body>
     </html>
   )
