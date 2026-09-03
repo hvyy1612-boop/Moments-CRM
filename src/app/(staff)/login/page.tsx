@@ -28,7 +28,7 @@ export default async function LoginPage({
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
   return (
-    <AuthCard heading="Sign in">
+    <AuthCard heading="Access your workspace">
       {reset === 'done' ? (
         <Alert tone="success" title="Your password has been updated">
           Sign in with your new password.
@@ -54,19 +54,17 @@ export default async function LoginPage({
 
       {googleEnabled ? (
         <>
-          <AuthDivider />
-          <GoogleButton />
+          <AuthDivider label="OR" />
+          <GoogleButton label="Sign in with Google" />
         </>
       ) : null}
 
-      <div className="flex items-center justify-between gap-4">
-        <Link href="/forgot" className="text-sm font-bold text-accent-ink hover:underline">
-          Forgot your password?
-        </Link>
-        <Link href="/register" className="text-sm font-bold text-accent-ink hover:underline">
+      <p className="text-center text-sm text-ink">
+        New staff member?{' '}
+        <Link href="/register" className="text-accent-ink underline underline-offset-2 hover:opacity-80">
           Create an account
         </Link>
-      </div>
+      </p>
     </AuthCard>
   )
 }
