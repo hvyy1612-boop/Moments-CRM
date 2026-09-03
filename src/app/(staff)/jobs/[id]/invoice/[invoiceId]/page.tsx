@@ -20,16 +20,16 @@ export default async function InvoicePrintPage({
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     select: {
-      invoiceNumber: true, type: true, subtotal: true, taxTotal: true, total: true,
-      amountPaid: true, invoiceDate: true, poNumber: true, notes: true,
+      invoiceNumber: true, type: true, status: true, total: true,
+      amountPaid: true, invoiceDate: true, dueAt: true, poNumber: true, notes: true,
       billingNameSnapshot: true, billingEmailSnapshot: true,
       lines: { orderBy: { sortOrder: 'asc' }, select: { itemName: true, description: true, quantity: true, unitPrice: true, discount: true, lineTotal: true } },
-      instalments: { orderBy: { sortOrder: 'asc' }, select: { label: true, dueAt: true, amount: true, status: true } },
       project: {
         select: {
-          id: true,
+          id: true, name: true, code: true,
           client: { select: { phone: true, street: true, suburb: true, state: true, postcode: true, country: true } },
-          company: { select: { name: true, abn: true } },
+          company: { select: { name: true, abn: true, settings: true } },
+          bookings: { orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true, endsAt: true, location: true, title: true } },
         },
       },
     },

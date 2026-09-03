@@ -1,131 +1,243 @@
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { formatAud } from '@/lib/money'
-import { formatSydneyDate } from '@/lib/time'
+import { formatSydneyDate, formatSydneyTime } from '@/lib/time'
 
 type D = Prisma.Decimal
+
+const GST_DIVISOR = new Prisma.Decimal('1.1')
 
 export type InvoiceDoc = {
   invoiceNumber: string
   type: string
+  status?: string
   invoiceDate: Date | null
+  dueAt: Date | null
   poNumber: string | null
   notes: string | null
-  subtotal: D
-  taxTotal: D
   total: D
   amountPaid: D
   billingNameSnapshot: string
   billingEmailSnapshot: string | null
   lines: { itemName: string | null; description: string; quantity: number; unitPrice: D; discount: D; lineTotal: D }[]
-  instalments: { label: string | null; dueAt: Date | null; amount: D; status: string }[]
   project: {
+    name: string
+    code: string
     client: { phone: string | null; street: string | null; suburb: string | null; state: string | null; postcode: string | null; country: string | null }
-    company: { name: string; abn: string | null }
+    company: { name: string; abn: string | null; settings: Prisma.JsonValue }
+    bookings: { startsAt: Date; endsAt: Date; location: string | null; title: string | null }[]
   }
+}
+
+const PAGE_CSS = '@media print{@page{size:A4;margin:12mm}.inv-doc{box-shadow:none!important}}'
+
+function text(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-6">
+      <span className="text-ink-muted">{label}</span>
+      <span className="text-right font-medium text-ink">{children}</span>
+    </div>
+  )
 }
 
 export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
   const c = invoice.project.client
-  const addr = [c.street, [c.suburb, c.state, c.postcode].filter(Boolean).join(' '), c.country].filter(Boolean)
-  const due = invoice.total.sub(invoice.amountPaid)
+  const co = invoice.project.company
+  const s = (co.settings && typeof co.settings === 'object' && !Array.isArray(co.settings) ? co.settings : {}) as Record<string, unknown>
+
+  const website = text(s.website) ?? 'momentsphotography.com.au'
+  const bizAddress = text(s.businessAddress) ?? 'Sydney, NSW, Australia'
+  const bizEmail = text(s.businessEmail)
+  const bizPhone = text(s.businessPhone)
+  const abn = text(co.abn)
+
+  const payInstructions = text(s.paymentInstructions)
+  const acctName = text(s.accountName)
+  const bsb = text(s.bsb)
+  const acctNo = text(s.accountNumber)
+  const payId = text(s.payId)
+  const hasBank = Boolean(bsb && acctNo)
+
+  const [markPrimary, ...markRest] = co.name.split(' ')
+  const markSecondary = markRest.join(' ')
+
+  const addr = [c.street, [c.suburb, c.state, c.postcode].filter(Boolean).join(' '), c.country].filter(Boolean) as string[]
+  const booking = invoice.project.bookings[0] ?? null
+
+  const rows = invoice.lines.map((l) => {
+    const incl = l.lineTotal
+    const ex = incl.div(GST_DIVISOR).toDecimalPlaces(2)
+    const gst = incl.sub(ex)
+    const unitEx = l.unitPrice.div(GST_DIVISOR).toDecimalPlaces(2)
+    return { ...l, incl, ex, gst, unitEx }
+  })
+  const subtotalEx = rows.reduce((sum, r) => sum.add(r.ex), new Prisma.Decimal(0))
+  const gstTotal = rows.reduce((sum, r) => sum.add(r.gst), new Prisma.Decimal(0))
+  const total = invoice.total
+  const paid = invoice.amountPaid
+  const balance = total.sub(paid)
+
+  const status = invoice.status ?? ''
+  const badge = status === 'PAID' ? 'Paid in full' : status === 'VOID' ? 'Void' : null
 
   return (
-    <div className="mx-auto max-w-3xl rounded-md border border-line bg-surface p-8 shadow-sm print:border-0 print:shadow-none">
-      <div className="flex items-start justify-between border-b border-line pb-5">
+    <div className="inv-doc mx-auto w-full max-w-[210mm] rounded-md border border-line bg-surface p-[14mm] text-ink shadow-sm print:max-w-none print:rounded-none print:border-0 print:p-0 print:shadow-none">
+      {/* Header: wordmark | TAX INVOICE + meta */}
+      <div className="flex flex-wrap items-start justify-between gap-6 border-b border-line-strong pb-6">
         <div>
-          <div className="font-serif text-2xl font-semibold uppercase tracking-[0.18em] text-ink">{invoice.project.company.name}</div>
-          {invoice.project.company.abn ? <div className="mt-1 text-sm text-ink-muted">ABN {invoice.project.company.abn}</div> : null}
+          <div className="text-3xl font-semibold uppercase leading-none tracking-tight text-ink">{markPrimary}</div>
+          {markSecondary ? <div className="mt-1 text-xs font-medium uppercase tracking-[0.34em] text-accent">{markSecondary}</div> : null}
         </div>
-        <div className="text-right">
-          <div className="font-serif text-xl font-semibold text-ink">Tax Invoice</div>
-          <div className="mt-1 text-sm text-ink-muted">{invoice.invoiceNumber}</div>
-          <div className="text-sm text-ink-muted">{formatSydneyDate(invoice.invoiceDate ?? new Date())}</div>
-          {invoice.poNumber ? <div className="text-sm text-ink-muted">PO: {invoice.poNumber}</div> : null}
+        <div className="min-w-[62mm] text-right">
+          <div className="text-xl font-semibold uppercase tracking-[0.14em] text-ink">Tax Invoice</div>
+          <div className="mt-3 space-y-1 text-sm">
+            <Field label="Invoice no.">{invoice.invoiceNumber}</Field>
+            <Field label="Issue date">{formatSydneyDate(invoice.invoiceDate ?? new Date())}</Field>
+            {invoice.dueAt ? <Field label="Due date">{formatSydneyDate(invoice.dueAt)}</Field> : null}
+            {invoice.poNumber ? <Field label="PO number">{invoice.poNumber}</Field> : null}
+          </div>
+          {badge ? (
+            <div className="mt-3 inline-block rounded-sm bg-accent-tint px-2 py-1 text-xs font-semibold uppercase tracking-wide text-accent">{badge}</div>
+          ) : null}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6 py-5">
-        <div>
-          <div className="text-xs font-bold uppercase tracking-wide text-muted">Bill to</div>
-          <div className="mt-1 text-ink">{invoice.billingNameSnapshot}</div>
-          {invoice.billingEmailSnapshot ? <div className="text-sm text-ink-muted">{invoice.billingEmailSnapshot}</div> : null}
-          {c.phone ? <div className="text-sm text-ink-muted">{c.phone}</div> : null}
-          {addr.map((l) => <div key={l} className="text-sm text-ink-muted">{l}</div>)}
+      {/* FROM / BILL TO / JOB DETAILS */}
+      <div className="grid grid-cols-1 gap-6 border-b border-line py-6 text-sm sm:grid-cols-3">
+        <div className="min-w-0 break-words">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted">From</div>
+          <div className="mt-2 font-semibold text-ink">{co.name}</div>
+          <div className="mt-1 space-y-0.5 text-ink-muted">
+            <div>{bizAddress}</div>
+            {bizEmail ? <div>{bizEmail}</div> : null}
+            {bizPhone ? <div>{bizPhone}</div> : null}
+            <div>{website}</div>
+            {abn ? <div>ABN {abn}</div> : null}
+          </div>
         </div>
-        <div className="text-right">
-          <div className="text-xs font-bold uppercase tracking-wide text-muted">Invoice type</div>
-          <div className="mt-1 text-sm capitalize text-ink-muted">{invoice.type.toLowerCase()}</div>
+        <div className="min-w-0 break-words">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted">Bill to</div>
+          <div className="mt-2 font-semibold text-ink">{invoice.billingNameSnapshot}</div>
+          <div className="mt-1 space-y-0.5 text-ink-muted">
+            {invoice.billingEmailSnapshot ? <div>{invoice.billingEmailSnapshot}</div> : null}
+            {c.phone ? <div>{c.phone}</div> : null}
+            {addr.map((line) => <div key={line}>{line}</div>)}
+          </div>
+        </div>
+        <div className="min-w-0 break-words">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted">Job details</div>
+          <div className="mt-2 font-semibold text-ink">{invoice.project.name}</div>
+          <div className="mt-1 space-y-0.5 text-ink-muted">
+            <div>Reference {invoice.project.code}</div>
+            {booking ? <div>{formatSydneyDate(booking.startsAt)} · {formatSydneyTime(booking.startsAt)}-{formatSydneyTime(booking.endsAt)}</div> : null}
+            {booking?.location ? <div>{booking.location}</div> : null}
+          </div>
         </div>
       </div>
 
-      <table className="w-full text-sm">
+      {/* Line items. table-fixed enforces the colgroup widths, so the six columns keep their exact
+          proportions and each header shares one alignment axis with the value under it. The three
+          money columns are given equal, generous territory (15/13/15) — with right-aligned figures
+          in a fixed table the separation between them comes from column width, not from padding, so
+          large values like $12,500.00 never collide. Uniform vertical padding keeps every row's
+          first line on one baseline. */}
+      <table className="mt-6 w-full table-fixed border-collapse text-sm">
+        <colgroup>
+          <col style={{ width: '18%' }} />
+          <col style={{ width: '32%' }} />
+          <col style={{ width: '7%' }} />
+          <col style={{ width: '15%' }} />
+          <col style={{ width: '13%' }} />
+          <col style={{ width: '15%' }} />
+        </colgroup>
         <thead>
-          <tr className="border-b border-line-strong text-left text-xs uppercase tracking-wide text-muted">
-            <th className="py-2">Description</th>
-            <th className="py-2 text-right">Qty</th>
-            <th className="py-2 text-right">Unit</th>
-            <th className="py-2 text-right">Discount</th>
-            <th className="py-2 text-right">Amount</th>
+          <tr className="border-y border-line-strong text-xs font-bold uppercase tracking-wider text-ink-muted">
+            <th className="py-2.5 pr-3 text-left">Item</th>
+            <th className="py-2.5 pl-3 pr-4 text-left">Description</th>
+            <th className="px-2 py-2.5 text-center">Qty</th>
+            <th className="whitespace-nowrap px-2 py-2.5 text-right">Unit price</th>
+            <th className="px-2 py-2.5 text-right">GST</th>
+            <th className="py-2.5 pl-3 text-right">Amount</th>
           </tr>
         </thead>
         <tbody>
-          {invoice.lines.map((l, i) => (
-            <tr key={i} className="border-b border-line align-top">
-              <td className="py-2 pr-2">
-                {l.itemName ? (
-                  <>
-                    <div className="font-semibold text-ink">{l.itemName}</div>
-                    {l.description ? <div className="mt-0.5 whitespace-pre-line text-sm text-ink-muted">{l.description}</div> : null}
-                  </>
-                ) : (
-                  <div className="whitespace-pre-line text-ink">{l.description || '-'}</div>
-                )}
-              </td>
-              <td className="tabular py-2 text-right text-ink-muted">{l.quantity}</td>
-              <td className="tabular py-2 text-right text-ink-muted">{formatAud(l.unitPrice)}</td>
-              <td className="tabular py-2 text-right text-ink-muted">{l.discount.greaterThan(0) ? `-${formatAud(l.discount)}` : '-'}</td>
-              <td className="tabular py-2 text-right text-ink">{formatAud(l.lineTotal)}</td>
-            </tr>
-          ))}
+          {rows.map((r, i) => {
+            const [descHead, ...descTail] = (r.description || '').split('\n')
+            const descBody = descTail.join('\n')
+            return (
+              <tr key={i} className="border-b border-line align-top">
+                <td className="break-words py-3.5 pr-3 font-semibold text-ink">{r.itemName ?? ''}</td>
+                <td className="py-3.5 pl-3 pr-4">
+                  {r.description ? (
+                    <>
+                      <div className="break-words text-ink">{descHead}</div>
+                      {descBody ? <div className="mt-1 whitespace-pre-line break-words text-xs leading-normal text-ink-muted">{descBody}</div> : null}
+                    </>
+                  ) : (
+                    <span className="text-ink-muted">{r.itemName ? '' : '-'}</span>
+                  )}
+                </td>
+                <td className="tabular px-2 py-3.5 text-center text-ink">{r.quantity}</td>
+                <td className="tabular px-2 py-3.5 text-right text-ink">{formatAud(r.unitEx)}</td>
+                <td className="tabular px-2 py-3.5 text-right text-ink">{formatAud(r.gst)}</td>
+                <td className="tabular py-3.5 pl-3 text-right font-semibold text-ink">{formatAud(r.ex)}</td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
 
-      <div className="ml-auto mt-4 w-full max-w-xs text-sm">
-        <div className="flex justify-between py-0.5 text-ink-muted"><span>Subtotal (excl. GST)</span><span className="tabular">{formatAud(invoice.subtotal)}</span></div>
-        <div className="flex justify-between py-0.5 text-ink-muted"><span>GST</span><span className="tabular">{formatAud(invoice.taxTotal)}</span></div>
-        <div className="mt-1 flex justify-between border-t border-line pt-1 font-semibold text-ink"><span>Total (incl. GST)</span><span className="tabular">{formatAud(invoice.total)}</span></div>
-        {invoice.amountPaid.greaterThan(0) ? (
-          <>
-            <div className="flex justify-between py-0.5 text-ink-muted"><span>Paid</span><span className="tabular">{formatAud(invoice.amountPaid)}</span></div>
-            <div className="flex justify-between py-0.5 font-semibold text-ink"><span>Amount due</span><span className="tabular">{formatAud(due)}</span></div>
-          </>
+      {/* Summary */}
+      <div className="mt-5 flex justify-end">
+        <div className="w-full max-w-[80mm] text-sm">
+          <div className="flex justify-between py-1 text-ink-muted"><span>Subtotal (ex GST)</span><span className="tabular text-ink">{formatAud(subtotalEx)}</span></div>
+          <div className="flex justify-between py-1 text-ink-muted"><span>GST 10%</span><span className="tabular text-ink">{formatAud(gstTotal)}</span></div>
+          <div className="mt-1 flex justify-between border-t border-line-strong pt-2 text-base font-semibold text-ink"><span>Total (inc GST)</span><span className="tabular">{formatAud(total)}</span></div>
+          {paid.greaterThan(0) ? (
+            <div className="flex justify-between py-1 text-ink-muted"><span>Amount paid</span><span className="tabular text-ink">-{formatAud(paid)}</span></div>
+          ) : null}
+          <div className="mt-1 flex justify-between border-t border-line pt-2 text-base font-semibold text-accent"><span className="text-ink">Balance due</span><span className="tabular">{formatAud(balance)}</span></div>
+        </div>
+      </div>
+
+      {/* Payment instructions + notes */}
+      <div className="mt-8 grid grid-cols-1 gap-6 border-t border-line pt-5 text-sm sm:grid-cols-2">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted">Payment instructions</div>
+          <div className="mt-2 space-y-0.5 text-ink-muted">
+            {payInstructions ? (
+              <p className="whitespace-pre-line">{payInstructions}</p>
+            ) : hasBank ? (
+              <>
+                <div>Bank transfer</div>
+                {acctName ? <div><span className="text-ink">Account name:</span> {acctName}</div> : null}
+                <div><span className="text-ink">BSB:</span> {bsb}</div>
+                <div><span className="text-ink">Account no.:</span> {acctNo}</div>
+                {payId ? <div><span className="text-ink">PayID:</span> {payId}</div> : null}
+              </>
+            ) : (
+              <p>Bank transfer details will be provided by the studio. Please quote your invoice number as the payment reference.</p>
+            )}
+            <div className="pt-1"><span className="text-ink">Reference:</span> {invoice.invoiceNumber}</div>
+          </div>
+        </div>
+        {invoice.notes ? (
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted">Notes</div>
+            <p className="mt-2 whitespace-pre-line text-ink-muted">{invoice.notes}</p>
+          </div>
         ) : null}
       </div>
 
-      {invoice.instalments.length > 1 ? (
-        <div className="mt-6 border-t border-line pt-4">
-          <div className="text-xs font-bold uppercase tracking-wide text-muted">Payment schedule</div>
-          <table className="mt-2 w-full text-sm">
-            <tbody>
-              {invoice.instalments.map((it, i) => (
-                <tr key={i} className="border-b border-line last:border-b-0">
-                  <td className="py-1.5 text-ink">{it.label ?? `Instalment ${i + 1}`}</td>
-                  <td className="py-1.5 text-ink-muted">{it.dueAt ? `due ${formatSydneyDate(it.dueAt)}` : ''}</td>
-                  <td className="py-1.5 text-right capitalize text-ink-muted">{it.status.toLowerCase()}</td>
-                  <td className="tabular py-1.5 text-right text-ink">{formatAud(it.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
+      {/* Footer */}
+      <div className="mt-8 border-t border-line pt-4 text-center text-xs text-muted">
+        {co.name}{abn ? ` · ABN ${abn}` : ''} · {website} · Thank you for choosing us.
+      </div>
 
-      {invoice.notes ? (
-        <div className="mt-6 border-t border-line pt-4">
-          <div className="text-xs font-bold uppercase tracking-wide text-muted">Notes</div>
-          <p className="mt-1 whitespace-pre-line text-sm text-ink-muted">{invoice.notes}</p>
-        </div>
-      ) : null}
+      <style>{PAGE_CSS}</style>
     </div>
   )
 }
