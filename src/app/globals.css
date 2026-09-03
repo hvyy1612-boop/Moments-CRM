@@ -60,16 +60,10 @@
   --text-2xl: 30px;
   --text-3xl: 36px;
 
-  --text-4xl: 46px;
-  --text-5xl: 54px;
-  --text-6xl: 62px;
-
   --font-sans: var(--font-poppins), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
     Helvetica, Arial, sans-serif;
   --font-serif: var(--font-poppins), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
     Helvetica, Arial, sans-serif;
-
-  --font-display: var(--font-bodoni), 'Bodoni Moda', Georgia, 'Times New Roman', serif;
 }
 
 :root {
@@ -98,4 +92,65 @@ body {
 
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+.landing-wordmark {
+  display: block;
+  width: clamp(270px, 40vw, 415px);
+  height: auto;
+  margin-left: auto;
+  margin-right: auto;
+}
+.landing-subtitle {
+  font-family: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+.landing-heading {
+  font-family: var(--font-cormorant), serif;
+  font-weight: 500;
+  font-size: 36px;
+  line-height: 1.08;
+  letter-spacing: -0.018em;
+}
+.landing-desc {
+  font-family: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+}
+.landing-btn {
+  font-family: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 1;
+}
+@media (min-width: 768px) {
+  .landing-subtitle {
+    font-size: 12px;
+    letter-spacing: 0.3em;
+  }
+  .landing-heading {
+    font-size: 44px;
+    line-height: 1.05;
+  }
+  .landing-desc {
+    font-size: 17px;
+  }
+}
+@media (min-width: 1200px) {
+  .landing-subtitle {
+    font-size: 13px;
+    letter-spacing: 0.32em;
+  }
+  .landing-heading {
+    font-size: 54px;
+  }
+  .landing-desc {
+    font-size: 18px;
+  }
 }

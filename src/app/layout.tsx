@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import { Poppins, Bodoni_Moda } from 'next/font/google'
+import { Poppins, Cormorant_Garamond, Manrope } from 'next/font/google'
 import './globals.css'
 
 const poppins = Poppins({
@@ -10,10 +10,17 @@ const poppins = Poppins({
   display: 'swap',
 })
 
-const bodoni = Bodoni_Moda({
+const cormorant = Cormorant_Garamond({
+  subsets: ['latin'],
+  weight: ['500'],
+  variable: '--font-cormorant',
+  display: 'swap',
+})
+
+const manrope = Manrope({
   subsets: ['latin'],
   weight: ['400', '500'],
-  variable: '--font-bodoni',
+  variable: '--font-manrope',
   display: 'swap',
 })
 
@@ -26,7 +33,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en-AU" className={`${poppins.variable} ${bodoni.variable}`}>
+    <html lang="en-AU" className={`${poppins.variable} ${cormorant.variable} ${manrope.variable}`}>
       <body>{children}</body>
     </html>
   )
