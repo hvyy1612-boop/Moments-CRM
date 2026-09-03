@@ -152,38 +152,55 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
         </div>
       </div>
 
-      {/* Line items. table-fixed enforces the colgroup widths so the columns stay even and the
-          numbers line up under their headers; padding is symmetric for even gaps. */}
-      <table className="mt-6 w-full table-fixed text-sm">
+      {/* Line items. table-fixed enforces the colgroup widths, so the six columns keep their exact
+          proportions and each header shares one alignment axis with the value under it. The three
+          money columns are given equal, generous territory (15/13/15) — with right-aligned figures
+          in a fixed table the separation between them comes from column width, not from padding, so
+          large values like $12,500.00 never collide. Uniform vertical padding keeps every row's
+          first line on one baseline. */}
+      <table className="mt-6 w-full table-fixed border-collapse text-sm">
         <colgroup>
-          <col style={{ width: '17%' }} />
-          <col style={{ width: '36%' }} />
-          <col style={{ width: '8%' }} />
-          <col style={{ width: '16%' }} />
-          <col style={{ width: '10%' }} />
+          <col style={{ width: '18%' }} />
+          <col style={{ width: '32%' }} />
+          <col style={{ width: '7%' }} />
+          <col style={{ width: '15%' }} />
           <col style={{ width: '13%' }} />
+          <col style={{ width: '15%' }} />
         </colgroup>
         <thead>
-          <tr className="border-b border-line-strong text-xs uppercase tracking-wide text-muted">
-            <th className="py-2 pr-2 text-left font-semibold">Item</th>
-            <th className="px-2 py-2 text-left font-semibold">Description</th>
-            <th className="px-2 py-2 text-center font-semibold">Qty</th>
-            <th className="whitespace-nowrap px-2 py-2 text-right font-semibold">Unit price</th>
-            <th className="px-2 py-2 text-right font-semibold">GST</th>
-            <th className="py-2 pl-2 text-right font-semibold">Amount</th>
+          <tr className="border-y border-line-strong text-xs font-bold uppercase tracking-wider text-ink-muted">
+            <th className="py-2.5 pr-3 text-left">Item</th>
+            <th className="py-2.5 pl-3 pr-4 text-left">Description</th>
+            <th className="px-2 py-2.5 text-center">Qty</th>
+            <th className="whitespace-nowrap px-2 py-2.5 text-right">Unit price</th>
+            <th className="px-2 py-2.5 text-right">GST</th>
+            <th className="py-2.5 pl-3 text-right">Amount</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} className="border-b border-line align-top">
-              <td className="break-words py-2.5 pr-2 font-semibold text-ink">{r.itemName ?? ''}</td>
-              <td className="whitespace-pre-line break-words px-2 py-2.5 text-ink-muted">{r.description || (r.itemName ? '' : '-')}</td>
-              <td className="tabular px-2 py-2.5 text-center text-ink-muted">{r.quantity}</td>
-              <td className="tabular px-2 py-2.5 text-right text-ink">{formatAud(r.unitEx)}</td>
-              <td className="tabular px-2 py-2.5 text-right text-ink-muted">{formatAud(r.gst)}</td>
-              <td className="tabular py-2.5 pl-2 text-right font-medium text-ink">{formatAud(r.ex)}</td>
-            </tr>
-          ))}
+          {rows.map((r, i) => {
+            const [descHead, ...descTail] = (r.description || '').split('\n')
+            const descBody = descTail.join('\n')
+            return (
+              <tr key={i} className="border-b border-line align-top">
+                <td className="break-words py-3.5 pr-3 font-semibold text-ink">{r.itemName ?? ''}</td>
+                <td className="py-3.5 pl-3 pr-4">
+                  {r.description ? (
+                    <>
+                      <div className="break-words text-ink">{descHead}</div>
+                      {descBody ? <div className="mt-1 whitespace-pre-line break-words text-xs leading-normal text-ink-muted">{descBody}</div> : null}
+                    </>
+                  ) : (
+                    <span className="text-ink-muted">{r.itemName ? '' : '-'}</span>
+                  )}
+                </td>
+                <td className="tabular px-2 py-3.5 text-center text-ink">{r.quantity}</td>
+                <td className="tabular px-2 py-3.5 text-right text-ink">{formatAud(r.unitEx)}</td>
+                <td className="tabular px-2 py-3.5 text-right text-ink">{formatAud(r.gst)}</td>
+                <td className="tabular py-3.5 pl-3 text-right font-semibold text-ink">{formatAud(r.ex)}</td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
 
