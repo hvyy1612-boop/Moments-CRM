@@ -28,7 +28,7 @@ export default async function LandingPage() {
         role="img"
         aria-label="A bride and groom dancing together on their wedding day"
         style={{ backgroundImage: 'url(/landing/hero.jpg)' }}
-        className="h-[42vh] w-full bg-sunk bg-cover bg-center sm:h-[52vh]"
+        className="h-[42vh] w-full bg-sunk bg-cover bg-[center_28%] sm:h-[52vh]"
       />
     </main>
   )
