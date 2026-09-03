@@ -22,9 +22,6 @@ import { InvoiceMoreMenu } from './InvoiceMoreMenu'
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Invoice - Moments' }
 
-const PRINT_CSS =
-  '@media print{body *{visibility:hidden}#invoice-print,#invoice-print *{visibility:visible}#invoice-print{position:absolute;left:0;top:0;width:100%;max-height:none;overflow:visible}}'
-
 function ymd(date: Date): string {
   const { year, month, day } = sydneyYmd(date)
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
@@ -128,7 +125,9 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
     : []
 
   return (
-    <AppShell user={user} csrf={csrf} active="finance">
+    <>
+      <div className="print:hidden">
+      <AppShell user={user} csrf={csrf} active="finance">
       <div>
         {/* Header */}
         <Link href="/finance" className="text-sm font-bold text-accent hover:underline">&lt;- Payments</Link>
@@ -197,16 +196,21 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
           </section>
         ) : null}
 
-        {/* Invoice preview (demoted) */}
+        {/* Invoice preview (demoted, screen only) */}
         <div className="mt-8">
           <CollapsiblePreview>
-            <div id="invoice-print"><InvoiceDocument invoice={inv} /></div>
+            <InvoiceDocument invoice={inv} />
           </CollapsiblePreview>
         </div>
       </div>
+      </AppShell>
+      </div>
 
-      {/* Locked invoices: the sheet is the record, so keep it printable even when the preview toggle is closed. */}
-      <style>{PRINT_CSS}</style>
-    </AppShell>
+      {/* Print target: only the invoice sheet prints, so the PDF is the invoice alone — one page for a
+          short invoice, with no app chrome and no blank trailing pages. */}
+      <div className="hidden print:block">
+        <InvoiceDocument invoice={inv} />
+      </div>
+    </>
   )
 }
