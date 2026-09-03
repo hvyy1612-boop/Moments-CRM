@@ -78,6 +78,10 @@
   --text-xl: 24px;
   --text-2xl: 30px;
   --text-3xl: 36px;
+  /* Display sizes for the public landing masthead only (font-display). */
+  --text-4xl: 46px;
+  --text-5xl: 54px;
+  --text-6xl: 62px;
 
   /* Typeface (D-05) - one readable geometric sans (Poppins), self-hosted by next/font (app/layout.tsx).
      Both --font-sans and --font-serif point to it so headings and body share the same clean font. */
@@ -85,6 +89,8 @@
     Helvetica, Arial, sans-serif;
   --font-serif: var(--font-poppins), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
     Helvetica, Arial, sans-serif;
+  /* Editorial display serif (Bodoni Moda) - public landing masthead only, self-hosted by next/font. */
+  --font-display: var(--font-bodoni), 'Bodoni Moda', Georgia, 'Times New Roman', serif;
 }
 
 /*
@@ -105,13 +111,17 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-h1,
-h2,
-h3,
-h4 {
-  font-family: var(--font-serif);
-  letter-spacing: -0.01em;
-  text-wrap: balance;
+/* In @layer base so a font-family utility (e.g. font-display on the landing headline) can override
+   it; every heading is Poppins by default today, so this changes no existing screen. */
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-serif);
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
 }
 
 /* Numbers line up in tables/finance: opt-in tabular figures (D-14). */
