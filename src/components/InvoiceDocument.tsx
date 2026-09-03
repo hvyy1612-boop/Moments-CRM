@@ -161,10 +161,10 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
       <table className="mt-6 w-full table-fixed border-collapse text-sm">
         <colgroup>
           <col style={{ width: '18%' }} />
-          <col style={{ width: '32%' }} />
-          <col style={{ width: '7%' }} />
+          <col style={{ width: '31%' }} />
+          <col style={{ width: '6%' }} />
           <col style={{ width: '15%' }} />
-          <col style={{ width: '13%' }} />
+          <col style={{ width: '15%' }} />
           <col style={{ width: '15%' }} />
         </colgroup>
         <thead>
