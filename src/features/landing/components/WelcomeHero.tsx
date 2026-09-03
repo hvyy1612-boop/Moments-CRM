@@ -1,16 +1,25 @@
+import Image from 'next/image'
 import Link from 'next/link'
 
 /**
- * The staff sign-in gateway shown at "/". A calm, editorial masthead for Moments Photography & Film:
- * the brand wordmark (Bodoni Moda), one line of what the workspace does (Cormorant Garamond heading,
- * Manrope supporting text), and a single primary action (Sign in). Type sizes/weights/tracking are
- * driven by the reference-matched .landing-* classes in globals.css. Sign in links to the existing
- * /login flow; auth, layout, colours and the button are unchanged.
+ * The staff sign-in gateway shown at "/". A calm, editorial masthead for Moments Photography & Film.
+ * The MOMENTS wordmark is the studio's own reference lettering (public/landing/wordmark.png, background
+ * keyed to transparent) rather than a substitute web font, so it matches the brand artwork exactly;
+ * alt="MOMENTS" keeps it accessible. The heading uses Cormorant Garamond and the supporting text uses
+ * Manrope, sized by the .landing-* classes in globals.css. Sign in links to the existing /login flow;
+ * auth, layout, colours and the button are unchanged.
  */
 export function WelcomeHero() {
   return (
     <section className="w-full max-w-3xl text-center">
-      <div className="landing-wordmark uppercase text-ink">Moments</div>
+      <Image
+        src="/landing/wordmark.png"
+        alt="MOMENTS"
+        width={993}
+        height={110}
+        priority
+        className="landing-wordmark"
+      />
       <div className="landing-subtitle mt-4 text-muted">
         Photography &amp; Film &middot; Sydney
       </div>

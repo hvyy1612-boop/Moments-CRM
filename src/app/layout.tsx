@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import { Poppins, Bodoni_Moda, Cormorant_Garamond, Manrope } from 'next/font/google'
+import { Poppins, Cormorant_Garamond, Manrope } from 'next/font/google'
 import './globals.css'
 
 // Single UI font (self-hosted by next/font so the browser never calls Google and the strict CSP
@@ -14,19 +14,9 @@ const poppins = Poppins({
   display: 'swap',
 })
 
-// Editorial display serif, used ONLY on the public landing masthead (the MOMENTS wordmark and the
-// welcome headline) for a premium, photography-brand feel. Self-hosted by next/font like Poppins, so
-// the CSP font-src 'self' still holds. The rest of the app stays on Poppins. Exposed as
-// --font-bodoni; globals.css maps --font-display to it.
-const bodoni = Bodoni_Moda({
-  subsets: ['latin'],
-  weight: ['400', '500'],
-  variable: '--font-bodoni',
-  display: 'swap',
-})
-
 // Landing masthead type (reference-matched, public page only): Cormorant Garamond for the welcome
 // heading, Manrope for the subtitle, description and button. Self-hosted by next/font (CSP-safe).
+// The MOMENTS wordmark itself is not a font - it is the reference artwork (public/landing/wordmark.png).
 const cormorant = Cormorant_Garamond({
   subsets: ['latin'],
   weight: ['500'],
@@ -54,7 +44,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en-AU" className={`${poppins.variable} ${bodoni.variable} ${cormorant.variable} ${manrope.variable}`}>
+    <html lang="en-AU" className={`${poppins.variable} ${cormorant.variable} ${manrope.variable}`}>
       <body>{children}</body>
     </html>
   )

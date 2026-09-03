@@ -78,10 +78,6 @@
   --text-xl: 24px;
   --text-2xl: 30px;
   --text-3xl: 36px;
-  /* Display sizes for the public landing masthead only (font-display). */
-  --text-4xl: 46px;
-  --text-5xl: 54px;
-  --text-6xl: 62px;
 
   /* Typeface (D-05) - one readable geometric sans (Poppins), self-hosted by next/font (app/layout.tsx).
      Both --font-sans and --font-serif point to it so headings and body share the same clean font. */
@@ -89,8 +85,6 @@
     Helvetica, Arial, sans-serif;
   --font-serif: var(--font-poppins), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
     Helvetica, Arial, sans-serif;
-  /* Editorial display serif (Bodoni Moda) - public landing masthead only, self-hosted by next/font. */
-  --font-display: var(--font-bodoni), 'Bodoni Moda', Georgia, 'Times New Roman', serif;
 }
 
 /*
@@ -130,17 +124,18 @@ body {
 }
 
 /*
- * Public landing masthead typography (reference-matched, exact spec). Literals live here per §10.1.
- * Fonts self-hosted via next/font (app/layout.tsx): Bodoni Moda (wordmark), Cormorant Garamond
- * (heading), Manrope (subtitle/description/button). Base values are mobile (<768px); the media
- * queries step up at the 768px and 1200px breakpoints from the spec.
+ * Public landing masthead. The MOMENTS wordmark is the reference artwork itself (public/landing/
+ * wordmark.png - the exact lettering from the design, background keyed to transparent), sized
+ * responsively here to match the reference. Heading = Cormorant Garamond; subtitle/description/
+ * button = Manrope, self-hosted via next/font (app/layout.tsx). Base values are mobile (<768px);
+ * the media queries step up at the 768px and 1200px breakpoints from the spec.
  */
 .landing-wordmark {
-  font-family: var(--font-bodoni), serif;
-  font-weight: 400;
-  font-size: 42px;
-  line-height: 0.95;
-  letter-spacing: 0.16em;
+  display: block;
+  width: clamp(270px, 40vw, 415px);
+  height: auto;
+  margin-left: auto;
+  margin-right: auto;
 }
 .landing-subtitle {
   font-family: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
@@ -171,10 +166,6 @@ body {
   line-height: 1;
 }
 @media (min-width: 768px) {
-  .landing-wordmark {
-    font-size: 56px;
-    letter-spacing: 0.2em;
-  }
   .landing-subtitle {
     font-size: 12px;
     letter-spacing: 0.3em;
@@ -188,9 +179,6 @@ body {
   }
 }
 @media (min-width: 1200px) {
-  .landing-wordmark {
-    font-size: 68px;
-  }
   .landing-subtitle {
     font-size: 13px;
     letter-spacing: 0.32em;
