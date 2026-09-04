@@ -54,7 +54,8 @@ export default async function ActivityPage() {
       <div>
         <h1 className="font-serif text-2xl text-ink">Activity</h1>
         <p className="mt-1 text-sm text-ink-muted">
-          Sign-in history and a record of what happened. Read-only: nothing here can be changed.
+          Sign-in history and a record of what happened. Times are Sydney local time and email addresses
+          are masked. Read-only: nothing here can be changed.
         </p>
 
         <section className="mt-8">
@@ -63,7 +64,7 @@ export default async function ActivityPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-line text-ink-muted">
                 <tr>
-                  <th className="px-4 py-2 font-medium">When</th>
+                  <th className="px-4 py-2 font-medium">When (Sydney)</th>
                   <th className="px-4 py-2 font-medium">Event</th>
                   <th className="px-4 py-2 font-medium">Account</th>
                   <th className="px-4 py-2 font-medium">IP address</th>
@@ -107,7 +108,7 @@ export default async function ActivityPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-line text-ink-muted">
                 <tr>
-                  <th className="px-4 py-2 font-medium">When</th>
+                  <th className="px-4 py-2 font-medium">When (Sydney)</th>
                   <th className="px-4 py-2 font-medium">Action</th>
                   <th className="px-4 py-2 font-medium">On</th>
                   <th className="px-4 py-2 font-medium">By</th>
