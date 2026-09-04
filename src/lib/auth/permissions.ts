@@ -45,7 +45,8 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/clients/[id]/edit': { roles: ['ADMIN', 'STUDIO'] },
   '/calendar': { roles: ['ADMIN', 'STUDIO'] },
   '/finance': { roles: ['ADMIN', 'STUDIO'] },
-  '/settings': { roles: ['ADMIN', 'STUDIO'] },
+  // Company configuration is owner-level, not a day-to-day staff workflow.
+  '/settings': { roles: ['ADMIN'] },
   '/users': { roles: ['ADMIN'] },
   // Security + activity log: ADMIN only (contains IP addresses and login history).
   '/activity': { roles: ['ADMIN'] },

@@ -32,7 +32,7 @@ async function main() {
     if (existing) {
       await prisma.user.update({
         where: { email },
-        data: { passwordHash: hash, passwordAlgo: algo, role: 'ADMIN', isActive: true, failedAttempts: 0, lockedUntil: null },
+        data: { passwordHash: hash, passwordAlgo: algo, role: 'ADMIN', isActive: true, status: 'ACTIVE', mustChangePassword: true, failedAttempts: 0, lockedUntil: null },
       })
     } else {
       const company = await prisma.company.findFirst({ select: { id: true } })
@@ -40,7 +40,7 @@ async function main() {
         throw new Error('No company found. Seed the database first (npm run seed:demo, or prisma migrate reset).')
       }
       await prisma.user.create({
-        data: { email, name, role: 'ADMIN', isActive: true, passwordHash: hash, passwordAlgo: algo, companyId: company.id },
+        data: { email, name, role: 'ADMIN', isActive: true, status: 'ACTIVE', mustChangePassword: true, passwordHash: hash, passwordAlgo: algo, companyId: company.id },
       })
     }
 
@@ -52,7 +52,7 @@ async function main() {
     console.log(`  Password: ${password}`)
     console.log('  Role:     ADMIN')
     console.log('  ---------------------------------------------------------------')
-    console.log('  Only the Argon2id hash is stored. Change this password after you sign in.')
+    console.log('  Only the Argon2id hash is stored. You will be prompted to set your own password on first sign-in.')
     console.log('')
   } finally {
     await prisma.$disconnect()
