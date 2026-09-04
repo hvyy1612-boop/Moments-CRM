@@ -48,6 +48,8 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   // Company configuration is owner-level, not a day-to-day staff workflow.
   '/settings': { roles: ['ADMIN'] },
   '/users': { roles: ['ADMIN'] },
+  // Printable staff roster (per team) — the source for the "Download PDF" export.
+  '/users/roster/[team]': { roles: ['ADMIN'] },
   // Security + activity log: ADMIN only (contains IP addresses and login history).
   '/activity': { roles: ['ADMIN'] },
   // Client-facing, reached by a token only. No session, no account.
