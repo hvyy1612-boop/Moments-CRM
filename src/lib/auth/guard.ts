@@ -10,7 +10,7 @@ import { ROUTE_PERMISSIONS, type Role } from './permissions'
  * The user shape handed to pages carries no secrets: passwordHash never leaves the auth layer
  * (SEC-P03, SEC-A11) because the Prisma select here simply never reads it.
  */
-export type SessionUser = { id: string; email: string; name: string; role: Role }
+export type SessionUser = { id: string; email: string; name: string; role: Role; mustChangePassword: boolean }
 
 /** Resolve the session cookie to an active user, or null. Never throws for a bad cookie. */
 export async function getSessionUser(): Promise<SessionUser | null> {
@@ -20,10 +20,10 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   if (!session) return null
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { id: true, email: true, name: true, role: true, isActive: true },
+    select: { id: true, email: true, name: true, role: true, isActive: true, mustChangePassword: true },
   })
   if (!user || !user.isActive) return null
-  return { id: user.id, email: user.email, name: user.name, role: user.role }
+  return { id: user.id, email: user.email, name: user.name, role: user.role, mustChangePassword: user.mustChangePassword }
 }
 
 /**
@@ -44,6 +44,9 @@ export async function requireRole(routeId: string): Promise<SessionUser> {
   }
   const user = await getSessionUser()
   if (!user) redirect('/login')
+  // First login on an admin-created account: force the password change before anything else. The
+  // /change-password page authenticates with getSessionUser (not requireRole), so it never loops.
+  if (user.mustChangePassword && routeId !== '/change-password') redirect('/change-password')
   if (!permission.roles.includes(user.role)) notFound()
   return user
 }

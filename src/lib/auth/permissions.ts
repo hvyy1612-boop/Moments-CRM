@@ -24,13 +24,12 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/api/auth/google': { public: true },
   '/api/auth/google/callback': { public: true },
   // Staff entrance and account recovery: public by necessity (not signed in yet / token-authorised).
+  // Accounts are admin-provisioned, so there is no public /register.
   '/login': { public: true },
-  '/register': { public: true },
   '/forgot': { public: true },
   '/reset/[token]': { public: true },
-  // First-run profile step after Google sign-in: any signed-in staff member, before they pick up a
-  // full role-gated area. No admin approval - access is gated by the Google Test users list.
-  '/onboarding': { roles: ['ADMIN', 'STUDIO', 'EDITOR'] },
+  // Forced first-login password change: any signed-in staff member, before any role-gated area.
+  '/change-password': { roles: ['ADMIN', 'STUDIO', 'EDITOR'] },
   // Staff workspace: the dashboard, enquiries, projects, and the project detail.
   '/dashboard': { roles: ['ADMIN', 'STUDIO'] },
   '/enquiries': { roles: ['ADMIN', 'STUDIO'] },
