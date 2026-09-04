@@ -15,7 +15,7 @@ export async function registerUser(input: {
   password: string
 }): Promise<RegisterResult> {
   if (checkPasswordPolicy(input.password)) {
-    return { ok: false, error: 'Choose a password of at least 12 characters that is not commonly used.' }
+    return { ok: false, error: 'Use at least 8 characters with a letter, a number, and a special character, and avoid common passwords.' }
   }
   const hashed = await hashPassword(input.password)
   try {

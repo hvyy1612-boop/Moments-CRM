@@ -19,8 +19,8 @@ async function main() {
   }
 
   const policyError = checkPasswordPolicy(password)
-  if (policyError === 'too_short') {
-    console.error('Password rejected: use at least 12 characters.')
+  if (policyError === 'weak') {
+    console.error('Password rejected: use at least 8 characters with a letter, a number, and a special character.')
     process.exit(1)
   }
   if (policyError === 'too_common') {

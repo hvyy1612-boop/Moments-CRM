@@ -27,8 +27,12 @@ export async function changePassword(
   const password = String(formData.get('password') ?? '')
   const confirm = String(formData.get('confirm') ?? '')
 
-  if (checkPasswordPolicy(password)) {
-    return { status: 'error', errors: { password: 'Choose a password of at least 12 characters that is not commonly used.' } }
+  const policy = checkPasswordPolicy(password)
+  if (policy === 'too_common') {
+    return { status: 'error', errors: { password: 'That password is too common. Choose something less predictable.' } }
+  }
+  if (policy) {
+    return { status: 'error', errors: { password: 'Your password does not meet all the requirements listed below.' } }
   }
   if (password !== confirm) {
     return { status: 'error', errors: { confirm: 'The two passwords do not match.' } }

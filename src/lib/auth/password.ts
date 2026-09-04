@@ -1,5 +1,9 @@
 import { hash as argonHash, verify as argonVerify } from '@node-rs/argon2'
 import { COMMON_PASSWORDS } from './common-passwords'
+import { meetsPasswordRules } from './password-rules'
+
+// Re-exported so ./password stays the single import surface for callers that already use it.
+export { PASSWORD_MIN_LENGTH, PASSWORD_RULES, meetsPasswordRules } from './password-rules'
 
 /**
  * Password hashing and policy (SEC-P01 to SEC-P05).
@@ -24,16 +28,18 @@ const ARGON2ID_OPTIONS = {
 } as const
 
 export const PASSWORD_ALGO = 'argon2id'
-export const PASSWORD_MIN_LENGTH = 12 // SEC-P04
 
-export type PasswordPolicyError = 'too_short' | 'too_common'
+export type PasswordPolicyError = 'weak' | 'too_common'
 
 /**
- * SEC-P04: minimum length 12 and not a known-common password. No composition rules that force
- * symbols; length plus a breach check is stronger.
+ * SEC-P04: enforce the visible composition rules (length + a letter, number, and special character;
+ * see ./password-rules) and reject known-common passwords. The rules live in a dependency-free module
+ * so the sign-in form can tick them off live and the server can never accept something the form said
+ * was fine. 'weak' means one or more rules failed; 'too_common' means it passed the rules but is a
+ * password everyone tries.
  */
 export function checkPasswordPolicy(password: string): PasswordPolicyError | null {
-  if (password.length < PASSWORD_MIN_LENGTH) return 'too_short'
+  if (!meetsPasswordRules(password)) return 'weak'
   if (COMMON_PASSWORDS.has(password.toLowerCase())) return 'too_common'
   return null
 }

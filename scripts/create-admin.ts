@@ -15,7 +15,7 @@ import { PrismaClient } from '@prisma/client'
 import { hashPassword } from '../src/lib/auth/password'
 
 function generatePassword(): string {
-  // 18 random bytes -> ~24 URL-safe chars: high entropy, well over the 12-char minimum, not guessable.
+  // 18 random bytes -> ~24 URL-safe chars: high entropy, well over the length minimum, not guessable.
   return randomBytes(18).toString('base64url')
 }
 

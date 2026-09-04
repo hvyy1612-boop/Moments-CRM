@@ -28,7 +28,7 @@ export async function nextStaffLoginId(): Promise<string> {
 
 /**
  * A high-entropy one-time password shown to the admin once, then discarded (only its Argon2id hash is
- * stored). 12 random bytes -> 16 URL-safe chars, comfortably over the 12-char minimum.
+ * stored). 12 random bytes -> 16 URL-safe chars, comfortably over the length minimum.
  */
 export function generateTempPassword(): string {
   return randomBytes(12).toString('base64url')
