@@ -20,9 +20,10 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/api/auth/google/callback': { public: true },
 
   '/login': { public: true },
-  '/register': { public: true },
   '/forgot': { public: true },
   '/reset/[token]': { public: true },
+
+  '/change-password': { roles: ['ADMIN', 'STUDIO', 'EDITOR'] },
 
   '/dashboard': { roles: ['ADMIN', 'STUDIO'] },
   '/enquiries': { roles: ['ADMIN', 'STUDIO'] },
@@ -38,7 +39,8 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/clients/[id]/edit': { roles: ['ADMIN', 'STUDIO'] },
   '/calendar': { roles: ['ADMIN', 'STUDIO'] },
   '/finance': { roles: ['ADMIN', 'STUDIO'] },
-  '/settings': { roles: ['ADMIN', 'STUDIO'] },
+
+  '/settings': { roles: ['ADMIN'] },
   '/users': { roles: ['ADMIN'] },
 
   '/activity': { roles: ['ADMIN'] },

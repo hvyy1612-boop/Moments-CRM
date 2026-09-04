@@ -1,14 +1,10 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { AuthCard } from '@/components/auth/AuthCard'
-import { AuthDivider } from '@/components/auth/AuthDivider'
-import { GoogleButton } from '@/components/auth/GoogleButton'
 import { Alert } from '@/components/ui/Alert'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
-import { googleEnabled } from '@/lib/env'
 import { LoginForm } from './LoginForm'
 
 export const runtime = 'nodejs'
@@ -18,53 +14,25 @@ export const metadata: Metadata = { title: 'Sign in - Moments' }
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ reset?: string; registered?: string; pending?: string; error?: string }>
+  searchParams: Promise<{ reset?: string; error?: string }>
 }) {
   const user = await getSessionUser()
   if (user) redirect('/dashboard')
 
-  const { reset, registered, pending, error } = await searchParams
+  const { reset, error } = await searchParams
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
   return (
     <AuthCard heading="Access your workspace">
       {reset === 'done' ? (
-        <Alert tone="success" title="Your password has been updated">
-          Sign in with your new password.
-        </Alert>
-      ) : null}
-      {registered === '1' ? (
-        <Alert tone="success" title="Account created">
-          An admin will approve it before you can sign in.
-        </Alert>
-      ) : null}
-      {pending === '1' ? (
-        <Alert tone="info" title="Account awaiting approval">
-          Your Google account is set up. An admin needs to approve it before you can sign in.
-        </Alert>
+        <Alert tone="success" title="Your password has been updated">Sign in with your new password.</Alert>
       ) : null}
       {error === 'google' ? (
-        <Alert tone="danger" title="Couldn't sign in with Google">
-          Please try again, or sign in with your email and password.
-        </Alert>
+        <Alert tone="danger" title="Couldn’t sign in with Google">Please sign in with your Staff ID and password.</Alert>
       ) : null}
 
       <LoginForm csrf={csrf} />
-
-      {googleEnabled ? (
-        <>
-          <AuthDivider label="OR" />
-          <GoogleButton label="Sign in with Google" />
-        </>
-      ) : null}
-
-      <p className="text-center text-sm text-ink">
-        New staff member?{' '}
-        <Link href="/register" className="text-accent-ink underline underline-offset-2 hover:opacity-80">
-          Create an account
-        </Link>
-      </p>
     </AuthCard>
   )
 }

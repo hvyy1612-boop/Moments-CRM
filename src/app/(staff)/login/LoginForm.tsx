@@ -22,12 +22,12 @@ export function LoginForm({ csrf }: { csrf: string }) {
 
       <input type="hidden" name="csrf" value={csrf} />
 
-      <Field label="Email" htmlFor="email" error={errors.email}>
+      <Field label="Staff ID" htmlFor="email" hint="e.g. m000127@staff.moments.com" error={errors.email}>
         <TextInput
           id="email"
           name="email"
-          type="email"
-          autoComplete="email"
+          type="text"
+          autoComplete="username"
           autoFocus
           hasError={Boolean(errors.email)}
         />

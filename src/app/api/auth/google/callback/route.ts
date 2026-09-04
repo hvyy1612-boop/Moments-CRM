@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import {
   exchangeGoogleCode,
@@ -7,10 +6,8 @@ import {
   OAUTH_STATE_COOKIE,
   OAUTH_VERIFIER_COOKIE,
 } from '@/lib/auth/google'
-import { hashPassword } from '@/lib/auth/password'
 import { createSession, revokeSessionByToken, SESSION_COOKIE } from '@/lib/auth/session'
 import { prisma } from '@/lib/db'
-import { requireCompany } from '@/lib/domain/project'
 import { googleEnabled } from '@/lib/env'
 import { requestMeta } from '@/lib/http'
 
@@ -64,46 +61,9 @@ export async function GET(request: NextRequest) {
     (await prisma.user.findUnique({ where: { googleSub: identity.sub }, select: USER_SELECT })) ??
     (await prisma.user.findUnique({ where: { email: identity.email }, select: USER_SELECT }))
 
-  if (!existing) {
-    const unusable = await hashPassword(randomBytes(32).toString('base64url'))
-    let newUserId = ''
-    await prisma.$transaction(async (tx) => {
-      const company = await requireCompany(tx)
-      const created = await tx.user.create({
-        data: {
-          companyId: company.id,
-          email: identity.email,
-          name: identity.name ?? identity.email,
-          googleSub: identity.sub,
-          passwordHash: unusable.hash,
-          passwordAlgo: unusable.algo,
-          role: 'STUDIO',
-          isActive: false,
-          status: 'PENDING',
-        },
-      })
-      newUserId = created.id
-      await tx.auditLog.create({
-        data: {
-          companyId: company.id,
-          action: 'auth.user_registered_google',
-          entityType: 'User',
-          entityId: created.id,
-          afterData: { email: created.email, name: created.name },
-        },
-      })
-    })
-    await prisma.signInLog.create({
-      data: {
-        eventType: 'google_login_pending',
-        userId: newUserId,
-        emailAttempted: identity.email,
-        ipAddress: meta.ipAddress,
-        userAgent: meta.userAgent,
-        outcome: 'FAILURE',
-      },
-    })
-    return toLogin('?pending=1')
+  if (!existing || !existing.isActive) {
+    await logFailure(existing?.id)
+    return toLogin('?error=google')
   }
 
   if (existing.googleSub && existing.googleSub !== identity.sub) {
@@ -114,11 +74,6 @@ export async function GET(request: NextRequest) {
   if (existing.lockedUntil && existing.lockedUntil.getTime() > Date.now()) {
     await logFailure(existing.id)
     return toLogin('?error=google')
-  }
-
-  if (!existing.isActive) {
-    await logFailure(existing.id)
-    return toLogin('?pending=1')
   }
 
   if (!existing.googleSub) {
