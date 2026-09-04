@@ -66,9 +66,18 @@ function historyDetails(action: string, after: unknown): string {
   return historyActionType(action)
 }
 
-export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProjectDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ back?: string }>
+}) {
   const user = await requireRole('/jobs/[id]')
   const { id } = await params
+
+  const { back } = await searchParams
+  const backHref = back ? `/jobs?${back}` : '/jobs'
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
@@ -132,8 +141,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       })
     : []
 
-  const board = isConfirmed ? await getProjectBoard(project.id) : null
-  const communications = isConfirmed
+  const board = canInvoice ? await getProjectBoard(project.id) : null
+  const communications = canInvoice
     ? await prisma.communication.findMany({
         where: { projectId: project.id },
         orderBy: { createdAt: 'asc' },
@@ -147,7 +156,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       })
     : []
 
-  const history: HistoryEntry[] = isConfirmed
+  const history: HistoryEntry[] = canInvoice
     ? (
         await prisma.auditLog.findMany({
           where: { entityType: 'Project', entityId: project.id },
@@ -209,10 +218,11 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     : null
 
   return (
-    <AppShell user={user} csrf={csrf} active="jobs">
-      <div className="mx-auto w-full max-w-5xl">
-        <Link href="/jobs" className="text-sm text-ink-muted transition-colors hover:text-accent">
-          ← Jobs
+    <AppShell user={user} csrf={csrf} active="jobs" bareHeader>
+      <div className="w-full">
+        <Link href={backHref} className="inline-flex items-center gap-0.5 text-sm text-ink-muted transition-colors hover:text-ink">
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+          Jobs
         </Link>
         <div className="mt-3 flex flex-wrap items-baseline justify-between gap-3">
           <div>
@@ -224,7 +234,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <StatusPill tone="info">{label(project.lifecycleStatus)}</StatusPill>
         </div>
 
-        {isConfirmed && board ? (
+        {board && board.stages.length > 0 ? (
           <p className="mt-2 text-base text-ink-muted">
             {board.allDone ? (
               <span className="font-bold text-delivered-ink">All workflow steps complete</span>
@@ -237,7 +247,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           </p>
         ) : null}
 
-        {isConfirmed && board ? (
+        {board && board.stages.length > 0 ? (
           <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* Workflow board: Studio-Ninja phased checklist over the business records (Hybrid, docs/23). */}
             <section className="rounded border border-line bg-surface p-5">
