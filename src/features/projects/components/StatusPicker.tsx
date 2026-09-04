@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { StatusTag } from '@/components/ui/StatusTag'
 import { isCommonLabel, type StatusLabel } from '../labels'
 import { setProjectStatusAction } from '../status-actions'
 import { LabelEditor } from './LabelEditor'
@@ -104,15 +103,11 @@ export function StatusPicker({
           value={label.id}
           role="option"
           aria-selected={selected}
-          className="relative block w-full overflow-hidden rounded-md transition-transform hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent aria-selected:ring-2 aria-selected:ring-ink"
+          className="flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-ink transition-colors hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent aria-selected:bg-sunk aria-selected:font-medium"
         >
-          <StatusTag kind={label.color} solid block>
-            {label.name}
-          </StatusTag>
+          <span>{label.name}</span>
           {selected ? (
-            <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs text-white">
-              ✓
-            </span>
+            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
           ) : null}
         </button>
       </form>
@@ -120,11 +115,7 @@ export function StatusPicker({
   }
 
   if (!canEdit) {
-    return (
-      <StatusTag kind={current.color} solid block>
-        {current.name}
-      </StatusTag>
-    )
+    return <span className="text-sm text-ink">{current.name}</span>
   }
 
   return (
@@ -135,15 +126,11 @@ export function StatusPicker({
         onClick={toggle}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="group/status relative flex w-full cursor-pointer items-center"
+        className="flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 text-sm text-ink transition-colors hover:bg-sunk"
         title="Change status"
       >
-        <StatusTag kind={current.color} solid block>
-          {current.name}
-        </StatusTag>
-        <span className="pointer-events-none absolute right-2 text-xs text-white opacity-70 transition-opacity group-hover/status:opacity-100">
-          ▾
-        </span>
+        {current.name}
+        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
       </button>
 
       {open && coords ? (
@@ -158,7 +145,7 @@ export function StatusPicker({
             minWidth: Math.max(coords.width, MENU_MIN_WIDTH),
             maxHeight: coords.maxHeight,
           }}
-          className="z-40 flex flex-col gap-2 overflow-y-auto rounded-lg border border-line bg-surface p-2.5 shadow-xl"
+          className="z-40 flex flex-col gap-0.5 overflow-y-auto rounded-lg border border-line bg-surface p-1.5 shadow-lg"
         >
           {commonLabels.map(renderOption)}
           {moreLabels.length > 0 &&

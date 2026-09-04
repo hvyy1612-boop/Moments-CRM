@@ -1,8 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
-import { Button } from '@/components/ui/Button'
-import { EmptyState } from '@/components/ui/EmptyState'
 import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
@@ -13,19 +11,22 @@ import { stageLabel } from '@/features/projects/workflow'
 import { getCompanyStatusLabels } from '@/lib/domain/status-labels'
 import { StatusPicker } from '@/features/projects/components/StatusPicker'
 import { AppShell } from '../AppShell'
-import { JobsBoard, type BoardJob } from './JobsBoard'
+import { JobSortSelect, JOB_DEFAULT_SORT, type JobSortValue } from './JobSortSelect'
+import { JobFilterMenu } from './JobFilterMenu'
+import { JobRowMenu } from './JobRowMenu'
+import { AddJobButton } from './AddJobButton'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Jobs - Moments' }
 
-// Status colours and labels are company-defined (features/projects/labels.ts); the lifecycle enum
-// still drives grouping and automation while the label controls how each status reads.
+const SORTS: JobSortValue[] = ['newest', 'oldest', 'client-asc']
 
 type Row = {
   id: string
   code: string
   name: string
   client: string
+  clientId: string
   label: StatusLabel
   closed: boolean
   enquiredAt: Date
@@ -33,117 +34,26 @@ type Row = {
   nextStage: string | null
 }
 
-function Group({
-  title,
-  spine,
-  rows,
-  labels,
-  csrf,
-  canEdit,
-}: {
-  title: string
-  spine: string
-  rows: Row[]
-  labels: StatusLabel[]
-  csrf: string
-  canEdit: boolean
-}) {
-  if (rows.length === 0) return null
-  return (
-    <div className="mb-5">
-      <div className="mb-1.5 flex items-center gap-2 text-sm font-bold text-ink">
-        <span className="text-muted">▾</span>
-        {title}
-        <span className="font-normal text-muted">· {rows.length}</span>
-      </div>
-      <div className={`overflow-x-auto rounded-md border border-line border-l-4 ${spine}`}>
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-sunk text-left text-xs uppercase tracking-wide text-muted">
-              <th className="w-10 border-b border-r border-line px-3 py-2.5" />
-              <th className="border-b border-r border-line px-3 py-2.5 font-bold">Client</th>
-              <th className="border-b border-r border-line px-3 py-2.5 font-bold">Job</th>
-              <th className="border-b border-r border-line px-3 py-2.5 font-bold">Enquired</th>
-              <th className="border-b border-r border-line px-3 py-2.5 font-bold">Next task</th>
-              <th className="w-40 border-b border-line px-3 py-2.5 font-bold">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.id} className="group transition-colors hover:bg-paper">
-                <td className="border-b border-r border-line px-3 py-2.5 text-center">
-                  <span className="inline-block h-4 w-4 rounded-sm border border-line-strong align-middle" />
-                </td>
-                <td className="border-b border-r border-line px-3 py-2.5">
-                  <Link
-                    href={`/jobs/${row.id}`}
-                    className="font-serif text-base font-semibold text-ink transition-colors group-hover:text-accent-ink"
-                  >
-                    {row.client}
-                  </Link>
-                </td>
-                <td className="border-b border-r border-line px-3 py-2.5 text-sm">
-                  <span className="text-ink">{row.name}</span>
-                  <span className="tabular text-ink-muted"> · {row.code}</span>
-                </td>
-                <td className="tabular border-b border-r border-line px-3 py-2.5 text-sm text-ink-muted">
-                  {formatSydneyDate(row.enquiredAt)}
-                </td>
-                <td className="border-b border-r border-line px-3 py-2.5 text-sm">
-                  {row.nextTask ? (
-                    <>
-                      <span className="text-ink">{row.nextTask}</span>
-                      {row.nextStage ? (
-                        <span className="text-ink-muted"> · {stageLabel(row.nextStage)}</span>
-                      ) : null}
-                    </>
-                  ) : (
-                    <span className="text-muted">-</span>
-                  )}
-                </td>
-                <td className="border-b border-line p-0">
-                  <StatusPicker
-                    projectId={row.id}
-                    current={row.label}
-                    labels={labels}
-                    csrf={csrf}
-                    canEdit={canEdit}
-                  />
-                </td>
-              </tr>
-            ))}
-            <tr>
-              <td className="px-3 py-2.5" />
-              <td colSpan={5} className="px-3 py-2.5 text-sm text-muted">
-                <Link href="/clients/new" className="hover:text-accent-ink">
-                  + Add client
-                </Link>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
-export default async function ProjectsPage({
+export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string }>
+  searchParams: Promise<{ q?: string; sort?: string; status?: string; task?: string }>
 }) {
   const user = await requireRole('/jobs')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
-  const view = (await searchParams).view === 'board' ? 'board' : 'list'
+
+  const sp = await searchParams
+  const q = (sp.q ?? '').trim()
+  const sort: JobSortValue = SORTS.includes(sp.sort as JobSortValue) ? (sp.sort as JobSortValue) : JOB_DEFAULT_SORT
+  const status = sp.status ?? ''
+  const task = sp.task ?? ''
 
   const [projects, labels] = await Promise.all([
     prisma.project.findMany({
       orderBy: { enquiryReceivedAt: 'desc' },
       include: {
-        client: { select: { displayName: true } },
-        owner: { select: { name: true } },
-        bookings: { orderBy: { startsAt: 'desc' }, take: 1, select: { startsAt: true } },
+        client: { select: { id: true, displayName: true } },
         workItems: {
           where: { status: 'PENDING', type: { not: 'AUTO' } },
           orderBy: { order: 'asc' },
@@ -154,8 +64,9 @@ export default async function ProjectsPage({
     }),
     getCompanyStatusLabels(),
   ])
+  const canEdit = can(user, 'PROJECT_EDIT')
 
-  const rows: Row[] = projects.map((p) => {
+  let rows: Row[] = projects.map((p) => {
     const label = resolveLabel(p, labels)
     const next = p.workItems[0]
     return {
@@ -163,6 +74,7 @@ export default async function ProjectsPage({
       code: p.code,
       name: p.name,
       client: p.client.displayName,
+      clientId: p.client.id,
       label,
       closed: isClosedLabel(label),
       enquiredAt: p.enquiryReceivedAt,
@@ -170,75 +82,113 @@ export default async function ProjectsPage({
       nextStage: next?.stage ?? null,
     }
   })
-  const active = rows.filter((r) => !r.closed)
-  const closed = rows.filter((r) => r.closed)
-  const canEdit = can(user, 'PROJECT_EDIT')
 
-  const boardJobs: BoardJob[] = projects
-    .filter((p) => !isClosedLabel(resolveLabel(p, labels)))
-    .map((p) => {
-      const next = p.workItems[0]
-      return {
-        id: p.id,
-        client: p.client.displayName,
-        name: p.name,
-        stage: next?.stage ?? 'done',
-        nextTask: next?.title ?? null,
-        assignee: p.owner?.name ?? 'Unassigned',
-        shootDate: p.bookings[0]?.startsAt ?? null,
-      }
-    })
+  // Status filter reveals any status (incl. closed); with no status filter the list shows active jobs.
+  rows = status ? rows.filter((r) => r.label.id === status) : rows.filter((r) => !r.closed)
+  if (task === 'has') rows = rows.filter((r) => r.nextTask != null)
+  if (task === 'none') rows = rows.filter((r) => r.nextTask == null)
+  if (q) {
+    const needle = q.toLowerCase()
+    rows = rows.filter((r) => [r.client, r.name, r.code].some((f) => f.toLowerCase().includes(needle)))
+  }
+  if (sort === 'oldest') rows = [...rows].sort((a, b) => a.enquiredAt.getTime() - b.enquiredAt.getTime())
+  else if (sort === 'client-asc') rows = [...rows].sort((a, b) => a.client.localeCompare(b.client))
 
-  const action = (
-    <Link href="/clients/new">
-      <Button size="sm">+ Add client</Button>
-    </Link>
-  )
+  // Carried to the job detail as ?back so its in-app "Jobs" link returns to this exact filtered list.
+  const listQs = new URLSearchParams()
+  if (q) listQs.set('q', q)
+  if (sort !== JOB_DEFAULT_SORT) listQs.set('sort', sort)
+  if (status) listQs.set('status', status)
+  if (task) listQs.set('task', task)
+  const listQsStr = listQs.toString()
+  const backParam = listQsStr ? `?back=${encodeURIComponent(listQsStr)}` : ''
 
   return (
-    <AppShell user={user} csrf={csrf} active="jobs" action={action}>
-      <p className="mb-4 text-base text-ink-muted">
-        Booked jobs in production - from planning through the shoot, editing, and delivery.
-      </p>
+    <AppShell user={user} csrf={csrf} active="jobs" bareHeader>
+      <div className="w-full">
+        <div className="text-xs text-muted">Studio / Jobs</div>
+        <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-md">
+            <h1 className="text-3xl font-semibold text-ink">Jobs</h1>
+            <p className="mt-1 text-sm text-ink-muted">Booked work from planning through the shoot, editing and delivery.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <form method="get" className="relative">
+              {sort !== JOB_DEFAULT_SORT ? <input type="hidden" name="sort" value={sort} /> : null}
+              {status ? <input type="hidden" name="status" value={status} /> : null}
+              {task ? <input type="hidden" name="task" value={task} /> : null}
+              <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+              </svg>
+              <input name="q" defaultValue={q} placeholder="Search jobs" aria-label="Search jobs" className="h-9 w-64 rounded-md border border-line bg-surface pl-9 pr-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent focus:ring-1 focus:ring-accent" />
+            </form>
+            {canEdit ? <AddJobButton csrf={csrf} /> : null}
+          </div>
+        </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {(
-          [
-            { key: 'list', label: 'List', href: '/jobs' },
-            { key: 'board', label: 'Board', href: '/jobs?view=board' },
-          ] as const
-        ).map((v) => (
-          <Link
-            key={v.key}
-            href={v.href}
-            className={`rounded border px-3 py-1.5 text-sm transition-colors ${
-              view === v.key
-                ? 'border-ink bg-ink font-bold text-surface'
-                : 'border-line-strong text-ink-muted hover:text-ink'
-            }`}
-          >
-            {v.label}
-          </Link>
-        ))}
+        <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
+          <div className="text-sm text-ink">
+            {status ? 'Jobs' : 'Active jobs'} <span className="text-ink-muted">· {rows.length}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <JobFilterMenu statuses={labels.map((l) => ({ id: l.id, name: l.name }))} status={status} task={task} />
+            <JobSortSelect value={sort} />
+          </div>
+        </div>
+
+        {rows.length === 0 ? (
+          <p className="py-16 text-center text-sm text-ink-muted">
+            {q || status || task ? 'No jobs match these filters.' : 'No jobs yet. Use Add job to create one.'}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
+                  <th className="py-2 pr-4 font-medium">Client</th>
+                  <th className="py-2 pr-4 font-medium">Job</th>
+                  <th className="py-2 pr-4 font-medium">Enquired</th>
+                  <th className="py-2 pr-4 font-medium">Next task</th>
+                  <th className="py-2 pr-4 font-medium">Status</th>
+                  <th className="w-10 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id} className="group border-b border-line align-top transition-colors last:border-b-0 hover:bg-paper">
+                    <td className="py-3 pr-4">
+                      <Link href={`/clients/${row.clientId}`} className="font-medium text-ink transition-colors hover:text-accent-ink">{row.client}</Link>
+                    </td>
+                    <td className="py-3 pr-4">
+                      <Link href={`/jobs/${row.id}${backParam}`} className="block">
+                        <span className="block font-medium text-ink transition-colors group-hover:text-accent-ink">{row.name}</span>
+                        <span className="tabular block text-xs text-ink-muted">{row.code}</span>
+                      </Link>
+                    </td>
+                    <td className="tabular py-3 pr-4 text-ink-muted">{formatSydneyDate(row.enquiredAt)}</td>
+                    <td className="py-3 pr-4">
+                      {row.nextTask ? (
+                        <>
+                          <span className="block text-ink">{row.nextTask}</span>
+                          {row.nextStage ? <span className="block text-xs text-ink-muted">{stageLabel(row.nextStage)}</span> : null}
+                        </>
+                      ) : (
+                        <span className="text-ink-muted">No pending task</span>
+                      )}
+                    </td>
+                    <td className="py-3 pr-4">
+                      <StatusPicker projectId={row.id} current={row.label} labels={labels} csrf={csrf} canEdit={canEdit} />
+                    </td>
+                    <td className="py-3">
+                      <JobRowMenu jobId={row.id} clientId={row.clientId} backParam={backParam} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
-
-      {rows.length === 0 ? (
-        <div className="mt-6">
-          <EmptyState
-            title="No jobs yet"
-            description="Jobs appear here once you book an enquiry. Add a client to start one."
-          />
-        </div>
-      ) : view === 'board' ? (
-        <div className="mt-2">
-          <JobsBoard jobs={boardJobs} />
-        </div>
-      ) : (
-        <div className="mt-5">
-          <Group title="Active jobs" spine="border-l-delivered-ink" rows={active} labels={labels} csrf={csrf} canEdit={canEdit} />
-          <Group title="Closed" spine="border-l-line-strong" rows={closed} labels={labels} csrf={csrf} canEdit={canEdit} />
-        </div>
-      )}
     </AppShell>
   )
 }
