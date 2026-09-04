@@ -143,8 +143,11 @@ export default async function ProjectDetailPage({
       })
     : []
 
-  const board = isConfirmed ? await getProjectBoard(project.id) : null
-  const communications = isConfirmed
+  // The workflow (and its conversation/history) is seeded when the enquiry is converted, so show it for
+  // any active job - not only once it is booked/confirmed. Business status and production progress are
+  // separate axes (the Hybrid model), so a job can be "awaiting decision" and already "in planning".
+  const board = canInvoice ? await getProjectBoard(project.id) : null
+  const communications = canInvoice
     ? await prisma.communication.findMany({
         where: { projectId: project.id },
         orderBy: { createdAt: 'asc' },
@@ -158,7 +161,7 @@ export default async function ProjectDetailPage({
       })
     : []
 
-  const history: HistoryEntry[] = isConfirmed
+  const history: HistoryEntry[] = canInvoice
     ? (
         await prisma.auditLog.findMany({
           where: { entityType: 'Project', entityId: project.id },
@@ -236,7 +239,7 @@ export default async function ProjectDetailPage({
           <StatusPill tone="info">{label(project.lifecycleStatus)}</StatusPill>
         </div>
 
-        {isConfirmed && board ? (
+        {board && board.stages.length > 0 ? (
           <p className="mt-2 text-base text-ink-muted">
             {board.allDone ? (
               <span className="font-bold text-delivered-ink">All workflow steps complete</span>
@@ -249,7 +252,7 @@ export default async function ProjectDetailPage({
           </p>
         ) : null}
 
-        {isConfirmed && board ? (
+        {board && board.stages.length > 0 ? (
           <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* Workflow board: Studio-Ninja phased checklist over the business records (Hybrid, docs/23). */}
             <section className="rounded border border-line bg-surface p-5">
