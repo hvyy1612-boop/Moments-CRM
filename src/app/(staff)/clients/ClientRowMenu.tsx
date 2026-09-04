@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRef, useState } from 'react'
-import { archiveClientAction, deleteClientAction, restoreClientAction } from './actions'
+import { deleteClientAction } from './actions'
 
 const MENU_H = 172
 
@@ -11,15 +11,16 @@ export function ClientRowMenu({
   name,
   email,
   csrf,
-  archived,
   canDelete,
+  backParam = '',
 }: {
   clientId: string
   name: string
   email: string
   csrf: string
-  archived: boolean
   canDelete: boolean
+
+  backParam?: string
 }) {
   const btnRef = useRef<HTMLButtonElement>(null)
   const [open, setOpen] = useState(false)
@@ -61,39 +62,23 @@ export function ClientRowMenu({
             style={{ position: 'fixed', top: pos.top, left: pos.left }}
             className="z-50 w-44 overflow-hidden rounded-md border border-line bg-surface py-1 shadow-lg"
           >
-            <Link href={`/clients/${clientId}`} role="menuitem" className={itemClass}>
-              View client
+            <Link href={`/clients/${clientId}${backParam}`} role="menuitem" className={itemClass}>
+              Open profile
+            </Link>
+            <Link href={`/clients/${clientId}/edit`} role="menuitem" className={itemClass}>
+              Edit details
             </Link>
             <a href={`mailto:${email}`} role="menuitem" className={itemClass}>
               Send email
             </a>
-            <Link href={`/clients/${clientId}/edit`} role="menuitem" className={itemClass}>
-              Edit client
-            </Link>
 
-            {archived ? (
-              <form action={restoreClientAction}>
-                <input type="hidden" name="csrf" value={csrf} />
-                <input type="hidden" name="clientId" value={clientId} />
-                <button type="submit" role="menuitem" className={itemClass}>
-                  Restore client
-                </button>
-              </form>
-            ) : (
-              <form action={archiveClientAction}>
-                <input type="hidden" name="csrf" value={csrf} />
-                <input type="hidden" name="clientId" value={clientId} />
-                <button type="submit" role="menuitem" className={itemClass}>
-                  Archive client
-                </button>
-              </form>
-            )}
             {canDelete ? (
               <form
                 action={deleteClientAction}
                 onSubmit={(e) => {
                   if (!window.confirm(`Permanently delete ${name} and ALL their jobs, quotes, invoices and history? This cannot be undone.`)) e.preventDefault()
                 }}
+                className="mt-1 border-t border-line pt-1"
               >
                 <input type="hidden" name="csrf" value={csrf} />
                 <input type="hidden" name="clientId" value={clientId} />
