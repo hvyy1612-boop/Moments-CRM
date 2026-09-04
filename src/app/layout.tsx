@@ -1,18 +1,10 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import { Poppins, Cormorant_Garamond, Manrope } from 'next/font/google'
+import { Cormorant_Garamond, Manrope } from 'next/font/google'
 import './globals.css'
 
-// Single UI font (self-hosted by next/font so the browser never calls Google and the strict CSP
-// font-src 'self' is satisfied). One clean, readable geometric sans across the whole app - headings
-// and body - for a modern, easy-to-read look. Exposed as --font-poppins; globals.css maps both
-// --font-sans and --font-serif to it.
-const poppins = Poppins({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-poppins',
-  display: 'swap',
-})
+// The in-app UI uses the native system sans (see globals.css --font-sans/--font-serif) - no webfont
+// download. Only the public landing masthead loads custom faces below.
 
 // Landing masthead type (reference-matched, public page only): Cormorant Garamond for the welcome
 // heading, Manrope for the subtitle, description and button. Self-hosted by next/font (CSP-safe).
@@ -44,7 +36,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en-AU" className={`${poppins.variable} ${cormorant.variable} ${manrope.variable}`}>
+    <html lang="en-AU" className={`${cormorant.variable} ${manrope.variable}`}>
       <body>{children}</body>
     </html>
   )
