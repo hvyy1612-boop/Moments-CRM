@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
-import { Prisma } from '@prisma/client'
+import { Prisma, type ClientSource, type ClientType } from '@prisma/client'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
@@ -10,11 +10,16 @@ import { titleCase } from '@/lib/text'
 import { AppShell } from '../AppShell'
 import { ClientRowMenu } from './ClientRowMenu'
 import { SortSelect, DEFAULT_SORT, type SortValue } from './SortSelect'
+import { FilterMenu } from './FilterMenu'
+import { ColumnsMenu } from './ColumnsMenu'
+import { ClientsMoreMenu } from './ClientsMoreMenu'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Clients - Moments' }
 
 const SORTS: SortValue[] = ['newest', 'oldest', 'name-asc', 'name-desc', 'most-jobs', 'fewest-jobs']
+const SOURCES: ClientSource[] = ['DIRECT_BOOKING', 'ENQUIRY', 'REFERRAL', 'MANUAL', 'OTHER']
+const TYPES: ClientType[] = ['INDIVIDUAL', 'BUSINESS']
 
 function orderFor(sort: SortValue): Prisma.ClientOrderByWithRelationInput {
   switch (sort) {
@@ -38,7 +43,7 @@ function initials(name: string): string {
 export default async function ClientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; sort?: string }>
+  searchParams: Promise<{ q?: string; sort?: string; source?: string; type?: string; jobs?: string }>
 }) {
   const user = await requireRole('/clients')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
@@ -47,6 +52,9 @@ export default async function ClientsPage({
   const sp = await searchParams
   const q = (sp.q ?? '').trim()
   const sort: SortValue = SORTS.includes(sp.sort as SortValue) ? (sp.sort as SortValue) : DEFAULT_SORT
+  const source = sp.source ?? ''
+  const type = sp.type ?? ''
+  const jobs = sp.jobs ?? ''
 
   // Clients page = profile management only: hide merged and archived records from the main list.
   const where: Prisma.ClientWhereInput = { mergedIntoClientId: null, archivedAt: null }
@@ -57,6 +65,10 @@ export default async function ClientsPage({
       { phone: { contains: q } },
     ]
   }
+  if ((SOURCES as string[]).includes(source)) where.source = source as ClientSource
+  if ((TYPES as string[]).includes(type)) where.type = type as ClientType
+  if (jobs === 'none') where.projects = { none: {} }
+  if (jobs === 'has' || jobs === '2plus') where.projects = { some: {} }
 
   const clients = await prisma.client.findMany({
     where,
@@ -72,7 +84,7 @@ export default async function ClientsPage({
     },
   })
 
-  const rows = clients.map((c) => ({
+  const allRows = clients.map((c) => ({
     id: c.id,
     name: c.displayName,
     email: c.email,
@@ -81,6 +93,19 @@ export default async function ClientsPage({
     projects: c._count.projects,
     since: c.createdAt,
   }))
+  // "2+ jobs" is the one filter Prisma can't express in the where clause, so refine here.
+  const rows = jobs === '2plus' ? allRows.filter((r) => r.projects >= 2) : allRows
+
+  // Carried to the detail page as ?back so its in-app "Clients" link returns to this exact filtered list.
+  const listQs = new URLSearchParams()
+  if (q) listQs.set('q', q)
+  if (sort !== DEFAULT_SORT) listQs.set('sort', sort)
+  if (source) listQs.set('source', source)
+  if (type) listQs.set('type', type)
+  if (jobs) listQs.set('jobs', jobs)
+  const listQsStr = listQs.toString()
+  const backParam = listQsStr ? `?back=${encodeURIComponent(listQsStr)}` : ''
+  const exportHref = `/clients/export${listQsStr ? `?${listQsStr}` : ''}`
 
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
@@ -119,11 +144,16 @@ export default async function ClientsPage({
         </div>
 
         {/* Toolbar */}
-        <div className="mt-7 flex items-center justify-between gap-3 border-b border-line pb-2">
+        <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
           <div className="text-sm text-ink">
             All clients <span className="text-ink-muted">· {rows.length}</span>
           </div>
-          <SortSelect value={sort} />
+          <div className="flex items-center gap-1">
+            <FilterMenu source={source} type={type} jobs={jobs} />
+            <SortSelect value={sort} />
+            <ColumnsMenu />
+            <ClientsMoreMenu exportHref={exportHref} />
+          </div>
         </div>
 
         {/* Table */}
@@ -133,14 +163,14 @@ export default async function ClientsPage({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
+            <table className="clients-table w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
                   <th className="py-2 pr-4 font-medium">Client</th>
-                  <th className="py-2 pr-4 font-medium">Phone</th>
-                  <th className="py-2 pr-4 font-medium">Source</th>
-                  <th className="py-2 pr-4 font-medium">Jobs</th>
-                  <th className="py-2 pr-4 font-medium">Client since</th>
+                  <th data-col="phone" className="py-2 pr-4 font-medium">Phone</th>
+                  <th data-col="source" className="py-2 pr-4 font-medium">Source</th>
+                  <th data-col="jobs" className="py-2 pr-4 font-medium">Jobs</th>
+                  <th data-col="since" className="py-2 pr-4 font-medium">Client since</th>
                   <th className="w-10 py-2"></th>
                 </tr>
               </thead>
@@ -148,7 +178,7 @@ export default async function ClientsPage({
                 {rows.map((row) => (
                   <tr key={row.id} className="group border-b border-line transition-colors last:border-b-0 hover:bg-paper">
                     <td className="py-3 pr-4">
-                      <Link href={`/clients/${row.id}`} className="flex items-center gap-3">
+                      <Link href={`/clients/${row.id}${backParam}`} className="flex items-center gap-3">
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">
                           {initials(row.name)}
                         </span>
@@ -158,10 +188,10 @@ export default async function ClientsPage({
                         </span>
                       </Link>
                     </td>
-                    <td className="tabular py-3 pr-4 text-ink-muted">{row.phone ?? '-'}</td>
-                    <td className="py-3 pr-4 text-ink-muted">{row.source}</td>
-                    <td className="tabular py-3 pr-4 text-ink">{row.projects}</td>
-                    <td className="tabular py-3 pr-4 text-ink-muted">{formatSydneyDate(row.since)}</td>
+                    <td data-col="phone" className="tabular py-3 pr-4 text-ink-muted">{row.phone ?? '-'}</td>
+                    <td data-col="source" className="py-3 pr-4 text-ink-muted">{row.source}</td>
+                    <td data-col="jobs" className="tabular py-3 pr-4 text-ink">{row.projects}</td>
+                    <td data-col="since" className="tabular py-3 pr-4 text-ink-muted">{formatSydneyDate(row.since)}</td>
                     <td className="py-3">
                       <ClientRowMenu
                         clientId={row.id}
@@ -170,6 +200,7 @@ export default async function ClientsPage({
                         csrf={csrf}
                         archived={false}
                         canDelete={user.role === 'ADMIN'}
+                        backParam={backParam}
                       />
                     </td>
                   </tr>

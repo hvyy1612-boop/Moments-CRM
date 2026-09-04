@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
+import { prisma } from '@/lib/db'
 import {
   addClientNote,
   archiveClient,
@@ -95,6 +96,77 @@ export async function createClientAction(formData: FormData): Promise<void> {
   revalidatePath('/clients')
   revalidatePath('/enquiries')
   redirect(`/enquiries/${enquiry.id}`)
+}
+
+export type ImportState =
+  | { status: 'idle' }
+  | { status: 'error'; message: string }
+  | { status: 'done'; created: number; skipped: number; failed: number }
+
+/**
+ * Bulk-import client PROFILES from pasted CSV (columns: name, email, phone, [source]). Creates plain
+ * client profiles only - it does NOT open enquiries (unlike the single-intake Add client), and skips
+ * rows whose email already exists so re-running is safe.
+ */
+export async function importClientsAction(_prev: ImportState, formData: FormData): Promise<ImportState> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+
+  const raw = String(formData.get('csv') ?? '').trim()
+  if (!raw) return { status: 'error', message: 'Paste at least one row of CSV first.' }
+
+  const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+  // Drop an optional header row (first line mentioning "email").
+  if (lines[0] && /email/i.test(lines[0]) && !/@/.test(lines[0]!)) lines.shift()
+
+  let created = 0
+  let skipped = 0
+  let failed = 0
+  const seen = new Set<string>()
+
+  for (const line of lines) {
+    const cols = line.split(',').map((c) => c.trim())
+    const [name = '', email = '', phone = ''] = cols
+    const key = email.toLowerCase()
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      failed++
+      continue
+    }
+    if (seen.has(key)) {
+      skipped++
+      continue
+    }
+    seen.add(key)
+    const existing = await prisma.client.findUnique({ where: { email }, select: { id: true } })
+    if (existing) {
+      skipped++
+      continue
+    }
+    const parts = name.split(/\s+/).filter(Boolean)
+    const parsed = clientSchema.safeParse({
+      firstName: parts.slice(0, -1).join(' ') || parts[0] || name || email,
+      lastName: parts.length > 1 ? parts[parts.length - 1] : '',
+      company: '',
+      email,
+      phone,
+      street: '', suburb: '', state: '', postcode: '', country: '',
+      isCompany: false,
+      notes: '',
+    })
+    if (!parsed.success) {
+      failed++
+      continue
+    }
+    try {
+      await createClient(parsed.data, user.id)
+      created++
+    } catch {
+      failed++
+    }
+  }
+
+  revalidatePath('/clients')
+  return { status: 'done', created, skipped, failed }
 }
 
 /** Save edits to a client. */

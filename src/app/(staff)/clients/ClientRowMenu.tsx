@@ -15,6 +15,7 @@ export function ClientRowMenu({
   csrf,
   archived,
   canDelete,
+  backParam = '',
 }: {
   clientId: string
   name: string
@@ -22,6 +23,8 @@ export function ClientRowMenu({
   csrf: string
   archived: boolean
   canDelete: boolean
+  /** Current list query string as ?back=... so the profile can return to this filtered list. */
+  backParam?: string
 }) {
   const btnRef = useRef<HTMLButtonElement>(null)
   const [open, setOpen] = useState(false)
@@ -63,15 +66,15 @@ export function ClientRowMenu({
             style={{ position: 'fixed', top: pos.top, left: pos.left }}
             className="z-50 w-44 overflow-hidden rounded-md border border-line bg-surface py-1 shadow-lg"
           >
-            <Link href={`/clients/${clientId}`} role="menuitem" className={itemClass}>
-              View client
+            <Link href={`/clients/${clientId}${backParam}`} role="menuitem" className={itemClass}>
+              Open profile
+            </Link>
+            <Link href={`/clients/${clientId}/edit`} role="menuitem" className={itemClass}>
+              Edit details
             </Link>
             <a href={`mailto:${email}`} role="menuitem" className={itemClass}>
               Send email
             </a>
-            <Link href={`/clients/${clientId}/edit`} role="menuitem" className={itemClass}>
-              Edit client
-            </Link>
 
             {archived ? (
               <form action={restoreClientAction}>

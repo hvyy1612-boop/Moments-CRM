@@ -1,11 +1,10 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { Button } from '@/components/ui/Button'
 import { CommandPalette } from '@/components/CommandPalette'
 import { AddNewMenu } from '@/components/AddNewMenu'
 import { can, type Permission } from '@/lib/auth/authz'
 import type { SessionUser } from '@/lib/auth/guard'
-import { signOut } from './actions'
+import { Sidebar } from './Sidebar'
 
 export type NavKey =
   | 'dashboard'
@@ -84,76 +83,16 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-paper">
-      {/* Left sidebar (D-16): w-60 wide, grouped, Lucide icons, active = sunk fill + accent rail. */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-line bg-surface md:flex">
-        <div className="border-b border-line px-4 py-4">
-          <div className="text-base font-semibold uppercase tracking-[0.2em] leading-none text-ink">
-            Moments
-          </div>
-          <div className="mt-1 text-xs uppercase tracking-widest text-muted">
-            Photography &amp; Film
-          </div>
-        </div>
-
-        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 py-3">
-          {GROUPS.map((group) => {
-            const groupItems = items.filter((n) => n.group === group)
-            if (groupItems.length === 0) return null
-            return (
-              <div key={group} className="mb-2">
-                <div className="px-2 pb-1 pt-2 text-xs uppercase tracking-widest text-muted">
-                  {group}
-                </div>
-                {groupItems.map((item) =>
-                  item.built ? (
-                    <Link
-                      key={item.key}
-                      href={item.href}
-                      aria-current={item.key === active ? 'page' : undefined}
-                      className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
-                        item.key === active
-                          ? 'bg-sunk font-medium text-ink'
-                          : 'text-ink-muted hover:bg-paper hover:text-ink'
-                      }`}
-                    >
-                      {item.icon}
-                      {item.label}
-                    </Link>
-                  ) : (
-                    <span
-                      key={item.key}
-                      aria-disabled="true"
-                      title="Coming soon"
-                      className="flex cursor-default items-center gap-3 rounded border-l-2 border-transparent px-3 py-2 text-sm text-ink-muted opacity-40"
-                    >
-                      {item.icon}
-                      {item.label}
-                    </span>
-                  ),
-                )}
-              </div>
-            )
-          })}
-        </nav>
-
-        <div className="border-t border-line px-4 py-4">
-          <div className="flex items-center gap-3">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-accent-tint font-serif text-sm text-accent-ink">
-              {initial}
-            </span>
-            <div className="min-w-0">
-              <div className="truncate text-sm text-ink">{user.name}</div>
-              <div className="text-xs capitalize text-ink-muted">{user.role.toLowerCase()}</div>
-            </div>
-          </div>
-          <form action={signOut} className="mt-3">
-            <input type="hidden" name="csrf" value={csrf} />
-            <Button type="submit" variant="secondary" size="sm" className="w-full">
-              Sign out
-            </Button>
-          </form>
-        </div>
-      </aside>
+      {/* Collapsible desktop sidebar (icon rail + account menu) - see Sidebar.tsx. */}
+      <Sidebar
+        items={items}
+        groups={GROUPS}
+        active={active}
+        userName={user.name}
+        userRole={user.role}
+        initial={initial}
+        csrf={csrf}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar (D-21): hidden when the page renders its own full-width header (bareHeader). */}

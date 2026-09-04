@@ -70,6 +70,10 @@ function initials(name: string): string {
   return parts.map((p) => p.charAt(0).toUpperCase()).join('') || '?'
 }
 
+// Quiet product action (not a marketing CTA): subtle neutral fill, no heavy black pill.
+const QUIET_BTN =
+  'inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk'
+
 const INVOICE_TONE: Record<string, Tone> = {
   DRAFT: 'neutral', ISSUED: 'info', SENT: 'info', PARTIALLY_PAID: 'warn', PAID: 'good', OVERDUE: 'bad', VOID: 'neutral',
 }
@@ -88,7 +92,7 @@ function SectionCard({
   children: ReactNode
 }) {
   return (
-    <section className="rounded-lg border border-line bg-surface p-5 shadow-sm">
+    <section className="rounded-lg border border-line bg-surface p-5">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
           <span className="text-accent-ink">{icon}</span>
@@ -112,9 +116,18 @@ function Fact({ label, value }: { label: string; value: ReactNode }) {
   )
 }
 
-export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ClientDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ back?: string }>
+}) {
   const user = await requireRole('/clients/[id]')
   const { id } = await params
+  // The list passes its own query string as ?back so this page can return to the exact filtered list.
+  const { back } = await searchParams
+  const backHref = back ? `/clients?${back}` : '/clients'
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
@@ -221,7 +234,6 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
   const cityLine = [client.suburb, client.state, client.postcode].filter(Boolean).join(' ')
   const addressLines = [client.street, cityLine, client.country].filter(Boolean)
-  const archived = client.status === 'ARCHIVED'
   const invoiced = invoiceAgg._sum.total ?? new Prisma.Decimal(0)
   const paid = invoiceAgg._sum.amountPaid ?? new Prisma.Decimal(0)
   const due = invoiced.sub(paid)
@@ -264,91 +276,56 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   })
 
   return (
-    <AppShell user={user} csrf={csrf} active="clients">
-      <div className="mx-auto max-w-5xl">
-        <Link href="/clients" className="text-sm font-bold text-accent-ink hover:underline">
-          Back to clients
+    <AppShell user={user} csrf={csrf} active="clients" bareHeader>
+      <div className="w-full">
+        <Link href={backHref} className="inline-flex items-center gap-0.5 text-sm text-ink-muted transition-colors hover:text-ink">
+          <svg className="h-4 w-4" {...svg}><path d="M15 6l-6 6 6 6" /></svg>
+          Clients
         </Link>
 
-        <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-3">
-          {/* Left: client card */}
+        {/* Header: identity + quiet actions. */}
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-4 border-b border-line pb-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent-tint text-base font-semibold text-accent-ink">
+              {initials(client.displayName)}
+            </span>
+            <div className="min-w-0">
+              <h1 className="truncate text-2xl font-semibold leading-tight text-ink">{client.displayName}</h1>
+              <p className="mt-0.5 truncate text-sm text-ink-muted">
+                <a href={`mailto:${client.email}`} className="hover:text-ink">{client.email}</a>
+                {client.phone ? ` · ${client.phone}` : ''}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <a href={`mailto:${client.email}`} className={QUIET_BTN}><IconMail /> Send email</a>
+            <Link href={`/clients/${client.id}/edit`} className={QUIET_BTN}><IconPencil /> Edit</Link>
+            {user.role === 'ADMIN' ? (
+              <DeleteClientButton clientId={client.id} name={client.displayName} csrf={csrf} />
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {/* Left: profile */}
           <div className="flex flex-col gap-4">
-            <section className="rounded-lg border border-line bg-surface p-5">
-              <div className="flex items-center gap-3">
-                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-accent-tint font-serif text-xl text-accent-ink">
-                  {initials(client.displayName)}
-                </span>
-                <div className="min-w-0">
-                  <h1 className="truncate font-serif text-2xl font-semibold leading-tight text-ink">
-                    {client.displayName}
-                  </h1>
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                    <span className="rounded border border-line-strong px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide text-ink-muted">
-                      {client.type === 'BUSINESS' ? 'Company' : 'Individual'}
-                    </span>
-                    <span
-                      className={`rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide ${
-                        archived ? 'bg-hold text-hold-ink' : 'bg-delivered text-delivered-ink'
-                      }`}
-                    >
-                      {titleCase(client.status)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <dl className="mt-4 flex flex-col">
-                <div className="flex justify-between gap-4 border-t border-line py-2.5">
-                  <dt className="text-sm text-muted">Email</dt>
-                  <dd className="text-right text-base text-ink">
-                    <a href={`mailto:${client.email}`} className="text-accent-ink hover:underline">
-                      {client.email}
-                    </a>
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-4 border-t border-line py-2.5">
-                  <dt className="text-sm text-muted">Phone</dt>
-                  <dd className="text-right text-base text-ink">{client.phone ?? '-'}</dd>
-                </div>
-                {client.type === 'BUSINESS' ? (
-                  <div className="flex justify-between gap-4 border-t border-line py-2.5">
-                    <dt className="text-sm text-muted">Company</dt>
-                    <dd className="text-right text-base text-ink">{client.legalName ?? '-'}</dd>
-                  </div>
-                ) : null}
-                <div className="flex justify-between gap-4 border-t border-line py-2.5">
-                  <dt className="text-sm text-muted">Address</dt>
-                  <dd className="text-right text-base text-ink">
-                    {addressLines.length > 0 ? (
-                      <div className="flex flex-col">
-                        {addressLines.map((line) => (
-                          <span key={line}>{line}</span>
-                        ))}
-                      </div>
-                    ) : (
-                      '-'
-                    )}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-4 border-t border-line py-2.5">
-                  <dt className="text-sm text-muted">Client since</dt>
-                  <dd className="text-right text-base text-ink">{formatSydneyDate(client.createdAt)}</dd>
-                </div>
-                <div className="flex justify-between gap-4 border-t border-line py-2.5">
-                  <dt className="text-sm text-muted">Source</dt>
-                  <dd className="text-right text-base text-ink">{titleCase(client.source)}</dd>
-                </div>
+            <SectionCard title="Contact" icon={<IconMail />}>
+              <dl className="flex flex-col gap-2">
+                <Fact label="Email" value={<a href={`mailto:${client.email}`} className="text-accent-ink hover:underline">{client.email}</a>} />
+                <Fact label="Phone" value={client.phone ?? '-'} />
               </dl>
+            </SectionCard>
 
-              <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
-                <Link href={`/clients/${client.id}/edit`}>
-                  <Button variant="secondary" size="sm"><IconPencil /> Edit client</Button>
-                </Link>
-                {user.role === 'ADMIN' ? (
-                  <DeleteClientButton clientId={client.id} name={client.displayName} csrf={csrf} />
-                ) : null}
-              </div>
-            </section>
+            <SectionCard title="Client details" icon={<IconJobs />}>
+              <dl className="flex flex-col gap-2">
+                <Fact label="Type" value={client.type === 'BUSINESS' ? 'Company' : 'Individual'} />
+                {client.type === 'BUSINESS' ? <Fact label="Company" value={client.legalName ?? '-'} /> : null}
+                <Fact label="Address" value={addressLines.length > 0 ? <div className="flex flex-col">{addressLines.map((line) => <span key={line}>{line}</span>)}</div> : '-'} />
+                <Fact label="Source" value={titleCase(client.source)} />
+                <Fact label="Status" value={titleCase(client.status)} />
+                <Fact label="Client since" value={formatSydneyDate(client.createdAt)} />
+              </dl>
+            </SectionCard>
 
             <SectionCard title="Notes" icon={<IconMail />}>
               <ClientNotesList
