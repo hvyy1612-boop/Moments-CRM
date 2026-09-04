@@ -1,14 +1,7 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import { Poppins, Cormorant_Garamond, Manrope } from 'next/font/google'
+import { Cormorant_Garamond, Manrope } from 'next/font/google'
 import './globals.css'
-
-const poppins = Poppins({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-poppins',
-  display: 'swap',
-})
 
 const cormorant = Cormorant_Garamond({
   subsets: ['latin'],
@@ -33,7 +26,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en-AU" className={`${poppins.variable} ${cormorant.variable} ${manrope.variable}`}>
+    <html lang="en-AU" className={`${cormorant.variable} ${manrope.variable}`}>
       <body>{children}</body>
     </html>
   )

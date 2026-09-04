@@ -64,6 +64,7 @@ export function AppShell({
   csrf,
   active,
   action,
+  bareHeader = false,
   children,
 }: {
   user: SessionUser
@@ -71,6 +72,8 @@ export function AppShell({
   active: NavKey
 
   action?: ReactNode
+
+  bareHeader?: boolean
   children: ReactNode
 }) {
   const items = NAV.filter((n) => !n.permission || can(user, n.permission))
@@ -81,12 +84,12 @@ export function AppShell({
     <div className="flex min-h-screen bg-paper">
       {/* Left sidebar (D-16): w-60 wide, grouped, Lucide icons, active = sunk fill + accent rail. */}
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-line bg-surface md:flex">
-        <div className="border-b border-line px-5 pb-4 pt-5">
-          <div className="font-serif text-xl font-semibold uppercase tracking-[0.18em] leading-none text-ink">
+        <div className="border-b border-line px-4 py-4">
+          <div className="text-base font-semibold uppercase tracking-[0.2em] leading-none text-ink">
             Moments
           </div>
-          <div className="mt-1.5 text-xs uppercase tracking-[0.2em] text-muted">
-            Photography · Sydney
+          <div className="mt-1 text-xs uppercase tracking-widest text-muted">
+            Photography &amp; Film
           </div>
         </div>
 
@@ -105,10 +108,10 @@ export function AppShell({
                       key={item.key}
                       href={item.href}
                       aria-current={item.key === active ? 'page' : undefined}
-                      className={`flex items-center gap-3 rounded px-3 py-2 text-sm transition-colors ${
+                      className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
                         item.key === active
-                          ? 'border-l-2 border-accent bg-sunk font-medium text-ink'
-                          : 'border-l-2 border-transparent text-ink-muted hover:bg-paper hover:text-ink'
+                          ? 'bg-sunk font-medium text-ink'
+                          : 'text-ink-muted hover:bg-paper hover:text-ink'
                       }`}
                     >
                       {item.icon}
@@ -151,7 +154,8 @@ export function AppShell({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Top bar (D-21): h-16 tall - eyebrow + page title, search, page action, avatar. */}
+        {/* Top bar (D-21): hidden when the page renders its own full-width header (bareHeader). */}
+        {bareHeader ? null : (
         <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b border-line bg-surface px-5 sm:px-8">
           <div className="min-w-0">
             <div className="text-xs uppercase tracking-widest text-muted">
@@ -169,6 +173,7 @@ export function AppShell({
             {initial}
           </span>
         </header>
+        )}
 
         {/* Mobile navigation (below md, where the sidebar is hidden). */}
         <nav className="flex gap-1 overflow-x-auto border-b border-line bg-surface px-4 py-2 md:hidden">
@@ -188,7 +193,7 @@ export function AppShell({
             ))}
         </nav>
 
-        <main className="mx-auto w-full max-w-7xl flex-1 px-5 py-8 sm:px-8">{children}</main>
+        <main className="w-full flex-1 px-6 py-8 sm:px-8">{children}</main>
       </div>
     </div>
   )

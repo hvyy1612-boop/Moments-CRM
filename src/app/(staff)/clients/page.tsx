@@ -1,9 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
-import { Button } from '@/components/ui/Button'
-import { EmptyState } from '@/components/ui/EmptyState'
-import { BoardGroup } from '@/components/ui/BoardGroup'
+import { Prisma } from '@prisma/client'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
@@ -11,117 +9,174 @@ import { formatSydneyDate } from '@/lib/time'
 import { titleCase } from '@/lib/text'
 import { AppShell } from '../AppShell'
 import { ClientRowMenu } from './ClientRowMenu'
+import { SortSelect, DEFAULT_SORT, type SortValue } from './SortSelect'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Clients - Moments' }
 
-const HEAD = ['Name', 'Type', 'Email', 'Phone', 'Source', 'Jobs', 'Since', '']
+const SORTS: SortValue[] = ['newest', 'oldest', 'name-asc', 'name-desc', 'most-jobs', 'fewest-jobs']
 
-type Row = {
-  id: string
-  name: string
-  type: string
-  email: string
-  phone: string | null
-  source: string
-  projects: number
-  since: Date
-  archived: boolean
+function orderFor(sort: SortValue): Prisma.ClientOrderByWithRelationInput {
+  switch (sort) {
+    case 'oldest': return { createdAt: 'asc' }
+    case 'name-asc': return { displayName: 'asc' }
+    case 'name-desc': return { displayName: 'desc' }
+    case 'most-jobs': return { projects: { _count: 'desc' } }
+    case 'fewest-jobs': return { projects: { _count: 'asc' } }
+    default: return { createdAt: 'desc' }
+  }
 }
 
-function Table({ rows, csrf, canDelete }: { rows: Row[]; csrf: string; canDelete: boolean }) {
-  return (
-    <>
-      {rows.map((row) => (
-        <tr key={row.id} className="group transition-colors hover:bg-paper">
-          <td className="border-b border-r border-line px-3 py-3">
-            <Link
-              href={`/clients/${row.id}`}
-              className="font-serif text-lg font-semibold text-ink transition-colors group-hover:text-accent-ink"
-            >
-              {row.name}
-            </Link>
-          </td>
-          <td className="border-b border-r border-line px-3 py-3 text-base text-ink-muted">{row.type}</td>
-          <td className="border-b border-r border-line px-3 py-3 text-base text-ink-muted">{row.email}</td>
-          <td className="tabular border-b border-r border-line px-3 py-3 text-base text-ink-muted">{row.phone ?? '-'}</td>
-          <td className="border-b border-r border-line px-3 py-3 text-base text-ink">{row.source}</td>
-          <td className="tabular border-b border-r border-line px-3 py-3 text-base text-ink">{row.projects}</td>
-          <td className="tabular border-b border-r border-line px-3 py-3 text-base text-ink-muted">{formatSydneyDate(row.since)}</td>
-          <td className="border-b border-line px-2 py-3">
-            <ClientRowMenu
-              clientId={row.id}
-              name={row.name}
-              email={row.email}
-              csrf={csrf}
-              archived={row.archived}
-              canDelete={canDelete}
-            />
-          </td>
-        </tr>
-      ))}
-    </>
-  )
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
 }
 
-export default async function ClientsPage() {
+export default async function ClientsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; sort?: string }>
+}) {
   const user = await requireRole('/clients')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
+  const sp = await searchParams
+  const q = (sp.q ?? '').trim()
+  const sort: SortValue = SORTS.includes(sp.sort as SortValue) ? (sp.sort as SortValue) : DEFAULT_SORT
+
+  const where: Prisma.ClientWhereInput = { mergedIntoClientId: null, archivedAt: null }
+  if (q) {
+    where.OR = [
+      { displayName: { contains: q, mode: 'insensitive' } },
+      { email: { contains: q, mode: 'insensitive' } },
+      { phone: { contains: q } },
+    ]
+  }
+
   const clients = await prisma.client.findMany({
-    where: { mergedIntoClientId: null },
-    orderBy: { createdAt: 'desc' },
+    where,
+    orderBy: orderFor(sort),
     select: {
       id: true,
       displayName: true,
-      type: true,
       email: true,
       phone: true,
       source: true,
-      archivedAt: true,
       createdAt: true,
       _count: { select: { projects: true } },
     },
   })
 
-  const rows: Row[] = clients.map((c) => ({
+  const rows = clients.map((c) => ({
     id: c.id,
     name: c.displayName,
-    type: c.type === 'BUSINESS' ? 'Company' : 'Individual',
     email: c.email,
     phone: c.phone,
     source: titleCase(c.source),
     projects: c._count.projects,
     since: c.createdAt,
-    archived: c.archivedAt != null,
   }))
-  const active = rows.filter((r) => !r.archived)
-  const archived = rows.filter((r) => r.archived)
-
-  const action = (
-    <Link href="/clients/new">
-      <Button size="sm">+ Add client</Button>
-    </Link>
-  )
 
   return (
-    <AppShell user={user} csrf={csrf} active="clients" action={action}>
-      {clients.length === 0 ? (
-        <EmptyState
-          title="No clients yet"
-          description="Add a client with the button above, or convert an enquiry."
-        />
-      ) : (
-        <div>
-          <BoardGroup title="Active clients" count={active.length} spine="border-l-delivered-ink" head={HEAD}>
-            <Table rows={active} csrf={csrf} canDelete={user.role === 'ADMIN'} />
-          </BoardGroup>
-          <BoardGroup title="Archived" count={archived.length} spine="border-l-line-strong" head={HEAD}>
-            <Table rows={archived} csrf={csrf} canDelete={user.role === 'ADMIN'} />
-          </BoardGroup>
+    <AppShell user={user} csrf={csrf} active="clients" bareHeader>
+      <div className="w-full">
+        {/* Header */}
+        <div className="text-xs text-muted">Studio / Clients</div>
+        <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-semibold text-ink">Clients</h1>
+            <p className="mt-1 text-sm text-ink-muted">Manage client profiles and contact information.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <form method="get" className="relative">
+              {sort !== DEFAULT_SORT ? <input type="hidden" name="sort" value={sort} /> : null}
+              <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+              </svg>
+              <input
+                name="q"
+                defaultValue={q}
+                placeholder="Search clients"
+                aria-label="Search clients"
+                className="h-9 w-64 rounded-md border border-line bg-surface pl-9 pr-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent focus:ring-1 focus:ring-accent"
+              />
+            </form>
+            <Link
+              href="/clients/new"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              Add client
+            </Link>
+          </div>
         </div>
-      )}
+
+        {/* Toolbar */}
+        <div className="mt-7 flex items-center justify-between gap-3 border-b border-line pb-2">
+          <div className="text-sm text-ink">
+            All clients <span className="text-ink-muted">· {rows.length}</span>
+          </div>
+          <SortSelect value={sort} />
+        </div>
+
+        {/* Table */}
+        {rows.length === 0 ? (
+          <p className="py-16 text-center text-sm text-ink-muted">
+            {q ? `No clients match "${q}".` : 'No clients yet. Add your first client above, or convert an enquiry.'}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
+                  <th className="py-2 pr-4 font-medium">Client</th>
+                  <th className="py-2 pr-4 font-medium">Phone</th>
+                  <th className="py-2 pr-4 font-medium">Source</th>
+                  <th className="py-2 pr-4 font-medium">Jobs</th>
+                  <th className="py-2 pr-4 font-medium">Client since</th>
+                  <th className="w-10 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id} className="group border-b border-line transition-colors last:border-b-0 hover:bg-paper">
+                    <td className="py-3 pr-4">
+                      <Link href={`/clients/${row.id}`} className="flex items-center gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">
+                          {initials(row.name)}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{row.name}</span>
+                          <span className="block truncate text-xs text-ink-muted">{row.email}</span>
+                        </span>
+                      </Link>
+                    </td>
+                    <td className="tabular py-3 pr-4 text-ink-muted">{row.phone ?? '-'}</td>
+                    <td className="py-3 pr-4 text-ink-muted">{row.source}</td>
+                    <td className="tabular py-3 pr-4 text-ink">{row.projects}</td>
+                    <td className="tabular py-3 pr-4 text-ink-muted">{formatSydneyDate(row.since)}</td>
+                    <td className="py-3">
+                      <ClientRowMenu
+                        clientId={row.id}
+                        name={row.name}
+                        email={row.email}
+                        csrf={csrf}
+                        archived={false}
+                        canDelete={user.role === 'ADMIN'}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </AppShell>
   )
 }

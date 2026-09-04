@@ -79,7 +79,7 @@ export default async function CalendarPage({
     >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <h1 className="min-w-40 font-serif text-2xl font-semibold text-ink">{isAgenda ? `Today - ${cockpit!.dateLabel}` : data!.label}</h1>
+          <h1 className="min-w-44 font-serif text-2xl font-semibold text-ink">{isAgenda ? `Today - ${cockpit!.dateLabel}` : data!.label}</h1>
           {!isAgenda ? (
             <div className="ml-1 flex items-center gap-1">
               <Link href={href({ date: data!.prevKey })} aria-label="Previous" className="flex h-8 w-8 items-center justify-center rounded border border-line bg-surface text-ink-muted hover:bg-paper hover:text-ink">
