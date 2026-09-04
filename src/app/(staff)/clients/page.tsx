@@ -198,7 +198,6 @@ export default async function ClientsPage({
                         name={row.name}
                         email={row.email}
                         csrf={csrf}
-                        archived={false}
                         canDelete={user.role === 'ADMIN'}
                         backParam={backParam}
                       />

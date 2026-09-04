@@ -45,7 +45,7 @@ export function ImportForm({ csrf }: { csrf: string }) {
           name="csv"
           ref={taRef}
           rows={10}
-          placeholder={'name, email, phone\nHa Vy Tran, ha@example.com, +61 410 208 428'}
+          placeholder="name, email, phone"
           className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent focus:ring-1 focus:ring-accent"
         />
       </div>

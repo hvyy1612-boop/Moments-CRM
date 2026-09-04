@@ -79,7 +79,7 @@ export function Sidebar({
           if (groupItems.length === 0) return null
           return (
             <div key={group} className="mb-2">
-              {!collapsed ? <div className="px-2 pb-1 pt-2 text-xs uppercase tracking-widest text-muted">{group}</div> : null}
+              {!collapsed && group !== 'Overview' ? <div className="px-2 pb-1 pt-2 text-xs uppercase tracking-widest text-muted">{group}</div> : null}
               {groupItems.map((item) =>
                 item.built ? (
                   <Link
