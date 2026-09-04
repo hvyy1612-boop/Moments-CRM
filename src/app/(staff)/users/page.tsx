@@ -62,10 +62,15 @@ export default async function UsersPage() {
           <AddStaffForm csrf={csrf} />
         </section>
 
-        <div className="mt-6 mb-2 flex items-center justify-between">
+        <div className="mt-6 mb-1 flex items-center justify-between">
           <h2 className="font-serif text-lg font-semibold text-ink">Teams</h2>
           <span className="text-sm text-ink-muted">{totalActive} active</span>
         </div>
+        <p className="mb-3 text-sm text-ink-muted">
+          <span className="font-semibold text-ink">Reset password</span> gives a new one-time password ·{' '}
+          <span className="font-semibold text-ink">Disable</span> blocks sign-in but keeps the account ·{' '}
+          <span className="font-semibold text-ink">Remove</span> deletes the account and revokes access
+        </p>
         <StaffTeams teams={teams} csrf={csrf} currentUserId={user.id} />
       </div>
     </AppShell>
