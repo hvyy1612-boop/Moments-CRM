@@ -1,0 +1,17 @@
+import type { Role } from './permissions'
+
+export const TEAMS = [
+  { slug: 'admin', role: 'ADMIN', label: 'Admins' },
+  { slug: 'studio', role: 'STUDIO', label: 'Studio' },
+  { slug: 'editor', role: 'EDITOR', label: 'Editors' },
+] as const satisfies readonly { slug: string; role: Role; label: string }[]
+
+export type TeamSlug = (typeof TEAMS)[number]['slug']
+
+export function teamBySlug(slug: string): (typeof TEAMS)[number] | undefined {
+  return TEAMS.find((t) => t.slug === slug)
+}
+
+export function labelForRole(role: string): string {
+  return TEAMS.find((t) => t.role === role)?.label ?? role
+}

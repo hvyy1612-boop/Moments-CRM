@@ -117,3 +117,34 @@ export async function setStaffActiveAction(formData: FormData): Promise<void> {
   if (!active) await revokeAllSessions(userId)
   revalidatePath('/users')
 }
+
+export async function removeStaffAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!verifyCsrf(cookieStore.get(CSRF_COOKIE)?.value, formData.get('csrf'))) return
+  const admin = await requireAdmin()
+  if (!admin) return
+
+  const userId = String(formData.get('userId') ?? '')
+  if (!userId || userId === admin.id) return
+
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, companyId: true, email: true, name: true, role: true },
+  })
+  if (!target) return
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: target.id }, data: { isActive: false, status: 'DELETED' } })
+    await tx.auditLog.create({
+      data: {
+        companyId: target.companyId,
+        action: 'auth.staff_removed',
+        entityType: 'User',
+        entityId: target.id,
+        beforeData: { loginId: target.email, name: target.name, role: target.role },
+      },
+    })
+  })
+  await revokeAllSessions(target.id)
+  revalidatePath('/users')
+}

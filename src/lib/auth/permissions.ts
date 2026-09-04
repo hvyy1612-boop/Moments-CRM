@@ -43,6 +43,8 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/settings': { roles: ['ADMIN'] },
   '/users': { roles: ['ADMIN'] },
 
+  '/users/roster/[team]': { roles: ['ADMIN'] },
+
   '/activity': { roles: ['ADMIN'] },
 
   '/quote/[token]': { token: true },

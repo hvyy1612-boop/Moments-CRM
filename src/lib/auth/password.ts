@@ -1,5 +1,8 @@
 import { hash as argonHash, verify as argonVerify } from '@node-rs/argon2'
 import { COMMON_PASSWORDS } from './common-passwords'
+import { meetsPasswordRules } from './password-rules'
+
+export { PASSWORD_MIN_LENGTH, PASSWORD_RULES, meetsPasswordRules } from './password-rules'
 
 const ARGON2ID_OPTIONS = {
   algorithm: 2, // Algorithm.Argon2id
@@ -9,12 +12,11 @@ const ARGON2ID_OPTIONS = {
 } as const
 
 export const PASSWORD_ALGO = 'argon2id'
-export const PASSWORD_MIN_LENGTH = 12
 
-export type PasswordPolicyError = 'too_short' | 'too_common'
+export type PasswordPolicyError = 'weak' | 'too_common'
 
 export function checkPasswordPolicy(password: string): PasswordPolicyError | null {
-  if (password.length < PASSWORD_MIN_LENGTH) return 'too_short'
+  if (!meetsPasswordRules(password)) return 'weak'
   if (COMMON_PASSWORDS.has(password.toLowerCase())) return 'too_common'
   return null
 }

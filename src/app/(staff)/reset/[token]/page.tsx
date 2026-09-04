@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: 'Set a new password - Moments' }
 
 const ERROR_MESSAGE: Record<string, string> = {
   invalid: 'This reset link is invalid or has expired. Please request a new one.',
-  too_short: 'Use at least 12 characters.',
+  weak: 'Use at least 8 characters with a letter, a number, and a special character.',
   too_common: 'That password is too common. Choose something less predictable.',
 }
 
@@ -53,7 +53,7 @@ export default async function ResetPasswordPage({
             ) : null}
             <input type="hidden" name="csrf" value={csrf} />
             <input type="hidden" name="token" value={token} />
-            <Field label="New password" htmlFor="password" hint="At least 12 characters.">
+            <Field label="New password" htmlFor="password" hint="At least 8 characters, with a letter, a number, and a special character.">
               <TextInput
                 id="password"
                 name="password"
@@ -61,7 +61,7 @@ export default async function ResetPasswordPage({
                 autoComplete="new-password"
                 autoFocus
                 required
-                minLength={12}
+                minLength={8}
               />
             </Field>
             <Button type="submit" className="w-full">
