@@ -58,6 +58,8 @@ export const ENQUIRY_VIEWS: { key: string; label: string; match: ViewMatch }[] =
     label: 'Waiting on client reply',
     match: (s, w) => isOpenEnquiry(s) && w === 'CLIENT',
   },
+  // Booked leads are kept as a record (never deleted) - a converted enquiry becomes a Job but stays here.
+  { key: 'booked', label: 'Booked', match: (s) => s === 'CONVERTED' },
   { key: 'archived', label: 'Lost or archived', match: (s) => s === 'LOST' || s === 'ARCHIVED' },
 ]
 
@@ -74,6 +76,10 @@ export const ENQUIRY_EMPTY: Record<string, { title: string; description: string 
   waiting: {
     title: 'Nothing waiting on a client',
     description: 'No open enquiries are currently with a client for their response.',
+  },
+  booked: {
+    title: 'No booked enquiries yet',
+    description: 'When an enquiry is booked it becomes a Job and stays here as a record.',
   },
   archived: {
     title: 'Nothing here',

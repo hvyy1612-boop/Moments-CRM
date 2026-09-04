@@ -100,12 +100,18 @@ export default async function EnquiryDetailPage({ params }: { params: Promise<{ 
           <div className="rounded-md border border-line bg-surface p-5">
             <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Workflow</h2>
 
-            <EnquiryWorkflow
-              stages={board.stages}
-              allDone={board.allDone}
-              enquiryId={enquiry.id}
-              csrf={csrf}
-            />
+            {enquiry.status === 'CONVERTED' ? (
+              <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">
+                This enquiry was booked. Its workflow now continues in the job.
+              </div>
+            ) : (
+              <EnquiryWorkflow
+                stages={board.stages}
+                allDone={board.allDone}
+                enquiryId={enquiry.id}
+                csrf={csrf}
+              />
+            )}
 
             {/* Outcomes */}
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
