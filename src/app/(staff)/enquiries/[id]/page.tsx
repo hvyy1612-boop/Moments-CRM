@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { StatusTag } from '@/components/ui/StatusTag'
 import { Button } from '@/components/ui/Button'
@@ -16,7 +17,6 @@ import {
 } from '@/features/enquiries/status'
 import { getEnquiryBoard } from '@/lib/domain/enquiry-workflow'
 import { AppShell } from '../../AppShell'
-import { CaseDetail } from '../../jobs/[id]/CaseDetail'
 import {
   convertEnquiryAction,
   logClientReplyAction,
@@ -69,9 +69,7 @@ export default async function EnquiryDetailPage({
     },
   })
 
-  if (!enquiry) {
-    return <CaseDetail id={id} user={user} csrf={csrf} section="enquiries" back={back} />
-  }
+  if (!enquiry) notFound()
 
   const activity = await prisma.auditLog.findMany({
     where: { entityType: 'Enquiry', entityId: id },

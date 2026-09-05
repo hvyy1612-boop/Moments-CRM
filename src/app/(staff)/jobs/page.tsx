@@ -6,9 +6,8 @@ import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
-import { ProjectLifecycle } from '@prisma/client'
 import { resolveLabel, type StatusLabel } from '@/features/projects/labels'
-import { CLOSED_STATUSES, FUNNEL_STATUSES } from '@/features/projects/lifecycle'
+import { CLOSED_STATUSES } from '@/features/projects/lifecycle'
 import { stageLabel } from '@/features/projects/workflow'
 import { getCompanyStatusLabels } from '@/lib/domain/status-labels'
 import { StatusPicker } from '@/features/projects/components/StatusPicker'
@@ -54,7 +53,6 @@ export default async function JobsPage({
   const [projects, labels] = await Promise.all([
     prisma.project.findMany({
 
-      where: { lifecycleStatus: { notIn: [...FUNNEL_STATUSES] as ProjectLifecycle[] } },
       orderBy: { enquiryReceivedAt: 'desc' },
       include: {
         client: { select: { id: true, displayName: true } },

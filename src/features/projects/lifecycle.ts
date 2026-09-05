@@ -44,11 +44,13 @@ export const CLOSED_STATUSES: ReadonlySet<ProjectLifecycle> = new Set([
   'ARCHIVED',
 ])
 
-export const FUNNEL_STATUSES = ['ENQUIRY', 'QUALIFYING', 'QUOTING', 'AWAITING_DECISION', 'NEGOTIATION'] as const
-const FUNNEL_SET: ReadonlySet<string> = new Set(FUNNEL_STATUSES)
+export const COMMITTED_LIFECYCLE = ['CONFIRMED', 'IN_PRODUCTION', 'COMPLETED', 'CLOSED'] as const
+export const COMMITTED_COMMERCIAL = ['ACCEPTED', 'DEPOSIT_PAID', 'PAID'] as const
+const COMMITTED_LC = new Set<string>(COMMITTED_LIFECYCLE)
+const COMMITTED_CM = new Set<string>(COMMITTED_COMMERCIAL)
 
-export function isBooked(status: string): boolean {
-  return !FUNNEL_SET.has(status)
+export function isCommitted(p: { lifecycleStatus: string; commercialStatus: string }): boolean {
+  return COMMITTED_LC.has(p.lifecycleStatus) || COMMITTED_CM.has(p.commercialStatus)
 }
 
 export const COMMON_STATUSES: ReadonlySet<ProjectLifecycle> = new Set([

@@ -225,7 +225,7 @@ async function runConvertEnquiry(enquiryId: string, actorUserId: string | null, 
         code: await nextProjectCode(tx, now.getFullYear()),
         name: enquiry.eventType ?? 'Project',
 
-        lifecycleStatus: 'CONFIRMED',
+        lifecycleStatus: 'BOOKING_REQUESTED',
         commercialStatus: 'UNQUOTED',
         source: enquiry.source,
         ownerUserId: enquiry.ownerUserId ?? actorUserId,

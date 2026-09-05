@@ -7,11 +7,10 @@ import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
 import { titleCase } from '@/lib/text'
 import { ENQUIRY_EMPTY, ENQUIRY_STAGE_LABEL, ENQUIRY_VIEWS, isOpenEnquiry } from '@/features/enquiries/status'
-import { FUNNEL_STATUSES, statusLabel } from '@/features/projects/lifecycle'
-import { ProjectLifecycle } from '@prisma/client'
 import { AppShell } from '../AppShell'
 import { EnquiryFilterMenu } from './EnquiryFilterMenu'
 import { EnquirySortSelect, ENQUIRY_DEFAULT_SORT, type EnquirySortValue } from './EnquirySortSelect'
+import { AddEnquiryButton } from './AddEnquiryButton'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Enquiries - Moments' }
@@ -21,10 +20,8 @@ const SORTS: EnquirySortValue[] = ['waiting', 'newest', 'name']
 
 type Row = {
   id: string
-  kind: 'enquiry' | 'project'
   name: string
   event: string
-  stage: string
   status: string
   waitingOn: string | null
   waitingDays: number
@@ -56,12 +53,11 @@ export default async function EnquiriesPage({
   })
 
   const now = Date.now()
-  const enquiryRows: Row[] = enquiries.map((e) => ({
+
+  let rows: Row[] = enquiries.map((e) => ({
     id: e.id,
-    kind: 'enquiry',
     name: e.name,
     event: e.eventType ? titleCase(e.eventType) : '-',
-    stage: ENQUIRY_STAGE_LABEL[e.status] ?? titleCase(e.status),
     status: e.status,
     waitingOn: e.waitingOn,
     waitingDays: Math.max(0, Math.floor((now - e.updatedAt.getTime()) / DAY_MS)),
@@ -70,34 +66,7 @@ export default async function EnquiriesPage({
     createdAt: e.createdAt,
   }))
 
-  const funnelProjects = await prisma.project.findMany({
-    where: { lifecycleStatus: { in: [...FUNNEL_STATUSES] as ProjectLifecycle[] } },
-    orderBy: { updatedAt: 'asc' },
-    select: {
-      id: true, name: true, lifecycleStatus: true, updatedAt: true, createdAt: true,
-      client: { select: { displayName: true } },
-      bookings: { orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true } },
-      workItems: { where: { status: 'PENDING', type: { not: 'AUTO' } }, orderBy: { order: 'asc' }, take: 1, select: { title: true } },
-    },
-  })
-  const projectRows: Row[] = funnelProjects.map((p) => ({
-    id: p.id,
-    kind: 'project',
-    name: p.client.displayName,
-    event: p.name,
-    stage: statusLabel(p.lifecycleStatus),
-    status: p.lifecycleStatus,
-    waitingOn: null,
-    waitingDays: Math.max(0, Math.floor((now - p.updatedAt.getTime()) / DAY_MS)),
-    nextTask: p.workItems[0]?.title ?? null,
-    eventDate: p.bookings[0]?.startsAt ?? null,
-    createdAt: p.createdAt,
-  }))
-
-  const matchRow = (r: Row, view: (typeof ENQUIRY_VIEWS)[number]): boolean =>
-    r.kind === 'project' ? view.key === 'all' : view.match(r.status, r.waitingOn)
-
-  let rows: Row[] = [...enquiryRows, ...projectRows].filter((r) => matchRow(r, activeView))
+  rows = rows.filter((r) => activeView.match(r.status, r.waitingOn))
   if (q) {
     const needle = q.toLowerCase()
     rows = rows.filter((r) => [r.name, r.event].some((f) => f.toLowerCase().includes(needle)))
@@ -105,7 +74,7 @@ export default async function EnquiriesPage({
   if (sort === 'newest') rows = [...rows].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
   else if (sort === 'name') rows = [...rows].sort((a, b) => a.name.localeCompare(b.name))
 
-  const count = [...enquiryRows, ...projectRows].filter((r) => matchRow(r, activeView)).length
+  const count = enquiries.filter((e) => activeView.match(e.status, e.waitingOn)).length
   const empty = ENQUIRY_EMPTY[activeView.key] ?? ENQUIRY_EMPTY.all!
 
   const listQs = new URLSearchParams()
@@ -131,10 +100,7 @@ export default async function EnquiriesPage({
               <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
               <input name="q" defaultValue={q} placeholder="Search enquiries" aria-label="Search enquiries" className="h-9 w-64 rounded-md border border-line bg-surface pl-9 pr-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent focus:ring-1 focus:ring-accent" />
             </form>
-            <Link href="/clients/new" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk">
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-              Add enquiry
-            </Link>
+            <AddEnquiryButton csrf={csrf} />
           </div>
         </div>
 
@@ -168,7 +134,7 @@ export default async function EnquiriesPage({
                       <Link href={`/enquiries/${row.id}${backParam}`} className="font-medium text-ink transition-colors group-hover:text-accent-ink">{row.name}</Link>
                     </td>
                     <td className="py-3 pr-4 text-ink-muted">{row.event}</td>
-                    <td className="py-3 pr-4 text-ink">{row.stage}</td>
+                    <td className="py-3 pr-4 text-ink">{ENQUIRY_STAGE_LABEL[row.status] ?? titleCase(row.status)}</td>
                     <td className="py-3 pr-4">
                       {row.waitingOn === 'STUDIO' ? (
                         <span className="font-medium text-ink">You</span>
