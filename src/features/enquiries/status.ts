@@ -42,12 +42,13 @@ type ViewMatch = (status: string, waitingOn: string | null) => boolean
 
 /**
  * The work queue. "Needs attention" and "Waiting for client" are driven by waitingOn (not by status),
- * so a CONTACTED lead can sit in either depending on who replied last. Closed leads never appear in
- * the two active views; they only show under All.
+ * so a CONTACTED lead can sit in either depending on who replied last. Booked leads stay under All as a
+ * record (sunk to the bottom); only lost/archived are hidden there, under their own view.
  */
 export const ENQUIRY_VIEWS: { key: string; label: string; match: ViewMatch }[] = [
-  // Default view first. A booked lead is a Job, so it never matches any of these open views.
-  { key: 'all', label: 'All open', match: (s) => isOpenEnquiry(s) },
+  // Default view. Shows live leads AND booked ones: a converted enquiry stays here (marked Booked, sunk
+  // to the bottom) so it never vanishes on conversion. Only lost/archived are excluded (their own view).
+  { key: 'all', label: 'All', match: (s) => isOpenEnquiry(s) || s === 'CONVERTED' },
   {
     key: 'attention',
     label: 'Needs your reply',
@@ -66,8 +67,8 @@ export const ENQUIRY_VIEWS: { key: string; label: string; match: ViewMatch }[] =
 /** Empty-state copy per view, phrased as a status rather than a dead filter. */
 export const ENQUIRY_EMPTY: Record<string, { title: string; description: string }> = {
   all: {
-    title: 'No open enquiries',
-    description: 'New leads from the website or "Add client" appear here. Booked clients are in Jobs.',
+    title: 'No enquiries yet',
+    description: 'New leads from the website or "Add client" appear here. Booked ones stay as a record and also open as a Job.',
   },
   attention: {
     title: "You're all caught up",

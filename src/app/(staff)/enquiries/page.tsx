@@ -28,6 +28,7 @@ type Row = {
   nextTask: string | null
   eventDate: Date | null
   createdAt: Date
+  convertedProjectId: string | null
 }
 
 export default async function EnquiriesPage({
@@ -47,7 +48,7 @@ export default async function EnquiriesPage({
   const enquiries = await prisma.enquiry.findMany({
     orderBy: { updatedAt: 'asc' }, // oldest-waiting first
     select: {
-      id: true, name: true, eventType: true, eventDate: true, status: true, waitingOn: true, updatedAt: true, createdAt: true,
+      id: true, name: true, eventType: true, eventDate: true, status: true, waitingOn: true, updatedAt: true, createdAt: true, convertedProjectId: true,
       workItems: { where: { status: 'PENDING' }, orderBy: { order: 'asc' }, take: 1, select: { title: true } },
     },
   })
@@ -65,6 +66,7 @@ export default async function EnquiriesPage({
     nextTask: e.workItems[0]?.title ?? null,
     eventDate: e.eventDate,
     createdAt: e.createdAt,
+    convertedProjectId: e.convertedProjectId,
   }))
 
   rows = rows.filter((r) => activeView.match(r.status, r.waitingOn))
@@ -74,6 +76,8 @@ export default async function EnquiriesPage({
   }
   if (sort === 'newest') rows = [...rows].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
   else if (sort === 'name') rows = [...rows].sort((a, b) => a.name.localeCompare(b.name))
+  // Booked (converted) enquiries stay in the list as a record but sink below the live leads (stable sort).
+  rows = [...rows].sort((a, b) => Number(a.status === 'CONVERTED') - Number(b.status === 'CONVERTED'))
 
   const count = enquiries.filter((e) => activeView.match(e.status, e.waitingOn)).length
   const empty = ENQUIRY_EMPTY[activeView.key] ?? ENQUIRY_EMPTY.all!
@@ -92,7 +96,7 @@ export default async function EnquiriesPage({
         <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-md">
             <h1 className="text-3xl font-semibold text-ink">Enquiries</h1>
-            <p className="mt-1 text-sm text-ink-muted">Clients who have not booked yet - from first enquiry through consultation, quote, and booking.</p>
+            <p className="mt-1 text-sm text-ink-muted">Your sales pipeline - from first enquiry to booking. Booked leads stay here as a record and also open as a Job.</p>
           </div>
           <div className="flex items-center gap-2">
             <form method="get" className="relative">
@@ -129,13 +133,15 @@ export default async function EnquiriesPage({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {rows.map((row) => {
+                  const booked = row.status === 'CONVERTED'
+                  return (
                   <tr key={row.id} className="group border-b border-line align-top transition-colors last:border-b-0 hover:bg-paper">
                     <td className="py-3 pr-4">
-                      <Link href={`/enquiries/${row.id}${backParam}`} className="font-medium text-ink transition-colors group-hover:text-accent-ink">{row.name}</Link>
+                      <Link href={`/enquiries/${row.id}${backParam}`} className={`font-medium transition-colors ${booked ? 'text-ink-muted group-hover:text-ink' : 'text-ink group-hover:text-accent-ink'}`}>{row.name}</Link>
                     </td>
                     <td className="py-3 pr-4 text-ink-muted">{row.event}</td>
-                    <td className="py-3 pr-4 text-ink">{ENQUIRY_STAGE_LABEL[row.status] ?? titleCase(row.status)}</td>
+                    <td className={`py-3 pr-4 ${booked ? 'text-ink-muted' : 'text-ink'}`}>{ENQUIRY_STAGE_LABEL[row.status] ?? titleCase(row.status)}</td>
                     <td className="py-3 pr-4">
                       {row.waitingOn === 'STUDIO' ? (
                         <span className="font-medium text-ink">You</span>
@@ -146,10 +152,17 @@ export default async function EnquiriesPage({
                       )}
                       {isOpenEnquiry(row.status) && row.waitingDays > 0 ? <span className="tabular text-ink-muted"> · {row.waitingDays}d</span> : null}
                     </td>
-                    <td className="py-3 pr-4 text-ink-muted">{row.nextTask ?? '-'}</td>
+                    <td className="py-3 pr-4 text-ink-muted">
+                      {booked ? (
+                        row.convertedProjectId ? (
+                          <Link href={`/jobs/${row.convertedProjectId}`} className="font-medium text-accent-ink transition-colors hover:underline">Open job -&gt;</Link>
+                        ) : '-'
+                      ) : (row.nextTask ?? '-')}
+                    </td>
                     <td className="tabular py-3 pr-4 text-ink-muted">{row.eventDate ? formatSydneyDate(row.eventDate) : '-'}</td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
