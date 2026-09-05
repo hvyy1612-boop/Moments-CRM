@@ -37,9 +37,17 @@ function titleCase(value: string): string {
     .join(' ')
 }
 
-export default async function EnquiryDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EnquiryDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ back?: string }>
+}) {
   const user = await requireRole('/enquiries/[id]')
   const { id } = await params
+  const { back } = await searchParams
+  const backHref = back ? `/enquiries?${back}` : '/enquiries'
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
@@ -73,14 +81,15 @@ export default async function EnquiryDetailPage({ params }: { params: Promise<{ 
   const board = await getEnquiryBoard(id)
 
   return (
-    <AppShell user={user} csrf={csrf} active="enquiries">
-      <div className="mx-auto max-w-5xl">
-        <Link href="/enquiries" className="text-sm font-bold text-accent-ink hover:underline">
-          Back to enquiries
+    <AppShell user={user} csrf={csrf} active="enquiries" bareHeader>
+      <div className="w-full">
+        <Link href={backHref} className="inline-flex items-center gap-0.5 text-sm text-ink-muted transition-colors hover:text-ink">
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+          Enquiries
         </Link>
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <h1 className="font-serif text-3xl font-semibold text-ink">{enquiry.name}</h1>
+          <h1 className="text-3xl font-semibold text-ink">{enquiry.name}</h1>
           <StatusTag kind={ENQUIRY_STAGE_KIND[enquiry.status] ?? 'hold'}>
             {ENQUIRY_STAGE_LABEL[enquiry.status] ?? titleCase(enquiry.status)}
           </StatusTag>
