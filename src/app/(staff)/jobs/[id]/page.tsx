@@ -143,40 +143,37 @@ export default async function ProjectDetailPage({
       })
     : []
 
-  // The workflow (and its conversation/history) is seeded when the enquiry is converted, so show it for
-  // any active job - not only once it is booked/confirmed. Business status and production progress are
-  // separate axes (the Hybrid model), so a job can be "awaiting decision" and already "in planning".
-  const board = canInvoice ? await getProjectBoard(project.id) : null
-  const communications = canInvoice
-    ? await prisma.communication.findMany({
-        where: { projectId: project.id },
-        orderBy: { createdAt: 'asc' },
-        select: {
-          id: true,
-          direction: true,
-          body: true,
-          createdAt: true,
-          by: { select: { name: true } },
-        },
-      })
-    : []
+  // The workflow (and its conversation/history) is seeded when the enquiry is converted, so it is ALWAYS
+  // shown - even for a cancelled/lost job, whose record stays visible rather than vanishing. Business
+  // status and production progress are separate axes (the Hybrid model): the operational board is never
+  // gated on lifecycle status (docs/24 Increment 1).
+  const board = await getProjectBoard(project.id)
+  const communications = await prisma.communication.findMany({
+    where: { projectId: project.id },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      direction: true,
+      body: true,
+      createdAt: true,
+      by: { select: { name: true } },
+    },
+  })
 
-  const history: HistoryEntry[] = canInvoice
-    ? (
-        await prisma.auditLog.findMany({
-          where: { entityType: 'Project', entityId: project.id },
-          orderBy: { createdAt: 'desc' },
-          take: 50,
-          select: { id: true, action: true, createdAt: true, afterData: true, actor: { select: { name: true } } },
-        })
-      ).map((r) => ({
-        id: r.id,
-        actionType: historyActionType(r.action),
-        dateLabel: formatSydneyDateTime(r.createdAt),
-        user: r.actor?.name ?? 'System',
-        details: historyDetails(r.action, r.afterData),
-      }))
-    : []
+  const history: HistoryEntry[] = (
+    await prisma.auditLog.findMany({
+      where: { entityType: 'Project', entityId: project.id },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: { id: true, action: true, createdAt: true, afterData: true, actor: { select: { name: true } } },
+    })
+  ).map((r) => ({
+    id: r.id,
+    actionType: historyActionType(r.action),
+    dateLabel: formatSydneyDateTime(r.createdAt),
+    user: r.actor?.name ?? 'System',
+    details: historyDetails(r.action, r.afterData),
+  }))
 
   const bookingViews = project.bookings.map((booking) => ({
     id: booking.id,

@@ -26,7 +26,7 @@ function computeTotals(lines: QuoteLineInput[]) {
   return { computed, subtotal, taxTotal, total }
 }
 
-/** Create a quote for a project with an empty draft version 1, and move the project to QUOTING. */
+/** Create a quote for a project with an empty draft version 1; sets commercial status QUOTED. */
 export async function createQuote(projectId: string, createdByUserId: string | null) {
   return prisma.$transaction(async (tx) => {
     const quote = await tx.quote.create({
@@ -41,9 +41,11 @@ export async function createQuote(projectId: string, createdByUserId: string | n
     const version = quote.versions[0]
     if (!version) throw new Error('Quote version was not created.')
     await tx.quote.update({ where: { id: quote.id }, data: { currentVersionId: version.id } })
+    // Quoting moves the COMMERCIAL axis only - never the operational lifecycle: a booked job stays
+    // booked while you quote extras (docs/24 Increment 1).
     await tx.project.update({
       where: { id: projectId },
-      data: { lifecycleStatus: 'QUOTING', commercialStatus: 'QUOTED' },
+      data: { commercialStatus: 'QUOTED' },
     })
     return { quoteId: quote.id, versionId: version.id }
   })
@@ -73,7 +75,7 @@ export async function saveQuoteDraft(
   })
 }
 
-/** Send the current draft version: lock it to SENT and move the project to AWAITING_DECISION. */
+/** Send the current draft version: lock it to SENT. Operational lifecycle is unchanged. */
 export async function sendQuote(quoteId: string, actorUserId: string | null) {
   const now = systemClock.now()
   return prisma.$transaction(async (tx) => {
@@ -88,10 +90,7 @@ export async function sendQuote(quoteId: string, actorUserId: string | null) {
 
     await tx.quoteVersion.update({ where: { id: version.id }, data: { status: 'SENT', sentToClientAt: now } })
     await tx.quote.update({ where: { id: quoteId }, data: { status: 'SENT' } })
-    await tx.project.update({
-      where: { id: quote.projectId },
-      data: { lifecycleStatus: 'AWAITING_DECISION' },
-    })
+    // Sending a quote does not touch the operational lifecycle (docs/24 Increment 1).
     await tx.auditLog.create({
       data: { action: 'quote.sent', entityType: 'Quote', entityId: quoteId, actorUserId },
     })
@@ -174,8 +173,9 @@ export async function acceptQuoteByToken(viewToken: string, acceptedName: string
 }
 
 /**
- * Client (or staff) declines the current quote with a reason (F-QUOTE-03). The version → DECLINED and
- * the project → LOST (commercial CANCELLED), recording the reason. Idempotent if already declined.
+ * Client (or staff) declines the current quote with a reason (F-QUOTE-03). The version → DECLINED,
+ * recording the reason. The job is NOT lost by a declined quote - abandoning a job is an explicit
+ * cancelJob() decision (docs/24 Increment 1). Idempotent if already declined.
  */
 export async function declineQuote(
   quoteId: string,
@@ -195,7 +195,6 @@ async function runDeclineQuote(
   actorUserId: string | null,
   source: string,
 ) {
-  const now = systemClock.now()
   return prisma.$transaction(async (tx) => {
     const quote = await tx.quote.findUnique({ where, include: { currentVersion: true } })
     if (!quote || !quote.currentVersion) throw new Error('Quote not found.')
@@ -211,15 +210,7 @@ async function runDeclineQuote(
       data: { status: 'DECLINED', declineReason: reason },
     })
     await tx.quote.update({ where: { id: quote.id }, data: { status: 'DECLINED' } })
-    await tx.project.update({
-      where: { id: quote.projectId },
-      data: {
-        lifecycleStatus: 'LOST',
-        commercialStatus: 'CANCELLED',
-        lostReason: reason,
-        lostAt: now,
-      },
-    })
+    // A declined quote is a quote-level fact; it does not lose the job (docs/24 Increment 1).
     await tx.auditLog.create({
       data: {
         action: 'quote.declined',
@@ -244,7 +235,7 @@ async function runDeclineQuote(
 
 /**
  * Client requests changes / staff revises (F-QUOTE-04). The current version is SUPERSEDED and a new
- * DRAFT version (copying the lines) becomes current; the project moves to NEGOTIATION. An accepted
+ * DRAFT version (copying the lines) becomes current. Operational lifecycle is unchanged. An accepted
  * quote is immutable - a change there goes through a change request instead.
  */
 export async function reviseQuote(quoteId: string, actorUserId: string | null = null) {
@@ -300,10 +291,8 @@ export async function reviseQuote(quoteId: string, actorUserId: string | null = 
       where: { id: quoteId },
       data: { currentVersionId: newVersion.id, status: 'DRAFT' },
     })
-    await tx.project.update({
-      where: { id: quote.projectId },
-      data: { lifecycleStatus: 'NEGOTIATION' },
-    })
+    // Revising a quote is a commercial/quote-level action; operational lifecycle is unchanged
+    // (docs/24 Increment 1).
     await tx.auditLog.create({
       data: {
         action: 'quote.revised',
