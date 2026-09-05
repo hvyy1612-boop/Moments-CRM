@@ -1,214 +1,158 @@
-import { Prisma } from '@prisma/client'
 import type { Metadata } from 'next'
+import type { ReactNode } from 'react'
 import { cookies } from 'next/headers'
-import Link from 'next/link'
-import { Button } from '@/components/ui/Button'
-import { Donut, Funnel } from '@/components/ui/charts'
-import { StatusTag, type StatusKind } from '@/components/ui/StatusTag'
-import { OPEN_STATUSES } from '@/features/enquiries/status'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
-import { prisma } from '@/lib/db'
-import { formatAud } from '@/lib/money'
-import { formatSydneyDate, formatSydneyDateTime, systemClock } from '@/lib/time'
+import { getDashboardData, type DashboardPeriod } from '@/lib/domain/dashboard'
+import { HBars, RevenueLines, StackedBar, StageDonut } from '@/components/dashboard/DashCharts'
 import { AppShell } from '../AppShell'
+import { DashboardFilters } from './DashboardFilters'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Dashboard - Moments' }
 
-type AttnTone = 'new' | 'money'
-type Attn = { id: string; who: string; what: string; tone: AttnTone; href: string }
+const PERIODS = ['30d', '90d', 'year']
 
-// The lead-conversion funnel reads the Enquiry model (the pre-booking pipeline), including booked
-// leads as the final step, so it is the same source of truth as the Enquiries page.
-const ENQUIRY_FUNNEL: { label: string; statuses: string[] }[] = [
-  { label: 'New', statuses: ['NEW'] },
-  { label: 'Discussing', statuses: ['CONTACTED'] },
-  { label: 'Preparing quote', statuses: ['QUALIFIED'] },
-  { label: 'Booked', statuses: ['CONVERTED'] },
-]
-
-// Which donut colour each booked-job lifecycle status contributes to.
-const DONUT_BUCKET: Record<string, 'booked' | 'editing' | 'delivered'> = {
-  BOOKING_REQUESTED: 'booked',
-  CONFIRMED: 'booked',
-  ON_HOLD: 'booked',
-  POSTPONED: 'booked',
-  IN_PRODUCTION: 'editing',
-  COMPLETED: 'delivered',
+function kShort(n: number): string {
+  if (Math.abs(n) >= 1000) return `$${(n / 1000).toFixed(1)}k`
+  return `$${Math.round(n)}`
+}
+function signed(n: number): string {
+  return `${n > 0 ? '+' : ''}${n}%`
 }
 
-const ATTN_KIND: Record<AttnTone, StatusKind> = { new: 'enquiry', money: 'lost' }
-const ATTN_LABEL: Record<AttnTone, string> = { new: 'Reply', money: 'Overdue' }
+function Panel({ tone, title, desc, right, children }: { tone: string; title: string; desc: string; right?: ReactNode; children: ReactNode }) {
+  return (
+    <section className={`rounded-xl ${tone} p-5`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-medium text-ink">{title}</h2>
+          <p className="mt-0.5 text-xs text-ink-muted">{desc}</p>
+        </div>
+        {right}
+      </div>
+      <div className="mt-4">{children}</div>
+    </section>
+  )
+}
 
-export default async function DashboardPage() {
+function Empty({ children }: { children: ReactNode }) {
+  return <p className="py-6 text-center text-sm text-ink-muted">{children}</p>
+}
+
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ period?: string; service?: string }> }) {
   const user = await requireRole('/dashboard')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
-  const now = systemClock.now()
+  const sp = await searchParams
+  const period = (PERIODS.includes(sp.period ?? '') ? sp.period : '90d') as DashboardPeriod
+  const service = sp.service ?? 'all'
+  const d = await getDashboardData({ period, service })
 
-  const [enquiries, projects, unpaidInvoices, upcoming] = await Promise.all([
-    prisma.enquiry.findMany({
-      select: { id: true, name: true, status: true, waitingOn: true },
-      orderBy: { updatedAt: 'asc' }, // oldest-waiting first
-    }),
-    prisma.project.findMany({
-      where: { lifecycleStatus: { not: 'CANCELLED' } },
-      select: {
-        id: true,
-        lifecycleStatus: true,
-        client: { select: { displayName: true } },
-      },
-      orderBy: { enquiryReceivedAt: 'desc' },
-    }),
-    prisma.invoice.findMany({
-      where: { status: { in: ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'OVERDUE'] } },
-      select: {
-        id: true,
-        total: true,
-        amountPaid: true,
-        project: { select: { id: true, client: { select: { displayName: true } } } },
-      },
-    }),
-    prisma.booking.findMany({
-      where: { startsAt: { gte: now }, status: { not: 'CANCELLED' } },
-      orderBy: { startsAt: 'asc' },
-      take: 5,
-      select: {
-        id: true,
-        startsAt: true,
-        location: true,
-        project: { select: { id: true, client: { select: { displayName: true } } } },
-      },
-    }),
-  ])
+  const collected = d.revenueSeries.reduce((s, p) => s + p.collected, 0)
+  const revenueEmpty = d.revenueSeries.every((p) => p.booked === 0 && p.collected === 0)
 
-  const openEnquiries = enquiries.filter((e) => (OPEN_STATUSES as ReadonlySet<string>).has(e.status))
-  const needsReply = openEnquiries.filter((e) => e.waitingOn === 'STUDIO')
-  const withClient = openEnquiries.filter((e) => e.waitingOn === 'CLIENT')
-
-  const attention: Attn[] = []
-  for (const e of needsReply) {
-    attention.push({ id: e.id, who: e.name, what: 'Open enquiry needs your reply.', tone: 'new', href: `/enquiries/${e.id}` })
-  }
-  let outstanding = new Prisma.Decimal(0)
-  for (const inv of unpaidInvoices) {
-    const due = inv.total.sub(inv.amountPaid)
-    outstanding = outstanding.add(due)
-    attention.push({ id: inv.id, who: inv.project.client.displayName, what: `Invoice outstanding, ${formatAud(due)} due.`, tone: 'money', href: `/jobs/${inv.project.id}` })
-  }
-
-  const tiles = [
-    { k: 'Needs your reply', v: String(needsReply.length), sub: 'Open enquiries' },
-    { k: 'With the client', v: String(withClient.length), sub: 'Awaiting their response' },
-    { k: 'Unpaid invoices', v: String(unpaidInvoices.length), sub: `${formatAud(outstanding)} outstanding` },
-    { k: 'Upcoming shoots', v: String(upcoming.length), sub: upcoming[0] ? `Next on ${formatSydneyDate(upcoming[0].startsAt)}` : 'None scheduled' },
+  const kpis = [
+    { tone: 'bg-lav', label: 'Booked revenue', value: kShort(d.kpi.bookedRevenue), sub: d.kpi.bookedDeltaPct != null ? `${signed(d.kpi.bookedDeltaPct)} vs previous period` : 'no prior period' },
+    { tone: 'bg-sage', label: 'Booking rate', value: `${d.kpi.bookingRatePct}%`, sub: `${d.kpi.bookingNum} of ${d.kpi.bookingDenom} enquiries` },
+    { tone: 'bg-powder', label: 'Outstanding', value: kShort(d.kpi.outstanding), sub: `${d.kpi.unpaidCount} unpaid invoice${d.kpi.unpaidCount === 1 ? '' : 's'}` },
+    { tone: 'bg-peach', label: 'Avg. turnaround', value: d.kpi.avgTurnaroundDays != null ? `${d.kpi.avgTurnaroundDays}d` : '—', sub: d.kpi.avgTurnaroundDays != null ? 'shoot to final delivery' : 'no delivered jobs yet' },
   ]
 
-  // Pie/donut uses the categorical palette A (D-23), the bright, high-contrast set chosen for charts.
-  const donutSegments = [
-    { label: 'Booked', varName: '--color-cat-3', value: 0 },
-    { label: 'Editing', varName: '--color-cat-4', value: 0 },
-    { label: 'Delivered', varName: '--color-cat-5', value: 0 },
+  const aging = [
+    { label: 'Current', value: d.invoiceAging.current, color: 'sage' as const },
+    { label: '1-7 days', value: d.invoiceAging.d1, color: 'butter' as const },
+    { label: '8-30 days', value: d.invoiceAging.d8, color: 'peach' as const },
+    { label: '30+ days', value: d.invoiceAging.d30, color: 'blush' as const },
   ]
-  const byLabel: Record<string, (typeof donutSegments)[number]> = {
-    booked: donutSegments[0]!,
-    editing: donutSegments[1]!,
-    delivered: donutSegments[2]!,
-  }
-  for (const p of projects) {
-    const bucket = DONUT_BUCKET[p.lifecycleStatus]
-    if (bucket) byLabel[bucket]!.value += 1
-  }
-
-  const funnelSteps = ENQUIRY_FUNNEL.map((col) => ({
-    label: col.label,
-    value: enquiries.filter((e) => col.statuses.includes(e.status)).length,
-  }))
-
-  const action = (
-    <Link href="/clients/new">
-      <Button size="sm">+ Add client</Button>
-    </Link>
-  )
 
   return (
-    <AppShell user={user} csrf={csrf} active="dashboard" action={action}>
-      <div className="mb-6">
-        <h1 className="font-serif text-2xl font-semibold text-ink">Welcome back, {user.name}</h1>
-        <p className="mt-1 text-base text-ink-muted">Studio overview for {formatSydneyDate(now)}.</p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {tiles.map((t) => (
-          <div key={t.k} className="rounded-md border border-line bg-surface p-5">
-            <div className="text-sm uppercase tracking-wide text-muted">{t.k}</div>
-            <div className="tabular mt-2 text-3xl font-black text-ink">{t.v}</div>
-            <div className="mt-1 text-sm text-ink-muted">{t.sub}</div>
+    <AppShell user={user} csrf={csrf} active="dashboard" bareHeader>
+      <div className="w-full">
+        <div className="text-xs text-muted">Overview / Dashboard</div>
+        <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-lg">
+            <h1 className="text-3xl font-semibold text-ink">Studio dashboard</h1>
+            <p className="mt-1 text-sm text-ink-muted">A compact view of revenue, demand, pipeline, delivery and cash flow.</p>
           </div>
-        ))}
-      </div>
+          <DashboardFilters period={period} service={service} services={d.services} />
+        </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <section className="rounded-md border border-line bg-surface p-5">
-          <h2 className="mb-4 text-lg font-bold text-ink">Job status distribution</h2>
-          <Donut segments={donutSegments} />
-        </section>
-        <section className="rounded-md border border-line bg-surface p-5">
-          <h2 className="mb-4 text-lg font-bold text-ink">Lead conversion</h2>
-          <Funnel steps={funnelSteps} />
-        </section>
-      </div>
+        {/* KPI row */}
+        <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {kpis.map((k) => (
+            <div key={k.label} className={`rounded-xl ${k.tone} p-4`}>
+              <div className="text-xs text-ink-muted">{k.label}</div>
+              <div className="tabular mt-1.5 text-2xl font-semibold text-ink">{k.value}</div>
+              <div className="mt-1 text-xs text-ink-muted">{k.sub}</div>
+            </div>
+          ))}
+        </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <section className="rounded-md border border-line bg-surface">
-          <div className="flex items-center justify-between border-b border-line px-5 py-4">
-            <h2 className="text-lg font-bold text-ink">Needs attention</h2>
-            <span className="text-sm text-muted">{attention.length} items</span>
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-12">
+          {/* Row A */}
+          <div className="lg:col-span-7">
+            <Panel tone="bg-lav/60" title="Revenue & bookings" desc="Are bookings and collected cash growing together?">
+              {revenueEmpty ? <Empty>No revenue data for this period</Empty> : (
+                <>
+                  <div className="mb-2 text-lg font-semibold text-ink">{kShort(d.kpi.bookedRevenue)} <span className="text-sm font-normal text-ink-muted">booked · {kShort(collected)} collected</span></div>
+                  <RevenueLines series={d.revenueSeries} />
+                </>
+              )}
+            </Panel>
           </div>
-          {attention.length === 0 ? (
-            <p className="px-5 py-6 text-base text-ink-muted">No items require attention.</p>
-          ) : (
-            <ul>
-              {attention.slice(0, 8).map((a) => (
-                <li key={a.id} className="flex items-center gap-3 border-b border-line px-5 py-3.5 last:border-b-0">
-                  <StatusTag kind={ATTN_KIND[a.tone]}>{ATTN_LABEL[a.tone]}</StatusTag>
-                  <div className="min-w-0">
-                    <div className="truncate text-base font-medium text-ink">{a.who}</div>
-                    <div className="truncate text-sm text-ink-muted">{a.what}</div>
-                  </div>
-                  <Link href={a.href} className="ml-auto text-sm font-bold text-accent-ink hover:underline">
-                    View
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="rounded-md border border-line bg-surface">
-          <div className="flex items-center justify-between border-b border-line px-5 py-4">
-            <h2 className="text-lg font-bold text-ink">Upcoming shoots</h2>
-            <span className="text-sm text-muted">Next 5</span>
+          <div className="lg:col-span-5">
+            <Panel tone="bg-sage" title="Job status distribution" desc="Where is active work concentrated?">
+              {d.activeJobs === 0 ? <Empty>No active jobs right now</Empty> : <StageDonut segments={d.jobStages} centre={d.activeJobs} family="sage" />}
+            </Panel>
           </div>
-          {upcoming.length === 0 ? (
-            <p className="px-5 py-6 text-base text-ink-muted">No shoots scheduled.</p>
-          ) : (
-            <ul>
-              {upcoming.map((b) => (
-                <li key={b.id} className="border-b border-line px-5 py-3.5 last:border-b-0">
-                  <Link href={`/jobs/${b.project.id}`} className="font-serif text-lg font-semibold text-ink hover:text-accent-ink">
-                    {b.project.client.displayName}
-                  </Link>
-                  <div className="mt-0.5 text-sm text-ink-muted">
-                    {formatSydneyDateTime(b.startsAt)}
-                    {b.location ? ` · ${b.location}` : ''}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+
+          {/* Row B */}
+          <div className="lg:col-span-4">
+            <Panel tone="bg-butter" title="Lead source quality" desc="Which channels bring clients who actually book?">
+              {d.leadSources.length === 0 ? <Empty>No enquiry data for this period</Empty> : (
+                <>
+                  <HBars bars={d.leadSources} color="butter" format={(v) => `${v}%`} />
+                  {d.leadSources[0] && d.leadSources[0].value > 0 ? <p className="mt-3 text-xs text-ink-muted">{d.leadSources[0].label} has the highest booking conversion.</p> : null}
+                </>
+              )}
+            </Panel>
+          </div>
+          <div className="lg:col-span-4">
+            <Panel tone="bg-lav" title="Revenue by service" desc="Which services contribute the most to studio revenue?">
+              {d.revenueByService.length === 0 ? <Empty>No revenue in this period</Empty> : <HBars bars={d.revenueByService} color="lav" format={kShort} />}
+            </Panel>
+          </div>
+          <div className="lg:col-span-4">
+            <Panel tone="bg-blush" title="Invoice health" desc="How much outstanding money is becoming risky?" right={<div className="text-right"><div className="tabular text-xl font-semibold text-ink">{kShort(d.invoiceAging.total)}</div><div className="text-xs text-ink-muted">outstanding</div></div>}>
+              {d.invoiceAging.total === 0 ? <Empty>No outstanding invoices</Empty> : (
+                <>
+                  <StackedBar segments={aging} />
+                  <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                    {aging.map((a) => (
+                      <div key={a.label} className="flex items-center justify-between gap-2">
+                        <dt className="text-ink-muted">{a.label}</dt>
+                        <dd className="tabular font-medium text-ink">{kShort(a.value)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </>
+              )}
+            </Panel>
+          </div>
+
+          {/* Row C */}
+          <div className="lg:col-span-6">
+            <Panel tone="bg-peach" title="Post-production turnaround" desc="Are editing and delivery times staying under control?">
+              {d.turnaround.length === 0 ? <Empty>No completed jobs available for turnaround analysis</Empty> : <HBars bars={d.turnaround} color="peach" format={(v) => `${v}d`} />}
+            </Panel>
+          </div>
+          <div className="lg:col-span-6">
+            <Panel tone="bg-powder" title="Enquiry pipeline" desc="How many enquiries progress toward a confirmed booking?" right={<div className="tabular text-xl font-semibold text-ink">{d.kpi.bookingRatePct}%</div>}>
+              {d.pipeline.every((p) => p.value === 0) ? <Empty>No enquiries in this period</Empty> : <HBars bars={d.pipeline} color="powder" format={(v) => String(v)} />}
+            </Panel>
+          </div>
+        </div>
       </div>
     </AppShell>
   )

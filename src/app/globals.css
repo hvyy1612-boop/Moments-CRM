@@ -64,6 +64,20 @@
   --color-cat-5: #8fd7d7;
   --color-cat-6: #ff8ca1;
 
+  /* Dashboard analytical pastels (one soft family per widget; tonal variation inside a chart). */
+  --color-lav: #eeeafd;
+  --color-lav-strong: #aaa2d6;
+  --color-sage: #e9f4ed;
+  --color-sage-strong: #91b9a0;
+  --color-powder: #eaf3f9;
+  --color-powder-strong: #9ebed1;
+  --color-peach: #fbefe7;
+  --color-peach-strong: #d9aa8e;
+  --color-blush: #faedf1;
+  --color-blush-strong: #d0a2b2;
+  --color-butter: #faf5e4;
+  --color-butter-strong: #c9b874;
+
   /* Radius - small for controls, medium/large for cards (D-10: card 8-10, button 7, tag 5). */
   --radius-sm: 2px;
   --radius: 5px;
