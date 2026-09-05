@@ -242,9 +242,9 @@ async function runConvertEnquiry(enquiryId: string, actorUserId: string | null, 
         clientId: client.id,
         code: await nextProjectCode(tx, now.getFullYear()),
         name: enquiry.eventType ?? 'Project',
-        // "Book it" is the booking milestone (the enquiry already handled quote and deposit), so the
-        // job starts CONFIRMED - booked and ready for production, with its workflow board visible.
-        lifecycleStatus: 'CONFIRMED',
+        // A WON enquiry converts to a Job. The Project starts at BOOKING_REQUESTED (a booked job pending
+        // final confirmation); production commands advance it from there (docs/24 FIX 5).
+        lifecycleStatus: 'BOOKING_REQUESTED',
         commercialStatus: 'UNQUOTED',
         source: enquiry.source,
         ownerUserId: enquiry.ownerUserId ?? actorUserId,

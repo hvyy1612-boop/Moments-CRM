@@ -1,4 +1,3 @@
-import type { ProjectLifecycle } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { labelsFromSettings, type StatusLabel } from '@/features/projects/labels'
 
@@ -27,15 +26,15 @@ export async function saveCompanyStatusLabels(labels: StatusLabel[]): Promise<vo
 }
 
 /**
- * Move a project to a status label. A built-in label (with a `stage`) also advances the lifecycle
- * enum so automation keeps working; a custom label only changes the displayed tag. Records an audit
- * row; a no-op when nothing changes.
+ * Set a project's display status label. This is PRESENTATION ONLY (docs/24 FIX 10): it changes the
+ * displayed tag and never the lifecycle, commercial state, workflow or booking. Business state moves
+ * only through domain commands. Records an audit row; a no-op when the label is unchanged.
  */
 export async function setProjectStatusByLabel(projectId: string, labelId: string, actorUserId: string) {
   return prisma.$transaction(async (tx) => {
     const project = await tx.project.findUnique({
       where: { id: projectId },
-      select: { id: true, companyId: true, lifecycleStatus: true, statusLabelId: true },
+      select: { id: true, companyId: true, statusLabelId: true },
     })
     if (!project) throw new Error('Project not found.')
 
@@ -46,24 +45,23 @@ export async function setProjectStatusByLabel(projectId: string, labelId: string
     const label = labelsFromSettings(company?.settings).find((l) => l.id === labelId)
     if (!label) throw new Error('Unknown status label.')
 
-    const nextStage: ProjectLifecycle = label.stage ?? project.lifecycleStatus
-    if (project.statusLabelId === label.id && project.lifecycleStatus === nextStage) return project
+    if (project.statusLabelId === label.id) return project
 
     const updated = await tx.project.update({
       where: { id: projectId },
-      data: { statusLabelId: label.id, lifecycleStatus: nextStage },
+      data: { statusLabelId: label.id }, // NEVER lifecycleStatus - a label cannot move business state.
       select: { id: true },
     })
     await tx.auditLog.create({
       data: {
         companyId: project.companyId,
         actorUserId,
-        action: 'project.status_changed',
+        action: 'project.label_changed',
         entityType: 'Project',
         entityId: projectId,
         source: 'staff.board',
-        beforeData: { lifecycleStatus: project.lifecycleStatus, statusLabelId: project.statusLabelId },
-        afterData: { lifecycleStatus: nextStage, statusLabelId: label.id },
+        beforeData: { statusLabelId: project.statusLabelId },
+        afterData: { statusLabelId: label.id },
       },
     })
     return updated

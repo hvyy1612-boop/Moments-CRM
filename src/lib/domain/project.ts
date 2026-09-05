@@ -25,9 +25,9 @@ export async function nextProjectCode(tx: Tx, year: number): Promise<string> {
 }
 
 /**
- * An enquiry becomes an operational Project immediately (P1: no leads). The client is deduped by
- * email so a returning enquirer never creates a duplicate. Everything is one transaction, with an
- * audit row and an outbox event.
+ * Create a booked Job directly (a "direct job" for a known booking / staff-added job). The client is
+ * deduped by email. The Project starts at BOOKING_REQUESTED - it is a Job from the start, NOT a funnel
+ * lead; leads are Enquiry records (docs/24 FIX 6). One transaction, with an audit row + outbox event.
  */
 export async function createProjectFromEnquiry(input: EnquiryInput) {
   const now = systemClock.now()
@@ -75,8 +75,8 @@ async function runCreateProjectFromEnquiry(input: EnquiryInput, now: Date) {
         companyId: company.id,
         clientId: client.id,
         code: await nextProjectCode(tx, now.getFullYear()),
-        name: input.eventType ?? 'Enquiry',
-        lifecycleStatus: 'ENQUIRY',
+        name: input.eventType ?? 'Job',
+        lifecycleStatus: 'BOOKING_REQUESTED',
         commercialStatus: 'UNQUOTED',
         source: input.source ?? null,
         enquiryReceivedAt: now,

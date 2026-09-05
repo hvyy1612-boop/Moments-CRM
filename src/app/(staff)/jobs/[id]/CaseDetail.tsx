@@ -10,7 +10,7 @@ import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
 import { getProjectBoard } from '@/lib/domain/project-workflow'
-import { isCommitted, statusLabel } from '@/features/projects/lifecycle'
+import { statusLabel } from '@/features/projects/lifecycle'
 import { listActivePackages } from '@/lib/domain/package'
 import { AppShell } from '../../AppShell'
 import {
@@ -60,15 +60,6 @@ function historyDetails(action: string, after: unknown): string {
   if (action === 'project.task_reopened') return `${title} was reopened.`
   if (action === 'enquiry.converted') return 'Job was created from an enquiry.'
   return historyActionType(action)
-}
-
-/** A small phase-step marker: a tick when done, an open circle when pending (Moments style, no emoji). */
-function PhaseCheck({ done }: { done: boolean }) {
-  return done ? (
-    <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-delivered-ink" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
-  ) : (
-    <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.6} aria-hidden="true"><circle cx="12" cy="12" r="9" /></svg>
-  )
 }
 
 /**
@@ -129,16 +120,6 @@ export async function CaseDetail({
   const contract = project.contracts[0]
   const contractVersion = contract?.currentVersion ?? null
   const quoteAccepted = version?.status === 'ACCEPTED'
-  // LEAD phase (derived): the sales milestones, ending in the auto "Job accepted" (= committed). Read
-  // from existing records - no extra tasks to seed, no migration (docs/24).
-  const committed = isCommitted(project)
-  const quoteSent = version != null && version.status !== 'DRAFT'
-  const leadDone = quoteSent || quoteAccepted || committed
-  const leadSteps = [
-    { label: 'Enquiry received', done: true, note: `Received ${formatSydneyDate(project.enquiryReceivedAt)}` },
-    { label: 'Quote sent to client', done: leadDone, note: leadDone ? null : 'Create and send a quote below.' },
-    { label: 'Client accepted the quote', done: quoteAccepted || committed, note: null },
-  ]
   const isConfirmed = (['CONFIRMED', 'IN_PRODUCTION', 'COMPLETED'] as const).some(
     (s) => s === project.lifecycleStatus,
   )
@@ -296,44 +277,12 @@ export async function CaseDetail({
                 <h2 className="text-xs font-bold uppercase tracking-wide text-muted">Workflow</h2>
                 <HistoryLogModal entries={history} />
               </div>
-
-              {/* LEAD phase: derived sales milestones, ending in the auto "Job accepted" (docs/24). */}
-              <div className="mb-4">
-                <div className="mb-2 text-xs font-bold uppercase tracking-wide text-accent-ink">Lead</div>
-                <ul className="flex flex-col gap-2">
-                  {leadSteps.map((s) => (
-                    <li key={s.label} className="flex items-start gap-2">
-                      <PhaseCheck done={s.done} />
-                      <div>
-                        <span className={`text-sm ${s.done ? 'text-ink' : 'text-ink-muted'}`}>{s.label}</span>
-                        {s.note ? <span className="block text-xs text-muted">{s.note}</span> : null}
-                      </div>
-                    </li>
-                  ))}
-                  <li className="mt-1 flex items-start gap-2 rounded bg-paper px-3 py-2">
-                    <PhaseCheck done={committed} />
-                    <div>
-                      <span className="text-sm font-bold text-ink">Job accepted</span>
-                      <span className="block text-xs text-ink-muted">
-                        {committed
-                          ? 'Booked - this is now a job.'
-                          : 'Ticks itself when a quote is accepted, a contract is signed, or a payment is received.'}
-                      </span>
-                    </div>
-                  </li>
-                </ul>
-              </div>
-
-              {/* PRODUCTION phase: the editable task board. */}
-              <div>
-                <div className="mb-2 text-xs font-bold uppercase tracking-wide text-accent-ink">Production</div>
-                <ProjectWorkflow
-                  stages={board.stages}
-                  allDone={board.allDone}
-                  projectId={project.id}
-                  csrf={csrf}
-                />
-              </div>
+              <ProjectWorkflow
+                stages={board.stages}
+                allDone={board.allDone}
+                projectId={project.id}
+                csrf={csrf}
+              />
             </section>
 
             {/* Conversation: reuses the Communication model, kept separate from the workflow. */}

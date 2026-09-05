@@ -6,7 +6,8 @@ import { redirect } from 'next/navigation'
 import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
-import { convertEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
+import { convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
+import { enquirySchema } from '@/lib/validation/enquiry'
 import {
   addEnquiryTask,
   deleteEnquiryTask,
@@ -30,6 +31,31 @@ async function requireStaff() {
 async function csrfOk(formData: FormData): Promise<boolean> {
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value
   return verifyCsrf(cookieValue, formData.get('csrf'))
+}
+
+export type AddEnquiryState =
+  | { status: 'idle' }
+  | { status: 'error'; message?: string; errors?: { name?: string; email?: string } }
+  | { status: 'created'; enquiryId: string }
+
+/** Staff adds a REAL Enquiry (a lead). It appears immediately in /enquiries with its seeded workflow. */
+export async function addEnquiryAction(_prev: AddEnquiryState, formData: FormData): Promise<AddEnquiryState> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) return { status: 'error', message: 'Your session expired. Refresh and try again.' }
+  const parsed = enquirySchema.safeParse({
+    name: formData.get('name'),
+    email: formData.get('email'),
+    phone: formData.get('phone') ?? '',
+    eventType: formData.get('eventType') ?? '',
+    message: formData.get('message') ?? '',
+  })
+  if (!parsed.success) {
+    const f = parsed.error.flatten().fieldErrors
+    return { status: 'error', errors: { name: f.name?.[0], email: f.email?.[0] } }
+  }
+  const enquiry = await createEnquiry({ ...parsed.data, source: 'MANUAL' }, user.id)
+  revalidatePath('/enquiries')
+  return { status: 'created', enquiryId: enquiry.id }
 }
 
 /** Outcomes that close or reopen a lead (contract docs/23). Convert/Lost leave the active queue;
