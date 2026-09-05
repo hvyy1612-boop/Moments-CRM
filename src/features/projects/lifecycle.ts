@@ -52,6 +52,19 @@ export const CLOSED_STATUSES: ReadonlySet<ProjectLifecycle> = new Set([
 ])
 
 /**
+ * Not-booked (funnel) stages. A Project in one of these is still a lead being worked, so it belongs in
+ * ENQUIRIES, never in Jobs; every other stage is "booked" and belongs in Jobs (docs/24). Kept as an
+ * array so Prisma `in` / `notIn` can consume it directly.
+ */
+export const FUNNEL_STATUSES = ['ENQUIRY', 'QUALIFYING', 'QUOTING', 'AWAITING_DECISION', 'NEGOTIATION'] as const
+const FUNNEL_SET: ReadonlySet<string> = new Set(FUNNEL_STATUSES)
+
+/** A case is "booked" (a Job) once it leaves the funnel; before that it is a lead (an Enquiry). */
+export function isBooked(status: string): boolean {
+  return !FUNNEL_SET.has(status)
+}
+
+/**
  * The everyday stages a studio moves work through: the main funnel plus the "lost" outcome. The
  * picker shows these first; the rest (sub-states and edge cases) sit behind a "More" toggle so the
  * menu stays short, the way a Monday status column shows a curated label set.
