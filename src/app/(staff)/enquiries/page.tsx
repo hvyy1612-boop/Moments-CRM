@@ -7,8 +7,8 @@ import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
 import { titleCase } from '@/lib/text'
 import { ENQUIRY_EMPTY, ENQUIRY_STAGE_LABEL, ENQUIRY_VIEWS, isOpenEnquiry } from '@/features/enquiries/status'
-import { FUNNEL_STATUSES, statusLabel } from '@/features/projects/lifecycle'
-import { ProjectLifecycle } from '@prisma/client'
+import { COMMITTED_COMMERCIAL, COMMITTED_LIFECYCLE, statusLabel } from '@/features/projects/lifecycle'
+import { CommercialStatus, ProjectLifecycle } from '@prisma/client'
 import { AppShell } from '../AppShell'
 import { EnquiryFilterMenu } from './EnquiryFilterMenu'
 import { EnquirySortSelect, ENQUIRY_DEFAULT_SORT, type EnquirySortValue } from './EnquirySortSelect'
@@ -73,7 +73,11 @@ export default async function EnquiriesPage({
   // A not-booked Project is a lead still being worked, so it belongs here (not in Jobs, docs/24). Show
   // it alongside website enquiry leads; clicking it opens its workflow on the case detail page.
   const funnelProjects = await prisma.project.findMany({
-    where: { lifecycleStatus: { in: [...FUNNEL_STATUSES] as ProjectLifecycle[] } },
+    // Sales phase = NOT yet committed and NOT terminal - a lead still being worked (docs/24).
+    where: {
+      lifecycleStatus: { notIn: [...COMMITTED_LIFECYCLE, 'LOST', 'CANCELLED', 'ARCHIVED'] as ProjectLifecycle[] },
+      commercialStatus: { notIn: [...COMMITTED_COMMERCIAL] as CommercialStatus[] },
+    },
     orderBy: { updatedAt: 'asc' },
     select: {
       id: true, name: true, lifecycleStatus: true, updatedAt: true, createdAt: true,

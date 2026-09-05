@@ -52,16 +52,19 @@ export const CLOSED_STATUSES: ReadonlySet<ProjectLifecycle> = new Set([
 ])
 
 /**
- * Not-booked (funnel) stages. A Project in one of these is still a lead being worked, so it belongs in
- * ENQUIRIES, never in Jobs; every other stage is "booked" and belongs in Jobs (docs/24). Kept as an
- * array so Prisma `in` / `notIn` can consume it directly.
+ * The "committed" milestone (Studio-Ninja "Job accepted"): a case becomes a booked Job the moment a
+ * quote is ACCEPTED, a contract is signed (=> CONFIRMED), a payment is taken (=> DEPOSIT_PAID / PAID),
+ * or staff confirm - NOT a manual "book" step and NOT a funnel status. It is DERIVED from the commercial
+ * + lifecycle facts, so the phase always reflects reality. committed == false => Sales phase
+ * (Enquiries); committed == true => Production phase (Jobs). (docs/24)
  */
-export const FUNNEL_STATUSES = ['ENQUIRY', 'QUALIFYING', 'QUOTING', 'AWAITING_DECISION', 'NEGOTIATION'] as const
-const FUNNEL_SET: ReadonlySet<string> = new Set(FUNNEL_STATUSES)
+export const COMMITTED_LIFECYCLE = ['CONFIRMED', 'IN_PRODUCTION', 'COMPLETED', 'CLOSED'] as const
+export const COMMITTED_COMMERCIAL = ['ACCEPTED', 'DEPOSIT_PAID', 'PAID'] as const
+const COMMITTED_LC = new Set<string>(COMMITTED_LIFECYCLE)
+const COMMITTED_CM = new Set<string>(COMMITTED_COMMERCIAL)
 
-/** A case is "booked" (a Job) once it leaves the funnel; before that it is a lead (an Enquiry). */
-export function isBooked(status: string): boolean {
-  return !FUNNEL_SET.has(status)
+export function isCommitted(p: { lifecycleStatus: string; commercialStatus: string }): boolean {
+  return COMMITTED_LC.has(p.lifecycleStatus) || COMMITTED_CM.has(p.commercialStatus)
 }
 
 /**
