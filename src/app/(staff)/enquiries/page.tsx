@@ -169,7 +169,7 @@ export default async function EnquiriesPage({
                 {rows.map((row) => (
                   <tr key={row.id} className="group border-b border-line align-top transition-colors last:border-b-0 hover:bg-paper">
                     <td className="py-3 pr-4">
-                      <Link href={row.kind === 'project' ? `/jobs/${row.id}` : `/enquiries/${row.id}${backParam}`} className="font-medium text-ink transition-colors group-hover:text-accent-ink">{row.name}</Link>
+                      <Link href={`/enquiries/${row.id}${backParam}`} className="font-medium text-ink transition-colors group-hover:text-accent-ink">{row.name}</Link>
                     </td>
                     <td className="py-3 pr-4 text-ink-muted">{row.event}</td>
                     <td className="py-3 pr-4 text-ink">{row.stage}</td>

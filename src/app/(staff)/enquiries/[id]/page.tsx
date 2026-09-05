@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { StatusTag } from '@/components/ui/StatusTag'
 import { Button } from '@/components/ui/Button'
@@ -17,6 +16,7 @@ import {
 } from '@/features/enquiries/status'
 import { getEnquiryBoard } from '@/lib/domain/enquiry-workflow'
 import { AppShell } from '../../AppShell'
+import { CaseDetail } from '../../jobs/[id]/CaseDetail'
 import {
   convertEnquiryAction,
   logClientReplyAction,
@@ -68,7 +68,11 @@ export default async function EnquiryDetailPage({
       },
     },
   })
-  if (!enquiry) notFound()
+  // A not-booked case is a Project (not a website Enquiry row). Render the SAME shared case detail here,
+  // in the Enquiries section, so clicking it stays in Enquiries and shows its workflow (docs/24).
+  if (!enquiry) {
+    return <CaseDetail id={id} user={user} csrf={csrf} section="enquiries" back={back} />
+  }
 
   const activity = await prisma.auditLog.findMany({
     where: { entityType: 'Enquiry', entityId: id },
