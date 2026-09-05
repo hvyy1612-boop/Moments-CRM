@@ -8,7 +8,7 @@ import { getSessionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { assignResource, createBooking } from '@/lib/domain/booking'
 import { logCommunication } from '@/lib/domain/communication'
-import { createProjectFromEnquiry } from '@/lib/domain/project'
+import { closeJob, createProjectFromEnquiry } from '@/lib/domain/project'
 import {
   addProjectStageBlock,
   addProjectTask,
@@ -56,6 +56,24 @@ export async function createQuoteAction(formData: FormData): Promise<void> {
   const projectId = String(formData.get('projectId') ?? '')
   if (!projectId) return
   await createQuote(projectId, user.id)
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+/**
+ * Close a delivered job (COMPLETED -> CLOSED) once it is settled and all tasks are done. Guarded in
+ * the domain; the button only shows when closeable, so a guard failure just leaves the state unchanged.
+ */
+export async function closeJobAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  if (!projectId) return
+  try {
+    await closeJob(projectId, user.id)
+  } catch {
+    // Balance outstanding or tasks pending - leave the job as-is; the page reflects the real state.
+  }
   revalidatePath(`/jobs/${projectId}`)
 }
 

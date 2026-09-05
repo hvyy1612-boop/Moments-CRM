@@ -34,7 +34,7 @@ export type TodayCockpit = {
 }
 
 const OPEN_ENQUIRY = ['NEW', 'CONTACTED', 'QUALIFIED'] as const
-const CLOSED_PROJECT = ['LOST', 'COMPLETED', 'CANCELLED', 'ARCHIVED'] as const
+const CLOSED_PROJECT = ['LOST', 'COMPLETED', 'CANCELLED', 'ARCHIVED', 'CLOSED'] as const
 
 function pad(n: number): string { return String(n).padStart(2, '0') }
 

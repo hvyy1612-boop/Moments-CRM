@@ -16,6 +16,7 @@ export const LIFECYCLE_KIND: Record<ProjectLifecycle, StatusKind> = {
   CONFIRMED: 'booked',
   IN_PRODUCTION: 'editing',
   COMPLETED: 'delivered',
+  CLOSED: 'delivered',
   CANCELLED: 'lost',
   LOST: 'lost',
   ON_HOLD: 'hold',
@@ -44,6 +45,7 @@ export const LIFECYCLE_ORDER: readonly ProjectLifecycle[] = [
 /** Stages that move a project out of the open pipeline into its own board group. */
 export const CLOSED_STATUSES: ReadonlySet<ProjectLifecycle> = new Set([
   'COMPLETED',
+  'CLOSED',
   'CANCELLED',
   'LOST',
   'ARCHIVED',
@@ -68,8 +70,14 @@ export function statusKind(status: string): StatusKind {
   return LIFECYCLE_KIND[status as ProjectLifecycle] ?? 'hold'
 }
 
-/** ENQUIRY -> "Enquiry", AWAITING_DECISION -> "Awaiting Decision". */
+// A few lifecycle values read better with a bespoke name than a title-cased enum: COMPLETED means the
+// work has been delivered to the client (CLOSED is the later "delivered and settled" terminal).
+const LIFECYCLE_DISPLAY: Partial<Record<ProjectLifecycle, string>> = { COMPLETED: 'Delivered' }
+
+/** ENQUIRY -> "Enquiry", AWAITING_DECISION -> "Awaiting Decision", COMPLETED -> "Delivered". */
 export function statusLabel(status: string): string {
+  const override = LIFECYCLE_DISPLAY[status as ProjectLifecycle]
+  if (override) return override
   return status
     .toLowerCase()
     .split('_')

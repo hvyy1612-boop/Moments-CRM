@@ -50,19 +50,24 @@ enum ClientStatus {
   ARCHIVED
 }
 
-// Coarse business stage of a Project (P2: gọn, không nhét scheduling/production vào đây).
+// Operational lifecycle of a Job/Project (macro axis; the WorkItem board is the micro axis).
+// COMPLETED = delivered to the client; CLOSED = delivered AND fully settled (no balance, no blocking
+// work). The funnel values (ENQUIRY, QUALIFYING, QUOTING, AWAITING_DECISION, NEGOTIATION) and LOST are
+// DEPRECATED for new writes - the Enquiry table owns the sales funnel and quoting no longer moves the
+// lifecycle (docs/24). They remain in the enum only so existing rows stay valid.
 enum ProjectLifecycle {
-  ENQUIRY
-  QUALIFYING
-  QUOTING
-  AWAITING_DECISION
-  NEGOTIATION
+  ENQUIRY // deprecated (funnel lives on Enquiry)
+  QUALIFYING // deprecated
+  QUOTING // deprecated
+  AWAITING_DECISION // deprecated
+  NEGOTIATION // deprecated
   BOOKING_REQUESTED
   CONFIRMED
   IN_PRODUCTION
-  COMPLETED
+  COMPLETED // = delivered to the client
+  CLOSED // = delivered and fully settled
   CANCELLED
-  LOST
+  LOST // deprecated (a stopped job is CANCELLED; LOST is an Enquiry outcome)
   ON_HOLD
   POSTPONED
   ARCHIVED
