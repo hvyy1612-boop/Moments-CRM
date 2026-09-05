@@ -13,9 +13,11 @@ import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
 import { getProjectBoard } from '@/lib/domain/project-workflow'
+import { statusLabel } from '@/features/projects/lifecycle'
 import { listActivePackages } from '@/lib/domain/package'
 import { AppShell } from '../../AppShell'
 import {
+  closeJobAction,
   createContractAction,
   createQuoteAction,
   logProjectClientReplyAction,
@@ -141,37 +143,33 @@ export default async function ProjectDetailPage({
       })
     : []
 
-  const board = canInvoice ? await getProjectBoard(project.id) : null
-  const communications = canInvoice
-    ? await prisma.communication.findMany({
-        where: { projectId: project.id },
-        orderBy: { createdAt: 'asc' },
-        select: {
-          id: true,
-          direction: true,
-          body: true,
-          createdAt: true,
-          by: { select: { name: true } },
-        },
-      })
-    : []
+  const board = await getProjectBoard(project.id)
+  const communications = await prisma.communication.findMany({
+    where: { projectId: project.id },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      direction: true,
+      body: true,
+      createdAt: true,
+      by: { select: { name: true } },
+    },
+  })
 
-  const history: HistoryEntry[] = canInvoice
-    ? (
-        await prisma.auditLog.findMany({
-          where: { entityType: 'Project', entityId: project.id },
-          orderBy: { createdAt: 'desc' },
-          take: 50,
-          select: { id: true, action: true, createdAt: true, afterData: true, actor: { select: { name: true } } },
-        })
-      ).map((r) => ({
-        id: r.id,
-        actionType: historyActionType(r.action),
-        dateLabel: formatSydneyDateTime(r.createdAt),
-        user: r.actor?.name ?? 'System',
-        details: historyDetails(r.action, r.afterData),
-      }))
-    : []
+  const history: HistoryEntry[] = (
+    await prisma.auditLog.findMany({
+      where: { entityType: 'Project', entityId: project.id },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: { id: true, action: true, createdAt: true, afterData: true, actor: { select: { name: true } } },
+    })
+  ).map((r) => ({
+    id: r.id,
+    actionType: historyActionType(r.action),
+    dateLabel: formatSydneyDateTime(r.createdAt),
+    user: r.actor?.name ?? 'System',
+    details: historyDetails(r.action, r.afterData),
+  }))
 
   const bookingViews = project.bookings.map((booking) => ({
     id: booking.id,
@@ -191,6 +189,13 @@ export default async function ProjectDetailPage({
     (sum, i) => sum.add(i.total).sub(i.amountPaid),
     new Prisma.Decimal(0),
   )
+
+  const isDelivered = project.lifecycleStatus === 'COMPLETED'
+  const isClosed = project.lifecycleStatus === 'CLOSED'
+  const blockingCount = isDelivered
+    ? await prisma.workItem.count({ where: { projectId: project.id, status: 'PENDING', type: { not: 'AUTO' } } })
+    : 0
+  const canClose = isDelivered && invoiceOutstanding.lessThanOrEqualTo(0) && blockingCount === 0
 
   const packageOptions = (await listActivePackages()).map((p) => ({
     id: p.id,
@@ -231,8 +236,28 @@ export default async function ProjectDetailPage({
               {project.code} · {project.name} · enquired {formatSydneyDate(project.enquiryReceivedAt)}
             </p>
           </div>
-          <StatusPill tone="info">{label(project.lifecycleStatus)}</StatusPill>
+          <StatusPill tone="info">{statusLabel(project.lifecycleStatus)}</StatusPill>
         </div>
+
+        {isDelivered ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded border border-line bg-paper px-4 py-3">
+            <p className="text-sm text-ink">
+              {canClose
+                ? 'Delivered and fully settled - ready to close.'
+                : `Delivered. ${invoiceOutstanding.greaterThan(0) ? `${formatAud(invoiceOutstanding)} outstanding. ` : ''}${blockingCount > 0 ? `${blockingCount} task${blockingCount === 1 ? '' : 's'} still to finish. ` : ''}Settle the balance and finish the tasks to close.`}
+            </p>
+            {canClose ? (
+              <form action={closeJobAction}>
+                <input type="hidden" name="csrf" value={csrf} />
+                <input type="hidden" name="projectId" value={project.id} />
+                <Button size="sm" type="submit">Close job</Button>
+              </form>
+            ) : null}
+          </div>
+        ) : null}
+        {isClosed ? (
+          <p className="mt-3 text-sm text-delivered-ink">This job is closed - delivered and fully settled.</p>
+        ) : null}
 
         {board && board.stages.length > 0 ? (
           <p className="mt-2 text-base text-ink-muted">

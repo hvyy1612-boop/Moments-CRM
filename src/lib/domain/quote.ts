@@ -39,9 +39,10 @@ export async function createQuote(projectId: string, createdByUserId: string | n
     const version = quote.versions[0]
     if (!version) throw new Error('Quote version was not created.')
     await tx.quote.update({ where: { id: quote.id }, data: { currentVersionId: version.id } })
+
     await tx.project.update({
       where: { id: projectId },
-      data: { lifecycleStatus: 'QUOTING', commercialStatus: 'QUOTED' },
+      data: { commercialStatus: 'QUOTED' },
     })
     return { quoteId: quote.id, versionId: version.id }
   })
@@ -84,10 +85,7 @@ export async function sendQuote(quoteId: string, actorUserId: string | null) {
 
     await tx.quoteVersion.update({ where: { id: version.id }, data: { status: 'SENT', sentToClientAt: now } })
     await tx.quote.update({ where: { id: quoteId }, data: { status: 'SENT' } })
-    await tx.project.update({
-      where: { id: quote.projectId },
-      data: { lifecycleStatus: 'AWAITING_DECISION' },
-    })
+
     await tx.auditLog.create({
       data: { action: 'quote.sent', entityType: 'Quote', entityId: quoteId, actorUserId },
     })
@@ -185,7 +183,6 @@ async function runDeclineQuote(
   actorUserId: string | null,
   source: string,
 ) {
-  const now = systemClock.now()
   return prisma.$transaction(async (tx) => {
     const quote = await tx.quote.findUnique({ where, include: { currentVersion: true } })
     if (!quote || !quote.currentVersion) throw new Error('Quote not found.')
@@ -201,15 +198,7 @@ async function runDeclineQuote(
       data: { status: 'DECLINED', declineReason: reason },
     })
     await tx.quote.update({ where: { id: quote.id }, data: { status: 'DECLINED' } })
-    await tx.project.update({
-      where: { id: quote.projectId },
-      data: {
-        lifecycleStatus: 'LOST',
-        commercialStatus: 'CANCELLED',
-        lostReason: reason,
-        lostAt: now,
-      },
-    })
+
     await tx.auditLog.create({
       data: {
         action: 'quote.declined',
@@ -285,10 +274,7 @@ export async function reviseQuote(quoteId: string, actorUserId: string | null = 
       where: { id: quoteId },
       data: { currentVersionId: newVersion.id, status: 'DRAFT' },
     })
-    await tx.project.update({
-      where: { id: quote.projectId },
-      data: { lifecycleStatus: 'NEGOTIATION' },
-    })
+
     await tx.auditLog.create({
       data: {
         action: 'quote.revised',

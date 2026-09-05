@@ -132,3 +132,57 @@ export async function setProjectLifecycle(
     return updated
   })
 }
+
+export async function closeJob(projectId: string, actorUserId: string | null = null) {
+  return prisma.$transaction(async (tx) => {
+    const project = await tx.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, companyId: true, lifecycleStatus: true },
+    })
+    if (!project) throw new Error('Job not found.')
+    if (project.lifecycleStatus === 'CLOSED') return { alreadyClosed: true }
+    if (project.lifecycleStatus !== 'COMPLETED') {
+      throw new Error('Only a delivered job can be closed.')
+    }
+
+    const invoices = await tx.invoice.findMany({
+      where: { projectId, status: { not: 'VOID' } },
+      select: { total: true, amountPaid: true },
+    })
+    const outstanding = invoices.reduce(
+      (sum, i) => sum.add(i.total).sub(i.amountPaid),
+      new Prisma.Decimal(0),
+    )
+    if (outstanding.greaterThan(0)) {
+      throw new Error(`This job still has ${outstanding.toFixed(2)} outstanding.`)
+    }
+
+    const blocking = await tx.workItem.count({
+      where: { projectId, status: 'PENDING', type: { not: 'AUTO' } },
+    })
+    if (blocking > 0) {
+      throw new Error(`This job still has ${blocking} task${blocking === 1 ? '' : 's'} to finish.`)
+    }
+
+    await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'CLOSED' } })
+    await tx.auditLog.create({
+      data: {
+        companyId: project.companyId,
+        actorUserId,
+        action: 'project.closed',
+        entityType: 'Project',
+        entityId: projectId,
+        source: 'staff.board',
+      },
+    })
+    await tx.outboxEvent.create({
+      data: {
+        eventType: 'project.closed',
+        aggregateType: 'Project',
+        aggregateId: projectId,
+        payload: { projectId },
+      },
+    })
+    return { alreadyClosed: false }
+  })
+}

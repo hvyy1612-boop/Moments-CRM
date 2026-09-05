@@ -6,7 +6,8 @@ import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
-import { isClosedLabel, resolveLabel, type StatusLabel } from '@/features/projects/labels'
+import { resolveLabel, type StatusLabel } from '@/features/projects/labels'
+import { CLOSED_STATUSES } from '@/features/projects/lifecycle'
 import { stageLabel } from '@/features/projects/workflow'
 import { getCompanyStatusLabels } from '@/lib/domain/status-labels'
 import { StatusPicker } from '@/features/projects/components/StatusPicker'
@@ -76,7 +77,8 @@ export default async function JobsPage({
       client: p.client.displayName,
       clientId: p.client.id,
       label,
-      closed: isClosedLabel(label),
+
+      closed: CLOSED_STATUSES.has(p.lifecycleStatus),
       enquiredAt: p.enquiryReceivedAt,
       nextTask: next?.title ?? null,
       nextStage: next?.stage ?? null,

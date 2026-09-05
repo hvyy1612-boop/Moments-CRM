@@ -43,6 +43,7 @@ enum ProjectLifecycle {
   CONFIRMED
   IN_PRODUCTION
   COMPLETED
+  CLOSED
   CANCELLED
   LOST
   ON_HOLD

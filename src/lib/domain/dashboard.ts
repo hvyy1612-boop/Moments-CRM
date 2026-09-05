@@ -33,7 +33,7 @@ export type DashboardData = {
 
 const INVOICE_COUNTED = ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'PAID', 'OVERDUE'] as const
 const INVOICE_UNPAID = ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'OVERDUE'] as const
-const ACTIVE_STAGES_EXCLUDE = ['CANCELLED', 'LOST', 'COMPLETED']
+const ACTIVE_STAGES_EXCLUDE = ['CANCELLED', 'LOST', 'COMPLETED', 'CLOSED']
 
 function periodStart(period: DashboardPeriod, now: Date): Date {
   if (period === 'year') return new Date(now.getFullYear(), 0, 1)
@@ -86,7 +86,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
     }),
     prisma.paymentTransaction.findMany({
       where: { status: 'SUCCEEDED', createdAt: { gte: start } },
-      select: { amount: true, createdAt: true, payment: { select: { invoice: { select: { project: { select: { package: { select: { name: true } } } } } } } } },
+      select: { amount: true, type: true, createdAt: true, payment: { select: { invoice: { select: { project: { select: { package: { select: { name: true } } } } } } } } },
     }),
     prisma.project.findMany({
       where: { lifecycleStatus: { notIn: ACTIVE_STAGES_EXCLUDE as never } },
@@ -160,7 +160,8 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   const revenueSeries: SeriesPoint[] = bk.map((b) => ({
     label: b.label,
     booked: periodInvoices.filter((i) => { const t = inv(i).getTime(); return t >= b.from && t < b.to }).reduce((s, i) => s + num(i.total), 0),
-    collected: svcPayments.filter((p) => { const t = p.createdAt.getTime(); return t >= b.from && t < b.to }).reduce((s, p) => s + num(p.amount), 0),
+
+    collected: svcPayments.filter((p) => { const t = p.createdAt.getTime(); return t >= b.from && t < b.to }).reduce((s, p) => s + (p.type === 'CHARGE' ? num(p.amount) : -num(p.amount)), 0),
   }))
 
   const svcProjects = projects.filter((p) => matchesSvc(p.package?.name))

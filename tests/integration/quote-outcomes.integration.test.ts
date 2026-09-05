@@ -26,15 +26,15 @@ async function sentQuote() {
 }
 
 describe('quote outcomes (integration, real DB)', () => {
-  it('decline: version DECLINED + reason, project LOST + reason, commercial CANCELLED; idempotent', async () => {
+  it('decline: version DECLINED + reason; operational lifecycle unchanged; idempotent', async () => {
     const { projectId, quoteId } = await sentQuote()
     const r = await declineQuote(quoteId, 'PRICE')
     expect(r.alreadyDeclined).toBe(false)
 
     const project = await prisma.project.findUnique({ where: { id: projectId } })
-    expect(project?.lifecycleStatus).toBe('LOST')
-    expect(project?.lostReason).toBe('PRICE')
-    expect(project?.commercialStatus).toBe('CANCELLED')
+
+    expect(project?.lifecycleStatus).toBe('CONFIRMED')
+    expect(project?.lostReason).toBeNull()
 
     const quote = await prisma.quote.findUnique({
       where: { id: quoteId },
@@ -47,7 +47,7 @@ describe('quote outcomes (integration, real DB)', () => {
     expect(r2.alreadyDeclined).toBe(true)
   })
 
-  it('revise: current version SUPERSEDED, new DRAFT copies lines, project NEGOTIATION', async () => {
+  it('revise: current version SUPERSEDED, new DRAFT copies lines; operational lifecycle unchanged', async () => {
     const { projectId, quoteId } = await sentQuote()
     const rev = await reviseQuote(quoteId)
     expect(rev.versionNumber).toBe(2)
@@ -64,7 +64,22 @@ describe('quote outcomes (integration, real DB)', () => {
     expect(v1?.status).toBe('SUPERSEDED')
 
     const project = await prisma.project.findUnique({ where: { id: projectId } })
-    expect(project?.lifecycleStatus).toBe('NEGOTIATION')
+
+    expect(project?.lifecycleStatus).toBe('CONFIRMED')
+  })
+
+  it('quoting a confirmed job leaves its operational lifecycle CONFIRMED (only commercial moves)', async () => {
+    const conv = await convertEnquiry((await createEnquiry({ name: 'Quoter', email: email() })).id)
+    const before = await prisma.project.findUnique({ where: { id: conv.projectId! } })
+    expect(before?.lifecycleStatus).toBe('CONFIRMED')
+
+    const q = await createQuote(conv.projectId!, null)
+    await saveQuoteDraft(q.versionId, [{ description: 'Coverage', quantity: 1, unitPrice: '2000' }], null)
+    await sendQuote(q.quoteId, null)
+
+    const after = await prisma.project.findUnique({ where: { id: conv.projectId! } })
+    expect(after?.lifecycleStatus).toBe('CONFIRMED')
+    expect(after?.commercialStatus).toBe('QUOTED')
   })
 
   it('an accepted quote cannot be revised', async () => {

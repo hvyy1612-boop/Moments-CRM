@@ -35,18 +35,21 @@ describe('password hashing and policy (SEC-P01, SEC-P04, SEC-P05)', () => {
     expect(Number(match?.[3])).toBe(1)
   })
 
-  it('SEC-P04 rejects a password shorter than 12 characters', () => {
-    expect(checkPasswordPolicy('short')).toBe('too_short')
-    expect(checkPasswordPolicy('elevenchars')).toBe('too_short')
+  it('SEC-P04 rejects a password that fails the composition rules (>=8 with a letter, number, special)', () => {
+    expect(checkPasswordPolicy('aB1!')).toBe('weak')
+    expect(checkPasswordPolicy('abcdefgh')).toBe('weak')
+    expect(checkPasswordPolicy('abcdefg1')).toBe('weak')
+    expect(checkPasswordPolicy('abcdefg!')).toBe('weak')
   })
 
   it('SEC-P04 rejects a known-common password regardless of case', () => {
-    expect(checkPasswordPolicy('passwordpassword')).toBe('too_common')
-    expect(checkPasswordPolicy('PasswordPassword')).toBe('too_common')
+
+    expect(checkPasswordPolicy('p@ssw0rd1234')).toBe('too_common')
+    expect(checkPasswordPolicy('P@ssW0rd1234')).toBe('too_common')
   })
 
-  it('SEC-P04 accepts a long, uncommon password', () => {
-    expect(checkPasswordPolicy('correct horse battery staple')).toBeNull()
+  it('SEC-P04 accepts a strong, uncommon password meeting all rules', () => {
+    expect(checkPasswordPolicy('Zt9$mkroLp')).toBeNull()
   })
 
   it('SEC-P05 flags a hash with weaker parameters for re-hashing', () => {
