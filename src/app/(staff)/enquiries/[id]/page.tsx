@@ -111,8 +111,17 @@ export default async function EnquiryDetailPage({
             <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Workflow</h2>
 
             {enquiry.status === 'CONVERTED' ? (
-              <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">
-                This enquiry was booked. Its workflow now continues in the job.
+              <div className="flex flex-col gap-3">
+                <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">
+                  Booked - the enquiry checklist is complete. Open the job below to continue the work.
+                </div>
+                <EnquiryWorkflow
+                  stages={board.stages}
+                  allDone={board.allDone}
+                  enquiryId={enquiry.id}
+                  csrf={csrf}
+                  readOnly
+                />
               </div>
             ) : (
               <EnquiryWorkflow

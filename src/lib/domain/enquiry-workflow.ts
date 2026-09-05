@@ -53,10 +53,18 @@ export async function cancelOpenWorkItems(tx: Tx, enquiryId: string) {
   })
 }
 
-/** Read the enquiry's editable tasks and build the board. */
+/** Read the enquiry's tasks and build the board. A booked (converted) enquiry is a finished record: the
+ *  board shows the FULL checklist - including tasks closed out on booking - as all ticked, read-only, so
+ *  any staff member can see what the sales phase covered. */
 export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> {
+  const enquiry = await prisma.enquiry.findUnique({
+    where: { id: enquiryId },
+    select: { createdAt: true, status: true },
+  })
+  const booked = enquiry?.status === 'CONVERTED'
   const items = await prisma.workItem.findMany({
-    where: { enquiryId, status: { not: 'CANCELLED' } },
+    // Live enquiry: hide tasks dropped from the flow. Booked: include them all - the record is complete.
+    where: booked ? { enquiryId } : { enquiryId, status: { not: 'CANCELLED' } },
     orderBy: { order: 'asc' },
     select: {
       id: true,
@@ -81,11 +89,7 @@ export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> 
     completedByName: w.completedBy?.name ?? null,
     completedAt: w.completedAt ?? null,
   }))
-  const enquiry = await prisma.enquiry.findUnique({
-    where: { id: enquiryId },
-    select: { createdAt: true },
-  })
-  return buildEnquiryBoard(tasks, formatSydneyDate, enquiry?.createdAt ?? null, new Date())
+  return buildEnquiryBoard(tasks, formatSydneyDate, enquiry?.createdAt ?? null, new Date(), booked)
 }
 
 /** Staff sends a reply: records an outbound message and moves the ball to the client. A brand-new lead
