@@ -34,7 +34,7 @@ type ViewMatch = (status: string, waitingOn: string | null) => boolean
 
 export const ENQUIRY_VIEWS: { key: string; label: string; match: ViewMatch }[] = [
 
-  { key: 'all', label: 'All open', match: (s) => isOpenEnquiry(s) },
+  { key: 'all', label: 'All', match: (s) => isOpenEnquiry(s) || s === 'CONVERTED' },
   {
     key: 'attention',
     label: 'Needs your reply',
@@ -52,8 +52,8 @@ export const ENQUIRY_VIEWS: { key: string; label: string; match: ViewMatch }[] =
 
 export const ENQUIRY_EMPTY: Record<string, { title: string; description: string }> = {
   all: {
-    title: 'No open enquiries',
-    description: 'New leads from the website or "Add client" appear here. Booked clients are in Jobs.',
+    title: 'No enquiries yet',
+    description: 'New leads from the website or "Add client" appear here. Booked ones stay as a record and also open as a Job.',
   },
   attention: {
     title: "You're all caught up",

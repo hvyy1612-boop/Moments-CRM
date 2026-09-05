@@ -46,7 +46,7 @@ export function EnquiryFilterMenu({ view }: { view: string }) {
               </select>
             </label>
             {active ? (
-              <button type="button" onClick={() => set(DEFAULT_VIEW)} className="mt-3 text-left text-sm text-accent-ink hover:underline">Reset to open</button>
+              <button type="button" onClick={() => set(DEFAULT_VIEW)} className="mt-3 text-left text-sm text-accent-ink hover:underline">Reset to all</button>
             ) : null}
           </div>
         </>
