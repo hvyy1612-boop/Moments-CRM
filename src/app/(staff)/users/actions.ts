@@ -5,7 +5,7 @@ import { cookies } from 'next/headers'
 import { z } from 'zod'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
-import { hashPassword } from '@/lib/auth/password'
+import { passwordCredentials, resetUserPassword } from '@/lib/auth/user-password'
 import { revokeAllSessions } from '@/lib/auth/session'
 import { generateTempPassword, nextStaffLoginId } from '@/lib/auth/staff'
 import { prisma } from '@/lib/db'
@@ -46,7 +46,7 @@ export async function addStaffAction(_prev: AddStaffState, formData: FormData): 
 
   const staffLoginId = await nextStaffLoginId()
   const tempPassword = generateTempPassword()
-  const hashed = await hashPassword(tempPassword)
+  const creds = await passwordCredentials(tempPassword)
 
   await prisma.$transaction(async (tx) => {
     const company = await requireCompany(tx)
@@ -55,8 +55,7 @@ export async function addStaffAction(_prev: AddStaffState, formData: FormData): 
         companyId: company.id,
         email: staffLoginId,
         name: parsed.data.name,
-        passwordHash: hashed.hash,
-        passwordAlgo: hashed.algo,
+        ...creds,
         role: parsed.data.role,
         isActive: true,
         status: 'ACTIVE',
@@ -100,11 +99,7 @@ export async function resetStaffPasswordAction(_prev: ResetState, formData: Form
   if (!target) return { status: 'error', message: 'That account no longer exists.' }
 
   const tempPassword = generateTempPassword()
-  const hashed = await hashPassword(tempPassword)
-  await prisma.user.update({
-    where: { id: target.id },
-    data: { passwordHash: hashed.hash, passwordAlgo: hashed.algo, mustChangePassword: true, failedAttempts: 0, lockedUntil: null },
-  })
+  await resetUserPassword(target.id, tempPassword)
   await revokeAllSessions(target.id)
   revalidatePath('/users')
   return { status: 'reset', staffLoginId: target.email, tempPassword }

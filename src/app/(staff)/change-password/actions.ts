@@ -4,8 +4,8 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
-import { checkPasswordPolicy, hashPassword } from '@/lib/auth/password'
-import { prisma } from '@/lib/db'
+import { checkPasswordPolicy } from '@/lib/auth/password'
+import { setOwnPassword } from '@/lib/auth/user-password'
 
 export type ChangePasswordState =
   | { status: 'idle' }
@@ -38,10 +38,6 @@ export async function changePassword(
     return { status: 'error', errors: { confirm: 'The two passwords do not match.' } }
   }
 
-  const hashed = await hashPassword(password)
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { passwordHash: hashed.hash, passwordAlgo: hashed.algo, mustChangePassword: false },
-  })
+  await setOwnPassword(user.id, password)
   redirect('/dashboard')
 }
