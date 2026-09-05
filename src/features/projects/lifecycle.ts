@@ -44,6 +44,13 @@ export const CLOSED_STATUSES: ReadonlySet<ProjectLifecycle> = new Set([
   'ARCHIVED',
 ])
 
+export const FUNNEL_STATUSES = ['ENQUIRY', 'QUALIFYING', 'QUOTING', 'AWAITING_DECISION', 'NEGOTIATION'] as const
+const FUNNEL_SET: ReadonlySet<string> = new Set(FUNNEL_STATUSES)
+
+export function isBooked(status: string): boolean {
+  return !FUNNEL_SET.has(status)
+}
+
 export const COMMON_STATUSES: ReadonlySet<ProjectLifecycle> = new Set([
   'ENQUIRY',
   'QUOTING',
