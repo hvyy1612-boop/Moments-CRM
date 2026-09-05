@@ -23,7 +23,7 @@ function signed(n: number): string {
 
 function Panel({ tone, title, desc, right, children }: { tone: string; title: string; desc: string; right?: ReactNode; children: ReactNode }) {
   return (
-    <section className={`rounded-xl ${tone} p-5`}>
+    <section className={`flex h-full flex-col rounded-xl ${tone} p-5`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-medium text-ink">{title}</h2>
@@ -31,7 +31,7 @@ function Panel({ tone, title, desc, right, children }: { tone: string; title: st
         </div>
         {right}
       </div>
-      <div className="mt-4">{children}</div>
+      <div className="mt-4 flex flex-1 flex-col justify-center">{children}</div>
     </section>
   )
 }
