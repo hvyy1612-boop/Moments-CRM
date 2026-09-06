@@ -288,6 +288,54 @@ async function runConvertEnquiry(enquiryId: string, actorUserId: string | null, 
   })
 }
 
+/**
+ * Undo a booking (staff correction). Cancels the linked Job (kept as a CANCELLED record, never deleted),
+ * reopens the enquiry to the chosen open stage, restores its checklist, and unlinks the client/project.
+ * Re-booking later creates a fresh Job (the client is reused by email). Guarded to CONVERTED leads.
+ */
+export async function revertEnquiryBooking(
+  enquiryId: string,
+  toStage: 'NEW' | 'CONTACTED' | 'QUALIFIED',
+  actorUserId: string | null = null,
+) {
+  return prisma.$transaction(async (tx) => {
+    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
+    if (!enquiry) throw new Error('Enquiry not found.')
+    if (enquiry.status !== 'CONVERTED') throw new Error('This enquiry is not booked.')
+
+    if (enquiry.convertedProjectId) {
+      await tx.project.update({
+        where: { id: enquiry.convertedProjectId },
+        data: { lifecycleStatus: 'CANCELLED' },
+      })
+    }
+    await tx.enquiry.update({
+      where: { id: enquiryId },
+      data: {
+        status: toStage,
+        waitingOn: 'STUDIO',
+        convertedProjectId: null,
+        convertedClientId: null,
+        convertedAt: null,
+      },
+    })
+    // Bring the checklist back to life so staff can keep working the lead.
+    await tx.workItem.updateMany({ where: { enquiryId, status: 'CANCELLED' }, data: { status: 'PENDING' } })
+    await tx.auditLog.create({
+      data: {
+        companyId: enquiry.companyId,
+        action: 'enquiry.booking_reverted',
+        entityType: 'Enquiry',
+        entityId: enquiryId,
+        actorUserId,
+        beforeData: { projectId: enquiry.convertedProjectId },
+        afterData: { status: toStage },
+      },
+    })
+    return { projectId: enquiry.convertedProjectId }
+  })
+}
+
 const CLIENT_MATCH_SELECT = {
   id: true,
   displayName: true,

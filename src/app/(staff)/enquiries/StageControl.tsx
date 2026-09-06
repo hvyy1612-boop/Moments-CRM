@@ -41,17 +41,9 @@ export function StageControl({ enquiryId, status, csrf }: { enquiryId: string; s
   const booked = status === 'CONVERTED'
   const closed = status === 'LOST' || status === 'ARCHIVED'
 
-  if (booked) {
-    return (
-      <span className="inline-flex h-8 items-center rounded-md bg-sunk px-2.5 text-sm text-ink-muted" title="Booked - managed as a Job">
-        Booked
-      </span>
-    )
-  }
-
   return (
     <Popover
-      width={208}
+      width={216}
       renderTrigger={({ ref, onClick, open }) => (
         <button
           ref={ref}
@@ -69,45 +61,64 @@ export function StageControl({ enquiryId, status, csrf }: { enquiryId: string; s
         </button>
       )}
     >
-      {({ close }) => (
-        <div role="listbox" className="flex flex-col gap-0.5">
-          {closed ? (
-            <>
-              <div className="px-2.5 py-1.5 text-sm text-ink-muted">This lead is {(STAGE_LABEL[status] ?? status).toLowerCase()}.</div>
-              <form action={setEnquiryStageAction} onSubmit={() => close()}>
+      {({ close }) =>
+        closed ? (
+          <div role="listbox" className="flex flex-col gap-0.5">
+            <div className="px-2.5 py-1.5 text-sm text-ink-muted">This lead is {(STAGE_LABEL[status] ?? status).toLowerCase()}.</div>
+            <form action={setEnquiryStageAction} onSubmit={() => close()}>
+              <input type="hidden" name="csrf" value={csrf} />
+              <input type="hidden" name="enquiryId" value={enquiryId} />
+              <button type="submit" name="target" value="REOPEN" className={optClass}>Reopen lead</button>
+            </form>
+          </div>
+        ) : booked ? (
+          <div role="listbox" className="flex flex-col gap-0.5">
+            <div className="px-2.5 pb-1 pt-0.5 text-xs font-medium text-muted">Move back to the pipeline</div>
+            {OPEN_OPTIONS.map((o) => (
+              <form
+                key={o.target}
+                action={setEnquiryStageAction}
+                onSubmit={(e) => {
+                  if (!window.confirm('Un-book this lead? Its job will be cancelled and it returns to the pipeline.')) {
+                    e.preventDefault()
+                    return
+                  }
+                  close()
+                }}
+              >
                 <input type="hidden" name="csrf" value={csrf} />
                 <input type="hidden" name="enquiryId" value={enquiryId} />
-                <button type="submit" name="target" value="REOPEN" className={optClass}>Reopen lead</button>
+                <button type="submit" name="target" value={o.target} className={optClass}>{o.label}</button>
               </form>
-            </>
-          ) : (
-            <>
-              {OPEN_OPTIONS.map((o) => (
-                <form key={o.target} action={setEnquiryStageAction} onSubmit={() => close()}>
-                  <input type="hidden" name="csrf" value={csrf} />
-                  <input type="hidden" name="enquiryId" value={enquiryId} />
-                  <button type="submit" name="target" value={o.target} role="option" aria-selected={status === o.target} className={`${optClass} aria-selected:bg-sunk aria-selected:font-medium`}>
-                    <span>{o.label}</span>
-                    {status === o.target ? <CheckIcon /> : null}
-                  </button>
-                </form>
-              ))}
-              <div className="my-0.5 border-t border-line" />
-              <form action={setEnquiryStageAction} onSubmit={(e) => { if (!window.confirm('Book this lead? This creates a job.')) { e.preventDefault(); return } close() }}>
+            ))}
+          </div>
+        ) : (
+          <div role="listbox" className="flex flex-col gap-0.5">
+            {OPEN_OPTIONS.map((o) => (
+              <form key={o.target} action={setEnquiryStageAction} onSubmit={() => close()}>
                 <input type="hidden" name="csrf" value={csrf} />
                 <input type="hidden" name="enquiryId" value={enquiryId} />
-                <button type="submit" name="target" value="CONVERTED" className={optClass}>Booked (create job)</button>
+                <button type="submit" name="target" value={o.target} role="option" aria-selected={status === o.target} className={`${optClass} aria-selected:bg-sunk aria-selected:font-medium`}>
+                  <span>{o.label}</span>
+                  {status === o.target ? <CheckIcon /> : null}
+                </button>
               </form>
-              <form action={setEnquiryStageAction} onSubmit={(e) => { const r = window.prompt('Reason for marking this lead lost?'); if (!r || !r.trim()) { e.preventDefault(); return } if (reasonRef.current) reasonRef.current.value = r.trim(); close() }}>
-                <input type="hidden" name="csrf" value={csrf} />
-                <input type="hidden" name="enquiryId" value={enquiryId} />
-                <input ref={reasonRef} type="hidden" name="reason" />
-                <button type="submit" name="target" value="LOST" className={`${optClass} text-lost-ink`}>Mark lost</button>
-              </form>
-            </>
-          )}
-        </div>
-      )}
+            ))}
+            <div className="my-0.5 border-t border-line" />
+            <form action={setEnquiryStageAction} onSubmit={(e) => { if (!window.confirm('Book this lead? This creates a job.')) { e.preventDefault(); return } close() }}>
+              <input type="hidden" name="csrf" value={csrf} />
+              <input type="hidden" name="enquiryId" value={enquiryId} />
+              <button type="submit" name="target" value="CONVERTED" className={optClass}>Booked (create job)</button>
+            </form>
+            <form action={setEnquiryStageAction} onSubmit={(e) => { const r = window.prompt('Reason for marking this lead lost?'); if (!r || !r.trim()) { e.preventDefault(); return } if (reasonRef.current) reasonRef.current.value = r.trim(); close() }}>
+              <input type="hidden" name="csrf" value={csrf} />
+              <input type="hidden" name="enquiryId" value={enquiryId} />
+              <input ref={reasonRef} type="hidden" name="reason" />
+              <button type="submit" name="target" value="LOST" className={`${optClass} text-lost-ink`}>Mark lost</button>
+            </form>
+          </div>
+        )
+      }
     </Popover>
   )
 }

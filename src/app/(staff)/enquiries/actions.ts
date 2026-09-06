@@ -6,7 +6,8 @@ import { redirect } from 'next/navigation'
 import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
-import { advanceEnquiry, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
+import { prisma } from '@/lib/db'
+import { advanceEnquiry, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry, revertEnquiryBooking } from '@/lib/domain/enquiry'
 import { enquirySchema } from '@/lib/validation/enquiry'
 import {
   addEnquiryTask,
@@ -92,6 +93,19 @@ export async function setEnquiryStageAction(formData: FormData): Promise<void> {
   const enquiryId = String(formData.get('enquiryId') ?? '')
   const target = String(formData.get('target') ?? '')
   if (!enquiryId) return
+
+  // Correcting a booked lead: moving it back to an open stage un-books it (cancels the Job).
+  if (target === 'NEW' || target === 'CONTACTED' || target === 'QUALIFIED') {
+    const current = await prisma.enquiry.findUnique({ where: { id: enquiryId }, select: { status: true } })
+    if (current?.status === 'CONVERTED') {
+      await revertEnquiryBooking(enquiryId, target, user.id)
+      revalidatePath('/enquiries')
+      revalidatePath(`/enquiries/${enquiryId}`)
+      revalidatePath('/jobs')
+      return
+    }
+  }
+
   switch (target) {
     case 'NEW':
       await advanceEnquiry(enquiryId, 'NEW', user.id)
