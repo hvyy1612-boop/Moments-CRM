@@ -3,9 +3,10 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { StageControl } from './StageControl'
-import { ProgressControl, type ProgressTask } from './ProgressControl'
+import { ProgressControl } from './ProgressControl'
 import { EnquiryRowMenu } from './EnquiryRowMenu'
 import { EditEnquiryPreview } from './EditEnquiryPreview'
+import { deriveTasks, type RowTask } from './stage-tasks'
 
 export type EnquiryRowData = {
   id: string
@@ -17,7 +18,7 @@ export type EnquiryRowData = {
   email: string
   phone: string | null
   convertedProjectId: string | null
-  tasks: ProgressTask[]
+  tasks: RowTask[]
   waitingMs: number
   createdMs: number
 }
@@ -38,6 +39,23 @@ function waitingLabel(waitingOn: string | null): string {
 
 export function EnquiryRow({ row }: { row: EnquiryRowData }) {
   const [editing, setEditing] = useState(false)
+  // PREVIEW-ONLY local state. previewStage drives the cascade; overrides are manual per-task ticks.
+  // Neither is persisted - a refresh reloads the canonical stage + completion from the server.
+  const [previewStage, setPreviewStage] = useState<string | null>(null)
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({})
+
+  const effectiveStatus = previewStage ?? row.status
+  const tasks = deriveTasks(row.tasks, previewStage, overrides)
+
+  function selectStage(value: string) {
+    // Changing the stage re-derives the checklist from the cascade, so clear any manual ticks first.
+    setOverrides({})
+    setPreviewStage(value)
+  }
+  function toggleTask(id: string) {
+    const current = tasks.find((t) => t.id === id)?.done ?? false
+    setOverrides((o) => ({ ...o, [id]: !current }))
+  }
 
   return (
     <tr className="group border-b border-line align-middle transition-colors last:border-b-0 hover:bg-paper">
@@ -51,11 +69,11 @@ export function EnquiryRow({ row }: { row: EnquiryRowData }) {
       </td>
       <td className="py-3 pr-4 text-ink-muted">{row.event}</td>
       <td className="py-3 pr-4">
-        <StageControl status={row.status} />
+        <StageControl status={effectiveStatus} onSelect={selectStage} />
       </td>
       <td className="py-3 pr-4 text-ink-muted">{waitingLabel(row.waitingOn)}</td>
       <td className="py-3 pr-4">
-        <ProgressControl tasks={row.tasks} />
+        <ProgressControl tasks={tasks} onToggle={toggleTask} />
       </td>
       <td className="tabular py-3 pr-4 text-ink-muted">{row.shootDate ?? 'Not set'}</td>
       <td className="py-3 text-right">

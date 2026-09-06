@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
 import { Popover } from './Popover'
 
 // UI REDESIGN PHASE ONLY.
 // Do not wire stage mutations here until workflow behaviour is approved.
-// Selecting a stage updates LOCAL preview state only - no persistence, no backend transition,
-// no Job creation, no lost/reopen. Refresh restores the canonical backend stage.
+// Controlled by the row: selecting a stage calls onSelect, which updates LOCAL preview state only -
+// no persistence, no backend transition, no Job creation, no lost/reopen. Refresh restores the
+// canonical backend stage.
 
 /** Short display labels for this list only (canonical enum values are unchanged elsewhere). */
 export const STAGE_LABEL: Record<string, string> = {
@@ -29,10 +29,9 @@ function Chevron() {
   )
 }
 
-export function StageControl({ status }: { status: string }) {
-  // previewStatus is ephemeral UI state, never written back to the server.
-  const [previewStatus, setPreviewStatus] = useState<string | null>(null)
-  const shown = previewStatus ?? status
+export function StageControl({ status, onSelect }: { status: string; onSelect: (value: string) => void }) {
+  // `status` is the effective (possibly previewed) stage owned by the row; selecting calls onSelect.
+  const shown = status
 
   return (
     <Popover
@@ -63,7 +62,7 @@ export function StageControl({ status }: { status: string }) {
                 role="option"
                 aria-selected={selected}
                 onClick={() => {
-                  setPreviewStatus(value)
+                  onSelect(value)
                   close()
                 }}
                 className="flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-ink transition-colors hover:bg-paper aria-selected:bg-sunk aria-selected:font-medium"

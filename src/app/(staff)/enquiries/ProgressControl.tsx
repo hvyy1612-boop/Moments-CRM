@@ -1,12 +1,11 @@
 'use client'
 
-import { useState } from 'react'
 import { Popover } from './Popover'
 
 // UI REDESIGN PHASE ONLY.
-// Task checkbox interaction is presentation-only in this phase: it toggles LOCAL preview state and never
-// calls toggleWorkItemAction or touches the WorkItem backend. Refresh restores canonical completion.
-// "Add task" is a disabled placeholder until the workflow phase is approved.
+// Controlled by the row. Completion reflects the stage cascade + manual toggles held in the row's LOCAL
+// preview state; ticking a box calls onToggle. Nothing here calls toggleWorkItemAction or touches the
+// WorkItem backend. Refresh restores canonical completion. "Add task" is a disabled placeholder.
 
 export type ProgressTask = { id: string; title: string; done: boolean }
 
@@ -43,9 +42,8 @@ function Check() {
   )
 }
 
-export function ProgressControl({ tasks }: { tasks: ProgressTask[] }) {
-  const [overrides, setOverrides] = useState<Record<string, boolean>>({})
-  const state = tasks.map((t) => ({ ...t, done: overrides[t.id] ?? t.done }))
+export function ProgressControl({ tasks, onToggle }: { tasks: ProgressTask[]; onToggle: (id: string) => void }) {
+  const state = tasks
   const total = state.length
   const done = state.filter((t) => t.done).length
   const complete = total > 0 && done === total
@@ -98,7 +96,7 @@ export function ProgressControl({ tasks }: { tasks: ProgressTask[] }) {
               <button
                 key={t.id}
                 type="button"
-                onClick={() => setOverrides((o) => ({ ...o, [t.id]: !t.done }))}
+                onClick={() => onToggle(t.id)}
                 className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-paper"
               >
                 <span
