@@ -7,12 +7,14 @@ import type { StatusKind } from '@/components/ui/StatusTag'
  *  - WAITING = the operational `waitingOn` field (who owes the next response): STUDIO or CLIENT.
  * The work queue reads WAITING; the stage is shown as a secondary label.
  */
+// The four major phases of the enquiry journey (in workflow order), plus the closed outcomes. The list
+// shows this "big phase"; the detailed per-case checklist lives on the enquiry page.
 export const ENQUIRY_STAGE_LABEL: Record<string, string> = {
-  NEW: 'New enquiry',
-  CONTACTED: 'Discussing details',
-  QUALIFIED: 'Preparing quote',
+  NEW: 'New',
+  CONTACTED: 'In discussion',
+  QUALIFIED: 'Quoting',
   CONVERTED: 'Booked',
-  LOST: 'Not proceeding',
+  LOST: 'Lost',
   ARCHIVED: 'Archived',
 }
 
