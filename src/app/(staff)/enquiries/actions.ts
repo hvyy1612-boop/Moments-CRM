@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation'
 import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
-import { convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
+import { advanceEnquiry, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
 import { enquirySchema } from '@/lib/validation/enquiry'
 import {
   addEnquiryTask,
@@ -69,6 +69,42 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
       await markEnquiryLost(enquiryId, 'Not proceeding', user.id)
       break
     case 'reopen':
+      await reopenEnquiry(enquiryId, user.id)
+      break
+    default:
+      return
+  }
+  revalidatePath('/enquiries')
+  revalidatePath(`/enquiries/${enquiryId}`)
+}
+
+export async function setEnquiryStageAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  const target = String(formData.get('target') ?? '')
+  if (!enquiryId) return
+  switch (target) {
+    case 'NEW':
+      await advanceEnquiry(enquiryId, 'NEW', user.id)
+      break
+    case 'CONTACTED':
+      await advanceEnquiry(enquiryId, 'CONTACTED', user.id)
+      break
+    case 'QUALIFIED':
+      await advanceEnquiry(enquiryId, 'QUALIFIED', user.id)
+      break
+    case 'CONVERTED': {
+      const result = await convertEnquiry(enquiryId, user.id)
+      if (result.projectId && !result.alreadyConverted) await seedProjectWorkflow(result.projectId)
+      break
+    }
+    case 'LOST': {
+      const reason = String(formData.get('reason') ?? '').trim() || 'Not proceeding'
+      await markEnquiryLost(enquiryId, reason, user.id)
+      break
+    }
+    case 'REOPEN':
       await reopenEnquiry(enquiryId, user.id)
       break
     default:

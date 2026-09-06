@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { StageControl } from './StageControl'
-import { ProgressControl, type ProgressTask } from './ProgressControl'
 import { EnquiryRowMenu } from './EnquiryRowMenu'
 import { EditEnquiryPreview } from './EditEnquiryPreview'
 
@@ -17,7 +16,6 @@ export type EnquiryRowData = {
   email: string
   phone: string | null
   convertedProjectId: string | null
-  tasks: ProgressTask[]
   waitingMs: number
   createdMs: number
 }
@@ -35,7 +33,7 @@ function waitingLabel(waitingOn: string | null): string {
   return 'No one'
 }
 
-export function EnquiryRow({ row }: { row: EnquiryRowData }) {
+export function EnquiryRow({ row, csrf }: { row: EnquiryRowData; csrf: string }) {
   const [editing, setEditing] = useState(false)
 
   return (
@@ -50,12 +48,9 @@ export function EnquiryRow({ row }: { row: EnquiryRowData }) {
       </td>
       <td className="py-3 pr-4 text-ink-muted">{row.event}</td>
       <td className="py-3 pr-4">
-        <StageControl status={row.status} />
+        <StageControl enquiryId={row.id} status={row.status} csrf={csrf} />
       </td>
       <td className="py-3 pr-4 text-ink-muted">{waitingLabel(row.waitingOn)}</td>
-      <td className="py-3 pr-4">
-        <ProgressControl tasks={row.tasks} />
-      </td>
       <td className="tabular py-3 pr-4 text-ink-muted">{row.shootDate ?? 'Not set'}</td>
       <td className="py-3 text-right">
         <EnquiryRowMenu

@@ -31,11 +31,6 @@ export default async function EnquiriesPage() {
       convertedProjectId: true,
       updatedAt: true,
       createdAt: true,
-      workItems: {
-        where: { status: { not: 'CANCELLED' } },
-        orderBy: { order: 'asc' },
-        select: { id: true, title: true, status: true },
-      },
     },
   })
 
@@ -49,7 +44,6 @@ export default async function EnquiriesPage() {
     email: e.email,
     phone: e.phone,
     convertedProjectId: e.convertedProjectId,
-    tasks: e.workItems.map((w) => ({ id: w.id, title: w.title, done: w.status === 'COMPLETED' })),
     waitingMs: e.updatedAt.getTime(),
     createdMs: e.createdAt.getTime(),
   }))
