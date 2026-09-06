@@ -51,8 +51,14 @@ export async function cancelOpenWorkItems(tx: Tx, enquiryId: string) {
 }
 
 export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> {
+  const enquiry = await prisma.enquiry.findUnique({
+    where: { id: enquiryId },
+    select: { createdAt: true, status: true },
+  })
+  const booked = enquiry?.status === 'CONVERTED'
   const items = await prisma.workItem.findMany({
-    where: { enquiryId, status: { not: 'CANCELLED' } },
+
+    where: booked ? { enquiryId } : { enquiryId, status: { not: 'CANCELLED' } },
     orderBy: { order: 'asc' },
     select: {
       id: true,
@@ -77,11 +83,7 @@ export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> 
     completedByName: w.completedBy?.name ?? null,
     completedAt: w.completedAt ?? null,
   }))
-  const enquiry = await prisma.enquiry.findUnique({
-    where: { id: enquiryId },
-    select: { createdAt: true },
-  })
-  return buildEnquiryBoard(tasks, formatSydneyDate, enquiry?.createdAt ?? null, new Date())
+  return buildEnquiryBoard(tasks, formatSydneyDate, enquiry?.createdAt ?? null, new Date(), booked)
 }
 
 export async function sendStaffReply(enquiryId: string, body: string, actorUserId: string) {

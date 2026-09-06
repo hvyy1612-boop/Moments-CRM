@@ -152,6 +152,7 @@ export function buildEnquiryBoard(
   formatDate: (d: Date) => string,
   anchorDate: Date | null = null,
   now: Date | null = null,
+  forceAllDone = false,
 ): EnquiryBoard {
   const doneTitles = new Set(tasks.filter((t) => t.status === 'COMPLETED').map((t) => t.title))
   let activeKey: string | null = null
@@ -161,11 +162,12 @@ export function buildEnquiryBoard(
       .sort((a, b) => a.order - b.order)
       .map((t) => {
         const type = (t.type as TaskType) ?? 'TODO'
-        const done = t.status === 'COMPLETED'
+
+        const done = forceAllDone || t.status === 'COMPLETED'
         const offset = ENQUIRY_TASK_SCHEDULE[t.title]
-        let dueDate: Date | null = t.dueAt ?? null
+        let dueDate: Date | null = forceAllDone ? null : (t.dueAt ?? null)
         let noDate = false
-        if (!dueDate && offset !== undefined) {
+        if (!forceAllDone && !dueDate && offset !== undefined) {
           if (anchorDate) dueDate = addDays(anchorDate, offset)
           else noDate = true
         }

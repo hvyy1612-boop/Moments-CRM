@@ -35,11 +35,14 @@ export function EnquiryWorkflow({
   allDone,
   enquiryId,
   csrf,
+  readOnly = false,
 }: {
   stages: EnqStage[]
   allDone: boolean
   enquiryId: string
   csrf: string
+
+  readOnly?: boolean
 }) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [addingStage, setAddingStage] = useState<string | null>(null)
@@ -87,7 +90,7 @@ export function EnquiryWorkflow({
 
               <div className="flex flex-col gap-1.5">
                 {stage.tasks.map((t) => {
-                  if (!t.editable) {
+                  if (!t.editable || readOnly) {
 
                     return (
                       <div key={t.id} className="flex items-start gap-2 rounded-md border border-line bg-paper px-3 py-2">
@@ -148,7 +151,7 @@ export function EnquiryWorkflow({
                   )
                 })}
 
-                {addingStage === stage.key ? (
+                {readOnly ? null : addingStage === stage.key ? (
                   <form
                     action={addEnquiryTaskAction}
                     onSubmit={() => setAddingStage(null)}
