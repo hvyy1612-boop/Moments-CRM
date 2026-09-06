@@ -28,7 +28,6 @@ type Row = {
   nextTask: string | null
   eventDate: Date | null
   createdAt: Date
-  convertedProjectId: string | null
 }
 
 export default async function EnquiriesPage({
@@ -48,7 +47,7 @@ export default async function EnquiriesPage({
   const enquiries = await prisma.enquiry.findMany({
     orderBy: { updatedAt: 'asc' }, // oldest-waiting first
     select: {
-      id: true, name: true, eventType: true, eventDate: true, status: true, waitingOn: true, updatedAt: true, createdAt: true, convertedProjectId: true,
+      id: true, name: true, eventType: true, eventDate: true, status: true, waitingOn: true, updatedAt: true, createdAt: true,
       workItems: { where: { status: 'PENDING' }, orderBy: { order: 'asc' }, take: 1, select: { title: true } },
     },
   })
@@ -59,14 +58,13 @@ export default async function EnquiriesPage({
   let rows: Row[] = enquiries.map((e) => ({
     id: e.id,
     name: e.name,
-    event: e.eventType ? titleCase(e.eventType) : '-',
+    event: e.eventType ? titleCase(e.eventType) : 'Not specified',
     status: e.status,
     waitingOn: e.waitingOn,
     waitingDays: Math.max(0, Math.floor((now - e.updatedAt.getTime()) / DAY_MS)),
     nextTask: e.workItems[0]?.title ?? null,
     eventDate: e.eventDate,
     createdAt: e.createdAt,
-    convertedProjectId: e.convertedProjectId,
   }))
 
   rows = rows.filter((r) => activeView.match(r.status, r.waitingOn))
@@ -148,18 +146,20 @@ export default async function EnquiriesPage({
                       ) : row.waitingOn === 'CLIENT' ? (
                         <span className="text-ink-muted">Client</span>
                       ) : (
-                        <span className="text-ink-muted">-</span>
+                        <span className="text-ink-muted">No one</span>
                       )}
                       {isOpenEnquiry(row.status) && row.waitingDays > 0 ? <span className="tabular text-ink-muted"> · {row.waitingDays}d</span> : null}
                     </td>
-                    <td className="py-3 pr-4 text-ink-muted">
+                    <td className="py-3 pr-4">
                       {booked ? (
-                        row.convertedProjectId ? (
-                          <Link href={`/jobs/${row.convertedProjectId}`} className="font-medium text-accent-ink transition-colors hover:underline">Open job -&gt;</Link>
-                        ) : '-'
-                      ) : (row.nextTask ?? '-')}
+                        <span className="text-ink-muted">All tasks done</span>
+                      ) : row.nextTask ? (
+                        <span className="text-ink">{row.nextTask}</span>
+                      ) : (
+                        <span className="text-ink-muted">No pending task</span>
+                      )}
                     </td>
-                    <td className="tabular py-3 pr-4 text-ink-muted">{row.eventDate ? formatSydneyDate(row.eventDate) : '-'}</td>
+                    <td className="tabular py-3 pr-4 text-ink-muted">{row.eventDate ? formatSydneyDate(row.eventDate) : 'Not set'}</td>
                   </tr>
                   )
                 })}
