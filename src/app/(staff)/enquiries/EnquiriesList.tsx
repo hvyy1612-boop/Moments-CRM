@@ -177,14 +177,13 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
                 <th className="py-2 pr-4 font-medium">Event</th>
                 <th className="py-2 pr-4 font-medium">Stage</th>
                 <th className="py-2 pr-4 font-medium">Waiting on</th>
-                <th className="py-2 pr-4 font-medium">Progress</th>
                 <th className="py-2 pr-4 font-medium">Shoot date</th>
                 <th className="w-10 py-2"></th>
               </tr>
             </thead>
             <tbody>
               {visible.map((row) => (
-                <EnquiryRow key={row.id} row={row} />
+                <EnquiryRow key={row.id} row={row} csrf={csrf} />
               ))}
             </tbody>
           </table>

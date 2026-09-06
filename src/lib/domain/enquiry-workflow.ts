@@ -8,6 +8,7 @@ import {
   type EnquiryBoard,
   type TaskInput,
 } from '@/features/enquiries/workflow'
+import { syncEnquiryStageFromTasks } from './enquiry-stage'
 
 /** Interactive-transaction client type. */
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
@@ -275,5 +276,7 @@ export async function toggleEnquiryTask(taskId: string, actorUserId: string) {
         afterData: { title: task.title },
       },
     })
+    // The stage follows the workflow: completing tasks nudges the open stage forward (docs/24).
+    await syncEnquiryStageFromTasks(tx, task.enquiryId!, actorUserId)
   })
 }

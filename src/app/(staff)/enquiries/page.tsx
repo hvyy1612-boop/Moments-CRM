@@ -17,9 +17,9 @@ export default async function EnquiriesPage() {
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
-  // READ-ONLY. Loads the same Enquiry records the page already used, plus each lead's tasks so the
-  // Progress column can summarise completion. This redesign never writes: stage, tasks, convert, lost
-  // and reopen remain owned by the existing backend commands and are untouched here.
+  // The list shows each lead's STAGE (which is the progress). The stage auto-follows the workflow and
+  // can be corrected by hand - both persist through the enquiry backend commands (docs/24). The detailed
+  // per-case checklist lives on the enquiry page, not here.
   const enquiries = await prisma.enquiry.findMany({
     orderBy: { updatedAt: 'asc' }, // oldest-waiting first (the default sort)
     select: {
@@ -34,12 +34,6 @@ export default async function EnquiriesPage() {
       convertedProjectId: true,
       updatedAt: true,
       createdAt: true,
-      // Load the FULL checklist (including items closed out on booking) so the Progress column and the
-      // stage cascade always have the whole task set to work with - not just the completed ones.
-      workItems: {
-        orderBy: { order: 'asc' },
-        select: { id: true, title: true, stage: true, status: true },
-      },
     },
   })
 
@@ -53,14 +47,6 @@ export default async function EnquiriesPage() {
     email: e.email,
     phone: e.phone,
     convertedProjectId: e.convertedProjectId,
-    // A booked lead's sales checklist is complete by definition (its items were closed on booking), so
-    // show every task ticked by default; otherwise a task is done only when actually COMPLETED.
-    tasks: e.workItems.map((w) => ({
-      id: w.id,
-      title: w.title,
-      stage: w.stage,
-      done: e.status === 'CONVERTED' ? true : w.status === 'COMPLETED',
-    })),
     waitingMs: e.updatedAt.getTime(),
     createdMs: e.createdAt.getTime(),
   }))
