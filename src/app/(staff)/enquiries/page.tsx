@@ -34,8 +34,9 @@ export default async function EnquiriesPage() {
       convertedProjectId: true,
       updatedAt: true,
       createdAt: true,
+      // Load the FULL checklist (including items closed out on booking) so the Progress column and the
+      // stage cascade always have the whole task set to work with - not just the completed ones.
       workItems: {
-        where: { status: { not: 'CANCELLED' } },
         orderBy: { order: 'asc' },
         select: { id: true, title: true, stage: true, status: true },
       },
@@ -52,7 +53,14 @@ export default async function EnquiriesPage() {
     email: e.email,
     phone: e.phone,
     convertedProjectId: e.convertedProjectId,
-    tasks: e.workItems.map((w) => ({ id: w.id, title: w.title, stage: w.stage, done: w.status === 'COMPLETED' })),
+    // A booked lead's sales checklist is complete by definition (its items were closed on booking), so
+    // show every task ticked by default; otherwise a task is done only when actually COMPLETED.
+    tasks: e.workItems.map((w) => ({
+      id: w.id,
+      title: w.title,
+      stage: w.stage,
+      done: e.status === 'CONVERTED' ? true : w.status === 'COMPLETED',
+    })),
     waitingMs: e.updatedAt.getTime(),
     createdMs: e.createdAt.getTime(),
   }))
