@@ -5,8 +5,8 @@ export const ENQUIRY_STAGE_LABEL: Record<string, string> = {
   CONTACTED: 'In discussion',
   QUALIFIED: 'Quoting',
   CONVERTED: 'Booked',
-  LOST: 'Lost',
-  ARCHIVED: 'Archived',
+  LOST: 'Cancelled',
+  ARCHIVED: 'Cancelled',
 }
 
 export const ENQUIRY_STAGE_KIND: Record<string, StatusKind> = {

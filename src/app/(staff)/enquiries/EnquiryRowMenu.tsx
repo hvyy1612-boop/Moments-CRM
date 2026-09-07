@@ -69,7 +69,7 @@ export function EnquiryRowMenu({
             <form
               action={setEnquiryStageAction}
               onSubmit={(e) => {
-                const r = window.prompt('Reason for marking this lead lost?')
+                const r = window.prompt('Reason this lead was cancelled? (e.g. chose another studio)')
                 if (!r || !r.trim()) { e.preventDefault(); return }
                 if (reasonRef.current) reasonRef.current.value = r.trim()
                 close()
@@ -80,7 +80,7 @@ export function EnquiryRowMenu({
               <input ref={reasonRef} type="hidden" name="reason" />
               <button type="submit" name="target" value="LOST" role="menuitem" className={`${itemClass} text-lost-ink`}>
                 <svg {...iconProps} className="h-4 w-4 shrink-0 text-lost-ink"><circle cx="12" cy="12" r="9" /><path d="m15 9-6 6M9 9l6 6" /></svg>
-                Mark lost
+                Mark as cancelled
               </button>
             </form>
           ) : null}
@@ -89,13 +89,13 @@ export function EnquiryRowMenu({
             <form
               action={setEnquiryStageAction}
               onSubmit={(e) => {
-                if (!window.confirm('Cancel this job? The booking is undone and the lead returns to the pipeline at Quoting.')) { e.preventDefault(); return }
+                if (!window.confirm('Cancel this job? The booking is cancelled and the client moves to Cancelled (the case is kept - Reopen it if they come back).')) { e.preventDefault(); return }
                 close()
               }}
             >
               <input type="hidden" name="csrf" value={csrf} />
               <input type="hidden" name="enquiryId" value={enquiryId} />
-              <button type="submit" name="target" value="QUALIFIED" role="menuitem" className={`${itemClass} text-lost-ink`}>
+              <button type="submit" name="target" value="CANCEL_JOB" role="menuitem" className={`${itemClass} text-lost-ink`}>
                 <svg {...iconProps} className="h-4 w-4 shrink-0 text-lost-ink"><path d="M9 14 4 9l5-5" /><path d="M4 9h11a5 5 0 0 1 5 5v0a5 5 0 0 1-5 5H9" /></svg>
                 Cancel job
               </button>

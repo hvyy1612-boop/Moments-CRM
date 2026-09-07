@@ -7,7 +7,7 @@ import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { advanceEnquiry, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry, revertEnquiryBooking } from '@/lib/domain/enquiry'
+import { advanceEnquiry, cancelBooking, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
 import { enquirySchema } from '@/lib/validation/enquiry'
 import {
   addEnquiryTask,
@@ -67,7 +67,10 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
 
   switch (op) {
     case 'lost':
-      await markEnquiryLost(enquiryId, 'Not proceeding', user.id)
+      await markEnquiryLost(enquiryId, 'Cancelled', user.id)
+      break
+    case 'cancel_job':
+      await cancelBooking(enquiryId, user.id)
       break
     case 'reopen':
       await reopenEnquiry(enquiryId, user.id)
@@ -77,6 +80,7 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
   }
   revalidatePath('/enquiries')
   revalidatePath(`/enquiries/${enquiryId}`)
+  revalidatePath('/jobs')
 }
 
 export async function setEnquiryStageAction(formData: FormData): Promise<void> {
@@ -86,17 +90,17 @@ export async function setEnquiryStageAction(formData: FormData): Promise<void> {
   const target = String(formData.get('target') ?? '')
   if (!enquiryId) return
 
-  const current = await prisma.enquiry.findUnique({ where: { id: enquiryId }, select: { status: true } })
-  const cur = current?.status
-  const openTarget = target === 'NEW' || target === 'CONTACTED' || target === 'QUALIFIED'
-
-  if (cur === 'CONVERTED' && openTarget) {
-    await revertEnquiryBooking(enquiryId, target as 'NEW' | 'CONTACTED' | 'QUALIFIED', user.id)
+  if (target === 'CANCEL_JOB') {
+    await cancelBooking(enquiryId, user.id)
     revalidatePath('/enquiries')
     revalidatePath(`/enquiries/${enquiryId}`)
     revalidatePath('/jobs')
     return
   }
+
+  const current = await prisma.enquiry.findUnique({ where: { id: enquiryId }, select: { status: true } })
+  const cur = current?.status
+  const openTarget = target === 'NEW' || target === 'CONTACTED' || target === 'QUALIFIED'
 
   if ((cur === 'LOST' || cur === 'ARCHIVED') && (openTarget || target === 'CONVERTED')) {
     await reopenEnquiry(enquiryId, user.id)
@@ -129,7 +133,7 @@ export async function setEnquiryStageAction(formData: FormData): Promise<void> {
       break
     }
     case 'LOST': {
-      const reason = String(formData.get('reason') ?? '').trim() || 'Not proceeding'
+      const reason = String(formData.get('reason') ?? '').trim() || 'Cancelled'
       await markEnquiryLost(enquiryId, reason, user.id)
       break
     }
@@ -277,7 +281,7 @@ export async function markEnquiryLostAction(formData: FormData): Promise<void> {
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
   const enquiryId = String(formData.get('enquiryId') ?? '')
   if (!enquiryId) throw new Error('Missing enquiry.')
-  const reason = String(formData.get('reason') ?? '').trim() || 'Not proceeding'
+  const reason = String(formData.get('reason') ?? '').trim() || 'Cancelled'
   await markEnquiryLost(enquiryId, reason, user.id)
   revalidatePath('/enquiries')
 }

@@ -150,6 +150,8 @@ export async function reopenEnquiry(enquiryId: string, actorUserId: string | nul
       where: { id: enquiryId },
       data: { status: 'CONTACTED', lostReason: null, waitingOn: 'STUDIO' },
     })
+
+    await tx.workItem.updateMany({ where: { enquiryId, status: 'CANCELLED' }, data: { status: 'PENDING' } })
     await tx.auditLog.create({
       data: {
         companyId: enquiry.companyId,
@@ -269,11 +271,7 @@ async function runConvertEnquiry(enquiryId: string, actorUserId: string | null, 
   })
 }
 
-export async function revertEnquiryBooking(
-  enquiryId: string,
-  toStage: 'NEW' | 'CONTACTED' | 'QUALIFIED',
-  actorUserId: string | null = null,
-) {
+export async function cancelBooking(enquiryId: string, actorUserId: string | null = null) {
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
     if (!enquiry) throw new Error('Enquiry not found.')
@@ -288,24 +286,22 @@ export async function revertEnquiryBooking(
     await tx.enquiry.update({
       where: { id: enquiryId },
       data: {
-        status: toStage,
-        waitingOn: 'STUDIO',
+        status: 'LOST',
+        lostReason: 'Booking cancelled',
+        waitingOn: null,
         convertedProjectId: null,
         convertedClientId: null,
         convertedAt: null,
       },
     })
-
-    await tx.workItem.updateMany({ where: { enquiryId, status: 'CANCELLED' }, data: { status: 'PENDING' } })
     await tx.auditLog.create({
       data: {
         companyId: enquiry.companyId,
-        action: 'enquiry.booking_reverted',
+        action: 'enquiry.booking_cancelled',
         entityType: 'Enquiry',
         entityId: enquiryId,
         actorUserId,
         beforeData: { projectId: enquiry.convertedProjectId },
-        afterData: { status: toStage },
       },
     })
     return { projectId: enquiry.convertedProjectId }
