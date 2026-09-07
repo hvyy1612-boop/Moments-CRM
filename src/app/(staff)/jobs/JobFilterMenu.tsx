@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 
-const TASKS: [string, string][] = [['', 'Any'], ['has', 'Has task'], ['none', 'No pending task']]
+const TASKS: [string, string][] = [['', 'All'], ['has', 'With pending tasks'], ['none', 'No pending tasks']]
 const selectClass = 'h-9 w-full rounded-md border border-line bg-surface px-2 text-sm text-ink outline-none focus:border-accent'
 
 /** Job filter: next-task state (the Active/Completed tabs handle the status split). Writes ?task, keeps ?q/?sort/?tab. */
@@ -49,7 +49,7 @@ export function JobFilterMenu({ task }: { task: string }) {
           <div className="absolute right-0 z-50 mt-1 w-64 rounded-md border border-line bg-surface p-3 shadow-lg">
             <div className="flex flex-col gap-3">
               <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-                Next task
+                Tasks
                 <select value={task} onChange={(e) => set('task', e.target.value)} className={selectClass}>
                   {TASKS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
