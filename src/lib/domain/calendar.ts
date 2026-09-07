@@ -276,7 +276,6 @@ export async function getCalendarView(
     const anchorLocal = new Date(anchor.y, anchor.m - 1, anchor.d)
     const offset = (anchorLocal.getDay() + 6) % 7
     const monday = new Date(anchor.y, anchor.m - 1, anchor.d - offset)
-    const sunday = new Date(anchor.y, anchor.m - 1, anchor.d - offset + 6)
     const mk = { y: monday.getFullYear(), m: monday.getMonth() + 1, d: monday.getDate() }
     const nextMon = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 7)
     const prevMon = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - 7)
@@ -290,10 +289,7 @@ export async function getCalendarView(
       const dk = dateKeyOf(dd.getFullYear(), dd.getMonth() + 1, dd.getDate())
       return { dateKey: dk, dow: DOW[i] ?? '', dayNum: dd.getDate(), isToday: dk === todayKey }
     })
-    const sameMonth = mk.m === sunday.getMonth() + 1
-    label = sameMonth
-      ? `${mk.d} - ${sunday.getDate()} ${MONTHS[mk.m - 1]} ${mk.y}`
-      : `${mk.d} ${MONTHS[mk.m - 1]} - ${sunday.getDate()} ${MONTHS[sunday.getMonth()]} ${sunday.getFullYear()}`
+    label = `${MONTHS[anchor.m - 1]} ${anchor.y}`
     week = { days, startHour: 7, endHour: 21 }
   } else {
     const start = new Date(anchor.y, anchor.m - 1, 1)

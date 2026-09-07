@@ -275,10 +275,12 @@ function WeekGrid({ data, canManage, onSlot, onPeek, onHide, onMove }: {
           </div>
         ))}
       </div>
-      {/* timed body */}
-      <div className="grid overflow-y-auto" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, minmax(0, 1fr))`, maxHeight: 512 }}>
+      {/* timed body. The gutter renders one label per hour ROW (7am..8pm) so it lines up exactly with
+          the day columns' rows - one extra label made the gutter taller than the columns and left an
+          un-ruled gap under 9pm. Full working day is shown (no inner scroll box). */}
+      <div className="grid" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, minmax(0, 1fr))` }}>
         <div className="border-r border-line">
-          {hours.map((h) => <div key={h} className="pr-1.5 pt-0.5 text-right text-xs text-muted" style={{ height: ROW_H }}>{minToLabel(h * 60)}</div>)}
+          {hours.slice(0, -1).map((h) => <div key={h} className="pr-1.5 pt-0.5 text-right text-xs text-muted" style={{ height: ROW_H }}>{minToLabel(h * 60)}</div>)}
         </div>
         {w.days.map((d, ci) => (
           <div
