@@ -195,9 +195,11 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
                   )}
                 </td>
                 <td className="tabular px-2 py-2 text-center text-ink">{r.quantity}</td>
-                <td className="tabular px-2 py-2 text-right text-ink">{formatAud(r.unitEx)}</td>
-                <td className="tabular px-2 py-2 text-right text-ink">{formatAud(r.gst)}</td>
-                <td className="tabular py-2 pl-3 text-right font-semibold text-ink">{formatAud(r.ex)}</td>
+                {/* Discounts are stored as negative lines; the invoice shows the figures unsigned (a
+                    "Discount" row reads as a reduction on its own). Totals still use the signed values. */}
+                <td className="tabular px-2 py-2 text-right text-ink">{formatAud(r.unitEx.abs())}</td>
+                <td className="tabular px-2 py-2 text-right text-ink">{formatAud(r.gst.abs())}</td>
+                <td className="tabular py-2 pl-3 text-right font-semibold text-ink">{formatAud(r.ex.abs())}</td>
               </tr>
             )
           })}
