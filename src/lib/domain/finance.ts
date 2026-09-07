@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { splitGstInclusive } from '@/lib/money'
 import { sydneyLocalToUtc, systemClock } from '@/lib/time'
 import type { CreateInvoiceInput, CreateInvoiceLinesInput, RecordPaymentInput } from '@/lib/validation/finance'
+import { maybeAutoCompleteJob } from './project-workflow'
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
@@ -455,6 +456,8 @@ export async function recordPayment(
           data: { commercialStatus: next },
         })
       }
+
+      if (invoice.projectId) await maybeAutoCompleteJob(tx, invoice.projectId, actorUserId)
     }
 
     await tx.auditLog.create({

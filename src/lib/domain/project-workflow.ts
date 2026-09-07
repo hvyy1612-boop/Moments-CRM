@@ -277,6 +277,8 @@ export async function toggleProjectTask(taskId: string, actorUserId: string) {
           afterData: { title: task.title, completedCount: ids.length },
         },
       })
+
+      await maybeAutoCompleteJob(tx, task.projectId!, actorUserId)
     } else {
       await tx.workItem.update({
         where: { id: taskId },
@@ -293,5 +295,36 @@ export async function toggleProjectTask(taskId: string, actorUserId: string) {
         },
       })
     }
+  })
+}
+
+const AUTO_COMPLETE_FROM = new Set(['BOOKING_REQUESTED', 'CONFIRMED', 'IN_PRODUCTION'])
+
+export async function maybeAutoCompleteJob(tx: Tx, projectId: string, actorUserId: string | null) {
+  const project = await tx.project.findUnique({
+    where: { id: projectId },
+    select: { companyId: true, lifecycleStatus: true, invoices: { select: { total: true, amountPaid: true } } },
+  })
+  if (!project || !AUTO_COMPLETE_FROM.has(project.lifecycleStatus)) return
+
+  const [total, pending] = await Promise.all([
+    tx.workItem.count({ where: { projectId, type: { not: 'AUTO' }, status: { not: 'CANCELLED' } } }),
+    tx.workItem.count({ where: { projectId, type: { not: 'AUTO' }, status: 'PENDING' } }),
+  ])
+  if (total === 0 || pending > 0) return
+
+  const outstanding = project.invoices.reduce((sum, i) => sum + (Number(i.total) - Number(i.amountPaid)), 0)
+  if (outstanding > 0.005) return
+
+  await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'COMPLETED' } })
+  await tx.auditLog.create({
+    data: {
+      companyId: project.companyId,
+      actorUserId: actorUserId ?? undefined,
+      action: 'project.auto_completed',
+      entityType: 'Project',
+      entityId: projectId,
+      afterData: { lifecycleStatus: 'COMPLETED' },
+    },
   })
 }

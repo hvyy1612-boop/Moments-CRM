@@ -6,11 +6,11 @@ import { useState } from 'react'
 const TASKS: [string, string][] = [['', 'Any'], ['has', 'Has task'], ['none', 'No pending task']]
 const selectClass = 'h-9 w-full rounded-md border border-line bg-surface px-2 text-sm text-ink outline-none focus:border-accent'
 
-export function JobFilterMenu({ statuses, status, task }: { statuses: { id: string; name: string }[]; status: string; task: string }) {
+export function JobFilterMenu({ task }: { task: string }) {
   const router = useRouter()
   const params = useSearchParams()
   const [open, setOpen] = useState(false)
-  const active = Boolean(status || task)
+  const active = Boolean(task)
 
   function set(key: string, value: string) {
     const p = new URLSearchParams(params.toString())
@@ -22,7 +22,6 @@ export function JobFilterMenu({ statuses, status, task }: { statuses: { id: stri
 
   function clearAll() {
     const p = new URLSearchParams(params.toString())
-    p.delete('status')
     p.delete('task')
     const qs = p.toString()
     router.push(qs ? `/jobs?${qs}` : '/jobs')
@@ -48,13 +47,6 @@ export function JobFilterMenu({ statuses, status, task }: { statuses: { id: stri
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden="true" />
           <div className="absolute right-0 z-50 mt-1 w-64 rounded-md border border-line bg-surface p-3 shadow-lg">
             <div className="flex flex-col gap-3">
-              <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-                Status
-                <select value={status} onChange={(e) => set('status', e.target.value)} className={selectClass}>
-                  <option value="">All statuses</option>
-                  {statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </label>
               <label className="flex flex-col gap-1 text-xs font-medium text-muted">
                 Next task
                 <select value={task} onChange={(e) => set('task', e.target.value)} className={selectClass}>
