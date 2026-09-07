@@ -163,7 +163,7 @@ export default async function EnquiryDetailPage({
                       type="submit"
                       className="rounded px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline"
                     >
-                      Mark as lost
+                      Mark as cancelled
                     </button>
                   </form>
                 </>

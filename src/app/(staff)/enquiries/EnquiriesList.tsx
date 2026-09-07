@@ -10,12 +10,14 @@ import { AddEnquiryButton } from './AddEnquiryButton'
 
 type TabKey = 'all' | 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'CONVERTED' | 'LOST'
 const TABS: { key: TabKey; label: string; match: (s: string) => boolean }[] = [
-  { key: 'all', label: 'All', match: () => true },
+  // "All" is the working set - active phases + booked. Cancelled leads live only in their own tab so
+  // they never clutter the pipeline.
+  { key: 'all', label: 'All', match: (s) => s !== 'LOST' && s !== 'ARCHIVED' },
   { key: 'NEW', label: 'New', match: (s) => s === 'NEW' },
   { key: 'CONTACTED', label: 'In discussion', match: (s) => s === 'CONTACTED' },
   { key: 'QUALIFIED', label: 'Quoting', match: (s) => s === 'QUALIFIED' },
   { key: 'CONVERTED', label: 'Booked', match: (s) => s === 'CONVERTED' },
-  { key: 'LOST', label: 'Lost', match: (s) => s === 'LOST' || s === 'ARCHIVED' },
+  { key: 'LOST', label: 'Cancelled', match: (s) => s === 'LOST' || s === 'ARCHIVED' },
 ]
 
 type SortKey = 'waiting' | 'newest' | 'name'
@@ -63,7 +65,9 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
     let out = searched.filter((r) => activeTab.match(r.status))
     if (waiting !== 'any') out = out.filter((r) => r.waitingOn === waiting)
     out = [...out]
-    if (sort === 'waiting') out.sort((a, b) => a.waitingMs - b.waitingMs)
+    // Cancelled: newest cancellation on top (updatedAt = when it was cancelled), ignoring the sort control.
+    if (tab === 'LOST') out.sort((a, b) => b.waitingMs - a.waitingMs)
+    else if (sort === 'waiting') out.sort((a, b) => a.waitingMs - b.waitingMs)
     else if (sort === 'newest') out.sort((a, b) => b.createdMs - a.createdMs)
     else out.sort((a, b) => a.name.localeCompare(b.name))
     return out

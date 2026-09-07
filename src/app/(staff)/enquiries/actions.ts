@@ -7,7 +7,7 @@ import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { advanceEnquiry, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry, revertEnquiryBooking } from '@/lib/domain/enquiry'
+import { advanceEnquiry, cancelBooking, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
 import { enquirySchema } from '@/lib/validation/enquiry'
 import {
   addEnquiryTask,
@@ -70,7 +70,7 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
 
   switch (op) {
     case 'lost':
-      await markEnquiryLost(enquiryId, 'Not proceeding', user.id)
+      await markEnquiryLost(enquiryId, 'Cancelled', user.id)
       break
     case 'reopen':
       await reopenEnquiry(enquiryId, user.id)
@@ -94,19 +94,20 @@ export async function setEnquiryStageAction(formData: FormData): Promise<void> {
   const target = String(formData.get('target') ?? '')
   if (!enquiryId) return
 
-  const current = await prisma.enquiry.findUnique({ where: { id: enquiryId }, select: { status: true } })
-  const cur = current?.status
-  const openTarget = target === 'NEW' || target === 'CONTACTED' || target === 'QUALIFIED'
-
-  // Correcting a booked lead: moving it back to an open phase un-books it (cancels the Job).
-  if (cur === 'CONVERTED' && openTarget) {
-    await revertEnquiryBooking(enquiryId, target as 'NEW' | 'CONTACTED' | 'QUALIFIED', user.id)
+  // The client cancelled a booking: cancel the Job, move the lead to the closed "Cancelled" state.
+  if (target === 'CANCEL_JOB') {
+    await cancelBooking(enquiryId, user.id)
     revalidatePath('/enquiries')
     revalidatePath(`/enquiries/${enquiryId}`)
     revalidatePath('/jobs')
     return
   }
-  // A lost lead moved back into the pipeline: reopen, then advance / book as chosen.
+
+  const current = await prisma.enquiry.findUnique({ where: { id: enquiryId }, select: { status: true } })
+  const cur = current?.status
+  const openTarget = target === 'NEW' || target === 'CONTACTED' || target === 'QUALIFIED'
+
+  // A cancelled lead moved back into the pipeline: reopen (restores the checklist), then advance / book.
   if ((cur === 'LOST' || cur === 'ARCHIVED') && (openTarget || target === 'CONVERTED')) {
     await reopenEnquiry(enquiryId, user.id) // -> CONTACTED
     if (openTarget && target !== 'CONTACTED') {
@@ -138,7 +139,7 @@ export async function setEnquiryStageAction(formData: FormData): Promise<void> {
       break
     }
     case 'LOST': {
-      const reason = String(formData.get('reason') ?? '').trim() || 'Not proceeding'
+      const reason = String(formData.get('reason') ?? '').trim() || 'Cancelled'
       await markEnquiryLost(enquiryId, reason, user.id)
       break
     }
@@ -297,7 +298,7 @@ export async function markEnquiryLostAction(formData: FormData): Promise<void> {
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
   const enquiryId = String(formData.get('enquiryId') ?? '')
   if (!enquiryId) throw new Error('Missing enquiry.')
-  const reason = String(formData.get('reason') ?? '').trim() || 'Not proceeding'
+  const reason = String(formData.get('reason') ?? '').trim() || 'Cancelled'
   await markEnquiryLost(enquiryId, reason, user.id)
   revalidatePath('/enquiries')
 }

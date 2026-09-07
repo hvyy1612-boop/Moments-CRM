@@ -161,6 +161,8 @@ export async function reopenEnquiry(enquiryId: string, actorUserId: string | nul
       where: { id: enquiryId },
       data: { status: 'CONTACTED', lostReason: null, waitingOn: 'STUDIO' },
     })
+    // Bring the checklist back to life so staff can keep working the returning lead.
+    await tx.workItem.updateMany({ where: { enquiryId, status: 'CANCELLED' }, data: { status: 'PENDING' } })
     await tx.auditLog.create({
       data: {
         companyId: enquiry.companyId,
@@ -289,15 +291,12 @@ async function runConvertEnquiry(enquiryId: string, actorUserId: string | null, 
 }
 
 /**
- * Undo a booking (staff correction). Cancels the linked Job (kept as a CANCELLED record, never deleted),
- * reopens the enquiry to the chosen open stage, restores its checklist, and unlinks the client/project.
- * Re-booking later creates a fresh Job (the client is reused by email). Guarded to CONVERTED leads.
+ * The client cancelled a booking. Cancels the linked Job (kept as a CANCELLED record, never deleted),
+ * moves the enquiry to the closed "Cancelled" state (status LOST) and unlinks the client/project - the
+ * case is kept in full, so if the client returns staff Reopen it (which restores the checklist) and can
+ * re-book (a fresh Job). Guarded to CONVERTED leads.
  */
-export async function revertEnquiryBooking(
-  enquiryId: string,
-  toStage: 'NEW' | 'CONTACTED' | 'QUALIFIED',
-  actorUserId: string | null = null,
-) {
+export async function cancelBooking(enquiryId: string, actorUserId: string | null = null) {
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
     if (!enquiry) throw new Error('Enquiry not found.')
@@ -312,24 +311,22 @@ export async function revertEnquiryBooking(
     await tx.enquiry.update({
       where: { id: enquiryId },
       data: {
-        status: toStage,
-        waitingOn: 'STUDIO',
+        status: 'LOST',
+        lostReason: 'Booking cancelled',
+        waitingOn: null,
         convertedProjectId: null,
         convertedClientId: null,
         convertedAt: null,
       },
     })
-    // Bring the checklist back to life so staff can keep working the lead.
-    await tx.workItem.updateMany({ where: { enquiryId, status: 'CANCELLED' }, data: { status: 'PENDING' } })
     await tx.auditLog.create({
       data: {
         companyId: enquiry.companyId,
-        action: 'enquiry.booking_reverted',
+        action: 'enquiry.booking_cancelled',
         entityType: 'Enquiry',
         entityId: enquiryId,
         actorUserId,
         beforeData: { projectId: enquiry.convertedProjectId },
-        afterData: { status: toStage },
       },
     })
     return { projectId: enquiry.convertedProjectId }
