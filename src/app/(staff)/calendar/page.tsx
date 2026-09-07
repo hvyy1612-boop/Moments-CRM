@@ -21,8 +21,9 @@ export const metadata: Metadata = { title: 'Calendar - Moments' }
 
 const FILTERS: { key: CalendarFilter; label: string }[] = [
   { key: 'all', label: 'All' },
-  { key: 'lead', label: 'Leads' },
+  { key: 'lead', label: 'Enquiries' },
   { key: 'job', label: 'Jobs' },
+  { key: 'payment', label: 'Payments' },
   { key: 'event', label: 'Events' },
 ]
 type ViewKey = 'month' | 'week' | 'agenda'
@@ -36,7 +37,7 @@ export default async function CalendarPage({
   const user = await requireRole('/calendar')
   const sp = await searchParams
   const view: ViewKey = sp.view === 'week' ? 'week' : sp.view === 'agenda' ? 'agenda' : 'month'
-  const filter: CalendarFilter = (['all', 'lead', 'job', 'event'] as const).includes(sp.filter as CalendarFilter)
+  const filter: CalendarFilter = (['all', 'lead', 'job', 'event', 'payment'] as const).includes(sp.filter as CalendarFilter)
     ? (sp.filter as CalendarFilter)
     : 'all'
 
@@ -113,14 +114,7 @@ export default async function CalendarPage({
       {isAgenda ? (
         <AgendaView cockpit={cockpit!} csrf={csrf} />
       ) : (
-        <>
-          <CalendarClient data={data!} csrf={csrf} canManage={canManage} clients={clients} />
-          {data!.items.length === 0 ? (
-            <p className="mt-4 rounded-md border border-dashed border-line bg-surface px-4 py-6 text-center text-sm text-ink-muted">
-              Nothing scheduled in {data!.label}. Shoots, appointments and due dates appear here as soon as staff enter them{canManage ? ', or use Add event' : ''}.
-            </p>
-          ) : null}
-        </>
+        <CalendarClient data={data!} csrf={csrf} canManage={canManage} clients={clients} />
       )}
     </AppShell>
   )
