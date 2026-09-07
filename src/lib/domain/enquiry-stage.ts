@@ -14,19 +14,25 @@ const OPEN = new Set<string>(OPEN_STAGE_ORDER)
 
 type DeriveTask = { stage: string | null; status: string; type: string }
 
+/** The three workflow groups map 1:1 to the three open stages, in order. */
+const GROUP_TO_STAGE: [string, OpenStage][] = [
+  ['new', 'NEW'],
+  ['discussion', 'CONTACTED'],
+  ['quote', 'QUALIFIED'],
+]
+
 /**
- * Derive the open stage from the checklist, independent of how many tasks a case has:
- *  - nothing done yet            -> NEW
- *  - working the enquiry phase   -> CONTACTED
- *  - enquiry phase fully done    -> QUALIFIED (now in the quote phase)
- * The auto "Enquiry received" row is ignored so a brand-new lead reads as NEW.
+ * Derive the open stage from the checklist: it is the group of the earliest incomplete task, walking
+ * New -> In discussion -> Quoting. Empty groups are skipped, so it works for any per-case task set. When
+ * everything is done the lead sits at Quoting until a Create Job (Booked) - that milestone is explicit.
  */
 export function deriveOpenStage(tasks: DeriveTask[]): OpenStage {
   const real = tasks.filter((t) => t.type !== 'AUTO')
-  if (!real.some((t) => t.status === 'COMPLETED')) return 'NEW'
-  const enquiryTasks = real.filter((t) => t.stage === 'enquiry')
-  const allEnquiryDone = enquiryTasks.length > 0 && enquiryTasks.every((t) => t.status === 'COMPLETED')
-  return allEnquiryDone ? 'QUALIFIED' : 'CONTACTED'
+  for (const [group, stage] of GROUP_TO_STAGE) {
+    const groupTasks = real.filter((t) => t.stage === group)
+    if (groupTasks.some((t) => t.status !== 'COMPLETED')) return stage
+  }
+  return 'QUALIFIED'
 }
 
 /**

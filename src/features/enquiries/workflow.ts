@@ -1,8 +1,8 @@
 /**
- * Enquiry workflow - editable per case. Its two task groups are named exactly like the outside stages
- * so they line up: "In discussion" (first contact + discussion) and "Quoting" (quote, contract,
- * deposit). Ticking a group's tasks moves the outside stage to that group; New = before In discussion,
- * Booked = the Create Job outcome. Tasks carry a type so the board can tag them; plain To-do shows none.
+ * Enquiry workflow - editable per case. Its three task groups are named exactly like the three open
+ * stages so they line up 1:1: "New" (first response), "In discussion" (qualify), "Quoting" (quote,
+ * contract, deposit). Working through a group's tasks moves the outside stage to that group; Booked is
+ * the Create Job outcome (a milestone, not a group). Tasks carry a type; plain To-do shows no tag.
  */
 
 export function currentActionText(waitingOn: string | null, pendingTitle: string | null): string {
@@ -33,8 +33,9 @@ export const ADDABLE_TASK_TYPES: { value: TaskType; label: string }[] = [
 type StageDef = { key: string; label: string; color: string }
 
 export const ENQUIRY_STAGES: StageDef[] = [
-  { key: 'enquiry', label: 'In discussion', color: 'enquiry' },
-  { key: 'quote', label: 'Quoting', color: 'quote' },
+  { key: 'new', label: 'New', color: 'enquiry' },
+  { key: 'discussion', label: 'In discussion', color: 'quote' },
+  { key: 'quote', label: 'Quoting', color: 'booked' },
 ]
 
 export const ENQUIRY_STAGE_KEYS: ReadonlySet<string> = new Set(ENQUIRY_STAGES.map((s) => s.key))
@@ -46,9 +47,9 @@ export function enquiryStageLabel(key: string): string {
 /** Default suggested flow a new enquiry is seeded with: the 3 essential tasks per phase. Staff can add
  *  more or edit them per case (e.g. "Follow up", "Schedule consultation") - this is just a lean start. */
 export const DEFAULT_ENQUIRY_TASKS: { stage: string; title: string; type: TaskType; done?: boolean }[] = [
-  { stage: 'enquiry', title: 'Send initial enquiry response', type: 'TODO' },
-  { stage: 'enquiry', title: 'Discuss shoot requirements', type: 'TODO' },
-  { stage: 'enquiry', title: 'Confirm shoot date and requirements', type: 'TODO' },
+  { stage: 'new', title: 'Send initial enquiry response', type: 'TODO' },
+  { stage: 'discussion', title: 'Discuss shoot requirements', type: 'TODO' },
+  { stage: 'discussion', title: 'Confirm shoot date and requirements', type: 'TODO' },
   { stage: 'quote', title: 'Prepare client quote', type: 'TODO' },
   { stage: 'quote', title: 'Send client quote', type: 'TODO' },
   { stage: 'quote', title: 'Send contract and deposit invoice', type: 'TODO' },
