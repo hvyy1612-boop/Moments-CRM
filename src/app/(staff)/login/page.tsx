@@ -45,7 +45,7 @@ export default async function LoginPage({
         <div className="login-corner-rule" />
       </div>
 
-      <div className="login-corner login-corner-bl">
+      <div className="login-corner login-corner-br">
         <div className="login-corner-rule" />
         Real stories
         <br />

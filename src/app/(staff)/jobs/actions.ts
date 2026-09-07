@@ -649,6 +649,7 @@ export async function toggleProjectTaskAction(formData: FormData): Promise<void>
     // Double submit / stale id: the re-render shows the real state.
   }
   revalidatePath(`/jobs/${projectId}`)
+  revalidatePath('/jobs')
 }
 
 export async function addProjectTaskAction(formData: FormData): Promise<void> {

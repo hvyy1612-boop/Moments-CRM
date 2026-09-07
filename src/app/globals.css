@@ -251,7 +251,6 @@ body {
   --login-btn: #6d6f4d;
   --login-btn-hover: #5e6041;
   --login-cream: #f4f1e9;
-  --login-google-hover: #f5f2ea;
 }
 
 .login-scene {
@@ -270,20 +269,24 @@ body {
 }
 .login-bg img {
   object-fit: cover;
-  object-position: center 42%;
+  object-position: center;
 }
 .login-scrim {
   position: absolute;
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    rgba(18, 20, 16, 0.28) 0%,
-    rgba(18, 20, 16, 0.12) 30%,
-    rgba(18, 20, 16, 0.1) 58%,
-    rgba(18, 20, 16, 0.26) 100%
-  );
+
+  background:
+    radial-gradient(42% 40% at 0% 0%, rgba(18, 20, 16, 0.42) 0%, rgba(18, 20, 16, 0) 70%),
+    radial-gradient(48% 46% at 100% 100%, rgba(18, 20, 16, 0.46) 0%, rgba(18, 20, 16, 0) 68%),
+    linear-gradient(
+      180deg,
+      rgba(18, 20, 16, 0.22) 0%,
+      rgba(18, 20, 16, 0.08) 32%,
+      rgba(18, 20, 16, 0.08) 62%,
+      rgba(18, 20, 16, 0.2) 100%
+    );
 }
 .login-stack {
   position: relative;
@@ -456,45 +459,6 @@ body {
   opacity: 0.6;
   cursor: not-allowed;
 }
-.login-divider {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  font-family: var(--font-manrope), sans-serif;
-  font-size: 12px;
-  color: var(--login-muted);
-}
-.login-divider::before,
-.login-divider::after {
-  content: '';
-  flex: 1 1 auto;
-  height: 1px;
-  background: var(--login-field-border);
-}
-.login-google {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  height: 46px;
-  background: #ffffff;
-  border: 1px solid var(--login-field-border);
-  border-radius: 8px;
-  font-family: var(--font-manrope), sans-serif;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--login-ink);
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-.login-google svg {
-  width: 18px;
-  height: 18px;
-}
-.login-google:hover {
-  background: var(--login-google-hover);
-}
 
 .login-corner {
   position: absolute;
@@ -512,9 +476,10 @@ body {
   top: 72px;
   left: 72px;
 }
-.login-corner-bl {
+.login-corner-br {
   bottom: 54px;
-  left: 72px;
+  right: 72px;
+  text-align: right;
 }
 .login-corner-rule {
   width: 22px;
@@ -525,14 +490,17 @@ body {
 .login-corner-tl .login-corner-rule {
   margin-top: 12px;
 }
-.login-corner-bl .login-corner-rule {
+.login-corner-br .login-corner-rule {
   margin-bottom: 12px;
+  margin-left: auto;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   .login-corner {
     display: none;
   }
+}
+@media (max-width: 640px) {
   .login-brand {
     margin-bottom: 22px;
   }
