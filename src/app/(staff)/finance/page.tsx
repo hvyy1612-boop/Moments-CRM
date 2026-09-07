@@ -1,9 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
-import { BoardGroup } from '@/components/ui/BoardGroup'
-import { Button } from '@/components/ui/Button'
-import { EmptyState } from '@/components/ui/EmptyState'
+import { Prisma } from '@prisma/client'
 import { StatusTag } from '@/components/ui/StatusTag'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
@@ -17,13 +15,10 @@ import { AppShell } from '../AppShell'
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Payments - Moments' }
 
-const HEAD = ['Invoice', 'Client', 'Issued', 'Due', 'Total', 'Balance', 'Status']
-
 type Row = {
   id: string
   number: string
   client: string
-  projectId: string
   status: string
   issued: Date | null
   due: Date | null
@@ -31,40 +26,77 @@ type Row = {
   balance: string
 }
 
-function Rows({ rows }: { rows: Row[] }) {
+/** Clean, borderless invoice table matching the Clients list (uppercase muted head, hover rows). */
+function InvoiceTable({ rows }: { rows: Row[] }) {
   return (
-    <>
-      {rows.map((row) => (
-        <tr key={row.id} className="transition-colors hover:bg-paper">
-          <td className="tabular border-b border-r border-line px-3 py-3 text-base text-ink">
-            <Link href={`/finance/${row.id}`} className="font-bold text-accent-ink hover:underline">
-              {row.number}
-            </Link>
-          </td>
-          <td className="border-b border-r border-line px-3 py-3">
-            <span className="font-serif text-lg font-semibold text-ink">{row.client}</span>
-          </td>
-          <td className="tabular border-b border-r border-line px-3 py-3 text-base text-ink-muted">{row.issued ? formatSydneyDate(row.issued) : '-'}</td>
-          <td className="tabular border-b border-r border-line px-3 py-3 text-base text-ink-muted">{row.due ? formatSydneyDate(row.due) : '-'}</td>
-          <td className="tabular border-b border-r border-line px-3 py-3 text-base text-ink">{row.total}</td>
-          <td className="tabular border-b border-r border-line px-3 py-3 text-base text-ink">{row.balance}</td>
-          <td className="border-b border-line p-0">
-            <StatusTag kind={INVOICE_KIND[row.status] ?? 'hold'} block>
-              {titleCase(row.status)}
-            </StatusTag>
-          </td>
-        </tr>
-      ))}
-    </>
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
+            <th className="py-2 pr-4 font-medium">Invoice</th>
+            <th className="py-2 pr-4 font-medium">Client</th>
+            <th className="py-2 pr-4 font-medium">Issued</th>
+            <th className="py-2 pr-4 font-medium">Due</th>
+            <th className="py-2 pr-4 text-right font-medium">Total</th>
+            <th className="py-2 pr-4 text-right font-medium">Balance</th>
+            <th className="py-2 font-medium">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id} className="group border-b border-line transition-colors last:border-b-0 hover:bg-paper">
+              <td className="py-3 pr-4">
+                <Link href={`/finance/${row.id}`} className="tabular font-medium text-accent-ink hover:underline">{row.number}</Link>
+              </td>
+              <td className="py-3 pr-4 font-medium text-ink">{row.client}</td>
+              <td className="tabular py-3 pr-4 text-ink-muted">{row.issued ? formatSydneyDate(row.issued) : '-'}</td>
+              <td className="tabular py-3 pr-4 text-ink-muted">{row.due ? formatSydneyDate(row.due) : '-'}</td>
+              <td className="tabular py-3 pr-4 text-right text-ink">{row.total}</td>
+              <td className="tabular py-3 pr-4 text-right text-ink">{row.balance}</td>
+              <td className="py-3">
+                <StatusTag kind={INVOICE_KIND[row.status] ?? 'hold'}>{titleCase(row.status)}</StatusTag>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
-export default async function FinancePage() {
+/** A grouped section: a Clients-style "Title · N" toolbar over its own clean table. */
+function Group({ title, rows, first }: { title: string; rows: Row[]; first: boolean }) {
+  if (rows.length === 0) return null
+  return (
+    <section className={first ? 'mt-7' : 'mt-10'}>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
+        <div className="text-sm text-ink">
+          {title} <span className="text-ink-muted">· {rows.length}</span>
+        </div>
+      </div>
+      <InvoiceTable rows={rows} />
+    </section>
+  )
+}
+
+export default async function FinancePage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const user = await requireRole('/finance')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
+  const sp = await searchParams
+  const q = (sp.q ?? '').trim()
+  const where: Prisma.InvoiceWhereInput = q
+    ? {
+        OR: [
+          { invoiceNumber: { contains: q, mode: 'insensitive' } },
+          { project: { client: { displayName: { contains: q, mode: 'insensitive' } } } },
+        ],
+      }
+    : {}
+
   const invoices = await prisma.invoice.findMany({
+    where,
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
@@ -82,7 +114,6 @@ export default async function FinancePage() {
     id: inv.id,
     number: inv.invoiceNumber,
     client: inv.project.client.displayName,
-    projectId: inv.project.id,
     status: inv.status,
     issued: inv.issuedAt,
     due: inv.dueAt,
@@ -94,31 +125,53 @@ export default async function FinancePage() {
   const other = rows.filter((r) => invoiceGroup(r.status) === 'other')
 
   return (
-    <AppShell
-      user={user}
-      csrf={csrf}
-      active="finance"
-      action={
-        <Link href="/finance/new">
-          <Button size="sm">+ New invoice</Button>
-        </Link>
-      }
-    >
-      {rows.length === 0 ? (
-        <EmptyState title="No invoices yet" description="Create one with + New invoice, or raise it from a job." />
-      ) : (
-        <div>
-          <BoardGroup title="Outstanding" count={outstanding.length} spine="border-l-lost-ink" head={HEAD}>
-            <Rows rows={outstanding} />
-          </BoardGroup>
-          <BoardGroup title="Paid" count={paid.length} spine="border-l-delivered-ink" head={HEAD}>
-            <Rows rows={paid} />
-          </BoardGroup>
-          <BoardGroup title="Draft & void" count={other.length} spine="border-l-line-strong" head={HEAD}>
-            <Rows rows={other} />
-          </BoardGroup>
+    <AppShell user={user} csrf={csrf} active="finance" bareHeader>
+      <div className="w-full">
+        {/* Header (matches the Clients list) */}
+        <div className="text-xs text-muted">Operations / Payments</div>
+        <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-semibold text-ink">Payments</h1>
+            <p className="mt-1 text-sm text-ink-muted">Track invoices, balances and payment status.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <form method="get" className="relative">
+              <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+              </svg>
+              <input
+                name="q"
+                defaultValue={q}
+                placeholder="Search invoices"
+                aria-label="Search invoices"
+                className="h-9 w-64 rounded-md border border-line bg-surface pl-9 pr-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent focus:ring-1 focus:ring-accent"
+              />
+            </form>
+            <Link
+              href="/finance/new"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              New invoice
+            </Link>
+          </div>
         </div>
-      )}
+
+        {/* Groups */}
+        {rows.length === 0 ? (
+          <p className="py-16 text-center text-sm text-ink-muted">
+            {q ? `No invoices match "${q}".` : 'No invoices yet. Create one with New invoice, or raise it from a job.'}
+          </p>
+        ) : (
+          <>
+            <Group title="Outstanding" rows={outstanding} first />
+            <Group title="Paid" rows={paid} first={outstanding.length === 0} />
+            <Group title="Draft & void" rows={other} first={outstanding.length === 0 && paid.length === 0} />
+          </>
+        )}
+      </div>
     </AppShell>
   )
 }
