@@ -1,8 +1,8 @@
 /**
- * Enquiry workflow - editable per case. Two stages live on the lead: Enquiry (first contact and
- * discussion) and Quote and booking (quote, contract, deposit). "Booking confirmed" is the Book-it
- * action that turns the lead into a Project (Studio-Ninja style). Tasks carry a type so the board can
- * tag them (Auto email / Appointment / Shoot / Auto); plain To-do tasks show no tag.
+ * Enquiry workflow - editable per case. Its two task groups are named exactly like the outside stages
+ * so they line up: "In discussion" (first contact + discussion) and "Quoting" (quote, contract,
+ * deposit). Ticking a group's tasks moves the outside stage to that group; New = before In discussion,
+ * Booked = the Create Job outcome. Tasks carry a type so the board can tag them; plain To-do shows none.
  */
 
 export function currentActionText(waitingOn: string | null, pendingTitle: string | null): string {
@@ -33,8 +33,8 @@ export const ADDABLE_TASK_TYPES: { value: TaskType; label: string }[] = [
 type StageDef = { key: string; label: string; color: string }
 
 export const ENQUIRY_STAGES: StageDef[] = [
-  { key: 'enquiry', label: 'Enquiry', color: 'enquiry' },
-  { key: 'quote', label: 'Quote and booking', color: 'quote' },
+  { key: 'enquiry', label: 'In discussion', color: 'enquiry' },
+  { key: 'quote', label: 'Quoting', color: 'quote' },
 ]
 
 export const ENQUIRY_STAGE_KEYS: ReadonlySet<string> = new Set(ENQUIRY_STAGES.map((s) => s.key))
