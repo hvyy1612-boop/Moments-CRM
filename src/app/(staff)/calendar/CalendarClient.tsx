@@ -242,8 +242,14 @@ function WeekGrid({ data, canManage, onSlot, onPeek, onHide, onMove }: {
   const w = data.week!
   const hours = Array.from({ length: w.endHour - w.startHour + 1 }, (_, i) => w.startHour + i)
   const total = (w.endHour - w.startHour) * ROW_H
-  const allDayByCol = w.days.map((d) => data.items.filter((it) => it.dayKey === d.dateKey && it.startMin === null))
   const timedByCol = w.days.map((d) => data.items.filter((it) => it.dayKey === d.dateKey && it.startMin !== null))
+
+  // Full 24-hour day (Apple-style). Open scrolled to the working morning so the empty night hours
+  // aren't what greets you - the body is the only thing that scrolls; the day header stays pinned.
+  const bodyRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = 7 * ROW_H
+  }, [])
 
   const slotClick = (dateKey: string, e: ReactMouseEvent<HTMLDivElement>) => {
     if (!canManage) return
@@ -264,21 +270,12 @@ function WeekGrid({ data, canManage, onSlot, onPeek, onHide, onMove }: {
           </div>
         ))}
       </div>
-      {/* all-day */}
-      <div className="grid border-b border-line" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, minmax(0, 1fr))` }}>
-        <div className="flex items-center justify-center border-r border-line text-xs text-muted">all-day</div>
-        {allDayByCol.map((items, ci) => (
-          <div key={ci} className="min-w-0 min-h-9 border-r border-line p-1 last:border-r-0">
-            <div className="flex flex-col gap-1">
-              {items.map((it) => <WeekChipAllDay key={it.id} item={it} onPeek={onPeek} onHide={onHide} />)}
-            </div>
-          </div>
-        ))}
-      </div>
-      {/* timed body. The gutter renders one label per hour ROW (7am..8pm) so it lines up exactly with
-          the day columns' rows - one extra label made the gutter taller than the columns and left an
-          un-ruled gap under 9pm. Full working day is shown (no inner scroll box). */}
-      <div className="grid" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, minmax(0, 1fr))` }}>
+      {/* Timed body - the full 24h day, the only scrolling region (max-h-[70vh]; vh keeps the
+          design-token check clean). The gutter renders one label per hour ROW (12am..11pm) so it lines
+          up exactly with the day columns' rows - one extra label would make the gutter taller than the
+          columns and leave an un-ruled gap at the bottom. No all-day strip: undated items (deadlines,
+          invoice-due, undated tasks) have no clock time and live in Month + Agenda instead. */}
+      <div ref={bodyRef} className="grid max-h-[70vh] overflow-y-auto" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, minmax(0, 1fr))` }}>
         <div className="border-r border-line">
           {hours.slice(0, -1).map((h) => <div key={h} className="pr-1.5 pt-0.5 text-right text-xs text-muted" style={{ height: ROW_H }}>{minToLabel(h * 60)}</div>)}
         </div>
@@ -300,14 +297,6 @@ function WeekGrid({ data, canManage, onSlot, onPeek, onHide, onMove }: {
       </div>
     </div>
   )
-}
-
-function WeekChipAllDay({ item, onPeek, onHide }: { item: CalItem; onPeek: (i: CalItem, e: { clientX: number; clientY: number }) => void; onHide: () => void }) {
-  const cls = `block rounded px-1.5 py-0.5 text-xs font-medium ${catClass(item)} ${item.kind === 'task' ? 'border-l-2 border-current' : ''} ${item.conflict ? 'outline outline-2 outline-lost-ink' : ''}`
-  const content = <span className="block truncate">{item.primary} - {item.secondary}</span>
-  return item.href
-    ? <Link href={item.href} className={cls} onMouseEnter={(e) => onPeek(item, e)} onMouseLeave={onHide}>{content}</Link>
-    : <div className={cls} onMouseEnter={(e) => onPeek(item, e)} onMouseLeave={onHide}>{content}</div>
 }
 
 function WeekBlock({ item, startHour, canManage, onPeek, onHide, onMove }: {

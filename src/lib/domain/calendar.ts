@@ -290,7 +290,7 @@ export async function getCalendarView(
       return { dateKey: dk, dow: DOW[i] ?? '', dayNum: dd.getDate(), isToday: dk === todayKey }
     })
     label = `${MONTHS[anchor.m - 1]} ${anchor.y}`
-    week = { days, startHour: 7, endHour: 21 }
+    week = { days, startHour: 0, endHour: 24 }
   } else {
     const start = new Date(anchor.y, anchor.m - 1, 1)
     const prev = shiftMonth(anchor.y, anchor.m, -1)
