@@ -17,10 +17,15 @@ type ClientOption = { id: string; displayName: string }
 type Prefill = { date: string; startTime?: string }
 
 function catClass(item: CalItem): string {
-  if (item.tone === 'overdue') return 'bg-lost text-lost-ink'
-  if (item.category === 'lead') return 'bg-enquiry text-enquiry-ink'
-  if (item.category === 'event') return 'bg-booked text-booked-ink'
-  return 'bg-accent-tint text-accent-ink'
+  // Restrained warm pastels by TYPE (not by bright workflow status). Overdue adds a subtle ring
+  // rather than a loud red fill. All tokens are the globals.css pastel family - no admin-bright colours.
+  const base =
+    item.category === 'payment' ? 'bg-peach text-ink'
+    : item.category === 'event' ? 'bg-sunk text-ink'
+    : item.category === 'lead' ? 'bg-lav text-ink'
+    : item.kind === 'booking' || item.kind === 'appointment' ? 'bg-sage text-ink'
+    : 'bg-butter text-ink'
+  return item.tone === 'overdue' ? `${base} ring-1 ring-lost-ink/40` : base
 }
 
 function pad(n: number): string { return String(n).padStart(2, '0') }
@@ -122,6 +127,7 @@ function MonthGrid({
   onMove: (item: CalItem, dateKey: string, startMin: number | null) => void
 }) {
   const m = data.month!
+  const [more, setMore] = useState<{ items: CalItem[]; x: number; y: number } | null>(null)
   const cells: (string | null)[] = [
     ...Array.from({ length: m.leading }, () => null),
     ...Array.from({ length: m.daysInMonth }, (_, i) => `${m.year}-${pad(m.monthNum)}-${pad(i + 1)}`),
@@ -131,6 +137,7 @@ function MonthGrid({
   for (const list of byDay.values()) list.sort((a, b) => (a.startMin ?? -1) - (b.startMin ?? -1) || a.primary.localeCompare(b.primary))
 
   return (
+    <>
     <div className="overflow-hidden rounded-md border border-line">
       <div className="grid grid-cols-7">
         {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d) => (
@@ -151,7 +158,16 @@ function MonthGrid({
                 <>
                   <span className={`tabular inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-sm ${isToday ? 'bg-accent font-semibold text-paper' : 'text-ink-muted'}`}>{day}</span>
                   <div className="mt-1 flex flex-col gap-1">
-                    {items.map((it) => <MonthChip key={it.id} item={it} canManage={canManage} onPeek={onPeek} onHide={onHide} onMove={onMove} />)}
+                    {items.slice(0, 3).map((it) => <MonthChip key={it.id} item={it} canManage={canManage} onPeek={onPeek} onHide={onHide} onMove={onMove} />)}
+                    {items.length > 3 ? (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setMore({ items, x: e.clientX, y: e.clientY }) }}
+                        className="rounded px-1.5 py-0.5 text-left text-xs font-medium text-ink-muted hover:bg-sunk hover:text-ink"
+                      >
+                        + {items.length - 3} more
+                      </button>
+                    ) : null}
                   </div>
                 </>
               ) : null}
@@ -160,6 +176,32 @@ function MonthGrid({
         })}
       </div>
     </div>
+    {more ? <MonthMorePopover more={more} onClose={() => setMore(null)} canManage={canManage} onPeek={onPeek} onHide={onHide} onMove={onMove} /> : null}
+    </>
+  )
+}
+
+// "+N more" popover for a busy day: keeps the month row compact yet every item stays reachable
+// without leaving the Month view (spec 11). Reuses the same chips + peek/drag behaviour.
+function MonthMorePopover({ more, onClose, canManage, onPeek, onHide, onMove }: {
+  more: { items: CalItem[]; x: number; y: number }
+  onClose: () => void
+  canManage: boolean
+  onPeek: (item: CalItem, e: { clientX: number; clientY: number }) => void
+  onHide: () => void
+  onMove: (item: CalItem, dateKey: string, startMin: number | null) => void
+}) {
+  const left = Math.min(more.x, (typeof window !== 'undefined' ? window.innerWidth : 900) - 240)
+  const top = Math.min(more.y, (typeof window !== 'undefined' ? window.innerHeight : 700) - 320)
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className="fixed z-50 w-56 rounded-lg border border-line-strong bg-surface p-2 shadow-lg" style={{ left, top }}>
+        <div className="flex max-h-80 flex-col gap-1 overflow-y-auto">
+          {more.items.map((it) => <MonthChip key={it.id} item={it} canManage={canManage} onPeek={onPeek} onHide={onHide} onMove={onMove} />)}
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -200,8 +242,20 @@ function WeekGrid({ data, canManage, onSlot, onPeek, onHide, onMove }: {
   const w = data.week!
   const hours = Array.from({ length: w.endHour - w.startHour + 1 }, (_, i) => w.startHour + i)
   const total = (w.endHour - w.startHour) * ROW_H
-  const allDayByCol = w.days.map((d) => data.items.filter((it) => it.dayKey === d.dateKey && it.startMin === null))
   const timedByCol = w.days.map((d) => data.items.filter((it) => it.dayKey === d.dateKey && it.startMin !== null))
+  // Undated items (enquiry + job tasks, invoice-due, undated appointments) have no clock time, so they
+  // ride a slim strip pinned above the timeline instead of an hour slot. The strip only appears when the
+  // week actually has some, so an empty week stays clean.
+  const allDayByCol = w.days.map((d) => data.items.filter((it) => it.dayKey === d.dateKey && it.startMin === null))
+  const hasAllDay = allDayByCol.some((c) => c.length > 0)
+
+  // Full 24-hour day (Apple-style). Open scrolled to the working morning so the empty night hours
+  // aren't what greets you - the body is the only thing that scrolls; the day header stays pinned.
+  const bodyRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    // Open just above the 7am line (small margin so its label isn't clipped by the top edge).
+    if (bodyRef.current) bodyRef.current.scrollTop = 7 * ROW_H - 8
+  }, [])
 
   const slotClick = (dateKey: string, e: ReactMouseEvent<HTMLDivElement>) => {
     if (!canManage) return
@@ -222,21 +276,43 @@ function WeekGrid({ data, canManage, onSlot, onPeek, onHide, onMove }: {
           </div>
         ))}
       </div>
-      {/* all-day */}
-      <div className="grid border-b border-line" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, minmax(0, 1fr))` }}>
-        <div className="flex items-center justify-center border-r border-line text-xs text-muted">all-day</div>
-        {allDayByCol.map((items, ci) => (
-          <div key={ci} className="min-w-0 min-h-9 border-r border-line p-1 last:border-r-0">
-            <div className="flex flex-col gap-1">
-              {items.map((it) => <WeekChipAllDay key={it.id} item={it} onPeek={onPeek} onHide={onHide} />)}
-            </div>
+      {/* Untimed strip - pinned above the scrolling timeline (like the day header), so enquiry + job
+          tasks, invoice-due and undated appointments stay visible on the week. Rendered only when the
+          week has any; the gutter shows a small list glyph rather than the old "all-day" label. */}
+      {hasAllDay ? (
+        <div className="grid border-b border-line" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, minmax(0, 1fr))` }}>
+          <div className="flex items-start justify-end border-r border-line pr-1.5 pt-2 text-muted">
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" /></svg>
           </div>
-        ))}
-      </div>
-      {/* timed body */}
-      <div className="grid overflow-y-auto" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, minmax(0, 1fr))`, maxHeight: 512 }}>
-        <div className="border-r border-line">
-          {hours.map((h) => <div key={h} className="pr-1.5 pt-0.5 text-right text-xs text-muted" style={{ height: ROW_H }}>{minToLabel(h * 60)}</div>)}
+          {allDayByCol.map((cells, ci) => (
+            <div key={w.days[ci]!.dateKey} className="min-w-0 border-r border-line p-1 last:border-r-0">
+              <div className="flex max-h-24 flex-col gap-1 overflow-y-auto">
+                {cells.map((it) => <WeekAllDayChip key={it.id} item={it} onPeek={onPeek} onHide={onHide} />)}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {/* Timed body - the full 24h day, the only scrolling region (max-h-[70vh]; vh keeps the
+          design-token check clean). The gutter renders one label per hour ROW (12am..11pm) so it lines
+          up exactly with the day columns' rows - one extra label would make the gutter taller than the
+          columns and leave an un-ruled gap at the bottom. */}
+      <div ref={bodyRef} className="grid max-h-[70vh] overflow-y-auto" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, minmax(0, 1fr))` }}>
+        <div className="relative border-r border-line" style={{ height: total }}>
+          {/* One label per gridline, vertically CENTRED on the rule it marks (Apple-style) so the time
+              reads level with its line - not floating in the middle of the cell. The day columns draw
+              their rules as row bottom-borders at y = k*ROW_H, so a label centred at that y sits on the
+              line. The first label (12am) is top-aligned and the last (12am = next midnight) is
+              bottom-aligned so neither is clipped by the scroll edges. */}
+          {hours.map((h, k) => (
+            <div
+              key={h}
+              className="absolute inset-x-0 pr-1.5 text-right text-xs text-muted"
+              style={{ top: k * ROW_H, transform: k === 0 ? undefined : k === hours.length - 1 ? 'translateY(-100%)' : 'translateY(-50%)' }}
+            >
+              {minToLabel((h * 60) % 1440)}
+            </div>
+          ))}
         </div>
         {w.days.map((d, ci) => (
           <div
@@ -258,12 +334,13 @@ function WeekGrid({ data, canManage, onSlot, onPeek, onHide, onMove }: {
   )
 }
 
-function WeekChipAllDay({ item, onPeek, onHide }: { item: CalItem; onPeek: (i: CalItem, e: { clientX: number; clientY: number }) => void; onHide: () => void }) {
-  const cls = `block rounded px-1.5 py-0.5 text-xs font-medium ${catClass(item)} ${item.kind === 'task' ? 'border-l-2 border-current' : ''} ${item.conflict ? 'outline outline-2 outline-lost-ink' : ''}`
-  const content = <span className="block truncate">{item.primary} - {item.secondary}</span>
+// Compact chip for the pinned untimed strip (enquiry/job tasks, invoice-due, undated appointments).
+function WeekAllDayChip({ item, onPeek, onHide }: { item: CalItem; onPeek: (i: CalItem, e: { clientX: number; clientY: number }) => void; onHide: () => void }) {
+  const cls = `block truncate rounded px-1.5 py-0.5 text-xs font-medium ${catClass(item)} ${item.kind === 'task' ? 'border-l-2 border-current' : ''} ${item.done ? 'line-through opacity-70' : ''} ${item.conflict ? 'outline outline-2 outline-lost-ink' : ''}`
+  const label = item.secondary ? `${item.primary} - ${item.secondary}` : item.primary
   return item.href
-    ? <Link href={item.href} className={cls} onMouseEnter={(e) => onPeek(item, e)} onMouseLeave={onHide}>{content}</Link>
-    : <div className={cls} onMouseEnter={(e) => onPeek(item, e)} onMouseLeave={onHide}>{content}</div>
+    ? <Link href={item.href} className={cls} title={label} onMouseEnter={(e) => onPeek(item, e)} onMouseLeave={onHide}>{label}</Link>
+    : <div className={cls} title={label} onMouseEnter={(e) => onPeek(item, e)} onMouseLeave={onHide}>{label}</div>
 }
 
 function WeekBlock({ item, startHour, canManage, onPeek, onHide, onMove }: {

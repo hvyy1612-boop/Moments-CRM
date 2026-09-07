@@ -14,8 +14,8 @@ import { PROJECT_TASK_SCHEDULE } from '@/features/projects/workflow'
  * conflict so a double-booking is caught immediately.
  */
 
-export type CalCategory = 'lead' | 'job' | 'event'
-export type CalendarFilter = 'all' | 'lead' | 'job' | 'event'
+export type CalCategory = 'lead' | 'job' | 'event' | 'payment'
+export type CalendarFilter = 'all' | 'lead' | 'job' | 'event' | 'payment'
 export type CalendarView = 'month' | 'week'
 
 export type CalItem = {
@@ -216,6 +216,29 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
     }
   }
 
+  // Invoice due dates - category payment. Read-only projection of Invoice.dueAt (no new data model);
+  // only outstanding invoices (issued/sent/part-paid/overdue) so paid & draft rows stay quiet. All-day.
+  if (want('payment')) {
+    const invoices = await prisma.invoice.findMany({
+      where: { dueAt: { gte: startUtc, lt: endUtc }, status: { in: ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'OVERDUE'] } },
+      select: {
+        id: true, invoiceNumber: true, dueAt: true, status: true,
+        project: { select: { client: { select: { displayName: true } } } },
+      },
+    })
+    for (const inv of invoices) {
+      if (!inv.dueAt) continue
+      items.push({
+        id: `inv_${inv.id}`, kind: 'task', refId: inv.id, dayKey: sydneyDateKey(inv.dueAt),
+        startMin: null, endMin: null,
+        primary: 'Invoice due', secondary: inv.project.client.displayName,
+        category: 'payment', tone: tone(inv.dueAt.getTime(), false, nowMs), timeLabel: null,
+        href: `/finance/${inv.id}`, editable: false, location: null,
+        status: inv.status, conflict: false, done: false,
+      })
+    }
+  }
+
   flagConflicts(items)
   return items
 }
@@ -253,7 +276,6 @@ export async function getCalendarView(
     const anchorLocal = new Date(anchor.y, anchor.m - 1, anchor.d)
     const offset = (anchorLocal.getDay() + 6) % 7
     const monday = new Date(anchor.y, anchor.m - 1, anchor.d - offset)
-    const sunday = new Date(anchor.y, anchor.m - 1, anchor.d - offset + 6)
     const mk = { y: monday.getFullYear(), m: monday.getMonth() + 1, d: monday.getDate() }
     const nextMon = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 7)
     const prevMon = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - 7)
@@ -267,11 +289,8 @@ export async function getCalendarView(
       const dk = dateKeyOf(dd.getFullYear(), dd.getMonth() + 1, dd.getDate())
       return { dateKey: dk, dow: DOW[i] ?? '', dayNum: dd.getDate(), isToday: dk === todayKey }
     })
-    const sameMonth = mk.m === sunday.getMonth() + 1
-    label = sameMonth
-      ? `${mk.d} - ${sunday.getDate()} ${MONTHS[mk.m - 1]} ${mk.y}`
-      : `${mk.d} ${MONTHS[mk.m - 1]} - ${sunday.getDate()} ${MONTHS[sunday.getMonth()]} ${sunday.getFullYear()}`
-    week = { days, startHour: 7, endHour: 21 }
+    label = `${MONTHS[anchor.m - 1]} ${anchor.y}`
+    week = { days, startHour: 0, endHour: 24 }
   } else {
     const start = new Date(anchor.y, anchor.m - 1, 1)
     const prev = shiftMonth(anchor.y, anchor.m, -1)

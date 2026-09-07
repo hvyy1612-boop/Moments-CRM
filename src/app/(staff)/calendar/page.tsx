@@ -21,8 +21,9 @@ export const metadata: Metadata = { title: 'Calendar - Moments' }
 
 const FILTERS: { key: CalendarFilter; label: string }[] = [
   { key: 'all', label: 'All' },
-  { key: 'lead', label: 'Leads' },
+  { key: 'lead', label: 'Enquiries' },
   { key: 'job', label: 'Jobs' },
+  { key: 'payment', label: 'Payments' },
   { key: 'event', label: 'Events' },
 ]
 type ViewKey = 'month' | 'week' | 'agenda'
@@ -36,7 +37,7 @@ export default async function CalendarPage({
   const user = await requireRole('/calendar')
   const sp = await searchParams
   const view: ViewKey = sp.view === 'week' ? 'week' : sp.view === 'agenda' ? 'agenda' : 'month'
-  const filter: CalendarFilter = (['all', 'lead', 'job', 'event'] as const).includes(sp.filter as CalendarFilter)
+  const filter: CalendarFilter = (['all', 'lead', 'job', 'event', 'payment'] as const).includes(sp.filter as CalendarFilter)
     ? (sp.filter as CalendarFilter)
     : 'all'
 
@@ -88,7 +89,6 @@ export default async function CalendarPage({
               <Link href={href({ date: data!.nextKey })} aria-label="Next" className="flex h-8 w-8 items-center justify-center rounded border border-line bg-surface text-ink-muted hover:bg-paper hover:text-ink">
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
               </Link>
-              <Link href={href({ date: data!.todayKey })} className="flex h-8 items-center rounded border border-line bg-surface px-3 text-sm text-ink-muted hover:bg-paper hover:text-ink">Today</Link>
             </div>
           ) : null}
           <div className="ml-1 flex items-center rounded border border-line bg-surface p-0.5">
@@ -113,14 +113,7 @@ export default async function CalendarPage({
       {isAgenda ? (
         <AgendaView cockpit={cockpit!} csrf={csrf} />
       ) : (
-        <>
-          <CalendarClient data={data!} csrf={csrf} canManage={canManage} clients={clients} />
-          {data!.items.length === 0 ? (
-            <p className="mt-4 rounded-md border border-dashed border-line bg-surface px-4 py-6 text-center text-sm text-ink-muted">
-              Nothing scheduled in {data!.label}. Shoots, appointments and due dates appear here as soon as staff enter them{canManage ? ', or use Add event' : ''}.
-            </p>
-          ) : null}
-        </>
+        <CalendarClient data={data!} csrf={csrf} canManage={canManage} clients={clients} />
       )}
     </AppShell>
   )
