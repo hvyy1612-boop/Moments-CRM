@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
-import { CopyLinkField } from '@/components/ui/CopyLinkField'
 import { InvoiceDocument } from '@/components/InvoiceDocument'
 import { PrintButton } from '@/components/PrintButton'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
@@ -184,17 +183,6 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
             paymentRows={paymentRows}
           />
         </div>
-
-        {/* Client invoice link */}
-        {inv.accessToken ? (
-          <section className="mt-8 max-w-2xl">
-            <div className="text-xs font-bold uppercase tracking-wide text-muted">Client invoice link</div>
-            <div className="mt-2 flex items-center gap-2">
-              <div className="min-w-0 flex-1"><CopyLinkField path={`/invoice/${inv.accessToken}`} /></div>
-              <Link href={`/invoice/${inv.accessToken}`} target="_blank"><Button variant="secondary" size="sm">Open</Button></Link>
-            </div>
-          </section>
-        ) : null}
 
         {/* Invoice preview (demoted, screen only) */}
         <div className="mt-8">
