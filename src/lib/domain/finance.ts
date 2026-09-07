@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { splitGstInclusive } from '@/lib/money'
 import { sydneyLocalToUtc, systemClock } from '@/lib/time'
 import type { CreateInvoiceInput, CreateInvoiceLinesInput, RecordPaymentInput } from '@/lib/validation/finance'
+import { maybeAutoCompleteJob } from './project-workflow'
 
 /**
  * Finance. Invoices are raised against a confirmed project and paid down by payments. Each payment
@@ -490,6 +491,8 @@ export async function recordPayment(
           data: { commercialStatus: next },
         })
       }
+      // Payment is one half of "done"; auto-complete the job if the checklist is finished too.
+      if (invoice.projectId) await maybeAutoCompleteJob(tx, invoice.projectId, actorUserId)
     }
 
     await tx.auditLog.create({
