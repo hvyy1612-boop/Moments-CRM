@@ -256,27 +256,59 @@ export async function moveProjectTask(taskId: string, direction: 'up' | 'down', 
   ])
 }
 
-/** Toggle a task complete or reopen it. */
+/**
+ * Toggle a task. Completing a task ALSO completes every earlier staff task (a "done up to here"
+ * cascade): the workflow is a sequence, so ticking a step means everything before it is done and the
+ * next-task pointer jumps past it. Ordering is stage (PROJECT_STAGES) then per-stage `order`. AUTO rows
+ * are skipped in both directions - their done-state is read from real records, not staff-toggled.
+ * Re-opening is per-task only, so staff can still correct any single step by hand.
+ */
 export async function toggleProjectTask(taskId: string, actorUserId: string) {
   const task = await loadTask(taskId)
   if (task.type === 'AUTO') return // auto rows are system-driven, not staff-toggled
   const completing = task.status !== 'COMPLETED'
+
+  const stageRank = new Map(PROJECT_STAGES.map((s, i) => [s.key, i]))
+  const rankOf = (t: { stage: string | null; order: number }) =>
+    (stageRank.get(t.stage ?? '') ?? 999) * 100_000 + t.order
+  const target = rankOf(task)
+
   await prisma.$transaction(async (tx) => {
-    await tx.workItem.update({
-      where: { id: taskId },
-      data: completing
-        ? { status: 'COMPLETED', completedByUserId: actorUserId, completedAt: new Date() }
-        : { status: 'PENDING', completedByUserId: null, completedAt: null },
-    })
-    await tx.auditLog.create({
-      data: {
-        companyId: task.companyId,
-        actorUserId,
-        action: completing ? 'project.task_completed' : 'project.task_reopened',
-        entityType: 'Project',
-        entityId: task.projectId!,
-        afterData: { title: task.title },
-      },
-    })
+    if (completing) {
+      const pending = await tx.workItem.findMany({
+        where: { projectId: task.projectId!, status: 'PENDING', type: { not: 'AUTO' } },
+        select: { id: true, stage: true, order: true },
+      })
+      const ids = pending.filter((t) => rankOf(t) <= target).map((t) => t.id)
+      await tx.workItem.updateMany({
+        where: { id: { in: ids } },
+        data: { status: 'COMPLETED', completedByUserId: actorUserId, completedAt: new Date() },
+      })
+      await tx.auditLog.create({
+        data: {
+          companyId: task.companyId,
+          actorUserId,
+          action: 'project.task_completed',
+          entityType: 'Project',
+          entityId: task.projectId!,
+          afterData: { title: task.title, completedCount: ids.length },
+        },
+      })
+    } else {
+      await tx.workItem.update({
+        where: { id: taskId },
+        data: { status: 'PENDING', completedByUserId: null, completedAt: null },
+      })
+      await tx.auditLog.create({
+        data: {
+          companyId: task.companyId,
+          actorUserId,
+          action: 'project.task_reopened',
+          entityType: 'Project',
+          entityId: task.projectId!,
+          afterData: { title: task.title },
+        },
+      })
+    }
   })
 }

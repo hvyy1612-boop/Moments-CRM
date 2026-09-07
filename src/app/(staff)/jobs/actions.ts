@@ -677,6 +677,7 @@ export async function toggleProjectTaskAction(formData: FormData): Promise<void>
     // Double submit / stale id: the re-render shows the real state.
   }
   revalidatePath(`/jobs/${projectId}`)
+  revalidatePath('/jobs') // the list's "Next task" column follows the first pending task
 }
 
 /** Add a task to a stage of the project's workflow. */
