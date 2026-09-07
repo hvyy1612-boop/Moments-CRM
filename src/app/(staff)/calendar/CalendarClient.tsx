@@ -276,8 +276,12 @@ function WeekGrid({ data, canManage, onSlot, onPeek, onHide, onMove }: {
           columns and leave an un-ruled gap at the bottom. No all-day strip: undated items (deadlines,
           invoice-due, undated tasks) have no clock time and live in Month + Agenda instead. */}
       <div ref={bodyRef} className="grid max-h-[70vh] overflow-y-auto" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, minmax(0, 1fr))` }}>
-        <div className="border-r border-line">
+        <div className="relative border-r border-line" style={{ height: total }}>
           {hours.slice(0, -1).map((h) => <div key={h} className="pr-1.5 pt-0.5 text-right text-xs text-muted" style={{ height: ROW_H }}>{minToLabel(h * 60)}</div>)}
+          {/* Trailing midnight on the final line: 12am = end of the day / start of the next, so the grid
+              reads as a full 12am->12am span. Absolute + bottom-0 so it sits just above the last line
+              without adding flow height (which would make the gutter taller than the day columns). */}
+          <div className="absolute inset-x-0 bottom-0 pr-1.5 text-right text-xs text-muted">{minToLabel(0)}</div>
         </div>
         {w.days.map((d, ci) => (
           <div
