@@ -11,13 +11,13 @@ type StageDef = { key: string; label: string; color: string; optional?: boolean 
 export const PROJECT_STAGES: StageDef[] = [
   { key: 'planning', label: 'Planning', color: 'enquiry' },
   { key: 'preshoot', label: 'Pre-wedding shoot', color: 'booked', optional: true },
-  { key: 'finalprep', label: 'Final shoot preparation', color: 'quote' },
-  { key: 'shootday', label: 'Shoot day', color: 'booked' },
-  { key: 'editing', label: 'Photo editing', color: 'editing' },
+  { key: 'finalprep', label: 'Pre-wedding preparation', color: 'quote' },
+  { key: 'shootday', label: 'Wedding day', color: 'booked' },
+  { key: 'editing', label: 'Editing and post-production', color: 'editing' },
   { key: 'video', label: 'Video editing', color: 'editing', optional: true },
   { key: 'film', label: 'Film processing', color: 'editing', optional: true },
   { key: 'album', label: 'Album and prints', color: 'editing', optional: true },
-  { key: 'delivery', label: 'Final delivery and close', color: 'delivered' },
+  { key: 'delivery', label: 'Delivery and close', color: 'delivered' },
 ]
 
 export const PROJECT_STAGE_KEYS: ReadonlySet<string> = new Set(PROJECT_STAGES.map((s) => s.key))
@@ -40,7 +40,7 @@ export const DEFAULT_PROJECT_TASKS: { stage: string; title: string; type: TaskTy
   { stage: 'finalprep', title: 'Schedule final planning call', type: 'APPOINTMENT' },
   { stage: 'finalprep', title: 'Confirm final timeline and shoot details', type: 'TODO' },
 
-  { stage: 'shootday', title: 'Conduct wedding photography', type: 'SHOOT' },
+  { stage: 'shootday', title: 'Photograph and film the wedding day', type: 'SHOOT' },
   { stage: 'shootday', title: 'Back up all captured files', type: 'TODO' },
 
   { stage: 'editing', title: 'Cull wedding images', type: 'TODO' },
@@ -94,7 +94,7 @@ export const PROJECT_TASK_NOTE: Record<string, string> = {
   'Schedule final planning call': 'Book a call about a week before the shoot.',
   'Confirm final timeline and shoot details': 'Lock the final run sheet with the client.',
   'Send final payment reminder': 'Sent automatically about two weeks before the shoot.',
-  'Conduct wedding photography': 'Shoot the day per the agreed coverage.',
+  'Photograph and film the wedding day': 'Capture photo and video on the day per the agreed coverage.',
   'Back up all captured files': 'Copy every card to two drives before deleting.',
   'Prepare preview images': 'Select and edit a small preview set.',
   'Send preview gallery to client': 'Share a first look within a few days.',
@@ -144,7 +144,7 @@ export const PROJECT_TASK_SCHEDULE: Record<string, number> = {
   'Review final shoot information': -14,
   'Schedule final planning call': -10,
   'Confirm final timeline and shoot details': -7,
-  'Conduct wedding photography': 0,
+  'Photograph and film the wedding day': 0,
   'Back up all captured files': 1,
   'Prepare preview images': 3,
   'Send preview gallery to client': 5,
