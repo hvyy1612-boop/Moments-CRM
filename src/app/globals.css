@@ -64,7 +64,9 @@
   --color-cat-5: #8fd7d7;
   --color-cat-6: #ff8ca1;
 
-  /* Dashboard analytical pastels (one soft family per widget; tonal variation inside a chart). */
+  /* Dashboard analytical pastels (one soft family per widget; tonal variation inside a chart).
+     NOTE: the dashboard no longer tints cards with these - it uses white cards + the muted data
+     series below. These pastels are kept because the Calendar still uses them for event categories. */
   --color-lav: #eeeafd;
   --color-lav-strong: #aaa2d6;
   --color-sage: #e9f4ed;
@@ -77,6 +79,22 @@
   --color-blush-strong: #d0a2b2;
   --color-butter: #faf5e4;
   --color-butter-strong: #c9b874;
+
+  /* Dashboard data series - muted, editorial. Used INSIDE visualisations (chart series, bars, donuts,
+     tiny badges) - never as a large card background. This is what keeps the dashboard reading as a
+     clean neutral surface with colour only in the data (docs: 90% neutral UI / 10% muted data). */
+  --color-data-deep-sage: #6f806c;
+  --color-data-sage: #879783;
+  --color-data-blue: #8699a2;
+  --color-data-mauve: #a58f98;
+  --color-data-sand: #b6a17b;
+  --color-data-clay: #b48e7e;
+  --color-data-neutral: #62675e;
+  --color-data-grey: #b8b4ae;
+  /* Semantic (restrained): positive / warning / negative for status bars and KPI deltas. */
+  --color-data-positive: #728a70;
+  --color-data-warning: #b69a68;
+  --color-data-negative: #b47770;
 
   /* Radius - small for controls, medium/large for cards (D-10: card 8-10, button 7, tag 5). */
   --radius-sm: 2px;
@@ -135,6 +153,20 @@ body {
 /* Numbers line up in tables/finance: opt-in tabular figures (D-14). */
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* Editorial display face (Cormorant Garamond, self-hosted via next/font on <html>). Used for the
+   dashboard title, analytical card headings and large KPI values so the studio dashboard reads as
+   editorial-but-operational, matching the landing/login brand. Body/UI text stays on the system sans. */
+.font-display {
+  font-family: var(--font-cormorant), Georgia, 'Times New Roman', serif;
+}
+
+/* Tiny letter-spaced caps under the sidebar wordmark (Photography & Film / Sydney). */
+.sidebar-brand-sub {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  line-height: 1.55;
 }
 
 /*

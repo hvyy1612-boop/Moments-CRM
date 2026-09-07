@@ -1,6 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { signOut } from './actions'
@@ -54,11 +55,12 @@ export function Sidebar({
     <aside className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-line bg-surface md:flex ${collapsed ? 'w-16' : 'w-56'}`}>
       <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-4">
         {collapsed ? (
-          <span className="mx-auto text-sm font-semibold uppercase tracking-widest text-ink">M</span>
+          <span className="mx-auto font-display text-2xl leading-none text-ink">m</span>
         ) : (
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold uppercase tracking-[0.18em] leading-none text-ink">Moments</div>
-            <div className="mt-1 truncate text-xs uppercase text-muted">Photography &amp; Film</div>
+            <Image src="/landing/wordmark.png" alt="Moments" width={655} height={148} priority className="h-7 w-auto" />
+            <div className="sidebar-brand-sub mt-1.5 uppercase text-muted">Photography &amp; Film</div>
+            <div className="sidebar-brand-sub uppercase text-muted">Sydney</div>
           </div>
         )}
         <button

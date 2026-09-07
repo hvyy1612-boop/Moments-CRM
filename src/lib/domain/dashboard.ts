@@ -12,6 +12,7 @@ const PERIOD_DAYS: Record<Exclude<DashboardPeriod, 'year'>, number> = { '30d': 3
 
 export type Bar = { label: string; value: number; sub?: string }
 export type SeriesPoint = { label: string; booked: number; collected: number }
+export type RecentEnquiry = { id: string; name: string; service: string | null; source: string; status: string; createdAt: Date }
 
 export type DashboardData = {
   period: DashboardPeriod
@@ -35,6 +36,7 @@ export type DashboardData = {
   invoiceAging: { current: number; d1: number; d8: number; d30: number; total: number }
   turnaround: Bar[]
   pipeline: Bar[]
+  recentEnquiries: RecentEnquiry[]
 }
 
 const INVOICE_COUNTED = ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'PAID', 'OVERDUE'] as const
@@ -84,7 +86,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   const svc = opts.service && opts.service !== 'all' ? opts.service : null
   const matchesSvc = (pkgName: string | null | undefined): boolean => !svc || (pkgName ?? 'Other') === svc
 
-  const [enquiries, invoices, payments, projects, packages] = await Promise.all([
+  const [enquiries, invoices, payments, projects, packages, recentRaw] = await Promise.all([
     prisma.enquiry.findMany({ where: { createdAt: { gte: prevStart } }, select: { status: true, source: true, createdAt: true } }),
     prisma.invoice.findMany({
       where: { status: { in: INVOICE_COUNTED as unknown as string[] } as never },
@@ -105,6 +107,12 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
       },
     }),
     prisma.package.findMany({ select: { name: true }, orderBy: { name: 'asc' } }),
+    // Recent enquiries across all channels (latest first) - real records for the dashboard table.
+    prisma.enquiry.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 6,
+      select: { id: true, name: true, eventType: true, source: true, status: true, createdAt: true },
+    }),
   ])
 
   const services = [...new Set(packages.map((p) => p.name).filter(Boolean))]
@@ -204,6 +212,15 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   const turnaround: Bar[] = [...turnMap.entries()].map(([label, arr]) => ({ label, value: Math.round(median(arr) * 10) / 10 })).sort((a, b) => b.value - a.value)
   const avgTurnaroundDays = allTurn.length ? Math.round((allTurn.reduce((s, d) => s + d, 0) / allTurn.length) * 10) / 10 : null
 
+  const recentEnquiries: RecentEnquiry[] = recentRaw.map((e) => ({
+    id: e.id,
+    name: e.name,
+    service: e.eventType,
+    source: titleCaseSource(e.source),
+    status: e.status,
+    createdAt: e.createdAt,
+  }))
+
   return {
     period: opts.period,
     service: opts.service,
@@ -226,6 +243,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
     invoiceAging: aging,
     turnaround,
     pipeline,
+    recentEnquiries,
   }
 }
 
