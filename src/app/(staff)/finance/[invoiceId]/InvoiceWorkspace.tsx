@@ -370,13 +370,11 @@ export function InvoiceWorkspace(props: {
                 {addMenu ? (
                   <div className="absolute right-0 top-full z-20 mt-1 w-72 overflow-hidden rounded-md border border-line bg-surface py-1 shadow-lg">
                     {packages.length > 0 ? (
-                      <div className="border-b border-line pb-2">
+                      <div className="border-b border-line pb-1">
                         <div className="px-3 pb-1 pt-2 text-xs font-bold uppercase tracking-wide text-muted">Quick add</div>
-                        <div className="flex flex-wrap gap-1.5 px-3">
-                          {packages.slice(0, 6).map((p) => (
-                            <button key={p.id} type="button" onClick={() => addQuick(p.id)} className="rounded-full border border-line px-2.5 py-1 text-xs text-ink hover:border-accent hover:text-accent-ink">{p.name}</button>
-                          ))}
-                        </div>
+                        {packages.slice(0, 6).map((p) => (
+                          <button key={p.id} type="button" onClick={() => addQuick(p.id)} className="block w-full truncate px-3 py-2 text-left text-sm text-ink hover:bg-paper">{p.name}</button>
+                        ))}
                       </div>
                     ) : null}
                     <div className="px-3 pb-1 pt-2 text-xs font-bold uppercase tracking-wide text-muted">From catalogue</div>
