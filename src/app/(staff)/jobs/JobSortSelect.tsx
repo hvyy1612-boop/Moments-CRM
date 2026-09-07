@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 const OPTIONS = [
   { value: 'newest', label: 'Newest' },
   { value: 'oldest', label: 'Oldest' },
+  { value: 'stage', label: 'Stage' },
   { value: 'client-asc', label: 'Client A-Z' },
 ] as const
 

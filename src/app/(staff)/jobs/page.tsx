@@ -8,7 +8,7 @@ import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
 import { resolveLabel, type StatusLabel } from '@/features/projects/labels'
 import { CLOSED_STATUSES } from '@/features/projects/lifecycle'
-import { stageLabel } from '@/features/projects/workflow'
+import { PROJECT_STAGES, stageLabel } from '@/features/projects/workflow'
 import { getCompanyStatusLabels } from '@/lib/domain/status-labels'
 import { StatusPicker } from '@/features/projects/components/StatusPicker'
 import { AppShell } from '../AppShell'
@@ -20,7 +20,11 @@ import { AddJobButton } from './AddJobButton'
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Jobs - Moments' }
 
-const SORTS: JobSortValue[] = ['newest', 'oldest', 'client-asc']
+const SORTS: JobSortValue[] = ['newest', 'oldest', 'stage', 'client-asc']
+
+// Reading order of the workflow stages, so "Sort by stage" clusters the pipeline Planning -> Delivery.
+const STAGE_RANK = new Map(PROJECT_STAGES.map((s, i) => [s.key, i]))
+const stageRank = (key: string | null) => (key && STAGE_RANK.has(key) ? STAGE_RANK.get(key)! : PROJECT_STAGES.length)
 
 type Row = {
   id: string
@@ -114,6 +118,7 @@ export default async function JobsPage({
 
   if (sort === 'oldest') rows = [...rows].sort((a, b) => a.enquiredAt.getTime() - b.enquiredAt.getTime())
   else if (sort === 'client-asc') rows = [...rows].sort((a, b) => a.client.localeCompare(b.client))
+  else if (sort === 'stage') rows = [...rows].sort((a, b) => stageRank(a.nextStage) - stageRank(b.nextStage) || b.enquiredAt.getTime() - a.enquiredAt.getTime())
 
   // Carried to the job detail as ?back so its in-app "Jobs" link returns to this exact filtered list.
   const listQs = new URLSearchParams()
@@ -181,7 +186,7 @@ export default async function JobsPage({
             </Link>
           </div>
           <div className="flex items-center gap-1">
-            <JobFilterMenu statuses={labels.map((l) => ({ id: l.id, name: l.name }))} status={status} task={task} />
+            <JobFilterMenu task={task} />
             <JobSortSelect value={sort} />
           </div>
         </div>
