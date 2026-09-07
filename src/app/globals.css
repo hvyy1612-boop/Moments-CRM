@@ -60,6 +60,19 @@
   --color-butter: #faf5e4;
   --color-butter-strong: #c9b874;
 
+  --color-data-deep-sage: #6f806c;
+  --color-data-sage: #879783;
+  --color-data-blue: #8699a2;
+  --color-data-mauve: #a58f98;
+  --color-data-sand: #b6a17b;
+  --color-data-clay: #b48e7e;
+  --color-data-neutral: #62675e;
+  --color-data-grey: #b8b4ae;
+
+  --color-data-positive: #728a70;
+  --color-data-warning: #b69a68;
+  --color-data-negative: #b47770;
+
   --radius-sm: 2px;
   --radius: 5px;
   --radius-md: 8px;
@@ -105,6 +118,16 @@ body {
 
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+.font-display {
+  font-family: var(--font-cormorant), Georgia, 'Times New Roman', serif;
+}
+
+.sidebar-brand-sub {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  line-height: 1.55;
 }
 
 .landing-wordmark {
