@@ -122,8 +122,8 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
 
   const PIPE = [
     { label: 'New', s: 'NEW' },
-    { label: 'Discussing', s: 'CONTACTED' },
-    { label: 'Quote sent', s: 'QUALIFIED' },
+    { label: 'In discussion', s: 'CONTACTED' },
+    { label: 'Quoting', s: 'QUALIFIED' },
     { label: 'Booked', s: 'CONVERTED' },
   ]
   const pipeline: Bar[] = PIPE.map((p) => ({ label: p.label, value: inPeriodEnq.filter((e) => e.status === p.s).length }))

@@ -6,7 +6,8 @@ import { redirect } from 'next/navigation'
 import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
-import { advanceEnquiry, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
+import { prisma } from '@/lib/db'
+import { advanceEnquiry, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry, revertEnquiryBooking } from '@/lib/domain/enquiry'
 import { enquirySchema } from '@/lib/validation/enquiry'
 import {
   addEnquiryTask,
@@ -84,6 +85,34 @@ export async function setEnquiryStageAction(formData: FormData): Promise<void> {
   const enquiryId = String(formData.get('enquiryId') ?? '')
   const target = String(formData.get('target') ?? '')
   if (!enquiryId) return
+
+  const current = await prisma.enquiry.findUnique({ where: { id: enquiryId }, select: { status: true } })
+  const cur = current?.status
+  const openTarget = target === 'NEW' || target === 'CONTACTED' || target === 'QUALIFIED'
+
+  if (cur === 'CONVERTED' && openTarget) {
+    await revertEnquiryBooking(enquiryId, target as 'NEW' | 'CONTACTED' | 'QUALIFIED', user.id)
+    revalidatePath('/enquiries')
+    revalidatePath(`/enquiries/${enquiryId}`)
+    revalidatePath('/jobs')
+    return
+  }
+
+  if ((cur === 'LOST' || cur === 'ARCHIVED') && (openTarget || target === 'CONVERTED')) {
+    await reopenEnquiry(enquiryId, user.id)
+    if (openTarget && target !== 'CONTACTED') {
+      await advanceEnquiry(enquiryId, target as 'NEW' | 'CONTACTED' | 'QUALIFIED', user.id)
+    }
+    if (target === 'CONVERTED') {
+      const result = await convertEnquiry(enquiryId, user.id)
+      if (result.projectId && !result.alreadyConverted) await seedProjectWorkflow(result.projectId)
+    }
+    revalidatePath('/enquiries')
+    revalidatePath(`/enquiries/${enquiryId}`)
+    revalidatePath('/jobs')
+    return
+  }
+
   switch (target) {
     case 'NEW':
       await advanceEnquiry(enquiryId, 'NEW', user.id)

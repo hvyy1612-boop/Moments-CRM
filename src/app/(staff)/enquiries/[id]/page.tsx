@@ -144,7 +144,7 @@ export default async function EnquiryDetailPage({
                         type="submit"
                         className="rounded border border-line-strong px-3 py-1.5 text-sm font-bold text-ink-muted hover:text-ink"
                       >
-                        Move to preparing quote
+                        Move to quoting
                       </button>
                     </form>
                   ) : null}

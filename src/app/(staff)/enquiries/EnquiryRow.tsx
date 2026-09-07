@@ -55,8 +55,10 @@ export function EnquiryRow({ row, csrf }: { row: EnquiryRowData; csrf: string })
       <td className="py-3 text-right">
         <EnquiryRowMenu
           enquiryId={row.id}
+          status={row.status}
           convertedProjectId={row.convertedProjectId}
           onEditDetails={() => setEditing(true)}
+          csrf={csrf}
         />
         {editing ? (
           <EditEnquiryPreview

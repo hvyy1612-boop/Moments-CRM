@@ -9,8 +9,8 @@ type TabKey = 'all' | 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'CONVERTED' | 'LOST'
 const TABS: { key: TabKey; label: string; match: (s: string) => boolean }[] = [
   { key: 'all', label: 'All', match: () => true },
   { key: 'NEW', label: 'New', match: (s) => s === 'NEW' },
-  { key: 'CONTACTED', label: 'Contacted', match: (s) => s === 'CONTACTED' },
-  { key: 'QUALIFIED', label: 'Quote sent', match: (s) => s === 'QUALIFIED' },
+  { key: 'CONTACTED', label: 'In discussion', match: (s) => s === 'CONTACTED' },
+  { key: 'QUALIFIED', label: 'Quoting', match: (s) => s === 'QUALIFIED' },
   { key: 'CONVERTED', label: 'Booked', match: (s) => s === 'CONVERTED' },
   { key: 'LOST', label: 'Lost', match: (s) => s === 'LOST' || s === 'ARCHIVED' },
 ]

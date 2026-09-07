@@ -1,11 +1,11 @@
 import type { StatusKind } from '@/components/ui/StatusTag'
 
 export const ENQUIRY_STAGE_LABEL: Record<string, string> = {
-  NEW: 'New enquiry',
-  CONTACTED: 'Discussing details',
-  QUALIFIED: 'Preparing quote',
+  NEW: 'New',
+  CONTACTED: 'In discussion',
+  QUALIFIED: 'Quoting',
   CONVERTED: 'Booked',
-  LOST: 'Not proceeding',
+  LOST: 'Lost',
   ARCHIVED: 'Archived',
 }
 
