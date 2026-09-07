@@ -26,6 +26,14 @@ const SORTS: JobSortValue[] = ['newest', 'oldest', 'stage', 'client-asc']
 const STAGE_RANK = new Map(PROJECT_STAGES.map((s, i) => [s.key, i]))
 const stageRank = (key: string | null) => (key && STAGE_RANK.has(key) ? STAGE_RANK.get(key)! : PROJECT_STAGES.length)
 
+/** Avatar initials, e.g. "Olivia & Ben" -> "OB". Mirrors the Clients / Enquiries lists. */
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
+}
+
 type Row = {
   id: string
   code: string
@@ -167,23 +175,22 @@ export default async function JobsPage({
         </div>
 
         <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
-          <div className="flex items-center gap-1" role="tablist" aria-label="Job status">
-            <Link
-              href={tabHref('active')}
-              role="tab"
-              aria-selected={tab === 'active'}
-              className={`rounded-md px-3 py-1 text-sm transition-colors ${tab === 'active' ? 'bg-sunk font-medium text-ink' : 'text-ink-muted hover:text-ink'}`}
-            >
-              Active <span className="tabular text-ink-muted">· {activeCount}</span>
-            </Link>
-            <Link
-              href={tabHref('completed')}
-              role="tab"
-              aria-selected={tab === 'completed'}
-              className={`rounded-md px-3 py-1 text-sm transition-colors ${tab === 'completed' ? 'bg-sunk font-medium text-ink' : 'text-ink-muted hover:text-ink'}`}
-            >
-              Completed <span className="tabular text-ink-muted">· {completedCount}</span>
-            </Link>
+          <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Job status">
+            {([['active', 'Active', activeCount], ['completed', 'Completed', completedCount]] as const).map(([key, label, count]) => {
+              const on = tab === key
+              return (
+                <Link
+                  key={key}
+                  href={tabHref(key)}
+                  role="tab"
+                  aria-selected={on}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${on ? 'bg-sunk font-medium text-ink' : 'text-ink-muted hover:bg-paper hover:text-ink'}`}
+                >
+                  {label}
+                  <span className={`tabular rounded-full px-1.5 py-0.5 text-xs leading-none ${on ? 'bg-line text-ink-muted' : 'bg-sunk text-ink-muted'}`}>{count}</span>
+                </Link>
+              )
+            })}
           </div>
           <div className="flex items-center gap-1">
             <JobFilterMenu task={task} />
@@ -216,12 +223,14 @@ export default async function JobsPage({
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.id} className="group border-b border-line align-top transition-colors last:border-b-0 hover:bg-paper">
+                  <tr key={row.id} className="group border-b border-line align-middle transition-colors last:border-b-0 hover:bg-paper">
                     <td className="py-3 pr-4">
-                      {/* Primary identifier opens the JOB (its task workflow), mirroring the Enquiries
-                          list where the name opens the case - not the client profile, which was sending
-                          staff away from the tasks. The client profile stays reachable via the row menu. */}
-                      <Link href={`/jobs/${row.id}${backParam}`} className="font-medium text-ink transition-colors hover:text-accent-ink">{row.client}</Link>
+                      {/* Avatar + name mirror the Clients / Enquiries lists. The primary identifier opens
+                          the JOB (its task workflow), not the client profile - that stays in the row menu. */}
+                      <Link href={`/jobs/${row.id}${backParam}`} className="flex items-center gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">{initials(row.client)}</span>
+                        <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{row.client}</span>
+                      </Link>
                     </td>
                     <td className="py-3 pr-4">
                       <Link href={`/jobs/${row.id}${backParam}`} className="block">
