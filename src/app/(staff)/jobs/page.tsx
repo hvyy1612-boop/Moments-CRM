@@ -38,7 +38,7 @@ type Row = {
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; sort?: string; status?: string; task?: string }>
+  searchParams: Promise<{ q?: string; sort?: string; status?: string; task?: string; tab?: string }>
 }) {
   const user = await requireRole('/jobs')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
@@ -49,6 +49,7 @@ export default async function JobsPage({
   const sort: JobSortValue = SORTS.includes(sp.sort as JobSortValue) ? (sp.sort as JobSortValue) : JOB_DEFAULT_SORT
   const status = sp.status ?? ''
   const task = sp.task ?? ''
+  const tab: 'active' | 'completed' = sp.tab === 'completed' ? 'completed' : 'active'
 
   const [projects, labels] = await Promise.all([
     prisma.project.findMany({
@@ -96,14 +97,21 @@ export default async function JobsPage({
     }
   })
 
-  // Status filter reveals any status (incl. closed); with no status filter the list shows active jobs.
-  rows = status ? rows.filter((r) => r.label.id === status) : rows.filter((r) => !r.closed)
-  if (task === 'has') rows = rows.filter((r) => r.nextTask != null)
-  if (task === 'none') rows = rows.filter((r) => r.nextTask == null)
+  // Search + next-task filter first, then the Active/Completed tab split, then any status narrowing.
   if (q) {
     const needle = q.toLowerCase()
     rows = rows.filter((r) => [r.client, r.name, r.code].some((f) => f.toLowerCase().includes(needle)))
   }
+  if (task === 'has') rows = rows.filter((r) => r.nextTask != null)
+  if (task === 'none') rows = rows.filter((r) => r.nextTask == null)
+
+  // Active = still being worked on; Completed = the job has finished (or otherwise left the pipeline).
+  // Nothing is deleted - a finished job just moves to the Completed tab, always reachable on the UI.
+  const activeCount = rows.filter((r) => !r.closed).length
+  const completedCount = rows.filter((r) => r.closed).length
+  rows = rows.filter((r) => (tab === 'completed' ? r.closed : !r.closed))
+  if (status) rows = rows.filter((r) => r.label.id === status)
+
   if (sort === 'oldest') rows = [...rows].sort((a, b) => a.enquiredAt.getTime() - b.enquiredAt.getTime())
   else if (sort === 'client-asc') rows = [...rows].sort((a, b) => a.client.localeCompare(b.client))
 
@@ -113,8 +121,21 @@ export default async function JobsPage({
   if (sort !== JOB_DEFAULT_SORT) listQs.set('sort', sort)
   if (status) listQs.set('status', status)
   if (task) listQs.set('task', task)
+  if (tab === 'completed') listQs.set('tab', tab)
   const listQsStr = listQs.toString()
   const backParam = listQsStr ? `?back=${encodeURIComponent(listQsStr)}` : ''
+
+  // Tab links preserve the other params (search/sort/filter) and just flip Active <-> Completed.
+  const tabHref = (t: 'active' | 'completed') => {
+    const p = new URLSearchParams()
+    if (q) p.set('q', q)
+    if (sort !== JOB_DEFAULT_SORT) p.set('sort', sort)
+    if (status) p.set('status', status)
+    if (task) p.set('task', task)
+    if (t === 'completed') p.set('tab', t)
+    const qs = p.toString()
+    return qs ? `/jobs?${qs}` : '/jobs'
+  }
 
   return (
     <AppShell user={user} csrf={csrf} active="jobs" bareHeader>
@@ -130,6 +151,7 @@ export default async function JobsPage({
               {sort !== JOB_DEFAULT_SORT ? <input type="hidden" name="sort" value={sort} /> : null}
               {status ? <input type="hidden" name="status" value={status} /> : null}
               {task ? <input type="hidden" name="task" value={task} /> : null}
+              {tab === 'completed' ? <input type="hidden" name="tab" value={tab} /> : null}
               <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
               </svg>
@@ -140,8 +162,23 @@ export default async function JobsPage({
         </div>
 
         <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
-          <div className="text-sm text-ink">
-            {status ? 'Jobs' : 'Active jobs'} <span className="text-ink-muted">· {rows.length}</span>
+          <div className="flex items-center gap-1" role="tablist" aria-label="Job status">
+            <Link
+              href={tabHref('active')}
+              role="tab"
+              aria-selected={tab === 'active'}
+              className={`rounded-md px-3 py-1 text-sm transition-colors ${tab === 'active' ? 'bg-sunk font-medium text-ink' : 'text-ink-muted hover:text-ink'}`}
+            >
+              Active <span className="tabular text-ink-muted">· {activeCount}</span>
+            </Link>
+            <Link
+              href={tabHref('completed')}
+              role="tab"
+              aria-selected={tab === 'completed'}
+              className={`rounded-md px-3 py-1 text-sm transition-colors ${tab === 'completed' ? 'bg-sunk font-medium text-ink' : 'text-ink-muted hover:text-ink'}`}
+            >
+              Completed <span className="tabular text-ink-muted">· {completedCount}</span>
+            </Link>
           </div>
           <div className="flex items-center gap-1">
             <JobFilterMenu statuses={labels.map((l) => ({ id: l.id, name: l.name }))} status={status} task={task} />
@@ -151,7 +188,13 @@ export default async function JobsPage({
 
         {rows.length === 0 ? (
           <p className="py-16 text-center text-sm text-ink-muted">
-            {q || status || task ? 'No jobs match these filters.' : 'No jobs yet. Use Add job to create one.'}
+            {q || status || task
+              ? 'No jobs match these filters.'
+              : tab === 'completed'
+                ? 'No completed jobs yet.'
+                : activeCount + completedCount > 0
+                  ? 'No active jobs right now - everything is complete.'
+                  : 'No jobs yet. Use Add job to create one.'}
           </p>
         ) : (
           <div className="overflow-x-auto">
