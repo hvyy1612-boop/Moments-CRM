@@ -27,8 +27,9 @@ export const ADDABLE_TASK_TYPES: { value: TaskType; label: string }[] = [
 type StageDef = { key: string; label: string; color: string }
 
 export const ENQUIRY_STAGES: StageDef[] = [
-  { key: 'enquiry', label: 'Enquiry', color: 'enquiry' },
-  { key: 'quote', label: 'Quote and booking', color: 'quote' },
+  { key: 'new', label: 'New', color: 'enquiry' },
+  { key: 'discussion', label: 'In discussion', color: 'quote' },
+  { key: 'quote', label: 'Quoting', color: 'booked' },
 ]
 
 export const ENQUIRY_STAGE_KEYS: ReadonlySet<string> = new Set(ENQUIRY_STAGES.map((s) => s.key))
@@ -38,9 +39,9 @@ export function enquiryStageLabel(key: string): string {
 }
 
 export const DEFAULT_ENQUIRY_TASKS: { stage: string; title: string; type: TaskType; done?: boolean }[] = [
-  { stage: 'enquiry', title: 'Send initial enquiry response', type: 'TODO' },
-  { stage: 'enquiry', title: 'Discuss shoot requirements', type: 'TODO' },
-  { stage: 'enquiry', title: 'Confirm shoot date and requirements', type: 'TODO' },
+  { stage: 'new', title: 'Send initial enquiry response', type: 'TODO' },
+  { stage: 'discussion', title: 'Discuss shoot requirements', type: 'TODO' },
+  { stage: 'discussion', title: 'Confirm shoot date and requirements', type: 'TODO' },
   { stage: 'quote', title: 'Prepare client quote', type: 'TODO' },
   { stage: 'quote', title: 'Send client quote', type: 'TODO' },
   { stage: 'quote', title: 'Send contract and deposit invoice', type: 'TODO' },

@@ -21,7 +21,6 @@ import {
   convertEnquiryAction,
   logClientReplyAction,
   sendReplyAction,
-  startQuotingAction,
   updateEnquiryAction,
 } from '../actions'
 import { EnquiryWorkflow } from './EnquiryWorkflow'
@@ -136,24 +135,15 @@ export default async function EnquiryDetailPage({
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
               {open ? (
                 <>
-                  {enquiry.status === 'CONTACTED' ? (
-                    <form action={startQuotingAction}>
-                      <input type="hidden" name="csrf" value={csrf} />
-                      <input type="hidden" name="enquiryId" value={enquiry.id} />
-                      <button
-                        type="submit"
-                        className="rounded border border-line-strong px-3 py-1.5 text-sm font-bold text-ink-muted hover:text-ink"
-                      >
-                        Move to quoting
-                      </button>
-                    </form>
-                  ) : null}
                   <form action={convertEnquiryAction}>
                     <input type="hidden" name="csrf" value={csrf} />
                     <input type="hidden" name="enquiryId" value={enquiry.id} />
-                    <Button size="sm" type="submit">
-                      Book it (create job)
-                    </Button>
+                    <button
+                      type="submit"
+                      className="rounded-md border border-line-strong px-3 py-1.5 text-sm font-bold text-ink transition-colors hover:bg-sunk"
+                    >
+                      Create Job
+                    </button>
                   </form>
                   <form action={updateEnquiryAction}>
                     <input type="hidden" name="csrf" value={csrf} />
@@ -161,9 +151,9 @@ export default async function EnquiryDetailPage({
                     <input type="hidden" name="op" value="lost" />
                     <button
                       type="submit"
-                      className="rounded px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline"
+                      className="rounded-md border border-line-strong px-3 py-1.5 text-sm font-bold text-lost-ink transition-colors hover:bg-sunk"
                     >
-                      Mark as cancelled
+                      Cancel
                     </button>
                   </form>
                 </>

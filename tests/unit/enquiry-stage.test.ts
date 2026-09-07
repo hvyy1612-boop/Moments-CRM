@@ -1,29 +1,33 @@
 import { describe, expect, it } from 'vitest'
 import { deriveOpenStage } from '@/lib/domain/enquiry-stage'
 
-const auto = { stage: 'enquiry', type: 'AUTO', status: 'COMPLETED' }
-const enq = (status: string) => ({ stage: 'enquiry', type: 'TODO', status })
+const nw = (status: string) => ({ stage: 'new', type: 'TODO', status })
+const disc = (status: string) => ({ stage: 'discussion', type: 'TODO', status })
 const quo = (status: string) => ({ stage: 'quote', type: 'TODO', status })
 
-describe('deriveOpenStage - stage follows the workflow (docs/24)', () => {
-  it('a fresh lead (only the auto row done) is NEW', () => {
-    expect(deriveOpenStage([auto, enq('PENDING'), enq('PENDING'), quo('PENDING')])).toBe('NEW')
+describe('deriveOpenStage - stage follows the workflow, 3 groups (docs/24)', () => {
+  it('a fresh lead (New group not done) is NEW', () => {
+    expect(deriveOpenStage([nw('PENDING'), disc('PENDING'), quo('PENDING')])).toBe('NEW')
   })
 
-  it('any enquiry-phase task done, still some pending -> CONTACTED', () => {
-    expect(deriveOpenStage([auto, enq('COMPLETED'), enq('PENDING'), quo('PENDING')])).toBe('CONTACTED')
+  it('New group done, In discussion pending -> CONTACTED', () => {
+    expect(deriveOpenStage([nw('COMPLETED'), disc('PENDING'), quo('PENDING')])).toBe('CONTACTED')
   })
 
-  it('all enquiry-phase tasks done -> QUALIFIED (now in the quote phase)', () => {
-    expect(deriveOpenStage([auto, enq('COMPLETED'), enq('COMPLETED'), quo('PENDING')])).toBe('QUALIFIED')
+  it('New + In discussion done, Quoting pending -> QUALIFIED', () => {
+    expect(deriveOpenStage([nw('COMPLETED'), disc('COMPLETED'), quo('PENDING')])).toBe('QUALIFIED')
   })
 
-  it('quote tasks also done stays QUALIFIED (Booked is explicit, never auto-derived)', () => {
-    expect(deriveOpenStage([auto, enq('COMPLETED'), quo('COMPLETED')])).toBe('QUALIFIED')
+  it('everything done stays QUALIFIED (Booked is an explicit Create Job)', () => {
+    expect(deriveOpenStage([nw('COMPLETED'), disc('COMPLETED'), quo('COMPLETED')])).toBe('QUALIFIED')
   })
 
-  it('count of tasks does not matter - one done enquiry task is enough for CONTACTED', () => {
-    expect(deriveOpenStage([auto, enq('COMPLETED')])).toBe('QUALIFIED')
-    expect(deriveOpenStage([auto, enq('COMPLETED'), enq('PENDING')])).toBe('CONTACTED')
+  it('empty groups are skipped', () => {
+
+    expect(deriveOpenStage([disc('PENDING'), quo('PENDING')])).toBe('CONTACTED')
+  })
+
+  it('count of tasks in a group does not matter', () => {
+    expect(deriveOpenStage([nw('COMPLETED'), disc('COMPLETED'), disc('PENDING'), quo('PENDING')])).toBe('CONTACTED')
   })
 })

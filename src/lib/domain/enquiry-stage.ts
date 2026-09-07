@@ -8,12 +8,19 @@ const OPEN = new Set<string>(OPEN_STAGE_ORDER)
 
 type DeriveTask = { stage: string | null; status: string; type: string }
 
+const GROUP_TO_STAGE: [string, OpenStage][] = [
+  ['new', 'NEW'],
+  ['discussion', 'CONTACTED'],
+  ['quote', 'QUALIFIED'],
+]
+
 export function deriveOpenStage(tasks: DeriveTask[]): OpenStage {
   const real = tasks.filter((t) => t.type !== 'AUTO')
-  if (!real.some((t) => t.status === 'COMPLETED')) return 'NEW'
-  const enquiryTasks = real.filter((t) => t.stage === 'enquiry')
-  const allEnquiryDone = enquiryTasks.length > 0 && enquiryTasks.every((t) => t.status === 'COMPLETED')
-  return allEnquiryDone ? 'QUALIFIED' : 'CONTACTED'
+  for (const [group, stage] of GROUP_TO_STAGE) {
+    const groupTasks = real.filter((t) => t.stage === group)
+    if (groupTasks.some((t) => t.status !== 'COMPLETED')) return stage
+  }
+  return 'QUALIFIED'
 }
 
 export async function syncEnquiryStageFromTasks(tx: Tx, enquiryId: string, actorUserId: string) {
