@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { useActionState, useState } from 'react'
-import { GoogleMark } from '@/components/auth/GoogleMark'
 import { Alert } from '@/components/ui/Alert'
 import { signIn, type LoginFormState } from './actions'
 
@@ -14,8 +13,7 @@ export function LoginForm({ csrf }: { csrf: string }) {
   const errors = state.status === 'error' ? (state.errors ?? {}) : {}
 
   return (
-    <>
-      <form action={action} className="mt-6 flex flex-col">
+    <form action={action} className="mt-6 flex flex-col">
         {state.status === 'error' && state.message ? (
           <div className="mb-4">
             <Alert tone="danger" title={state.message} />
@@ -98,16 +96,6 @@ export function LoginForm({ csrf }: { csrf: string }) {
         <button type="submit" disabled={pending} className="login-primary mt-5">
           {pending ? 'Signing in…' : 'Sign in'}
         </button>
-      </form>
-
-      {/* Google sign-in is a real, admin-provisioned-only flow (it signs in existing staff, never
-          creates accounts). It is a plain GET link to the OAuth route, not a form action. */}
-      <div className="login-divider mt-5">or continue with</div>
-
-      <a href="/api/auth/google" className="login-google mt-4">
-        <GoogleMark />
-        Sign in with Google
-      </a>
-    </>
+    </form>
   )
 }
