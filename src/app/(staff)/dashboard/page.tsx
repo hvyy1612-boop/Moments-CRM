@@ -71,7 +71,7 @@ function Kpi({ label, value, icon, delta, sub }: { label: string; value: string;
         <div className="text-sm text-ink-muted">{label}</div>
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sunk text-ink-muted" aria-hidden="true">{icon}</span>
       </div>
-      <div className="tabular font-display mt-2 text-3xl leading-none text-ink">{value}</div>
+      <div className="tabular font-semibold mt-2 text-3xl leading-none text-ink">{value}</div>
       <div className="mt-2.5 text-xs text-ink-muted">
         {delta != null ? <Delta pct={delta} /> : null}
         {sub}
@@ -85,7 +85,7 @@ function Card({ title, desc, right, children }: { title: string; desc: string; r
     <section className="flex h-full flex-col rounded-xl border border-line bg-surface p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-display text-lg leading-tight text-ink">{title}</h2>
+          <h2 className="font-semibold text-lg leading-tight text-ink">{title}</h2>
           <p className="mt-0.5 text-xs text-ink-muted">{desc}</p>
         </div>
         {right}
@@ -137,7 +137,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-xl">
-            <h1 className="font-display text-3xl leading-none text-ink">Dashboard</h1>
+            <h1 className="font-semibold text-3xl leading-none text-ink">Dashboard</h1>
             <p className="mt-1.5 text-sm text-ink-muted">A snapshot of your studio&rsquo;s bookings, revenue and operations.</p>
           </div>
           <DashboardFilters period={period} service={service} services={d.services} />
@@ -170,7 +170,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 <Empty>No revenue data for this period</Empty>
               ) : (
                 <>
-                  <div className="font-display mb-3 text-xl text-ink">
+                  <div className="font-semibold mb-3 text-xl text-ink">
                     {kShort(d.kpi.bookedRevenue)} <span className="text-sm text-ink-muted">booked · {kShort(collected)} collected</span>
                   </div>
                   <RevenueChart series={d.revenueSeries} format={kShort} />
@@ -213,7 +213,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               desc="How much outstanding money is becoming risky?"
               right={
                 <div className="text-right">
-                  <div className="tabular font-display text-xl text-ink">{kShort(d.invoiceAging.total)}</div>
+                  <div className="tabular font-semibold text-xl text-ink">{kShort(d.invoiceAging.total)}</div>
                   <div className="text-xs text-ink-muted">outstanding</div>
                 </div>
               }
@@ -229,7 +229,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </Card>
           </div>
           <div className="lg:col-span-6">
-            <Card title="Enquiry pipeline" desc="How many enquiries progress toward a confirmed booking?" right={<div className="tabular font-display text-xl text-ink">{d.kpi.bookingRatePct}%</div>}>
+            <Card title="Enquiry pipeline" desc="How many enquiries progress toward a confirmed booking?" right={<div className="tabular font-semibold text-xl text-ink">{d.kpi.bookingRatePct}%</div>}>
               {d.pipeline.every((p) => p.value === 0) ? <Empty>No enquiries in this period</Empty> : <HBars bars={d.pipeline} colors={PIPELINE_COLORS} format={(v) => String(v)} />}
             </Card>
           </div>
@@ -239,7 +239,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <section className="rounded-xl border border-line bg-surface p-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h2 className="font-display text-lg leading-tight text-ink">Recent enquiries</h2>
+                  <h2 className="font-semibold text-lg leading-tight text-ink">Recent enquiries</h2>
                   <p className="mt-0.5 text-xs text-ink-muted">Latest enquiries across all channels.</p>
                 </div>
                 <Link href="/enquiries" className="shrink-0 text-sm font-medium text-accent-ink hover:underline">View all →</Link>

@@ -47,7 +47,9 @@ function InvoiceTable({ rows }: { rows: Row[] }) {
               <td className="py-3 pr-4">
                 <Link href={`/finance/${row.id}`} className="tabular font-medium text-accent-ink hover:underline">{row.number}</Link>
               </td>
-              <td className="py-3 pr-4 font-medium text-ink">{row.client}</td>
+              <td className="py-3 pr-4">
+                <Link href={`/finance/${row.id}`} className="font-medium text-ink transition-colors group-hover:text-accent-ink">{row.client}</Link>
+              </td>
               <td className="tabular py-3 pr-4 text-ink-muted">{row.issued ? formatSydneyDate(row.issued) : '-'}</td>
               <td className="tabular py-3 pr-4 text-ink-muted">{row.due ? formatSydneyDate(row.due) : '-'}</td>
               <td className="tabular py-3 pr-4 text-right text-ink">{row.total}</td>
