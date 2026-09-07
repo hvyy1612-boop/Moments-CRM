@@ -155,9 +155,9 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Editorial display face (Cormorant Garamond, self-hosted via next/font on <html>). Used for the
-   dashboard title, analytical card headings and large KPI values so the studio dashboard reads as
-   editorial-but-operational, matching the landing/login brand. Body/UI text stays on the system sans. */
+/* Editorial display face (Cormorant Garamond, self-hosted via next/font on <html>). Used only as a
+   small decorative brand glyph (the collapsed-sidebar "m"); app UI - including the dashboard - uses
+   the system sans so headings and data stay easy to read and consistent with Clients/Jobs/etc. */
 .font-display {
   font-family: var(--font-cormorant), Georgia, 'Times New Roman', serif;
 }

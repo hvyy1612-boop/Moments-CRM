@@ -58,7 +58,7 @@ export function Donut({
     <div className="flex flex-wrap items-center gap-6">
       <div className="relative h-32 w-32 shrink-0 rounded-full" style={{ backgroundImage: `conic-gradient(${stops.join(', ')})` }}>
         <div className="absolute inset-[27%] flex flex-col items-center justify-center rounded-full bg-surface text-center">
-          <span className="font-display text-2xl leading-none text-ink">{centre}</span>
+          <span className="text-2xl font-semibold leading-none text-ink">{centre}</span>
           <span className="mt-0.5 text-xs text-muted">{centreLabel}</span>
         </div>
       </div>
