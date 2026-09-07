@@ -8,7 +8,7 @@ import './globals.css'
 
 // Landing masthead type (reference-matched, public page only): Cormorant Garamond for the welcome
 // heading, Manrope for the subtitle, description and button. Self-hosted by next/font (CSP-safe).
-// The MOMENTS wordmark itself is not a font - it is the reference artwork (public/landing/wordmark.png).
+// The "moments" wordmark itself is not a font - it is the studio's script logo (public/landing/wordmark.png).
 const cormorant = Cormorant_Garamond({
   subsets: ['latin'],
   weight: ['500'],

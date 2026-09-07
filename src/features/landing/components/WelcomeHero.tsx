@@ -3,20 +3,20 @@ import Link from 'next/link'
 
 /**
  * The staff sign-in gateway shown at "/". A calm, editorial masthead for Moments Photography & Film.
- * The MOMENTS wordmark is the studio's own reference lettering (public/landing/wordmark.png, background
- * keyed to transparent) rather than a substitute web font, so it matches the brand artwork exactly;
- * alt="MOMENTS" keeps it accessible. The heading uses Cormorant Garamond and the supporting text uses
- * Manrope, sized by the .landing-* classes in globals.css. Sign in links to the existing /login flow;
- * auth, layout, colours and the button are unchanged.
+ * The "moments" wordmark is the studio's own script logo (public/landing/wordmark.png, background keyed
+ * to transparent) - the same brand mark used on the sign-in page, so the two screens stay consistent.
+ * The heading uses Cormorant Garamond and the supporting text uses Manrope, sized by the .landing-*
+ * classes in globals.css. Sign in links to the existing /login flow; auth, layout, colours and the
+ * button are unchanged.
  */
 export function WelcomeHero() {
   return (
     <section className="w-full max-w-3xl text-center">
       <Image
         src="/landing/wordmark.png"
-        alt="MOMENTS"
-        width={993}
-        height={110}
+        alt="Moments"
+        width={655}
+        height={148}
         priority
         className="landing-wordmark"
       />

@@ -138,15 +138,15 @@ body {
 }
 
 /*
- * Public landing masthead. The MOMENTS wordmark is the reference artwork itself (public/landing/
- * wordmark.png - the exact lettering from the design, background keyed to transparent), sized
- * responsively here to match the reference. Heading = Cormorant Garamond; subtitle/description/
- * button = Manrope, self-hosted via next/font (app/layout.tsx). Base values are mobile (<768px);
- * the media queries step up at the 768px and 1200px breakpoints from the spec.
+ * Public landing masthead. The "moments" wordmark is the studio's script logo (public/landing/
+ * wordmark.png - the same brand mark as the sign-in page, background keyed to transparent), sized
+ * responsively here. Heading = Cormorant Garamond; subtitle/description/button = Manrope, self-hosted
+ * via next/font (app/layout.tsx). Base values are mobile (<768px); the media queries step up at the
+ * 768px and 1200px breakpoints from the spec.
  */
 .landing-wordmark {
   display: block;
-  width: clamp(270px, 40vw, 415px);
+  width: clamp(250px, 40vw, 460px);
   height: auto;
   margin-left: auto;
   margin-right: auto;
