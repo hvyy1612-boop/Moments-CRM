@@ -11,8 +11,8 @@ export function AuthCard({
   children: ReactNode
 }) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-paper px-4 py-12">
-      <div className="w-full max-w-md rounded-xl border border-line bg-surface p-8 shadow-sm">
+    <main className="auth-shell">
+      <div className="auth-card">
         <div className="text-center">
           <Image
             src="/auth/wordmark.png"
@@ -24,9 +24,9 @@ export function AuthCard({
           />
           <p className="mt-2 text-xs uppercase tracking-[0.28em] text-muted">Photography and Film</p>
         </div>
-        <h1 className="mt-6 text-center text-base font-normal text-ink-muted">{heading}</h1>
-        {subtitle ? <p className="mt-2 text-center text-sm text-ink-muted">{subtitle}</p> : null}
-        <div className="mt-6 flex flex-col gap-5">{children}</div>
+        <h1 className="mt-7 text-center text-base font-normal text-ink-muted">{heading}</h1>
+        {subtitle ? <p className="mt-1.5 text-center text-sm text-ink-muted">{subtitle}</p> : null}
+        <div className="mt-7 flex flex-col gap-4">{children}</div>
       </div>
     </main>
   )
