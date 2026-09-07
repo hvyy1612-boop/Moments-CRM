@@ -17,10 +17,14 @@ type ClientOption = { id: string; displayName: string }
 type Prefill = { date: string; startTime?: string }
 
 function catClass(item: CalItem): string {
-  if (item.tone === 'overdue') return 'bg-lost text-lost-ink'
-  if (item.category === 'lead') return 'bg-enquiry text-enquiry-ink'
-  if (item.category === 'event') return 'bg-booked text-booked-ink'
-  return 'bg-accent-tint text-accent-ink'
+
+  const base =
+    item.category === 'payment' ? 'bg-peach text-ink'
+    : item.category === 'event' ? 'bg-sunk text-ink'
+    : item.category === 'lead' ? 'bg-lav text-ink'
+    : item.kind === 'booking' || item.kind === 'appointment' ? 'bg-sage text-ink'
+    : 'bg-butter text-ink'
+  return item.tone === 'overdue' ? `${base} ring-1 ring-lost-ink/40` : base
 }
 
 function pad(n: number): string { return String(n).padStart(2, '0') }
@@ -119,6 +123,7 @@ function MonthGrid({
   onMove: (item: CalItem, dateKey: string, startMin: number | null) => void
 }) {
   const m = data.month!
+  const [more, setMore] = useState<{ items: CalItem[]; x: number; y: number } | null>(null)
   const cells: (string | null)[] = [
     ...Array.from({ length: m.leading }, () => null),
     ...Array.from({ length: m.daysInMonth }, (_, i) => `${m.year}-${pad(m.monthNum)}-${pad(i + 1)}`),
@@ -128,6 +133,7 @@ function MonthGrid({
   for (const list of byDay.values()) list.sort((a, b) => (a.startMin ?? -1) - (b.startMin ?? -1) || a.primary.localeCompare(b.primary))
 
   return (
+    <>
     <div className="overflow-hidden rounded-md border border-line">
       <div className="grid grid-cols-7">
         {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d) => (
@@ -148,7 +154,16 @@ function MonthGrid({
                 <>
                   <span className={`tabular inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-sm ${isToday ? 'bg-accent font-semibold text-paper' : 'text-ink-muted'}`}>{day}</span>
                   <div className="mt-1 flex flex-col gap-1">
-                    {items.map((it) => <MonthChip key={it.id} item={it} canManage={canManage} onPeek={onPeek} onHide={onHide} onMove={onMove} />)}
+                    {items.slice(0, 3).map((it) => <MonthChip key={it.id} item={it} canManage={canManage} onPeek={onPeek} onHide={onHide} onMove={onMove} />)}
+                    {items.length > 3 ? (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setMore({ items, x: e.clientX, y: e.clientY }) }}
+                        className="rounded px-1.5 py-0.5 text-left text-xs font-medium text-ink-muted hover:bg-sunk hover:text-ink"
+                      >
+                        + {items.length - 3} more
+                      </button>
+                    ) : null}
                   </div>
                 </>
               ) : null}
@@ -157,6 +172,30 @@ function MonthGrid({
         })}
       </div>
     </div>
+    {more ? <MonthMorePopover more={more} onClose={() => setMore(null)} canManage={canManage} onPeek={onPeek} onHide={onHide} onMove={onMove} /> : null}
+    </>
+  )
+}
+
+function MonthMorePopover({ more, onClose, canManage, onPeek, onHide, onMove }: {
+  more: { items: CalItem[]; x: number; y: number }
+  onClose: () => void
+  canManage: boolean
+  onPeek: (item: CalItem, e: { clientX: number; clientY: number }) => void
+  onHide: () => void
+  onMove: (item: CalItem, dateKey: string, startMin: number | null) => void
+}) {
+  const left = Math.min(more.x, (typeof window !== 'undefined' ? window.innerWidth : 900) - 240)
+  const top = Math.min(more.y, (typeof window !== 'undefined' ? window.innerHeight : 700) - 320)
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className="fixed z-50 w-56 rounded-lg border border-line-strong bg-surface p-2 shadow-lg" style={{ left, top }}>
+        <div className="flex max-h-80 flex-col gap-1 overflow-y-auto">
+          {more.items.map((it) => <MonthChip key={it.id} item={it} canManage={canManage} onPeek={onPeek} onHide={onHide} onMove={onMove} />)}
+        </div>
+      </div>
+    </>
   )
 }
 
