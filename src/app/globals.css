@@ -109,7 +109,7 @@ body {
 
 .landing-wordmark {
   display: block;
-  width: clamp(270px, 40vw, 415px);
+  width: clamp(250px, 40vw, 460px);
   height: auto;
   margin-left: auto;
   margin-right: auto;

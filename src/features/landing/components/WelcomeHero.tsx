@@ -6,9 +6,9 @@ export function WelcomeHero() {
     <section className="w-full max-w-3xl text-center">
       <Image
         src="/landing/wordmark.png"
-        alt="MOMENTS"
-        width={993}
-        height={110}
+        alt="Moments"
+        width={655}
+        height={148}
         priority
         className="landing-wordmark"
       />

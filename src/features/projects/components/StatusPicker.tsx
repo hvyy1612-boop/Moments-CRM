@@ -30,8 +30,9 @@ export function StatusPicker({
   const [showMore, setShowMore] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
 
-  const commonLabels = labels.filter(isCommonLabel)
-  const moreLabels = labels.filter((l) => !isCommonLabel(l))
+  const splitMenu = labels.length > 8
+  const commonLabels = splitMenu ? labels.filter(isCommonLabel) : labels
+  const moreLabels = splitMenu ? labels.filter((l) => !isCommonLabel(l)) : []
   const currentIsMore = moreLabels.some((l) => l.id === current.id)
 
   const place = useCallback(() => {
