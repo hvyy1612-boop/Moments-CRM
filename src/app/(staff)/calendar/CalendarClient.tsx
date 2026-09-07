@@ -243,6 +243,11 @@ function WeekGrid({ data, canManage, onSlot, onPeek, onHide, onMove }: {
   const hours = Array.from({ length: w.endHour - w.startHour + 1 }, (_, i) => w.startHour + i)
   const total = (w.endHour - w.startHour) * ROW_H
   const timedByCol = w.days.map((d) => data.items.filter((it) => it.dayKey === d.dateKey && it.startMin !== null))
+  // Undated items (enquiry + job tasks, invoice-due, undated appointments) have no clock time, so they
+  // ride a slim strip pinned above the timeline instead of an hour slot. The strip only appears when the
+  // week actually has some, so an empty week stays clean.
+  const allDayByCol = w.days.map((d) => data.items.filter((it) => it.dayKey === d.dateKey && it.startMin === null))
+  const hasAllDay = allDayByCol.some((c) => c.length > 0)
 
   // Full 24-hour day (Apple-style). Open scrolled to the working morning so the empty night hours
   // aren't what greets you - the body is the only thing that scrolls; the day header stays pinned.
@@ -271,11 +276,27 @@ function WeekGrid({ data, canManage, onSlot, onPeek, onHide, onMove }: {
           </div>
         ))}
       </div>
+      {/* Untimed strip - pinned above the scrolling timeline (like the day header), so enquiry + job
+          tasks, invoice-due and undated appointments stay visible on the week. Rendered only when the
+          week has any; the gutter shows a small list glyph rather than the old "all-day" label. */}
+      {hasAllDay ? (
+        <div className="grid border-b border-line" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, minmax(0, 1fr))` }}>
+          <div className="flex items-start justify-end border-r border-line pr-1.5 pt-2 text-muted">
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" /></svg>
+          </div>
+          {allDayByCol.map((cells, ci) => (
+            <div key={w.days[ci]!.dateKey} className="min-w-0 border-r border-line p-1 last:border-r-0">
+              <div className="flex max-h-24 flex-col gap-1 overflow-y-auto">
+                {cells.map((it) => <WeekAllDayChip key={it.id} item={it} onPeek={onPeek} onHide={onHide} />)}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {/* Timed body - the full 24h day, the only scrolling region (max-h-[70vh]; vh keeps the
           design-token check clean). The gutter renders one label per hour ROW (12am..11pm) so it lines
           up exactly with the day columns' rows - one extra label would make the gutter taller than the
-          columns and leave an un-ruled gap at the bottom. No all-day strip: undated items (deadlines,
-          invoice-due, undated tasks) have no clock time and live in Month + Agenda instead. */}
+          columns and leave an un-ruled gap at the bottom. */}
       <div ref={bodyRef} className="grid max-h-[70vh] overflow-y-auto" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, minmax(0, 1fr))` }}>
         <div className="relative border-r border-line" style={{ height: total }}>
           {/* One label per gridline, vertically CENTRED on the rule it marks (Apple-style) so the time
@@ -311,6 +332,15 @@ function WeekGrid({ data, canManage, onSlot, onPeek, onHide, onMove }: {
       </div>
     </div>
   )
+}
+
+// Compact chip for the pinned untimed strip (enquiry/job tasks, invoice-due, undated appointments).
+function WeekAllDayChip({ item, onPeek, onHide }: { item: CalItem; onPeek: (i: CalItem, e: { clientX: number; clientY: number }) => void; onHide: () => void }) {
+  const cls = `block truncate rounded px-1.5 py-0.5 text-xs font-medium ${catClass(item)} ${item.kind === 'task' ? 'border-l-2 border-current' : ''} ${item.done ? 'line-through opacity-70' : ''} ${item.conflict ? 'outline outline-2 outline-lost-ink' : ''}`
+  const label = item.secondary ? `${item.primary} - ${item.secondary}` : item.primary
+  return item.href
+    ? <Link href={item.href} className={cls} title={label} onMouseEnter={(e) => onPeek(item, e)} onMouseLeave={onHide}>{label}</Link>
+    : <div className={cls} title={label} onMouseEnter={(e) => onPeek(item, e)} onMouseLeave={onHide}>{label}</div>
 }
 
 function WeekBlock({ item, startHour, canManage, onPeek, onHide, onMove }: {
