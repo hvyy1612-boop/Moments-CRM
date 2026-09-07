@@ -72,6 +72,9 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
     case 'lost':
       await markEnquiryLost(enquiryId, 'Cancelled', user.id)
       break
+    case 'cancel_job':
+      await cancelBooking(enquiryId, user.id)
+      break
     case 'reopen':
       await reopenEnquiry(enquiryId, user.id)
       break
@@ -80,6 +83,7 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
   }
   revalidatePath('/enquiries')
   revalidatePath(`/enquiries/${enquiryId}`)
+  revalidatePath('/jobs')
 }
 
 /**

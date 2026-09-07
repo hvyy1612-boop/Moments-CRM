@@ -167,13 +167,28 @@ export default async function EnquiryDetailPage({
                     </button>
                   </form>
                 </>
-              ) : enquiry.status === 'CONVERTED' && enquiry.convertedProjectId ? (
-                <Link
-                  href={`/jobs/${enquiry.convertedProjectId}`}
-                  className="font-bold text-accent-ink hover:underline"
-                >
-                  Open the job
-                </Link>
+              ) : enquiry.status === 'CONVERTED' ? (
+                <>
+                  {enquiry.convertedProjectId ? (
+                    <Link
+                      href={`/jobs/${enquiry.convertedProjectId}`}
+                      className="font-bold text-accent-ink hover:underline"
+                    >
+                      Open the job
+                    </Link>
+                  ) : null}
+                  <form action={updateEnquiryAction}>
+                    <input type="hidden" name="csrf" value={csrf} />
+                    <input type="hidden" name="enquiryId" value={enquiry.id} />
+                    <input type="hidden" name="op" value="cancel_job" />
+                    <button
+                      type="submit"
+                      className="rounded px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline"
+                    >
+                      Cancel job
+                    </button>
+                  </form>
+                </>
               ) : (
                 <form action={updateEnquiryAction}>
                   <input type="hidden" name="csrf" value={csrf} />
