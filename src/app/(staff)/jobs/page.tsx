@@ -57,11 +57,12 @@ export default async function JobsPage({
       orderBy: { enquiryReceivedAt: 'desc' },
       include: {
         client: { select: { id: true, displayName: true } },
+        // All staff tasks (non-AUTO, non-cancelled) so we can read both the next pending task AND whether
+        // the whole workflow is finished - the list status auto-follows completion (see below).
         workItems: {
-          where: { status: 'PENDING', type: { not: 'AUTO' } },
+          where: { type: { not: 'AUTO' }, status: { not: 'CANCELLED' } },
           orderBy: { order: 'asc' },
-          take: 1,
-          select: { title: true, stage: true },
+          select: { title: true, stage: true, status: true },
         },
       },
     }),
@@ -70,8 +71,15 @@ export default async function JobsPage({
   const canEdit = can(user, 'PROJECT_EDIT')
 
   let rows: Row[] = projects.map((p) => {
-    const label = resolveLabel(p, labels)
-    const next = p.workItems[0]
+    const next = p.workItems.find((t) => t.status !== 'COMPLETED') // first pending staff task
+    const workflowDone = p.workItems.length > 0 && !next
+    // The list status auto-follows the workflow: a finished checklist shows "Complete" on its own. This
+    // is display only (lifecycle/business state is untouched) and yields to a manual override - once
+    // staff pick a status by hand (statusLabelId set), their choice wins.
+    const label =
+      !p.statusLabelId && workflowDone
+        ? (labels.find((l) => l.stage === 'COMPLETED') ?? resolveLabel(p, labels))
+        : resolveLabel(p, labels)
     return {
       id: p.id,
       code: p.code,
