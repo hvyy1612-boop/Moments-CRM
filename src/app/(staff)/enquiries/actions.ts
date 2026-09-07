@@ -94,16 +94,32 @@ export async function setEnquiryStageAction(formData: FormData): Promise<void> {
   const target = String(formData.get('target') ?? '')
   if (!enquiryId) return
 
-  // Correcting a booked lead: moving it back to an open stage un-books it (cancels the Job).
-  if (target === 'NEW' || target === 'CONTACTED' || target === 'QUALIFIED') {
-    const current = await prisma.enquiry.findUnique({ where: { id: enquiryId }, select: { status: true } })
-    if (current?.status === 'CONVERTED') {
-      await revertEnquiryBooking(enquiryId, target, user.id)
-      revalidatePath('/enquiries')
-      revalidatePath(`/enquiries/${enquiryId}`)
-      revalidatePath('/jobs')
-      return
+  const current = await prisma.enquiry.findUnique({ where: { id: enquiryId }, select: { status: true } })
+  const cur = current?.status
+  const openTarget = target === 'NEW' || target === 'CONTACTED' || target === 'QUALIFIED'
+
+  // Correcting a booked lead: moving it back to an open phase un-books it (cancels the Job).
+  if (cur === 'CONVERTED' && openTarget) {
+    await revertEnquiryBooking(enquiryId, target as 'NEW' | 'CONTACTED' | 'QUALIFIED', user.id)
+    revalidatePath('/enquiries')
+    revalidatePath(`/enquiries/${enquiryId}`)
+    revalidatePath('/jobs')
+    return
+  }
+  // A lost lead moved back into the pipeline: reopen, then advance / book as chosen.
+  if ((cur === 'LOST' || cur === 'ARCHIVED') && (openTarget || target === 'CONVERTED')) {
+    await reopenEnquiry(enquiryId, user.id) // -> CONTACTED
+    if (openTarget && target !== 'CONTACTED') {
+      await advanceEnquiry(enquiryId, target as 'NEW' | 'CONTACTED' | 'QUALIFIED', user.id)
     }
+    if (target === 'CONVERTED') {
+      const result = await convertEnquiry(enquiryId, user.id)
+      if (result.projectId && !result.alreadyConverted) await seedProjectWorkflow(result.projectId)
+    }
+    revalidatePath('/enquiries')
+    revalidatePath(`/enquiries/${enquiryId}`)
+    revalidatePath('/jobs')
+    return
   }
 
   switch (target) {
