@@ -180,12 +180,12 @@ body {
   line-height: 1;
 }
 
-/* Auth card script wordmark (public/auth/wordmark.png - the reference "Moments" calligraphy,
-   background keyed to transparent). Sized to the card, centred; scales down on narrow cards. */
+/* Auth card script wordmark (public/auth/main-logo.png - the studio's "moments" script logo from the
+   website, background keyed to transparent). Sized to the card, centred; scales down on narrow cards. */
 .auth-wordmark {
   display: block;
   width: 100%;
-  max-width: 280px;
+  max-width: 240px;
   height: auto;
   margin-left: auto;
   margin-right: auto;
