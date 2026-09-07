@@ -14,16 +14,18 @@ export type ProjectFacts = { gallerySent: boolean; finalPaid: boolean }
 
 type StageDef = { key: string; label: string; color: string; optional?: boolean }
 
+// Stage labels are plain, verb-led and self-explanatory so any staff member can picture the work at a
+// glance (keys never change - renaming a label needs no data migration).
 export const PROJECT_STAGES: StageDef[] = [
-  { key: 'planning', label: 'Planning', color: 'enquiry' },
+  { key: 'planning', label: 'Collect wedding details', color: 'enquiry' },
   { key: 'preshoot', label: 'Pre-wedding shoot', color: 'booked', optional: true },
-  { key: 'finalprep', label: 'Final shoot preparation', color: 'quote' },
-  { key: 'shootday', label: 'Shoot day', color: 'booked' },
-  { key: 'editing', label: 'Photo editing', color: 'editing' },
+  { key: 'finalprep', label: 'Prepare for the shoot', color: 'quote' },
+  { key: 'shootday', label: 'Shoot the wedding', color: 'booked' },
+  { key: 'editing', label: 'Edit the photos', color: 'editing' },
   { key: 'video', label: 'Video editing', color: 'editing', optional: true },
   { key: 'film', label: 'Film processing', color: 'editing', optional: true },
   { key: 'album', label: 'Album and prints', color: 'editing', optional: true },
-  { key: 'delivery', label: 'Final delivery and close', color: 'delivered' },
+  { key: 'delivery', label: 'Deliver & finish', color: 'delivered' },
 ]
 
 export const PROJECT_STAGE_KEYS: ReadonlySet<string> = new Set(PROJECT_STAGES.map((s) => s.key))

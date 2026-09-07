@@ -49,10 +49,15 @@ export function ProjectWorkflow({
 }) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [addingStage, setAddingStage] = useState<string | null>(null)
+  const [addStageOpen, setAddStageOpen] = useState(false)
 
   const allTasks = stages.flatMap((s) => s.tasks)
   const nowStage = stages.find((s) => s.active) ?? null
   const nextTask = nowStage?.tasks.find((t) => !t.done) ?? allTasks.find((t) => !t.done) ?? null
+  // Optional stages with no tasks stay hidden so the board only shows groups that hold real work;
+  // they can be switched on from the "Add a stage" control below.
+  const visibleStages = stages.filter((s) => !(s.optional && s.total === 0))
+  const hiddenStages = stages.filter((s) => s.optional && s.total === 0)
 
   return (
     <div className="flex flex-col gap-5">
@@ -62,7 +67,7 @@ export function ProjectWorkflow({
         nowLabel={allDone ? null : (nowStage?.label ?? null)}
         nextTitle={allDone ? null : (nextTask?.title ?? null)}
       />
-      {stages.map((stage) => {
+      {visibleStages.map((stage) => {
         const cls = PHASE[stage.color] ?? FALLBACK
         return (
           <div key={stage.key} className="flex gap-3">
@@ -201,6 +206,35 @@ export function ProjectWorkflow({
           </div>
         )
       })}
+
+      {hiddenStages.length > 0 ? (
+        addStageOpen ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-paper p-3">
+            <span className="text-sm text-ink-muted">Add a stage:</span>
+            {hiddenStages.map((s) => (
+              <form key={s.key} action={addProjectStageBlockAction} onSubmit={() => setAddStageOpen(false)}>
+                <input type="hidden" name="csrf" value={csrf} />
+                <input type="hidden" name="projectId" value={projectId} />
+                <input type="hidden" name="stage" value={s.key} />
+                <button type="submit" className="rounded border border-line-strong px-2.5 py-1 text-sm font-bold text-ink-muted hover:text-ink">
+                  {s.label}
+                </button>
+              </form>
+            ))}
+            <button type="button" onClick={() => setAddStageOpen(false)} className="text-sm font-bold text-muted hover:text-ink">
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAddStageOpen(true)}
+            className="self-start rounded px-1 py-1 text-sm font-bold text-accent-ink hover:underline"
+          >
+            + Add a stage
+          </button>
+        )
+      ) : null}
     </div>
   )
 }
