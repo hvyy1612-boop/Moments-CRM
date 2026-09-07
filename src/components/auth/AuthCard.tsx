@@ -18,7 +18,7 @@ export function AuthCard({
 }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-paper px-4 py-12">
-      <div className="w-full max-w-sm rounded-xl border border-line bg-surface p-8 shadow-sm">
+      <div className="w-full max-w-md rounded-xl border border-line bg-surface p-8 shadow-sm">
         <div className="text-center">
           <Image
             src="/auth/wordmark.png"

@@ -43,18 +43,14 @@ export function enquiryStageLabel(key: string): string {
   return ENQUIRY_STAGES.find((s) => s.key === key)?.label ?? key
 }
 
-/** Default suggested flow a new enquiry is seeded with. `done` seeds a completed AUTO row. */
+/** Default suggested flow a new enquiry is seeded with: the 3 essential tasks per phase. Staff can add
+ *  more or edit them per case (e.g. "Follow up", "Schedule consultation") - this is just a lean start. */
 export const DEFAULT_ENQUIRY_TASKS: { stage: string; title: string; type: TaskType; done?: boolean }[] = [
-  { stage: 'enquiry', title: 'Enquiry received', type: 'AUTO', done: true },
   { stage: 'enquiry', title: 'Send initial enquiry response', type: 'TODO' },
-  { stage: 'enquiry', title: 'Follow up on enquiry', type: 'TODO' },
   { stage: 'enquiry', title: 'Discuss shoot requirements', type: 'TODO' },
-  { stage: 'enquiry', title: 'Schedule client consultation', type: 'APPOINTMENT' },
   { stage: 'enquiry', title: 'Confirm shoot date and requirements', type: 'TODO' },
   { stage: 'quote', title: 'Prepare client quote', type: 'TODO' },
   { stage: 'quote', title: 'Send client quote', type: 'TODO' },
-  { stage: 'quote', title: 'Follow up on quote', type: 'TODO' },
-  { stage: 'quote', title: 'Update quote based on client request', type: 'TODO' },
   { stage: 'quote', title: 'Send contract and deposit invoice', type: 'TODO' },
 ]
 
