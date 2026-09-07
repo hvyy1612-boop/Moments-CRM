@@ -294,6 +294,8 @@ export async function toggleProjectTask(taskId: string, actorUserId: string) {
           afterData: { title: task.title, completedCount: ids.length },
         },
       })
+      // Finishing the checklist is one half of "done"; auto-complete the job if the balance is settled too.
+      await maybeAutoCompleteJob(tx, task.projectId!, actorUserId)
     } else {
       await tx.workItem.update({
         where: { id: taskId },
@@ -310,5 +312,43 @@ export async function toggleProjectTask(taskId: string, actorUserId: string) {
         },
       })
     }
+  })
+}
+
+const AUTO_COMPLETE_FROM = new Set(['BOOKING_REQUESTED', 'CONFIRMED', 'IN_PRODUCTION'])
+
+/**
+ * Auto-complete a job when it is truly finished: EVERY staff task done AND the balance fully settled.
+ * Called from whichever event completes last - the final task tick (see toggleProjectTask) or the final
+ * payment (see recordPayment) - so staff never flip the status by hand and a delivered-but-unpaid job
+ * stays visible until it is paid. Forward-only from an active job state; parked/terminal states are left
+ * alone. Re-opening a task never auto-demotes (that stays a manual correction). No-op unless both hold.
+ */
+export async function maybeAutoCompleteJob(tx: Tx, projectId: string, actorUserId: string | null) {
+  const project = await tx.project.findUnique({
+    where: { id: projectId },
+    select: { companyId: true, lifecycleStatus: true, invoices: { select: { total: true, amountPaid: true } } },
+  })
+  if (!project || !AUTO_COMPLETE_FROM.has(project.lifecycleStatus)) return
+
+  const [total, pending] = await Promise.all([
+    tx.workItem.count({ where: { projectId, type: { not: 'AUTO' }, status: { not: 'CANCELLED' } } }),
+    tx.workItem.count({ where: { projectId, type: { not: 'AUTO' }, status: 'PENDING' } }),
+  ])
+  if (total === 0 || pending > 0) return // checklist not finished
+
+  const outstanding = project.invoices.reduce((sum, i) => sum + (Number(i.total) - Number(i.amountPaid)), 0)
+  if (outstanding > 0.005) return // still owed - stay active so the balance isn't forgotten
+
+  await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'COMPLETED' } })
+  await tx.auditLog.create({
+    data: {
+      companyId: project.companyId,
+      actorUserId: actorUserId ?? undefined,
+      action: 'project.auto_completed',
+      entityType: 'Project',
+      entityId: projectId,
+      afterData: { lifecycleStatus: 'COMPLETED' },
+    },
   })
 }
