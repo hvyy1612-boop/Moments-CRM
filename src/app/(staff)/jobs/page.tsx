@@ -56,11 +56,11 @@ export default async function JobsPage({
       orderBy: { enquiryReceivedAt: 'desc' },
       include: {
         client: { select: { id: true, displayName: true } },
+
         workItems: {
-          where: { status: 'PENDING', type: { not: 'AUTO' } },
+          where: { type: { not: 'AUTO' }, status: { not: 'CANCELLED' } },
           orderBy: { order: 'asc' },
-          take: 1,
-          select: { title: true, stage: true },
+          select: { title: true, stage: true, status: true },
         },
       },
     }),
@@ -69,8 +69,13 @@ export default async function JobsPage({
   const canEdit = can(user, 'PROJECT_EDIT')
 
   let rows: Row[] = projects.map((p) => {
-    const label = resolveLabel(p, labels)
-    const next = p.workItems[0]
+    const next = p.workItems.find((t) => t.status !== 'COMPLETED')
+    const workflowDone = p.workItems.length > 0 && !next
+
+    const label =
+      !p.statusLabelId && workflowDone
+        ? (labels.find((l) => l.stage === 'COMPLETED') ?? resolveLabel(p, labels))
+        : resolveLabel(p, labels)
     return {
       id: p.id,
       code: p.code,
