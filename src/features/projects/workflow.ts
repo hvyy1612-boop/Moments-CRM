@@ -32,35 +32,23 @@ export const AUTO_FACT_BY_TITLE: Record<string, keyof ProjectFacts> = {
 }
 
 export const DEFAULT_PROJECT_TASKS: { stage: string; title: string; type: TaskType }[] = [
-  { stage: 'planning', title: 'Send client welcome email', type: 'AUTO_EMAIL' },
   { stage: 'planning', title: 'Collect wedding and shoot details', type: 'TODO' },
   { stage: 'planning', title: 'Confirm timeline and venue details', type: 'TODO' },
-  { stage: 'planning', title: 'Record special requests', type: 'TODO' },
   { stage: 'planning', title: 'Confirm photography and video coverage', type: 'TODO' },
 
-  { stage: 'finalprep', title: 'Send pre-shoot questionnaire and reminder', type: 'AUTO_EMAIL' },
   { stage: 'finalprep', title: 'Review final shoot information', type: 'TODO' },
   { stage: 'finalprep', title: 'Schedule final planning call', type: 'APPOINTMENT' },
   { stage: 'finalprep', title: 'Confirm final timeline and shoot details', type: 'TODO' },
-  { stage: 'finalprep', title: 'Send final payment reminder', type: 'AUTO_EMAIL' },
 
   { stage: 'shootday', title: 'Conduct wedding photography', type: 'SHOOT' },
   { stage: 'shootday', title: 'Back up all captured files', type: 'TODO' },
 
-  { stage: 'editing', title: 'Prepare preview images', type: 'TODO' },
-  { stage: 'editing', title: 'Send preview gallery to client', type: 'TODO' },
   { stage: 'editing', title: 'Cull wedding images', type: 'TODO' },
   { stage: 'editing', title: 'Edit wedding images', type: 'TODO' },
-  { stage: 'editing', title: 'Review edited gallery', type: 'TODO' },
   { stage: 'editing', title: 'Finalise wedding gallery', type: 'TODO' },
 
-  { stage: 'delivery', title: 'Prepare final client deliverables', type: 'TODO' },
   { stage: 'delivery', title: 'Send final gallery to client', type: 'TODO' },
-  { stage: 'delivery', title: 'Gallery delivered', type: 'AUTO' },
   { stage: 'delivery', title: 'Confirm client received deliverables', type: 'TODO' },
-  { stage: 'delivery', title: 'Confirm final payment received', type: 'AUTO' },
-  { stage: 'delivery', title: 'Send final thank-you email', type: 'AUTO_EMAIL' },
-  { stage: 'delivery', title: 'Archive project files', type: 'TODO' },
   { stage: 'delivery', title: 'Close project', type: 'TODO' },
 ]
 
@@ -197,10 +185,8 @@ export const PROJECT_TASK_SCHEDULE: Record<string, number> = {
 
 export const PROJECT_TASK_BLOCKED_BY: Record<string, string> = {
   'Edit wedding images': 'Cull wedding images',
-  'Review edited gallery': 'Edit wedding images',
-  'Finalise wedding gallery': 'Review edited gallery',
+  'Finalise wedding gallery': 'Edit wedding images',
   'Send final gallery to client': 'Finalise wedding gallery',
-  'Send preview gallery to client': 'Prepare preview images',
   'Confirm client received deliverables': 'Send final gallery to client',
 }
 
