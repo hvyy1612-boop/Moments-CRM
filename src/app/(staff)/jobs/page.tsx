@@ -158,7 +158,10 @@ export default async function JobsPage({
                 {rows.map((row) => (
                   <tr key={row.id} className="group border-b border-line align-top transition-colors last:border-b-0 hover:bg-paper">
                     <td className="py-3 pr-4">
-                      <Link href={`/clients/${row.clientId}`} className="font-medium text-ink transition-colors hover:text-accent-ink">{row.client}</Link>
+                      {/* Primary identifier opens the JOB (its task workflow), mirroring the Enquiries
+                          list where the name opens the case - not the client profile, which was sending
+                          staff away from the tasks. The client profile stays reachable via the row menu. */}
+                      <Link href={`/jobs/${row.id}${backParam}`} className="font-medium text-ink transition-colors hover:text-accent-ink">{row.client}</Link>
                     </td>
                     <td className="py-3 pr-4">
                       <Link href={`/jobs/${row.id}${backParam}`} className="block">
