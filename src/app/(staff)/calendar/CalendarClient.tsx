@@ -248,7 +248,8 @@ function WeekGrid({ data, canManage, onSlot, onPeek, onHide, onMove }: {
   // aren't what greets you - the body is the only thing that scrolls; the day header stays pinned.
   const bodyRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (bodyRef.current) bodyRef.current.scrollTop = 7 * ROW_H
+    // Open just above the 7am line (small margin so its label isn't clipped by the top edge).
+    if (bodyRef.current) bodyRef.current.scrollTop = 7 * ROW_H - 8
   }, [])
 
   const slotClick = (dateKey: string, e: ReactMouseEvent<HTMLDivElement>) => {
@@ -277,11 +278,20 @@ function WeekGrid({ data, canManage, onSlot, onPeek, onHide, onMove }: {
           invoice-due, undated tasks) have no clock time and live in Month + Agenda instead. */}
       <div ref={bodyRef} className="grid max-h-[70vh] overflow-y-auto" style={{ gridTemplateColumns: `${GUTTER}px repeat(7, minmax(0, 1fr))` }}>
         <div className="relative border-r border-line" style={{ height: total }}>
-          {hours.slice(0, -1).map((h) => <div key={h} className="pr-1.5 pt-0.5 text-right text-xs text-muted" style={{ height: ROW_H }}>{minToLabel(h * 60)}</div>)}
-          {/* Trailing midnight on the final line: 12am = end of the day / start of the next, so the grid
-              reads as a full 12am->12am span. Absolute + bottom-0 so it sits just above the last line
-              without adding flow height (which would make the gutter taller than the day columns). */}
-          <div className="absolute inset-x-0 bottom-0 pr-1.5 text-right text-xs text-muted">{minToLabel(0)}</div>
+          {/* One label per gridline, vertically CENTRED on the rule it marks (Apple-style) so the time
+              reads level with its line - not floating in the middle of the cell. The day columns draw
+              their rules as row bottom-borders at y = k*ROW_H, so a label centred at that y sits on the
+              line. The first label (12am) is top-aligned and the last (12am = next midnight) is
+              bottom-aligned so neither is clipped by the scroll edges. */}
+          {hours.map((h, k) => (
+            <div
+              key={h}
+              className="absolute inset-x-0 pr-1.5 text-right text-xs text-muted"
+              style={{ top: k * ROW_H, transform: k === 0 ? undefined : k === hours.length - 1 ? 'translateY(-100%)' : 'translateY(-50%)' }}
+            >
+              {minToLabel((h * 60) % 1440)}
+            </div>
+          ))}
         </div>
         {w.days.map((d, ci) => (
           <div
