@@ -18,8 +18,8 @@ export function LoginForm({ csrf }: { csrf: string }) {
 
       <input type="hidden" name="csrf" value={csrf} />
 
-      {/* Generous rhythm between fields (gap-8), matching the reference spacing. */}
-      <div className="flex flex-col gap-8">
+      {/* Intentional rhythm between fields (gap-5), matching the reference spacing. */}
+      <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-2">
           <label htmlFor="email" className="text-sm font-medium text-ink">Email</label>
           <input
@@ -49,7 +49,7 @@ export function LoginForm({ csrf }: { csrf: string }) {
               onClick={() => setShowPassword((value) => !value)}
               aria-pressed={showPassword}
               aria-label={showPassword ? 'Hide password' : 'Show password'}
-              className="absolute inset-y-0 right-0 flex items-center rounded px-4 text-ink-muted outline-none transition-colors duration-150 hover:text-ink focus-visible:ring-2 focus-visible:ring-accent"
+              className="absolute inset-y-0 right-0 flex items-center rounded px-3 text-ink-muted outline-none transition-colors duration-150 hover:text-ink focus-visible:ring-2 focus-visible:ring-accent"
             >
               {showPassword ? (
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
@@ -68,7 +68,7 @@ export function LoginForm({ csrf }: { csrf: string }) {
         </div>
       </div>
 
-      <div className="mt-6 flex items-center justify-between gap-4">
+      <div className="mt-4 flex items-center justify-between gap-4">
         {/* Opt-in, never pre-ticked. Extends only the absolute session lifetime. */}
         <label htmlFor="remember" className="flex items-center gap-2 text-sm text-ink">
           <input id="remember" name="remember" type="checkbox" className="h-4 w-4 accent-accent" />
@@ -79,7 +79,7 @@ export function LoginForm({ csrf }: { csrf: string }) {
         </Link>
       </div>
 
-      <button type="submit" disabled={pending} className="auth-primary mt-8">
+      <button type="submit" disabled={pending} className="auth-primary mt-6">
         {pending ? 'Signing in…' : 'Sign in'}
       </button>
     </form>
