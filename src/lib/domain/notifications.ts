@@ -4,6 +4,7 @@ import { sydneyYmd, systemClock } from '@/lib/time'
 import { MS_PER_DAY } from '@/features/enquiries/workflow'
 import { sendEmailWithResult, type SendResult } from '@/lib/email'
 import { getInvoiceBalanceById } from './invoice-money'
+import { getAutomationSettings, type AutomationSettings } from './automation'
 
 /**
  * Notifications & reminders (docs/25 Part 4). NotificationDispatch is the ONE send-retry unit: both
@@ -259,18 +260,41 @@ export async function invalidateShootReminders(client: Client, bookingId: string
   return res.count
 }
 
+export type ReminderImpactItem =
+  | { type: 'reminder'; invoiceId: string; milestone: string; recipientEmail: string; amount: string; wouldSend: boolean }
+  | { type: 'followup'; invoiceId: string; projectId: string; wouldCreate: boolean }
+
 /**
- * Time-driven payment reminders (Rule N10/N12). For each unpaid instalment of each obligation-bearing
- * invoice, find the LATEST reached milestone (catch-up: one still-relevant reminder, never a burst) and
- * enqueue it idempotently. At +7 it stops auto-email and opens one staff follow-up task that
- * auto-resolves when the balance clears.
+ * Time-driven payment reminders (Rule N10/N12), GATED by per-company automation settings so nothing is
+ * created — and so nothing accumulates to burst-send — until a company deliberately turns it on
+ * (independent of RESEND_API_KEY). For each unpaid instalment of each obligation-bearing invoice it
+ * finds the LATEST reached milestone (catch-up: one reminder, never a burst); at +7 it stops auto-email
+ * and opens one staff follow-up task (auto-resolved when the balance clears). `remindersActiveFrom`
+ * skips instalments that came due before the automation was switched on (no backfill of old overdue).
+ *
+ * With `{ preview: true }` it computes the FULL impact list and WRITES NOTHING — the report a company
+ * reviews before its first live enable. `wouldSend` / `wouldCreate` reflect the current gates so the
+ * preview shows exactly what a live run would do.
  */
-export async function scanPaymentReminders(now: Date = systemClock.now()): Promise<{ enqueued: number; followups: number }> {
+export async function scanPaymentReminders(
+  now: Date = systemClock.now(),
+  opts: { preview?: boolean } = {},
+): Promise<{ enqueued: number; followups: number; impact: ReminderImpactItem[] }> {
+  const preview = opts.preview === true
   const invoices = await prisma.invoice.findMany({
     where: { status: { in: ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'OVERDUE'] } },
     select: { id: true, projectId: true, billingEmailSnapshot: true, project: { select: { companyId: true, client: { select: { email: true } } } } },
   })
   const nowDay = sydneyDayNumber(now)
+  const settingsCache = new Map<string, AutomationSettings>()
+  const settingsFor = async (companyId: string): Promise<AutomationSettings> => {
+    const hit = settingsCache.get(companyId)
+    if (hit) return hit
+    const s = await getAutomationSettings(companyId)
+    settingsCache.set(companyId, s)
+    return s
+  }
+  const impact: ReminderImpactItem[] = []
   let enqueued = 0
   let followups = 0
 
@@ -279,51 +303,72 @@ export async function scanPaymentReminders(now: Date = systemClock.now()): Promi
     if (!bal || bal.owed.lessThanOrEqualTo(0)) continue
     const recipient = inv.billingEmailSnapshot ?? inv.project.client.email
     if (!recipient) continue
+    const settings = await settingsFor(inv.project.companyId)
 
     for (let index = 0; index < bal.instalments.length; index++) {
       const inst = bal.instalments[index]!
       if (inst.remaining.lessThanOrEqualTo(0) || !inst.dueAt) continue
+      // No backfill: skip instalments that came due before automation was switched on.
+      if (settings.remindersActiveFrom && inst.dueAt.getTime() < settings.remindersActiveFrom.getTime()) continue
       const dueDay = sydneyDayNumber(inst.dueAt)
       const reached = PAYMENT_MILESTONES.filter((m) => nowDay >= dueDay + m)
       if (reached.length === 0) continue
       const current = Math.max(...reached)
+
       if (current >= FOLLOWUP_MILESTONE) {
-        // +7 terminal: no more auto-email; ensure a single staff follow-up task exists (Rule N-j).
-        if (await ensureOverdueFollowup(inv.id, inv.projectId, inv.project.companyId)) followups++
+        impact.push({ type: 'followup', invoiceId: inv.id, projectId: inv.projectId, wouldCreate: settings.internalFollowupsEnabled })
+        if (!preview && settings.internalFollowupsEnabled) {
+          if (await ensureOverdueFollowup(inv.id, inv.projectId, inv.project.companyId)) followups++
+        }
         continue
       }
       // Catch-up (Rule N10): only the LATEST reached milestone, so a missed day is not a burst.
-      const id = await enqueueDispatch(prisma, {
-        kind: 'payment_reminder',
-        targetType: 'Invoice',
-        targetId: inv.id,
-        milestone: `inst${index}_due_${current}`,
-        recipientEmail: recipient,
-        subject: `Payment reminder - ${inst.remaining.toFixed(2)} due`,
-        body: `A payment of ${inst.remaining.toFixed(2)} is due. Thank you - Moments Photography and Film.`,
-      })
-      if (id) enqueued++
+      impact.push({ type: 'reminder', invoiceId: inv.id, milestone: `inst${index}_due_${current}`, recipientEmail: recipient, amount: inst.remaining.toFixed(2), wouldSend: settings.clientEmailsEnabled })
+      if (!preview && settings.clientEmailsEnabled) {
+        const id = await enqueueDispatch(prisma, {
+          kind: 'payment_reminder',
+          targetType: 'Invoice',
+          targetId: inv.id,
+          milestone: `inst${index}_due_${current}`,
+          recipientEmail: recipient,
+          subject: `Payment reminder - ${inst.remaining.toFixed(2)} due`,
+          body: `A payment of ${inst.remaining.toFixed(2)} is due. Thank you - Moments Photography and Film.`,
+        })
+        if (id) enqueued++
+      }
     }
   }
-  return { enqueued, followups }
+  return { enqueued, followups, impact }
 }
 
 const OVERDUE_FOLLOWUP_TITLE = 'Follow up on overdue payment'
 
-/** Ensure exactly one open overdue-followup task per invoice (Rule N-j). Returns true if it created one. */
+/** Deterministic WorkItem id for an invoice's follow-up task, so concurrent scanners upsert the SAME
+ *  row instead of racing to create two (fits VARCHAR(30): 'of' + 28 hex). */
+function followupId(invoiceId: string): string {
+  return 'of' + createHash('sha256').update(invoiceId).digest('hex').slice(0, 28)
+}
+
+/** Ensure exactly one overdue-followup task per invoice (Rule N-j), concurrency-safe via upsert on a
+ *  deterministic id. Returns true if this call created it (best-effort metric; the row count is always
+ *  at most one whatever the concurrency). */
 async function ensureOverdueFollowup(invoiceId: string, projectId: string, companyId: string): Promise<boolean> {
-  const existing = await prisma.workItem.findFirst({
-    where: { projectId, kind: 'OVERDUE_FOLLOWUP', title: { contains: invoiceId } , status: 'PENDING' },
-    select: { id: true },
-  })
-  if (existing) return false
-  await prisma.workItem.create({
-    data: {
-      companyId, projectId, kind: 'OVERDUE_FOLLOWUP', stage: 'delivery', type: 'TODO',
-      title: `${OVERDUE_FOLLOWUP_TITLE} (${invoiceId})`, status: 'PENDING', order: 9999,
-    },
-  })
-  return true
+  const id = followupId(invoiceId)
+  const existing = await prisma.workItem.findUnique({ where: { id }, select: { id: true } })
+  try {
+    await prisma.workItem.upsert({
+      where: { id },
+      create: {
+        id, companyId, projectId, kind: 'OVERDUE_FOLLOWUP', stage: 'delivery', type: 'TODO',
+        title: `${OVERDUE_FOLLOWUP_TITLE} (${invoiceId})`, status: 'PENDING', order: 9999,
+      },
+      update: {}, // already exists → leave as-is; never a duplicate row
+    })
+  } catch {
+    // A concurrent worker won the insert race on the same deterministic id — the row now exists, which
+    // is exactly the desired end state, so this is a no-op (never a duplicate).
+  }
+  return !existing
 }
 
 /**
@@ -344,10 +389,12 @@ export async function processOutboxOnce(now: Date = systemClock.now()): Promise<
       if (invoiceId) {
         const inv = await prisma.invoice.findUnique({
           where: { id: invoiceId },
-          select: { id: true, invoiceNumber: true, billingEmailSnapshot: true, total: true, project: { select: { client: { select: { email: true } } } } },
+          select: { id: true, invoiceNumber: true, billingEmailSnapshot: true, total: true, project: { select: { companyId: true, client: { select: { email: true } } } } },
         })
         const recipient = inv?.billingEmailSnapshot ?? inv?.project.client.email ?? null
-        if (inv && recipient) {
+        // Client-facing dispatch only when the company has turned client emails on — otherwise the
+        // event is still marked PROCESSED (no reprocessing, no backfill burst when it is later enabled).
+        if (inv && recipient && (await getAutomationSettings(inv.project.companyId)).clientEmailsEnabled) {
           await enqueueDispatch(prisma, {
             kind: 'invoice_issued',
             targetType: 'Invoice',
