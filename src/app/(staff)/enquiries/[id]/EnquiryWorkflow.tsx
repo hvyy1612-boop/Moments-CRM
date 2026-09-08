@@ -4,6 +4,14 @@ import { useState } from 'react'
 import { ADDABLE_TASK_TYPES, type EnqStage, type TaskType } from '@/features/enquiries/workflow'
 import { WorkflowProgress } from '@/components/WorkflowProgress'
 import { ReminderChip } from '@/components/ui/WorkflowChips'
+import {
+  checkTaskForm,
+  TaskDueDateTimeFields,
+  taskBorderFor,
+  taskInputBase,
+  taskInputClass,
+  type TaskFormErrors,
+} from '@/components/ui/TaskDateTimeFields'
 import { addEnquiryTaskAction, updateEnquiryTaskAction } from '../actions'
 import { EnquiryTaskRow } from './EnquiryTaskRow'
 
@@ -22,9 +30,6 @@ const TYPE_BADGE: Record<TaskType, string> = {
   AUTO: 'bg-paper text-muted',
 }
 
-const inputClass =
-  'h-9 w-full rounded border border-line-strong bg-surface px-2.5 text-base text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
-
 function TypeTag({ label, type }: { label: string; type: TaskType }) {
   if (!label) return null
   return <span className={`rounded px-1.5 py-0.5 text-xs font-bold ${TYPE_BADGE[type]}`}>{label}</span>
@@ -35,17 +40,25 @@ export function EnquiryWorkflow({
   allDone,
   enquiryId,
   csrf,
+  taskTimes = {},
   readOnly = false,
 }: {
   stages: EnqStage[]
   allDone: boolean
   enquiryId: string
   csrf: string
+  taskTimes?: Record<string, string>
 
   readOnly?: boolean
 }) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [addingStage, setAddingStage] = useState<string | null>(null)
+  const [editErrors, setEditErrors] = useState<TaskFormErrors>({})
+  const [addErrors, setAddErrors] = useState<TaskFormErrors>({})
+  const clearEdit = (field: keyof TaskFormErrors) =>
+    setEditErrors((p) => (p[field] ? { ...p, [field]: undefined } : p))
+  const clearAdd = (field: keyof TaskFormErrors) =>
+    setAddErrors((p) => (p[field] ? { ...p, [field]: undefined } : p))
 
   const allTasks = stages.flatMap((s) => s.tasks)
   const nowStage = stages.find((s) => s.active) ?? null
@@ -123,19 +136,43 @@ export function EnquiryWorkflow({
                     <form
                       key={t.id}
                       action={updateEnquiryTaskAction}
-                      onSubmit={() => setEditingId(null)}
+                      noValidate
+                      onSubmit={(e) => {
+                        const errs = checkTaskForm(e.currentTarget)
+                        if (errs.title || errs.date || errs.time) {
+                          e.preventDefault()
+                          setEditErrors(errs)
+                          return
+                        }
+                        setEditErrors({})
+                        setEditingId(null)
+                      }}
                       className="flex flex-col gap-2 rounded-md border border-accent bg-paper p-3"
                     >
                       <input type="hidden" name="csrf" value={csrf} />
                       <input type="hidden" name="enquiryId" value={enquiryId} />
                       <input type="hidden" name="workItemId" value={t.id} />
-                      <input className={inputClass} name="title" defaultValue={t.title} required aria-label="Task title" />
+                      <div className="flex flex-col gap-1">
+                        <input
+                          className={`${taskInputBase} ${taskBorderFor(Boolean(editErrors.title))}`}
+                          name="title"
+                          defaultValue={t.title}
+                          aria-label="Task title"
+                          onInput={() => clearEdit('title')}
+                        />
+                        {editErrors.title ? <p className="text-sm text-danger">{editErrors.title}</p> : null}
+                      </div>
+                      <TaskDueDateTimeFields
+                        dateDefault={t.dueValue ?? ''}
+                        timeDefault={taskTimes[t.id] ?? ''}
+                        errors={editErrors}
+                        onClear={clearEdit}
+                      />
                       <div className="flex items-center gap-2">
-                        <input className={`${inputClass} max-w-40`} type="date" name="dueAt" defaultValue={t.dueValue ?? ''} aria-label="Due date" />
                         <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface">
                           Save
                         </button>
-                        <button type="button" onClick={() => setEditingId(null)} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">
+                        <button type="button" onClick={() => { setEditErrors({}); setEditingId(null) }} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">
                           Cancel
                         </button>
                       </div>
@@ -146,7 +183,7 @@ export function EnquiryWorkflow({
                       task={t}
                       enquiryId={enquiryId}
                       csrf={csrf}
-                      onEdit={() => setEditingId(t.id)}
+                      onEdit={() => { setEditErrors({}); setEditingId(t.id) }}
                     />
                   )
                 })}
@@ -154,30 +191,55 @@ export function EnquiryWorkflow({
                 {readOnly ? null : addingStage === stage.key ? (
                   <form
                     action={addEnquiryTaskAction}
-                    onSubmit={() => setAddingStage(null)}
+                    noValidate
+                    onSubmit={(e) => {
+                      const errs = checkTaskForm(e.currentTarget)
+                      if (errs.title || errs.date || errs.time) {
+                        e.preventDefault()
+                        setAddErrors(errs)
+                        return
+                      }
+                      setAddErrors({})
+                      setAddingStage(null)
+                    }}
                     className="flex flex-col gap-2 rounded-md border border-accent bg-paper p-3"
                   >
                     <input type="hidden" name="csrf" value={csrf} />
                     <input type="hidden" name="enquiryId" value={enquiryId} />
                     <input type="hidden" name="stage" value={stage.key} />
-                    <input className={inputClass} name="title" placeholder="New task" required autoFocus aria-label="Task title" />
-                    <div className="flex flex-wrap items-center gap-2">
-                      <select className={`${inputClass} max-w-40`} name="type" defaultValue="TODO" aria-label="Task type">
-                        {ADDABLE_TASK_TYPES.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                      <input className={`${inputClass} max-w-40`} type="date" name="dueAt" aria-label="Due date" />
+                    <div className="flex flex-col gap-1">
+                      <input
+                        className={`${taskInputBase} ${taskBorderFor(Boolean(addErrors.title))}`}
+                        name="title"
+                        placeholder="New task"
+                        autoFocus
+                        aria-label="Task title"
+                        onInput={() => clearAdd('title')}
+                      />
+                      {addErrors.title ? <p className="text-sm text-danger">{addErrors.title}</p> : null}
+                    </div>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <label className="flex flex-col gap-1 text-xs font-bold text-muted">
+                        <span>Type</span>
+                        <select className={`${taskInputClass} max-w-40`} name="type" defaultValue="TODO" aria-label="Task type">
+                          {ADDABLE_TASK_TYPES.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <TaskDueDateTimeFields errors={addErrors} onClear={clearAdd} />
+                    </div>
+                    <div className="flex items-center gap-2">
                       <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface">Add</button>
-                      <button type="button" onClick={() => setAddingStage(null)} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">Cancel</button>
+                      <button type="button" onClick={() => { setAddErrors({}); setAddingStage(null) }} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">Cancel</button>
                     </div>
                   </form>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setAddingStage(stage.key)}
+                    onClick={() => { setAddErrors({}); setAddingStage(stage.key) }}
                     className="self-start rounded px-1 py-1 text-sm font-bold text-accent-ink hover:underline"
                   >
                     + Add task

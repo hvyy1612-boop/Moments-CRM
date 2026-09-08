@@ -43,6 +43,41 @@ async function deliver(args: {
   }
 }
 
+export type SendResult =
+  | { outcome: 'ACCEPTED'; providerMessageId: string | null }
+  | { outcome: 'FAILED' }
+  | { outcome: 'SKIPPED_NO_PROVIDER' }
+
+export async function sendEmailWithResult(args: {
+  to: string
+  subject: string
+  html: string
+  idempotencyKey: string
+}): Promise<SendResult> {
+  if (!emailEnabled) return { outcome: 'SKIPPED_NO_PROVIDER' }
+  try {
+    const res = await fetch(RESEND_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+        'Idempotency-Key': args.idempotencyKey,
+      },
+      body: JSON.stringify({ from: process.env.EMAIL_FROM, to: args.to, subject: args.subject, html: args.html }),
+    })
+    if (!res.ok) {
+      logger.error('notification.send.failed', { to: maskEmail(args.to), status: res.status })
+      return { outcome: 'FAILED' }
+    }
+    const data = (await res.json().catch(() => ({}))) as { id?: string }
+    logger.info('notification.send.accepted', { to: maskEmail(args.to) })
+    return { outcome: 'ACCEPTED', providerMessageId: data.id ?? null }
+  } catch (error) {
+    logger.error('notification.send.error', { to: maskEmail(args.to), message: error instanceof Error ? error.message : 'unknown' })
+    return { outcome: 'FAILED' }
+  }
+}
+
 function shell(title: string, body: string): string {
   return `<div style="font-family:Helvetica,Arial,sans-serif;color:#20201e;max-width:520px;margin:0 auto;padding:24px">
     <div style="font-family:Georgia,serif;font-size:20px;letter-spacing:2px;text-transform:uppercase">Moments</div>

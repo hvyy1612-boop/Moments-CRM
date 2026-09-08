@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db'
 import { sydneyLocalToUtc, systemClock } from '@/lib/time'
 import type { AssignResourceInput, CreateBookingInput } from '@/lib/validation/booking'
+import { invalidateShootReminders } from './notifications'
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
@@ -168,6 +169,8 @@ export async function rescheduleBookingTx(
 
   await tx.resourceAssignment.updateMany({ where: { bookingId, status: 'ACTIVE' }, data: { status: 'CANCELLED' } })
   await tx.booking.update({ where: { id: bookingId }, data: { status: 'CANCELLED', cancelledAt: now } })
+
+  await invalidateShootReminders(tx, bookingId)
 
   const booking = await tx.booking.create({
     data: {

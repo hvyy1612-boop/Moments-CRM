@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/form'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
+import { formatSydneyDate, formatSydneyDateTime, sydneyDateTimeParts } from '@/lib/time'
 import {
   ENQUIRY_STAGE_KIND,
   ENQUIRY_STAGE_LABEL,
@@ -89,6 +89,13 @@ export default async function EnquiryDetailPage({
   const open = isOpenEnquiry(enquiry.status)
   const board = await getEnquiryBoard(id)
 
+  const datedTasks = await prisma.workItem.findMany({
+    where: { enquiryId: id, dueAt: { not: null } },
+    select: { id: true, dueAt: true },
+  })
+  const taskTimes: Record<string, string> = {}
+  for (const w of datedTasks) if (w.dueAt) taskTimes[w.id] = sydneyDateTimeParts(w.dueAt).time
+
   return (
     <AppShell user={user} csrf={csrf} active="enquiries" bareHeader>
       <div className="w-full">
@@ -137,6 +144,7 @@ export default async function EnquiryDetailPage({
                 allDone={board.allDone}
                 enquiryId={enquiry.id}
                 csrf={csrf}
+                taskTimes={taskTimes}
               />
             )}
 

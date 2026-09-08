@@ -340,15 +340,19 @@ function WeekBlock({ item, startHour, canManage, onPeek, onHide, onMove }: {
   const draggable = canManage && item.editable
   const dragged = useRef(false)
   const start = item.startMin ?? startHour * 60
-  const end = item.endMin ?? start + 60
+
+  const timed = item.endMin != null && item.endMin > start
+  const end = timed ? item.endMin! : start + 60
   const top = ((start - startHour * 60) / 60) * ROW_H + 1
-  const height = Math.max(((end - start) / 60) * ROW_H - 2, 22)
-  const cls = `absolute left-0.5 right-0.5 overflow-hidden rounded px-1.5 py-1 leading-tight ${catClass(item)} ${item.conflict ? 'outline outline-2 outline-lost-ink' : ''} ${draggable ? 'cursor-grab' : ''}`
-  const inner = (
+  const height = timed ? Math.max(((end - start) / 60) * ROW_H - 2, 22) : ROW_H / 2 - 2
+  const cls = `absolute left-0.5 right-0.5 overflow-hidden rounded px-1.5 py-0.5 leading-tight ${catClass(item)} ${item.conflict ? 'outline outline-2 outline-lost-ink' : ''} ${draggable ? 'cursor-grab' : ''}`
+  const inner = timed ? (
     <>
       <span className="block truncate text-xs font-medium">{item.timeLabel} {item.primary}</span>
       <span className="block truncate text-xs opacity-80">{item.secondary}</span>
     </>
+  ) : (
+    <span className="block truncate text-xs font-medium">{item.timeLabel} {item.primary}</span>
   )
   const handlers = {
     style: { top, height },
