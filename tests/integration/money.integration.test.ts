@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
 import { createEnquiry, convertEnquiry } from '@/lib/domain/enquiry'
 import { createInvoice, issueCreditNote, issueInvoice, recordPayment, voidInvoice } from '@/lib/domain/finance'
+import { closeJob } from '@/lib/domain/project'
 import { refundPayment } from '@/lib/domain/refund'
 import { getInvoiceBalanceById, getJobBalanceByProjectId } from '@/lib/domain/invoice-money'
 
@@ -215,6 +216,39 @@ describe('Money foundation against a real DB (docs/25 Part 1)', () => {
       const invId = await issuedInvoice(await newProject(), '1000')
       await voidInvoice(invId, null) // no money on it, so the void succeeds
       await expect(issueCreditNote(invId, '100', null, null)).rejects.toThrow(/issued invoice/i)
+    })
+  })
+
+  describe('call-site: job gates use the ledger-derived outstanding (docs/25 Part 5)', () => {
+    // Drive a project to COMPLETED with no blocking tasks so closeJob's only remaining gate is money.
+    async function completedJobReadyToClose(): Promise<string> {
+      const projectId = await newProject()
+      await prisma.workItem.deleteMany({ where: { projectId } })
+      await prisma.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'COMPLETED' } })
+      return projectId
+    }
+
+    it('closeJob is blocked while a balance is owed, then succeeds once paid', async () => {
+      const projectId = await completedJobReadyToClose()
+      const invId = await issuedInvoice(projectId, '1000')
+      await pay(invId, '400')
+      await expect(closeJob(projectId, null)).rejects.toThrow(/outstanding/i)
+      await pay(invId, '600') // now owed 0
+      await closeJob(projectId, null)
+      const p = await prisma.project.findUnique({ where: { id: projectId }, select: { lifecycleStatus: true } })
+      expect(p?.lifecycleStatus).toBe('CLOSED')
+    })
+
+    it('a credit note that clears the obligation lets the job close (old total−amountPaid would block)', async () => {
+      const projectId = await completedJobReadyToClose()
+      const invId = await issuedInvoice(projectId, '1000')
+      await pay(invId, '400') // owed 600 by payment alone
+      await issueCreditNote(invId, '600', 'Scope reduced', null) // obligation 400, paidNet 400 ⇒ owed 0
+      const bal = await getInvoiceBalanceById(invId)
+      expect(bal?.owed.toString()).toBe('0')
+      await closeJob(projectId, null) // credit-aware outstanding = 0
+      const p = await prisma.project.findUnique({ where: { id: projectId }, select: { lifecycleStatus: true } })
+      expect(p?.lifecycleStatus).toBe('CLOSED')
     })
   })
 })

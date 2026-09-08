@@ -1,6 +1,8 @@
 import { Prisma, type ProjectLifecycle } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
+import { getJobBalance } from './money'
+import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
 import type { EnquiryInput } from '@/lib/validation/enquiry'
 
 /** The interactive-transaction client type, carrying the db.ts extensions. */
@@ -165,14 +167,14 @@ export async function closeJob(projectId: string, actorUserId: string | null = n
       throw new Error('Only a delivered job can be closed.')
     }
 
+    // Outstanding via the Money foundation (docs/25): Σ per-invoice `owed`, so a credit note reduces
+    // the balance and an overpaid invoice never silently offsets another's shortfall. Agreed value is
+    // irrelevant to `outstanding`, so we pass null and read only that field.
     const invoices = await tx.invoice.findMany({
       where: { projectId, status: { not: 'VOID' } },
-      select: { total: true, amountPaid: true },
+      select: INVOICE_MONEY_SELECT,
     })
-    const outstanding = invoices.reduce(
-      (sum, i) => sum.add(i.total).sub(i.amountPaid),
-      new Prisma.Decimal(0),
-    )
+    const { outstanding } = getJobBalance(invoices.map(toInvoiceMoneyInput), null)
     if (outstanding.greaterThan(0)) {
       throw new Error(`This job still has ${outstanding.toFixed(2)} outstanding.`)
     }

@@ -17,7 +17,12 @@ import {
  * migration still records payments; only these derivations need the table.
  */
 
-const INVOICE_MONEY_SELECT = {
+/**
+ * The columns every money derivation needs. Exported so in-transaction gates (close-job,
+ * auto-complete) can fetch the same shape via their own `tx` and reuse `toInvoiceMoneyInput` +
+ * the pure `money.ts` functions — one derivation, whether inside a transaction or not.
+ */
+export const INVOICE_MONEY_SELECT = {
   status: true,
   total: true,
   dueAt: true,
@@ -26,7 +31,7 @@ const INVOICE_MONEY_SELECT = {
   creditNotes: { where: { NOT: { status: 'VOIDED' } }, select: { amount: true } },
 } as const
 
-type InvoiceMoneyRow = {
+export type InvoiceMoneyRow = {
   status: InvoiceMoneyInput['status']
   total: InvoiceMoneyInput['total']
   dueAt: Date | null
@@ -35,7 +40,7 @@ type InvoiceMoneyRow = {
   creditNotes: { amount: InvoiceMoneyInput['total'] }[]
 }
 
-function toInput(inv: InvoiceMoneyRow): InvoiceMoneyInput {
+export function toInvoiceMoneyInput(inv: InvoiceMoneyRow): InvoiceMoneyInput {
   return {
     status: inv.status,
     total: inv.total,
@@ -49,7 +54,7 @@ function toInput(inv: InvoiceMoneyRow): InvoiceMoneyInput {
 /** One invoice's balance, derived from its ledger. */
 export async function getInvoiceBalanceById(invoiceId: string): Promise<InvoiceBalance | null> {
   const inv = await prisma.invoice.findUnique({ where: { id: invoiceId }, select: INVOICE_MONEY_SELECT })
-  return inv ? getInvoiceBalance(toInput(inv)) : null
+  return inv ? getInvoiceBalance(toInvoiceMoneyInput(inv)) : null
 }
 
 /**
@@ -64,5 +69,5 @@ export async function getJobBalanceByProjectId(projectId: string): Promise<JobBa
     prisma.quoteVersion.findFirst({ where: { quote: { projectId }, status: 'ACCEPTED' }, select: { total: true } }),
   ])
   const agreed = acceptedQuote?.total ?? project?.packagePriceSnapshot ?? null
-  return getJobBalance(invoices.map(toInput), agreed)
+  return getJobBalance(invoices.map(toInvoiceMoneyInput), agreed)
 }
