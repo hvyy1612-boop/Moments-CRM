@@ -2,6 +2,8 @@ import { prisma } from '@/lib/db'
 import { sydneyLocalToUtc, systemClock } from '@/lib/time'
 import type { AssignResourceInput, CreateBookingInput } from '@/lib/validation/booking'
 
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+
 /**
  * Scheduling. A confirmed project can have several bookings (engagement shoot, wedding day). Each
  * booking is staffed through ResourceAssignment; a resource can never hold two overlapping active
@@ -157,98 +159,104 @@ export async function rescheduleBooking(
   const startsAt = sydneyLocalToUtc(input.startsAt)
   const endsAt = sydneyLocalToUtc(input.endsAt)
   if (endsAt <= startsAt) throw new Error('The end time must be after the start time.')
-  const now = systemClock.now()
-
   try {
-    return await prisma.$transaction(async (tx) => {
-      const previous = await tx.booking.findUnique({
-        where: { id: bookingId },
-        include: { assignments: { where: { status: 'ACTIVE' } } },
-      })
-      if (!previous) throw new Error('Booking not found.')
-      if (previous.status === 'CANCELLED') throw new Error('A cancelled booking cannot be rescheduled.')
-
-      // Free the old slot first so the same crew can move to the new time.
-      await tx.resourceAssignment.updateMany({
-        where: { bookingId, status: 'ACTIVE' },
-        data: { status: 'CANCELLED' },
-      })
-      await tx.booking.update({
-        where: { id: bookingId },
-        data: { status: 'CANCELLED', cancelledAt: now },
-      })
-
-      const booking = await tx.booking.create({
-        data: {
-          companyId: previous.companyId,
-          projectId: previous.projectId,
-          title: previous.title,
-          status: 'TENTATIVE',
-          startsAt,
-          endsAt,
-          timezone: previous.timezone,
-          location: previous.location,
-          notes: previous.notes,
-          rescheduledFromId: previous.id,
-        },
-      })
-
-      // Rule D5 (docs/25 Part 2): only NOT-done SHOOT tasks linked to THIS booking, without a manual
-      // override, follow the move — repoint them to the successor so repeated reschedules resolve
-      // correctly. FIXED / JOB_CONFIRMED and completed tasks do not move; no stored due date is shifted
-      // (Rule D2) — the next resolveTaskDueDate read yields the new dates. Unlinked shoot tasks follow
-      // the job's primary shoot automatically.
-      await tx.workItem.updateMany({
-        where: { bookingId, dueAnchor: 'SHOOT', dueOverrideAt: null, status: { not: 'COMPLETED' } },
-        data: { bookingId: booking.id },
-      })
-
-      for (const assignment of previous.assignments) {
-        const clash = await tx.resourceAssignment.findFirst({
-          where: {
-            resourceId: assignment.resourceId,
-            status: 'ACTIVE',
-            startsAt: { lt: endsAt },
-            endsAt: { gt: startsAt },
-          },
-        })
-        if (clash) throw new Error('A resource on this booking is already booked at the new time.')
-        await tx.resourceAssignment.create({
-          data: {
-            bookingId: booking.id,
-            resourceId: assignment.resourceId,
-            role: assignment.role,
-            startsAt,
-            endsAt,
-            status: 'ACTIVE',
-            assignedByUserId: actorUserId,
-          },
-        })
-      }
-
-      await tx.auditLog.create({
-        data: {
-          action: 'booking.rescheduled',
-          entityType: 'Booking',
-          entityId: booking.id,
-          actorUserId,
-          afterData: { from: bookingId, reason: input.reason ?? null },
-        },
-      })
-      await tx.outboxEvent.create({
-        data: {
-          eventType: 'booking.rescheduled',
-          aggregateType: 'Booking',
-          aggregateId: booking.id,
-          payload: { bookingId: booking.id, rescheduledFrom: bookingId },
-        },
-      })
-      return booking
-    })
+    return await prisma.$transaction((tx) =>
+      rescheduleBookingTx(tx, bookingId, { startsAt, endsAt, reason: input.reason ?? null }, actorUserId),
+    )
   } catch (error) {
     if (isOverlapViolation(error)) {
       throw new Error('A resource on this booking is already booked at the new time.')
     }
     throw error
   }
+}
+
+/**
+ * Transaction-aware core of {@link rescheduleBooking}: cancels the old booking + its crew, creates the
+ * successor (linked via rescheduledFromId), repoints not-done SHOOT tasks (Rule D5), carries the crew
+ * over (with the overlap pre-check), and writes the audit + outbox rows. Callers pass parsed UTC
+ * instants and their OWN transaction, so a Change Request can apply a reschedule together with a fee
+ * in ONE transaction (docs/25 Rule C5). Overlap surfaces as a friendly message via the pre-check; the
+ * DB exclusion constraint is the backstop.
+ */
+export async function rescheduleBookingTx(
+  tx: Tx,
+  bookingId: string,
+  args: { startsAt: Date; endsAt: Date; reason?: string | null },
+  actorUserId: string | null,
+) {
+  const { startsAt, endsAt } = args
+  const now = systemClock.now()
+  const previous = await tx.booking.findUnique({
+    where: { id: bookingId },
+    include: { assignments: { where: { status: 'ACTIVE' } } },
+  })
+  if (!previous) throw new Error('Booking not found.')
+  if (previous.status === 'CANCELLED') throw new Error('A cancelled booking cannot be rescheduled.')
+
+  // Free the old slot first so the same crew can move to the new time.
+  await tx.resourceAssignment.updateMany({ where: { bookingId, status: 'ACTIVE' }, data: { status: 'CANCELLED' } })
+  await tx.booking.update({ where: { id: bookingId }, data: { status: 'CANCELLED', cancelledAt: now } })
+
+  const booking = await tx.booking.create({
+    data: {
+      companyId: previous.companyId,
+      projectId: previous.projectId,
+      title: previous.title,
+      status: 'TENTATIVE',
+      startsAt,
+      endsAt,
+      timezone: previous.timezone,
+      location: previous.location,
+      notes: previous.notes,
+      rescheduledFromId: previous.id,
+    },
+  })
+
+  // Rule D5 (docs/25 Part 2): only NOT-done SHOOT tasks linked to THIS booking, without a manual
+  // override, follow the move — repoint them to the successor so repeated reschedules resolve
+  // correctly. FIXED / JOB_CONFIRMED and completed tasks do not move; no stored due date is shifted
+  // (Rule D2) — the next resolveTaskDueDate read yields the new dates. Unlinked shoot tasks follow
+  // the job's primary shoot automatically.
+  await tx.workItem.updateMany({
+    where: { bookingId, dueAnchor: 'SHOOT', dueOverrideAt: null, status: { not: 'COMPLETED' } },
+    data: { bookingId: booking.id },
+  })
+
+  for (const assignment of previous.assignments) {
+    const clash = await tx.resourceAssignment.findFirst({
+      where: { resourceId: assignment.resourceId, status: 'ACTIVE', startsAt: { lt: endsAt }, endsAt: { gt: startsAt } },
+    })
+    if (clash) throw new Error('A resource on this booking is already booked at the new time.')
+    await tx.resourceAssignment.create({
+      data: {
+        bookingId: booking.id,
+        resourceId: assignment.resourceId,
+        role: assignment.role,
+        startsAt,
+        endsAt,
+        status: 'ACTIVE',
+        assignedByUserId: actorUserId,
+      },
+    })
+  }
+
+  await tx.auditLog.create({
+    data: {
+      action: 'booking.rescheduled',
+      entityType: 'Booking',
+      entityId: booking.id,
+      actorUserId,
+      afterData: { from: bookingId, reason: args.reason ?? null },
+    },
+  })
+  await tx.outboxEvent.create({
+    data: {
+      eventType: 'booking.rescheduled',
+      aggregateType: 'Booking',
+      aggregateId: booking.id,
+      payload: { bookingId: booking.id, rescheduledFrom: bookingId },
+    },
+  })
+  return booking
 }

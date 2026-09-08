@@ -239,69 +239,81 @@ async function runDeclineQuote(
  * quote is immutable - a change there goes through a change request instead.
  */
 export async function reviseQuote(quoteId: string, actorUserId: string | null = null) {
-  return prisma.$transaction(async (tx) => {
-    const quote = await tx.quote.findUnique({
-      where: { id: quoteId },
-      include: { currentVersion: { include: { lines: { orderBy: { sortOrder: 'asc' } } } } },
-    })
-    if (!quote || !quote.currentVersion) throw new Error('Quote not found.')
-    const current = quote.currentVersion
-    if (current.status === 'ACCEPTED') {
-      throw new Error('An accepted quote cannot be revised; raise a change request.')
-    }
+  return prisma.$transaction((tx) => reviseQuoteTx(tx, quoteId, actorUserId))
+}
 
-    const agg = await tx.quoteVersion.aggregate({
-      where: { quoteId },
-      _max: { versionNumber: true },
-    })
-    const nextNumber = (agg._max.versionNumber ?? 0) + 1
+type QuoteTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
-    const newVersion = await tx.quoteVersion.create({
-      data: {
-        quoteId,
-        versionNumber: nextNumber,
-        status: 'DRAFT',
-        currency: current.currency,
-        subtotal: current.subtotal,
-        discountTotal: current.discountTotal,
-        taxTotal: current.taxTotal,
-        total: current.total,
-        validUntil: current.validUntil,
-        createdByUserId: actorUserId,
-      },
-    })
-    if (current.lines.length > 0) {
-      await tx.quoteLine.createMany({
-        data: current.lines.map((line) => ({
-          quoteVersionId: newVersion.id,
-          lineType: line.lineType,
-          referenceId: line.referenceId,
-          description: line.description,
-          quantity: line.quantity,
-          unitPrice: line.unitPrice,
-          discount: line.discount,
-          tax: line.tax,
-          lineTotal: line.lineTotal,
-          sortOrder: line.sortOrder,
-        })),
-      })
-    }
-    await tx.quoteVersion.update({ where: { id: current.id }, data: { status: 'SUPERSEDED' } })
-    await tx.quote.update({
-      where: { id: quoteId },
-      data: { currentVersionId: newVersion.id, status: 'DRAFT' },
-    })
-    // Revising a quote is a commercial/quote-level action; operational lifecycle is unchanged
-    // (docs/24 Increment 1).
-    await tx.auditLog.create({
-      data: {
-        action: 'quote.revised',
-        entityType: 'Quote',
-        entityId: quoteId,
-        actorUserId,
-        afterData: { newVersion: nextNumber },
-      },
-    })
-    return { quoteId, versionId: newVersion.id, versionNumber: nextNumber }
+/**
+ * Transaction-aware core of {@link reviseQuote}: copies the current version into a new DRAFT, supersedes
+ * the old one, and points the quote at it. Callers pass their own transaction so a Change Request can
+ * revise the quote for client review inside its single apply transaction (docs/25 Rule C5).
+ *
+ * By default an ACCEPTED version cannot be revised (staff must raise a change request). The Change
+ * Request scope-change path passes `allowFromAccepted` — revising the agreed quote for the client to
+ * review is exactly what a CR does (Rule C1: this creates a draft to review, it is not application).
+ */
+export async function reviseQuoteTx(
+  tx: QuoteTx,
+  quoteId: string,
+  actorUserId: string | null = null,
+  opts: { allowFromAccepted?: boolean } = {},
+) {
+  const quote = await tx.quote.findUnique({
+    where: { id: quoteId },
+    include: { currentVersion: { include: { lines: { orderBy: { sortOrder: 'asc' } } } } },
   })
+  if (!quote || !quote.currentVersion) throw new Error('Quote not found.')
+  const current = quote.currentVersion
+  if (current.status === 'ACCEPTED' && !opts.allowFromAccepted) {
+    throw new Error('An accepted quote cannot be revised; raise a change request.')
+  }
+
+  const agg = await tx.quoteVersion.aggregate({ where: { quoteId }, _max: { versionNumber: true } })
+  const nextNumber = (agg._max.versionNumber ?? 0) + 1
+
+  const newVersion = await tx.quoteVersion.create({
+    data: {
+      quoteId,
+      versionNumber: nextNumber,
+      status: 'DRAFT',
+      currency: current.currency,
+      subtotal: current.subtotal,
+      discountTotal: current.discountTotal,
+      taxTotal: current.taxTotal,
+      total: current.total,
+      validUntil: current.validUntil,
+      createdByUserId: actorUserId,
+    },
+  })
+  if (current.lines.length > 0) {
+    await tx.quoteLine.createMany({
+      data: current.lines.map((line) => ({
+        quoteVersionId: newVersion.id,
+        lineType: line.lineType,
+        referenceId: line.referenceId,
+        description: line.description,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        discount: line.discount,
+        tax: line.tax,
+        lineTotal: line.lineTotal,
+        sortOrder: line.sortOrder,
+      })),
+    })
+  }
+  await tx.quoteVersion.update({ where: { id: current.id }, data: { status: 'SUPERSEDED' } })
+  await tx.quote.update({ where: { id: quoteId }, data: { currentVersionId: newVersion.id, status: 'DRAFT' } })
+  // Revising a quote is a commercial/quote-level action; operational lifecycle is unchanged
+  // (docs/24 Increment 1).
+  await tx.auditLog.create({
+    data: {
+      action: 'quote.revised',
+      entityType: 'Quote',
+      entityId: quoteId,
+      actorUserId,
+      afterData: { newVersion: nextNumber },
+    },
+  })
+  return { quoteId, versionId: newVersion.id, versionNumber: nextNumber }
 }

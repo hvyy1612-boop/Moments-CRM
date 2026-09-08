@@ -1240,9 +1240,22 @@ model ChangeRequest {
   reason                  String?             @db.VarChar(500)
   commercialImpact        Decimal?            @map("commercial_impact") @db.Decimal(12, 2)
   scheduleImpact          Boolean             @default(false) @map("schedule_impact")
+  // Typed composite payload + its version (docs/25 Rule C2); a payload edited after approval bumps the
+  // version and invalidates the prior approval/assessment.
+  payload                 Json?
+  payloadVersion          Int                 @default(1) @map("payload_version")
+  // Drift snapshot taken at assessment (Rule C4): apply re-reads and blocks if either changed.
+  assessedBookingVersion  String?             @map("assessed_booking_version") @db.VarChar(64)
+  assessedQuoteVersionId  String?             @map("assessed_quote_version_id") @db.VarChar(30)
+  // Client agreement is a separate fact from internal approval and from application (Rule C1).
+  clientAgreedVia         String?             @map("client_agreed_via") @db.VarChar(30)
+  clientAgreedAt          DateTime?           @map("client_agreed_at") @db.Timestamptz
+  clientAgreedByUserId    String?             @map("client_agreed_by_user_id") @db.VarChar(30)
+  agreedQuoteVersionId    String?             @map("agreed_quote_version_id") @db.VarChar(30)
   resultingQuoteVersionId String?             @map("resulting_quote_version_id") @db.VarChar(30)
   approvedByUserId        String?             @map("approved_by_user_id") @db.VarChar(30)
   approvedAt              DateTime?           @map("approved_at") @db.Timestamptz
+  appliedAt               DateTime?           @map("applied_at") @db.Timestamptz
   rejectedAt              DateTime?           @map("rejected_at") @db.Timestamptz
   createdAt               DateTime            @default(now()) @map("created_at") @db.Timestamptz
   updatedAt               DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
