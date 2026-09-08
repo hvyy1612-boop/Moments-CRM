@@ -50,6 +50,12 @@ export async function createClient(input: ClientInput, actorUserId: string) {
   })
 }
 
+export async function findOrCreateClient(input: ClientInput, actorUserId: string) {
+  const existing = await prisma.client.findUnique({ where: { email: input.email } })
+  if (existing) return existing
+  return createClient(input, actorUserId)
+}
+
 export async function updateClient(clientId: string, input: ClientInput, actorUserId: string) {
   return prisma.$transaction(async (tx) => {
     const client = await tx.client.findUnique({ where: { id: clientId } })

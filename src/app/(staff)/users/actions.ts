@@ -82,7 +82,7 @@ export type ResetState =
 export async function resetStaffPasswordAction(_prev: ResetState, formData: FormData): Promise<ResetState> {
   const cookieStore = await cookies()
   if (!verifyCsrf(cookieStore.get(CSRF_COOKIE)?.value, formData.get('csrf'))) {
-    return { status: 'error', message: 'Session expired — refresh the page.' }
+    return { status: 'error', message: 'Session expired. Refresh the page.' }
   }
   const admin = await requireAdmin()
   if (!admin) return { status: 'error', message: 'Only an admin can reset passwords.' }

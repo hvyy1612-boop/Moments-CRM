@@ -22,7 +22,7 @@ export default async function ImportClientsPage() {
           Clients
         </Link>
         <h1 className="mt-3 text-3xl font-semibold text-ink">Import clients</h1>
-        <p className="mt-1 text-sm text-ink-muted">Bulk-add client profiles from a CSV. This creates profiles only — it does not open enquiries.</p>
+        <p className="mt-1 text-sm text-ink-muted">Bulk-add client profiles from a CSV. This creates profiles only. It does not open enquiries.</p>
         <div className="mt-6">
           <ImportForm csrf={csrf} />
         </div>

@@ -156,7 +156,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <Kpi label="Outstanding" value={kShort(d.kpi.outstanding)} icon={ICONS.outstanding} sub={`${d.kpi.unpaidCount} unpaid invoice${d.kpi.unpaidCount === 1 ? '' : 's'}`} />
           <Kpi
             label="Avg. turnaround"
-            value={d.kpi.avgTurnaroundDays != null ? `${d.kpi.avgTurnaroundDays}d` : '—'}
+            value={d.kpi.avgTurnaroundDays != null ? `${d.kpi.avgTurnaroundDays}d` : '-'}
             icon={ICONS.turnaround}
             sub={d.kpi.avgTurnaroundDays != null ? 'shoot to final delivery' : 'no delivered jobs yet'}
           />
@@ -265,7 +265,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                             <Link href={`/enquiries/${e.id}`} className="hover:text-accent-ink">{e.name}</Link>
                           </td>
                           <td className="py-2.5 pr-3 text-ink-muted">{fmtDate(e.createdAt)}</td>
-                          <td className="py-2.5 pr-3 text-ink-muted">{e.service ?? '—'}</td>
+                          <td className="py-2.5 pr-3 text-ink-muted">{e.service ?? '-'}</td>
                           <td className="py-2.5 pr-3 text-ink-muted">{e.source}</td>
                           <td className="py-2.5"><StatusPill status={e.status} /></td>
                         </tr>

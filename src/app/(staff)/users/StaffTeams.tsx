@@ -77,7 +77,7 @@ function StaffRow({ staff, csrf, isSelf }: { staff: StaffRowData; csrf: string; 
 
       {reset.status === 'reset' ? (
         <div className="mt-2 rounded-md border border-line bg-delivered p-3 text-sm">
-          <span className="font-bold text-delivered-ink">New temporary password</span> — give it to {staff.name}; they’ll change it on next sign-in:
+          <span className="font-bold text-delivered-ink">New temporary password</span>. Give it to {staff.name}; they’ll change it on next sign-in:
           <span className="ml-2 select-all rounded border border-line bg-surface px-2 py-0.5 text-ink">{reset.tempPassword}</span>
         </div>
       ) : null}

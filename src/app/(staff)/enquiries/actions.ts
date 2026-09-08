@@ -7,6 +7,7 @@ import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { findOrCreateClient } from '@/lib/domain/client'
 import { advanceEnquiry, cancelBooking, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
 import { enquirySchema } from '@/lib/validation/enquiry'
 import {
@@ -39,22 +40,72 @@ export type AddEnquiryState =
   | { status: 'error'; message?: string; errors?: { name?: string; email?: string } }
   | { status: 'created'; enquiryId: string }
 
+export type ClientMatch = { id: string; displayName: string; email: string }
+
+export async function searchClientsAction(query: string): Promise<ClientMatch[]> {
+  await requireStaff()
+  const q = query.trim()
+  if (q.length < 2) return []
+  return prisma.client.findMany({
+    where: {
+      OR: [{ displayName: { contains: q, mode: 'insensitive' } }, { email: { contains: q } }],
+    },
+    select: { id: true, displayName: true, email: true },
+    orderBy: { displayName: 'asc' },
+    take: 8,
+  })
+}
+
 export async function addEnquiryAction(_prev: AddEnquiryState, formData: FormData): Promise<AddEnquiryState> {
   const user = await requireStaff()
   if (!(await csrfOk(formData))) return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  const parsed = enquirySchema.safeParse({
-    name: formData.get('name'),
-    email: formData.get('email'),
-    phone: formData.get('phone') ?? '',
-    eventType: formData.get('eventType') ?? '',
-    message: formData.get('message') ?? '',
-  })
-  if (!parsed.success) {
-    const f = parsed.error.flatten().fieldErrors
-    return { status: 'error', errors: { name: f.name?.[0], email: f.email?.[0] } }
+  const eventType = String(formData.get('eventType') ?? '').trim() || null
+  const message = String(formData.get('message') ?? '').trim() || null
+
+  const existingClientId = String(formData.get('clientId') ?? '').trim()
+  let client
+  if (existingClientId) {
+    client = await prisma.client.findUnique({ where: { id: existingClientId } })
+    if (!client) return { status: 'error', message: 'That client no longer exists.' }
+  } else {
+    const parsed = enquirySchema.safeParse({
+      name: formData.get('name'),
+      email: formData.get('email'),
+      phone: formData.get('phone') ?? '',
+    })
+    if (!parsed.success) {
+      const f = parsed.error.flatten().fieldErrors
+      return { status: 'error', errors: { name: f.name?.[0], email: f.email?.[0] } }
+    }
+    const parts = parsed.data.name.trim().split(/\s+/)
+    client = await findOrCreateClient(
+      { email: parsed.data.email, firstName: parts[0], lastName: parts.slice(1).join(' ') || undefined, phone: parsed.data.phone },
+      user.id,
+    )
   }
-  const enquiry = await createEnquiry({ ...parsed.data, source: 'MANUAL' }, user.id)
+
+  const enquiry = await createEnquiry(
+    {
+      clientId: client.id,
+      name: client.displayName,
+      firstName: client.firstName,
+      lastName: client.lastName,
+      email: client.email,
+      phone: client.phone,
+      street: client.street,
+      suburb: client.suburb,
+      state: client.state,
+      postcode: client.postcode,
+      country: client.country,
+      isCompany: client.type === 'BUSINESS',
+      eventType,
+      message,
+      source: 'MANUAL',
+    },
+    user.id,
+  )
   revalidatePath('/enquiries')
+  revalidatePath('/clients')
   return { status: 'created', enquiryId: enquiry.id }
 }
 
