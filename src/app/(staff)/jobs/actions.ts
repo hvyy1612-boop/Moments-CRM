@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { sydneyLocalToUtc } from '@/lib/time'
 import { assignResource, createBooking } from '@/lib/domain/booking'
 import { logCommunication } from '@/lib/domain/communication'
 import { closeJob, createProjectFromEnquiry } from '@/lib/domain/project'
@@ -630,9 +631,10 @@ export async function publishGalleryAction(formData: FormData): Promise<void> {
 }
 
 function parseDue(formData: FormData): Date | null {
-  const raw = String(formData.get('dueAt') ?? '').trim()
-  if (!raw) return null
-  const d = new Date(raw)
+  const date = String(formData.get('dueAt') ?? '').trim()
+  if (!date) return null
+  const time = String(formData.get('dueTime') ?? '').trim() || '09:00'
+  const d = sydneyLocalToUtc(`${date}T${time}`)
   return Number.isNaN(d.getTime()) ? null : d
 }
 

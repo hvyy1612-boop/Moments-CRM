@@ -24,69 +24,9 @@ export async function createInvoice(
   input: CreateInvoiceInput,
   actorUserId: string | null,
 ) {
-  const now = systemClock.now()
-  const total = new Prisma.Decimal(input.amount)
-  if (total.lessThanOrEqualTo(0)) throw new Error('Enter an amount greater than zero.')
-  const { subtotal, taxTotal } = splitGstInclusive(total)
-
   for (let attempt = 0; ; attempt++) {
     try {
-      return await prisma.$transaction(async (tx) => {
-        const project = await tx.project.findUnique({
-          where: { id: projectId },
-          select: {
-            id: true,
-            lifecycleStatus: true,
-            client: { select: { displayName: true, email: true } },
-          },
-        })
-        if (!project) throw new Error('Project not found.')
-        if (project.lifecycleStatus === 'CANCELLED' || project.lifecycleStatus === 'LOST') {
-          throw new Error('This job is closed. Reopen it before invoicing.')
-        }
-
-        const invoice = await tx.invoice.create({
-          data: {
-            projectId,
-            invoiceNumber: await nextInvoiceNumber(tx, now.getFullYear()),
-            type: input.type,
-            status: 'DRAFT',
-            subtotal,
-            taxTotal,
-            total,
-            billingNameSnapshot: project.client.displayName,
-            billingEmailSnapshot: project.client.email,
-            lines: {
-              create: {
-                description: input.description,
-                quantity: 1,
-                unitPrice: total,
-                tax: taxTotal,
-                lineTotal: total,
-                sortOrder: 0,
-              },
-            },
-          },
-        })
-        await tx.auditLog.create({
-          data: {
-            action: 'invoice.created',
-            entityType: 'Invoice',
-            entityId: invoice.id,
-            actorUserId,
-            afterData: { invoiceNumber: invoice.invoiceNumber, total: total.toString() },
-          },
-        })
-        await tx.outboxEvent.create({
-          data: {
-            eventType: 'invoice.created',
-            aggregateType: 'Invoice',
-            aggregateId: invoice.id,
-            payload: { invoiceId: invoice.id, projectId },
-          },
-        })
-        return invoice
-      })
+      return await prisma.$transaction((tx) => createInvoiceTx(tx, projectId, input, actorUserId))
     } catch (error) {
       const isUnique =
         error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
@@ -94,6 +34,62 @@ export async function createInvoice(
       throw error
     }
   }
+}
+
+export async function createInvoiceTx(
+  tx: Tx,
+  projectId: string,
+  input: CreateInvoiceInput,
+  actorUserId: string | null,
+) {
+  const now = systemClock.now()
+  const total = new Prisma.Decimal(input.amount)
+  if (total.lessThanOrEqualTo(0)) throw new Error('Enter an amount greater than zero.')
+  const { subtotal, taxTotal } = splitGstInclusive(total)
+
+  const project = await tx.project.findUnique({
+    where: { id: projectId },
+    select: { id: true, lifecycleStatus: true, client: { select: { displayName: true, email: true } } },
+  })
+  if (!project) throw new Error('Project not found.')
+  if (project.lifecycleStatus === 'CANCELLED' || project.lifecycleStatus === 'LOST') {
+    throw new Error('This job is closed. Reopen it before invoicing.')
+  }
+
+  const invoice = await tx.invoice.create({
+    data: {
+      projectId,
+      invoiceNumber: await nextInvoiceNumber(tx, now.getFullYear()),
+      type: input.type,
+      status: 'DRAFT',
+      subtotal,
+      taxTotal,
+      total,
+      billingNameSnapshot: project.client.displayName,
+      billingEmailSnapshot: project.client.email,
+      lines: {
+        create: { description: input.description, quantity: 1, unitPrice: total, tax: taxTotal, lineTotal: total, sortOrder: 0 },
+      },
+    },
+  })
+  await tx.auditLog.create({
+    data: {
+      action: 'invoice.created',
+      entityType: 'Invoice',
+      entityId: invoice.id,
+      actorUserId,
+      afterData: { invoiceNumber: invoice.invoiceNumber, total: total.toString() },
+    },
+  })
+  await tx.outboxEvent.create({
+    data: {
+      eventType: 'invoice.created',
+      aggregateType: 'Invoice',
+      aggregateId: invoice.id,
+      payload: { invoiceId: invoice.id, projectId },
+    },
+  })
+  return invoice
 }
 
 export async function createInvoiceWithLines(
@@ -338,52 +334,60 @@ export async function issueCreditNote(
   reason: string | null,
   actorUserId: string | null,
 ) {
+  return prisma.$transaction((tx) => issueCreditNoteTx(tx, invoiceId, amount, reason, actorUserId))
+}
+
+export async function issueCreditNoteTx(
+  tx: Tx,
+  invoiceId: string,
+  amount: Prisma.Decimal | string | number,
+  reason: string | null,
+  actorUserId: string | null,
+) {
   const value = new Prisma.Decimal(amount)
   if (value.lessThanOrEqualTo(0)) throw new Error('Credit note amount must be greater than zero.')
-  return prisma.$transaction(async (tx) => {
-    await lockInvoiceRow(tx, invoiceId)
-    const invoice = await tx.invoice.findUnique({
-      where: { id: invoiceId },
-      select: { id: true, projectId: true, total: true, status: true },
-    })
-    if (!invoice) throw new Error('Invoice not found.')
-    if (invoice.status === 'DRAFT' || invoice.status === 'VOID') {
-      throw new Error('Only an issued invoice can be credited.')
-    }
-    const priorCredits = await tx.creditNote.findMany({
-      where: { invoiceId, NOT: { status: 'VOIDED' } },
-      select: { amount: true },
-    })
-    const creditedTotal = priorCredits.reduce((s, c) => s.add(c.amount), new Prisma.Decimal(0))
-    if (creditedTotal.add(value).greaterThan(invoice.total)) {
-      throw new Error('Credit notes cannot exceed the invoice total.')
-    }
-    const creditNote = await tx.creditNote.create({
-      data: { invoiceId, amount: value, reason: reason ?? null, status: 'SUCCEEDED', issuedByUserId: actorUserId },
-    })
-
-    const paidNet = await invoicePaidNet(tx, invoiceId)
-    const obligation = invoice.total.sub(creditedTotal.add(value))
-    const status = paidNet.greaterThanOrEqualTo(obligation)
-      ? 'PAID'
-      : paidNet.greaterThan(0)
-        ? 'PARTIALLY_PAID'
-        : invoice.status
-    await tx.invoice.update({ where: { id: invoiceId }, data: { status } })
-
-    const project = await tx.project.findUnique({ where: { id: invoice.projectId }, select: { companyId: true } })
-    await tx.auditLog.create({
-      data: {
-        companyId: project?.companyId ?? null,
-        action: 'invoice.credit_note_issued',
-        entityType: 'Invoice',
-        entityId: invoiceId,
-        actorUserId,
-        afterData: { amount: value.toString(), reason: reason ?? null },
-      },
-    })
-    return creditNote
+  await lockInvoiceRow(tx, invoiceId)
+  const invoice = await tx.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { id: true, projectId: true, total: true, status: true },
   })
+  if (!invoice) throw new Error('Invoice not found.')
+  if (invoice.status === 'DRAFT' || invoice.status === 'VOID') {
+    throw new Error('Only an issued invoice can be credited.')
+  }
+  const priorCredits = await tx.creditNote.findMany({
+    where: { invoiceId, NOT: { status: 'VOIDED' } },
+    select: { amount: true },
+  })
+  const creditedTotal = priorCredits.reduce((s, c) => s.add(c.amount), new Prisma.Decimal(0))
+  if (creditedTotal.add(value).greaterThan(invoice.total)) {
+    throw new Error('Credit notes cannot exceed the invoice total.')
+  }
+  const creditNote = await tx.creditNote.create({
+    data: { invoiceId, amount: value, reason: reason ?? null, status: 'SUCCEEDED', issuedByUserId: actorUserId },
+  })
+
+  const paidNet = await invoicePaidNet(tx, invoiceId)
+  const obligation = invoice.total.sub(creditedTotal.add(value))
+  const status = paidNet.greaterThanOrEqualTo(obligation)
+    ? 'PAID'
+    : paidNet.greaterThan(0)
+      ? 'PARTIALLY_PAID'
+      : invoice.status
+  await tx.invoice.update({ where: { id: invoiceId }, data: { status } })
+
+  const project = await tx.project.findUnique({ where: { id: invoice.projectId }, select: { companyId: true } })
+  await tx.auditLog.create({
+    data: {
+      companyId: project?.companyId ?? null,
+      action: 'invoice.credit_note_issued',
+      entityType: 'Invoice',
+      entityId: invoiceId,
+      actorUserId,
+      afterData: { amount: value.toString(), reason: reason ?? null },
+    },
+  })
+  return creditNote
 }
 
 export async function issueInvoice(invoiceId: string, actorUserId: string | null) {

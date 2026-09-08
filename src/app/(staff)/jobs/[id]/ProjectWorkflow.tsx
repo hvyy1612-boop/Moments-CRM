@@ -28,12 +28,68 @@ const TYPE_BADGE: Record<TaskType, string> = {
   AUTO: 'bg-paper text-muted',
 }
 
-const inputClass =
-  'h-9 w-full rounded border border-line-strong bg-surface px-2.5 text-base text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
+const inputBase =
+  'h-9 w-full rounded border bg-surface px-2.5 text-base text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
+const inputClass = `${inputBase} border-line-strong`
+const borderFor = (hasError: boolean) => (hasError ? 'border-danger' : 'border-line-strong')
+
+type TaskFormErrors = { title?: string; date?: string; time?: string }
+
+function checkTaskForm(form: HTMLFormElement): TaskFormErrors {
+  const fd = new FormData(form)
+  const errs: TaskFormErrors = {}
+  if (!String(fd.get('title') ?? '').trim()) errs.title = 'Please enter a task name.'
+  if (!String(fd.get('dueAt') ?? '').trim()) errs.date = 'Please choose a date.'
+  if (!String(fd.get('dueTime') ?? '').trim()) errs.time = 'Please choose a time.'
+  return errs
+}
 
 function TypeTag({ label, type }: { label: string; type: TaskType }) {
   if (!label) return null
   return <span className={`rounded px-1.5 py-0.5 text-xs font-bold ${TYPE_BADGE[type]}`}>{label}</span>
+}
+
+function DueDateTimeFields({
+  dateDefault,
+  timeDefault,
+  errors,
+  onClear,
+}: {
+  dateDefault?: string
+  timeDefault?: string
+  errors: TaskFormErrors
+  onClear: (field: 'date' | 'time') => void
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1 text-xs font-bold text-muted">
+          <span>Date <span className="text-danger">*</span></span>
+          <input
+            className={`${inputBase} max-w-40 ${borderFor(Boolean(errors.date))}`}
+            type="date"
+            name="dueAt"
+            defaultValue={dateDefault ?? ''}
+            aria-label="Due date"
+            onInput={() => onClear('date')}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-bold text-muted">
+          <span>Time <span className="text-danger">*</span></span>
+          <input
+            className={`${inputBase} max-w-48 ${borderFor(Boolean(errors.time))}`}
+            type="time"
+            step={1}
+            name="dueTime"
+            defaultValue={timeDefault ?? ''}
+            aria-label="Due time (hours, minutes, seconds)"
+            onInput={() => onClear('time')}
+          />
+        </label>
+      </div>
+      {errors.date || errors.time ? <p className="text-sm text-danger">{errors.date ?? errors.time}</p> : null}
+    </div>
+  )
 }
 
 export function ProjectWorkflow({
@@ -41,15 +97,23 @@ export function ProjectWorkflow({
   allDone,
   projectId,
   csrf,
+  taskTimes = {},
 }: {
   stages: BoardStage[]
   allDone: boolean
   projectId: string
   csrf: string
+  taskTimes?: Record<string, string>
 }) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [addingStage, setAddingStage] = useState<string | null>(null)
   const [addStageOpen, setAddStageOpen] = useState(false)
+  const [editErrors, setEditErrors] = useState<TaskFormErrors>({})
+  const [addErrors, setAddErrors] = useState<TaskFormErrors>({})
+  const clearEdit = (field: keyof TaskFormErrors) =>
+    setEditErrors((p) => (p[field] ? { ...p, [field]: undefined } : p))
+  const clearAdd = (field: keyof TaskFormErrors) =>
+    setAddErrors((p) => (p[field] ? { ...p, [field]: undefined } : p))
 
   const allTasks = stages.flatMap((s) => s.tasks)
   const nowStage = stages.find((s) => s.active) ?? null
@@ -130,17 +194,41 @@ export function ProjectWorkflow({
                     <form
                       key={t.id}
                       action={updateProjectTaskAction}
-                      onSubmit={() => setEditingId(null)}
+                      noValidate
+                      onSubmit={(e) => {
+                        const errs = checkTaskForm(e.currentTarget)
+                        if (errs.title || errs.date || errs.time) {
+                          e.preventDefault()
+                          setEditErrors(errs)
+                          return
+                        }
+                        setEditErrors({})
+                        setEditingId(null)
+                      }}
                       className="flex flex-col gap-2 rounded-md border border-accent bg-paper p-3"
                     >
                       <input type="hidden" name="csrf" value={csrf} />
                       <input type="hidden" name="projectId" value={projectId} />
                       <input type="hidden" name="workItemId" value={t.id} />
-                      <input className={inputClass} name="title" defaultValue={t.title} required aria-label="Task title" />
+                      <div className="flex flex-col gap-1">
+                        <input
+                          className={`${inputBase} ${borderFor(Boolean(editErrors.title))}`}
+                          name="title"
+                          defaultValue={t.title}
+                          aria-label="Task title"
+                          onInput={() => clearEdit('title')}
+                        />
+                        {editErrors.title ? <p className="text-sm text-danger">{editErrors.title}</p> : null}
+                      </div>
+                      <DueDateTimeFields
+                        dateDefault={t.dueValue ?? ''}
+                        timeDefault={taskTimes[t.id] ?? ''}
+                        errors={editErrors}
+                        onClear={clearEdit}
+                      />
                       <div className="flex items-center gap-2">
-                        <input className={`${inputClass} max-w-40`} type="date" name="dueAt" defaultValue={t.dueValue ?? ''} aria-label="Due date" />
                         <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface">Save</button>
-                        <button type="button" onClick={() => setEditingId(null)} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">Cancel</button>
+                        <button type="button" onClick={() => { setEditErrors({}); setEditingId(null) }} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">Cancel</button>
                       </div>
                     </form>
                   ) : (
@@ -149,7 +237,7 @@ export function ProjectWorkflow({
                       task={t}
                       projectId={projectId}
                       csrf={csrf}
-                      onEdit={() => setEditingId(t.id)}
+                      onEdit={() => { setEditErrors({}); setEditingId(t.id) }}
                     />
                   )
                 })}
@@ -171,30 +259,55 @@ export function ProjectWorkflow({
                 {addingStage === stage.key ? (
                   <form
                     action={addProjectTaskAction}
-                    onSubmit={() => setAddingStage(null)}
+                    noValidate
+                    onSubmit={(e) => {
+                      const errs = checkTaskForm(e.currentTarget)
+                      if (errs.title || errs.date || errs.time) {
+                        e.preventDefault()
+                        setAddErrors(errs)
+                        return
+                      }
+                      setAddErrors({})
+                      setAddingStage(null)
+                    }}
                     className="flex flex-col gap-2 rounded-md border border-accent bg-paper p-3"
                   >
                     <input type="hidden" name="csrf" value={csrf} />
                     <input type="hidden" name="projectId" value={projectId} />
                     <input type="hidden" name="stage" value={stage.key} />
-                    <input className={inputClass} name="title" placeholder="New task" required autoFocus aria-label="Task title" />
-                    <div className="flex flex-wrap items-center gap-2">
-                      <select className={`${inputClass} max-w-40`} name="type" defaultValue="TODO" aria-label="Task type">
-                        {ADDABLE_TASK_TYPES.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                      <input className={`${inputClass} max-w-40`} type="date" name="dueAt" aria-label="Due date" />
+                    <div className="flex flex-col gap-1">
+                      <input
+                        className={`${inputBase} ${borderFor(Boolean(addErrors.title))}`}
+                        name="title"
+                        placeholder="New task"
+                        autoFocus
+                        aria-label="Task title"
+                        onInput={() => clearAdd('title')}
+                      />
+                      {addErrors.title ? <p className="text-sm text-danger">{addErrors.title}</p> : null}
+                    </div>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <label className="flex flex-col gap-1 text-xs font-bold text-muted">
+                        <span>Type</span>
+                        <select className={`${inputClass} max-w-40`} name="type" defaultValue="TODO" aria-label="Task type">
+                          {ADDABLE_TASK_TYPES.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <DueDateTimeFields errors={addErrors} onClear={clearAdd} />
+                    </div>
+                    <div className="flex items-center gap-2">
                       <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface">Add</button>
-                      <button type="button" onClick={() => setAddingStage(null)} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">Cancel</button>
+                      <button type="button" onClick={() => { setAddErrors({}); setAddingStage(null) }} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">Cancel</button>
                     </div>
                   </form>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setAddingStage(stage.key)}
+                    onClick={() => { setAddErrors({}); setAddingStage(stage.key) }}
                     className="self-start rounded px-1 py-1 text-sm font-bold text-accent-ink hover:underline"
                   >
                     + Add task

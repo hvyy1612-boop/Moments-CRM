@@ -1132,9 +1132,18 @@ model ChangeRequest {
   reason                  String?             @db.VarChar(500)
   commercialImpact        Decimal?            @map("commercial_impact") @db.Decimal(12, 2)
   scheduleImpact          Boolean             @default(false) @map("schedule_impact")
+  payload                 Json?
+  payloadVersion          Int                 @default(1) @map("payload_version")
+  assessedBookingVersion  String?             @map("assessed_booking_version") @db.VarChar(64)
+  assessedQuoteVersionId  String?             @map("assessed_quote_version_id") @db.VarChar(30)
+  clientAgreedVia         String?             @map("client_agreed_via") @db.VarChar(30)
+  clientAgreedAt          DateTime?           @map("client_agreed_at") @db.Timestamptz
+  clientAgreedByUserId    String?             @map("client_agreed_by_user_id") @db.VarChar(30)
+  agreedQuoteVersionId    String?             @map("agreed_quote_version_id") @db.VarChar(30)
   resultingQuoteVersionId String?             @map("resulting_quote_version_id") @db.VarChar(30)
   approvedByUserId        String?             @map("approved_by_user_id") @db.VarChar(30)
   approvedAt              DateTime?           @map("approved_at") @db.Timestamptz
+  appliedAt               DateTime?           @map("applied_at") @db.Timestamptz
   rejectedAt              DateTime?           @map("rejected_at") @db.Timestamptz
   createdAt               DateTime            @default(now()) @map("created_at") @db.Timestamptz
   updatedAt               DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz

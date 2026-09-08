@@ -75,6 +75,23 @@ export function sydneyYmd(date: Date): { year: number; month: number; day: numbe
   return { year: Number(at.year), month: Number(at.month), day: Number(at.day) }
 }
 
+export function sydneyDateTimeParts(date: Date): { date: string; time: string } {
+  const at: Record<string, string> = {}
+  for (const part of new Intl.DateTimeFormat('en-GB', {
+    timeZone: SYDNEY,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)) {
+    if (part.type !== 'literal') at[part.type] = part.value
+  }
+  return { date: `${at.year}-${at.month}-${at.day}`, time: `${at.hour}:${at.minute}:${at.second}` }
+}
+
 export function formatSydneyTime(date: Date): string {
   return new Intl.DateTimeFormat('en-AU', {
     timeZone: SYDNEY,

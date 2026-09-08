@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/form'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
-import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
+import { formatSydneyDate, formatSydneyDateTime, sydneyDateTimeParts } from '@/lib/time'
 import { getProjectBoard } from '@/lib/domain/project-workflow'
 import { getJobBalance } from '@/lib/domain/money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
@@ -129,6 +129,13 @@ export async function CaseDetail({
     : []
 
   const board = await getProjectBoard(project.id)
+
+  const taskOverrides = await prisma.workItem.findMany({
+    where: { projectId: project.id, dueOverrideAt: { not: null } },
+    select: { id: true, dueOverrideAt: true },
+  })
+  const taskTimes: Record<string, string> = {}
+  for (const w of taskOverrides) if (w.dueOverrideAt) taskTimes[w.id] = sydneyDateTimeParts(w.dueOverrideAt).time
   const communications = await prisma.communication.findMany({
     where: { projectId: project.id },
     orderBy: { createdAt: 'asc' },
@@ -268,6 +275,7 @@ export async function CaseDetail({
                 allDone={board.allDone}
                 projectId={project.id}
                 csrf={csrf}
+                taskTimes={taskTimes}
               />
             </section>
 

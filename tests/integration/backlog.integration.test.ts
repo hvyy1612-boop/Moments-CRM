@@ -7,6 +7,7 @@ import {
   approveChangeRequest,
   assessChangeRequest,
   createChangeRequest,
+  recordClientAgreement,
 } from '@/lib/domain/change-request'
 import { listCommunications, logCommunication } from '@/lib/domain/communication'
 import { confirmBookingByToken, createProjectFromPackage } from '@/lib/domain/direct-booking'
@@ -150,13 +151,14 @@ describe('change requests', () => {
     await saveQuoteDraft(q.versionId, [{ description: 'Base', quantity: 1, unitPrice: '2000' }], null)
     await sendQuote(q.quoteId, null)
 
-    const request = await createChangeRequest(projectId, {
-      type: 'COMMERCIAL',
-      description: 'Add an extra hour of coverage',
-      requestedByType: 'client',
-    })
-    await assessChangeRequest(request.id, { commercialImpact: '300' })
+    const request = await createChangeRequest(
+      projectId,
+      { kind: 'scopeChange', summary: 'Add an extra hour of coverage', fee: { amount: '300' } },
+      { requestedByType: 'client' },
+    )
+    await assessChangeRequest(request.id)
     await approveChangeRequest(request.id, null)
+    await recordClientAgreement(request.id, { via: 'email' })
     const applied = await applyChangeRequest(request.id, null)
 
     expect(applied.status).toBe('APPLIED')

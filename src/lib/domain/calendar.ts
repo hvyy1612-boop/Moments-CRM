@@ -187,13 +187,13 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
       const isLead = Boolean(w.enquiry)
       const category: CalCategory = isLead ? 'lead' : 'job'
       if (!want(category)) continue
-      const { date } = resolveCalendarDate(w)
+      const { date, timed } = resolveCalendarDate(w)
       if (!date || date.getTime() < startUtc.getTime() || date.getTime() >= endUtc.getTime()) continue
       items.push({
         id: `t_${w.id}`, kind: 'task', refId: w.id, dayKey: sydneyDateKey(date),
-        startMin: null, endMin: null,
+        startMin: timed ? sydneyMinutes(date) : null, endMin: null,
         primary: w.title, secondary: isLead ? w.enquiry!.name : (w.project?.client.displayName ?? 'Job'),
-        category, tone: tone(date.getTime(), false, nowMs), timeLabel: null,
+        category, tone: tone(date.getTime(), false, nowMs), timeLabel: timed ? formatSydneyTime(date) : null,
         href: isLead ? `/enquiries/${w.enquiry!.id}` : `/jobs/${w.project!.id}`,
         editable: false, location: null, status: null, conflict: false, done: false,
       })
