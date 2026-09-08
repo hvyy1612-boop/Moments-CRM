@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/form'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { formatSydneyDateTime } from '@/lib/time'
+import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
 import {
   ENQUIRY_STAGE_KIND,
   ENQUIRY_STAGE_LABEL,
@@ -58,6 +58,15 @@ export default async function EnquiryDetailPage({
       email: true,
       phone: true,
       eventType: true,
+      eventDate: true,
+      message: true,
+      partnerName: true,
+      coverage: true,
+      gettingReadyLocation: true,
+      ceremonyLocation: true,
+      guestCount: true,
+      styleReason: true,
+      heardAbout: true,
       status: true,
       waitingOn: true,
       convertedProjectId: true,
@@ -253,6 +262,37 @@ export default async function EnquiryDetailPage({
             ) : null}
           </div>
         </div>
+
+        {/* Enquiry details (wedding-enquiry fields captured on the add-client / website form) */}
+        {(() => {
+          const details: { label: string; value: string }[] = []
+          const add = (label: string, v: string | null | undefined) => {
+            if (v && v.trim()) details.push({ label, value: v })
+          }
+          add('Partner', enquiry.partnerName)
+          add('Photo / video', enquiry.coverage)
+          add('Event type', enquiry.eventType ? titleCase(enquiry.eventType) : null)
+          add('Event date', enquiry.eventDate ? formatSydneyDate(enquiry.eventDate) : null)
+          add('Getting-ready location', enquiry.gettingReadyLocation)
+          add('Ceremony & reception', enquiry.ceremonyLocation)
+          add('Guest count', enquiry.guestCount)
+          add('How they heard', enquiry.heardAbout)
+          add('Draws them to our style', enquiry.styleReason)
+          if (details.length === 0) return null
+          return (
+            <div className="mt-4 rounded-md border border-line bg-surface p-5">
+              <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Enquiry details</h2>
+              <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {details.map((d) => (
+                  <div key={d.label}>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-muted">{d.label}</dt>
+                    <dd className="mt-0.5 whitespace-pre-line break-words text-sm text-ink">{d.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )
+        })()}
 
         {/* Client + Activity */}
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">

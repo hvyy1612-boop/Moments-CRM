@@ -1,19 +1,24 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { assertTestDatabaseUrl, readDotenvValue } from './assert-test-db'
 
-if (existsSync('.env')) {
-  for (const raw of readFileSync('.env', 'utf8').split('\n')) {
-    const line = raw.trim()
-    if (!line || line.startsWith('#')) continue
-    const eq = line.indexOf('=')
-    if (eq === -1) continue
-    const key = line.slice(0, eq).trim()
-    let value = line.slice(eq + 1).trim()
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1)
-    }
-    if (!(key in process.env)) process.env[key] = value
-  }
+const dotenvTest = existsSync('.env.test') ? readFileSync('.env.test', 'utf8') : ''
+function fromEnvOrTestFile(key: string): string | undefined {
+  const fromEnv = process.env[key]
+  if (fromEnv && fromEnv.trim()) return fromEnv
+  return dotenvTest ? readDotenvValue(key, dotenvTest) : undefined
 }
+
+const productionUrl = existsSync('.env') ? readDotenvValue('DATABASE_URL', readFileSync('.env', 'utf8')) : undefined
+const testUrl = fromEnvOrTestFile('TEST_DATABASE_URL')
+const testDirectUrl = fromEnvOrTestFile('TEST_DIRECT_URL')
+const { masked } = assertTestDatabaseUrl({ testUrl, productionUrl })
+
+process.env.DATABASE_URL = testUrl!
+process.env.DIRECT_URL = testDirectUrl ?? testUrl!
+
+delete process.env.RESEND_API_KEY
+delete process.env.EMAIL_FROM
+delete process.env.STRIPE_SECRET_KEY
+delete process.env.STRIPE_WEBHOOK_SECRET
+
+console.log(`[integration] TEST database verified: ${masked} — email/providers disabled`)

@@ -27,6 +27,14 @@ export type CreateEnquiryInput = {
   message?: string | null
   source?: EnquirySource
   ownerUserId?: string | null
+
+  partnerName?: string | null
+  coverage?: string | null
+  gettingReadyLocation?: string | null
+  ceremonyLocation?: string | null
+  guestCount?: string | null
+  styleReason?: string | null
+  heardAbout?: string | null
 }
 
 export async function createEnquiry(input: CreateEnquiryInput, actorUserId: string | null = null) {
@@ -50,6 +58,13 @@ export async function createEnquiry(input: CreateEnquiryInput, actorUserId: stri
         eventType: input.eventType ?? null,
         eventDate: input.eventDate ?? null,
         message: input.message ?? null,
+        partnerName: input.partnerName ?? null,
+        coverage: input.coverage ?? null,
+        gettingReadyLocation: input.gettingReadyLocation ?? null,
+        ceremonyLocation: input.ceremonyLocation ?? null,
+        guestCount: input.guestCount ?? null,
+        styleReason: input.styleReason ?? null,
+        heardAbout: input.heardAbout ?? null,
         source: input.source ?? 'WEBSITE',
         waitingOn: 'STUDIO',
       },

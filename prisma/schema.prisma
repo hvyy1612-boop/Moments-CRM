@@ -525,6 +525,13 @@ model Enquiry {
   eventType          String?       @map("event_type") @db.VarChar(50)
   eventDate          DateTime?     @map("event_date") @db.Date
   message            String?       @db.Text
+  partnerName          String?     @map("partner_name") @db.VarChar(150)
+  coverage             String?     @db.VarChar(30)
+  gettingReadyLocation String?     @map("getting_ready_location") @db.Text
+  ceremonyLocation     String?     @map("ceremony_location") @db.Text
+  guestCount           String?     @map("guest_count") @db.VarChar(100)
+  styleReason          String?     @map("style_reason") @db.Text
+  heardAbout           String?     @map("heard_about") @db.VarChar(120)
   source             EnquirySource @default(WEBSITE)
   status             EnquiryStatus @default(NEW)
   waitingOn          WaitingOn?    @map("waiting_on")

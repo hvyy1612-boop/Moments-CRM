@@ -91,11 +91,43 @@ export function ClientForm({
         <div className="mt-6 border-t border-line pt-6">
           <p className="mb-4 text-xs font-bold uppercase tracking-wide text-muted">Enquiry</p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Partner's name" htmlFor="partnerName">
+              <TextInput id="partnerName" name="partnerName" placeholder="Their partner (optional)" />
+            </Field>
+            <Field label="Photography, videography or both?" htmlFor="coverage">
+              <Select id="coverage" name="coverage" defaultValue="">
+                <option value="">Not sure yet</option>
+                <option value="Photography">Photography</option>
+                <option value="Videography">Videography</option>
+                <option value="Both">Both</option>
+              </Select>
+            </Field>
             <Field label="Event type" htmlFor="eventType">
               <TextInput id="eventType" name="eventType" placeholder="Wedding" />
             </Field>
-            <Field label="Event date" htmlFor="eventDate">
+            <Field label="Wedding / event date" htmlFor="eventDate">
               <TextInput id="eventDate" name="eventDate" type="date" />
+            </Field>
+            <Field label="Getting-ready location/s" htmlFor="gettingReadyLocation">
+              <TextInput id="gettingReadyLocation" name="gettingReadyLocation" placeholder="If known" />
+            </Field>
+            <Field label="Ceremony & reception location" htmlFor="ceremonyLocation">
+              <TextInput id="ceremonyLocation" name="ceremonyLocation" placeholder="If known" />
+            </Field>
+            <Field label="Approx. guest count" htmlFor="guestCount">
+              <TextInput id="guestCount" name="guestCount" placeholder="e.g. 120" />
+            </Field>
+            <Field label="How did they hear about us?" htmlFor="heardAbout">
+              <Select id="heardAbout" name="heardAbout" defaultValue="">
+                <option value="">Choose an option</option>
+                <option value="Instagram">Instagram</option>
+                <option value="Google">Google</option>
+                <option value="Facebook">Facebook</option>
+                <option value="Referral">Referral (friend / family)</option>
+                <option value="Wedding expo">Wedding expo</option>
+                <option value="Returning client">Returning client</option>
+                <option value="Other">Other</option>
+              </Select>
             </Field>
             <Field label="Source" htmlFor="source">
               <Select id="source" name="source" defaultValue="MANUAL">
@@ -105,6 +137,11 @@ export function ClientForm({
                   </option>
                 ))}
               </Select>
+            </Field>
+          </div>
+          <div className="mt-4">
+            <Field label="What draws them to our style?" htmlFor="styleReason">
+              <Textarea id="styleReason" name="styleReason" placeholder="Optional — what appealed to them about our photography / videography" />
             </Field>
           </div>
         </div>
