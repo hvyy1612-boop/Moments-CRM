@@ -17,14 +17,15 @@ type ClientOption = { id: string; displayName: string }
 type Prefill = { date: string; startTime?: string }
 
 function catClass(item: CalItem): string {
-  // Restrained warm pastels by TYPE (not by bright workflow status). Overdue adds a subtle ring
-  // rather than a loud red fill. All tokens are the globals.css pastel family - no admin-bright colours.
+  // Colour by CATEGORY so it reads against the filter tabs: Enquiries = purple, Job tasks = soft red,
+  // Payments = peach, Events = grey. Shoots (bookings) keep their own green so the shoot day stands out.
+  // Overdue adds a subtle ring rather than a loud fill. All tokens are the globals.css family.
   const base =
     item.category === 'payment' ? 'bg-peach text-ink'
     : item.category === 'event' ? 'bg-sunk text-ink'
     : item.category === 'lead' ? 'bg-lav text-ink'
-    : item.kind === 'booking' || item.kind === 'appointment' ? 'bg-sage text-ink'
-    : 'bg-butter text-ink'
+    : item.kind === 'booking' ? 'bg-sage text-ink'
+    : 'bg-lost text-ink'
   return item.tone === 'overdue' ? `${base} ring-1 ring-lost-ink/40` : base
 }
 
