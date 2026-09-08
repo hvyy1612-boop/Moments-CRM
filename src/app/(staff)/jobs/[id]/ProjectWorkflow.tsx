@@ -80,11 +80,12 @@ function DueDateTimeFields({
         <label className="flex flex-col gap-1 text-xs font-bold text-muted">
           <span>Time <span className="text-danger">*</span></span>
           <input
-            className={`${inputBase} max-w-32 ${borderFor(Boolean(errors.time))}`}
+            className={`${inputBase} max-w-48 ${borderFor(Boolean(errors.time))}`}
             type="time"
+            step={1}
             name="dueTime"
             defaultValue={timeDefault ?? ''}
-            aria-label="Due time"
+            aria-label="Due time (hours, minutes, seconds)"
             onInput={() => onClear('time')}
           />
         </label>

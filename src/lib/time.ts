@@ -89,8 +89,8 @@ export function sydneyYmd(date: Date): { year: number; month: number; day: numbe
   return { year: Number(at.year), month: Number(at.month), day: Number(at.day) }
 }
 
-/** The Sydney-zone calendar date ("YYYY-MM-DD") and 24h wall-clock time ("HH:mm") of an instant,
- *  for pre-filling separate date and time form inputs. */
+/** The Sydney-zone calendar date ("YYYY-MM-DD") and 24h wall-clock time ("HH:mm:ss") of an instant,
+ *  for pre-filling separate date and time (with seconds) form inputs. */
 export function sydneyDateTimeParts(date: Date): { date: string; time: string } {
   const at: Record<string, string> = {}
   for (const part of new Intl.DateTimeFormat('en-GB', {
@@ -100,11 +100,12 @@ export function sydneyDateTimeParts(date: Date): { date: string; time: string } 
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    second: '2-digit',
     hourCycle: 'h23',
   }).formatToParts(date)) {
     if (part.type !== 'literal') at[part.type] = part.value
   }
-  return { date: `${at.year}-${at.month}-${at.day}`, time: `${at.hour}:${at.minute}` }
+  return { date: `${at.year}-${at.month}-${at.day}`, time: `${at.hour}:${at.minute}:${at.second}` }
 }
 
 /** Format an instant as "2:00 pm" in the Sydney zone (time only). */
