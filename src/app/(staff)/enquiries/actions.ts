@@ -7,6 +7,7 @@ import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { sydneyLocalToUtc } from '@/lib/time'
 import { findOrCreateClient } from '@/lib/domain/client'
 import { advanceEnquiry, cancelBooking, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
 import { enquirySchema } from '@/lib/validation/enquiry'
@@ -214,11 +215,14 @@ export async function setEnquiryStageAction(formData: FormData): Promise<void> {
   revalidatePath(`/enquiries/${enquiryId}`)
 }
 
-/** A yyyy-mm-dd form value to a Date, or null. */
+/** Combine the form's date (yyyy-mm-dd) and time (HH:mm[:ss]) into a UTC instant, read as Sydney
+ *  wall-clock so the calendar can place the task in the right slot. Null when no date was given; a
+ *  missing time falls back to 9am. */
 function parseDue(formData: FormData): Date | null {
-  const raw = String(formData.get('dueAt') ?? '').trim()
-  if (!raw) return null
-  const d = new Date(raw)
+  const date = String(formData.get('dueAt') ?? '').trim()
+  if (!date) return null
+  const time = String(formData.get('dueTime') ?? '').trim() || '09:00'
+  const d = sydneyLocalToUtc(`${date}T${time}`)
   return Number.isNaN(d.getTime()) ? null : d
 }
 

@@ -5,6 +5,14 @@ import { ADDABLE_TASK_TYPES, type BoardStage, type TaskType } from '@/features/p
 import { WorkflowProgress } from '@/components/WorkflowProgress'
 import { ReminderChip } from '@/components/ui/WorkflowChips'
 import {
+  checkTaskForm,
+  TaskDueDateTimeFields,
+  taskBorderFor,
+  taskInputBase,
+  taskInputClass,
+  type TaskFormErrors,
+} from '@/components/ui/TaskDateTimeFields'
+import {
   addProjectStageBlockAction,
   addProjectTaskAction,
   updateProjectTaskAction,
@@ -28,71 +36,9 @@ const TYPE_BADGE: Record<TaskType, string> = {
   AUTO: 'bg-paper text-muted',
 }
 
-const inputBase =
-  'h-9 w-full rounded border bg-surface px-2.5 text-base text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
-const inputClass = `${inputBase} border-line-strong`
-const borderFor = (hasError: boolean) => (hasError ? 'border-danger' : 'border-line-strong')
-
-type TaskFormErrors = { title?: string; date?: string; time?: string }
-
-/** The required checks the server also runs, done in the browser so a blank starred field shows a red
- * line the moment staff hit Save (Google/Facebook style) instead of a native tooltip. */
-function checkTaskForm(form: HTMLFormElement): TaskFormErrors {
-  const fd = new FormData(form)
-  const errs: TaskFormErrors = {}
-  if (!String(fd.get('title') ?? '').trim()) errs.title = 'Please enter a task name.'
-  if (!String(fd.get('dueAt') ?? '').trim()) errs.date = 'Please choose a date.'
-  if (!String(fd.get('dueTime') ?? '').trim()) errs.time = 'Please choose a time.'
-  return errs
-}
-
 function TypeTag({ label, type }: { label: string; type: TaskType }) {
   if (!label) return null
   return <span className={`rounded px-1.5 py-0.5 text-xs font-bold ${TYPE_BADGE[type]}`}>{label}</span>
-}
-
-/** Required date + time for a task, so the calendar can place it in the right slot. */
-function DueDateTimeFields({
-  dateDefault,
-  timeDefault,
-  errors,
-  onClear,
-}: {
-  dateDefault?: string
-  timeDefault?: string
-  errors: TaskFormErrors
-  onClear: (field: 'date' | 'time') => void
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-xs font-bold text-muted">
-          <span>Date <span className="text-danger">*</span></span>
-          <input
-            className={`${inputBase} max-w-40 ${borderFor(Boolean(errors.date))}`}
-            type="date"
-            name="dueAt"
-            defaultValue={dateDefault ?? ''}
-            aria-label="Due date"
-            onInput={() => onClear('date')}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs font-bold text-muted">
-          <span>Time <span className="text-danger">*</span></span>
-          <input
-            className={`${inputBase} max-w-48 ${borderFor(Boolean(errors.time))}`}
-            type="time"
-            step={1}
-            name="dueTime"
-            defaultValue={timeDefault ?? ''}
-            aria-label="Due time (hours, minutes, seconds)"
-            onInput={() => onClear('time')}
-          />
-        </label>
-      </div>
-      {errors.date || errors.time ? <p className="text-sm text-danger">{errors.date ?? errors.time}</p> : null}
-    </div>
-  )
 }
 
 export function ProjectWorkflow({
@@ -216,7 +162,7 @@ export function ProjectWorkflow({
                       <input type="hidden" name="workItemId" value={t.id} />
                       <div className="flex flex-col gap-1">
                         <input
-                          className={`${inputBase} ${borderFor(Boolean(editErrors.title))}`}
+                          className={`${taskInputBase} ${taskBorderFor(Boolean(editErrors.title))}`}
                           name="title"
                           defaultValue={t.title}
                           aria-label="Task title"
@@ -224,7 +170,7 @@ export function ProjectWorkflow({
                         />
                         {editErrors.title ? <p className="text-sm text-danger">{editErrors.title}</p> : null}
                       </div>
-                      <DueDateTimeFields
+                      <TaskDueDateTimeFields
                         dateDefault={t.dueValue ?? ''}
                         timeDefault={taskTimes[t.id] ?? ''}
                         errors={editErrors}
@@ -281,7 +227,7 @@ export function ProjectWorkflow({
                     <input type="hidden" name="stage" value={stage.key} />
                     <div className="flex flex-col gap-1">
                       <input
-                        className={`${inputBase} ${borderFor(Boolean(addErrors.title))}`}
+                        className={`${taskInputBase} ${taskBorderFor(Boolean(addErrors.title))}`}
                         name="title"
                         placeholder="New task"
                         autoFocus
@@ -293,7 +239,7 @@ export function ProjectWorkflow({
                     <div className="flex flex-wrap items-end gap-3">
                       <label className="flex flex-col gap-1 text-xs font-bold text-muted">
                         <span>Type</span>
-                        <select className={`${inputClass} max-w-40`} name="type" defaultValue="TODO" aria-label="Task type">
+                        <select className={`${taskInputClass} max-w-40`} name="type" defaultValue="TODO" aria-label="Task type">
                           {ADDABLE_TASK_TYPES.map((o) => (
                             <option key={o.value} value={o.value}>
                               {o.label}
@@ -301,7 +247,7 @@ export function ProjectWorkflow({
                           ))}
                         </select>
                       </label>
-                      <DueDateTimeFields errors={addErrors} onClear={clearAdd} />
+                      <TaskDueDateTimeFields errors={addErrors} onClear={clearAdd} />
                     </div>
                     <div className="flex items-center gap-2">
                       <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface">Add</button>
