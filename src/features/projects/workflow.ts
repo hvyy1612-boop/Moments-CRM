@@ -5,7 +5,8 @@
  * final payment), not toggled by staff. Optional stages (Pre-wedding, Video, Film, Album) are not
  * seeded by default; staff add their tasks per package.
  */
-import { addDays, dueToneFor, TASK_TYPE_LABEL, type DueTone, type TaskType } from '@/features/enquiries/workflow'
+import { dueToneFor, TASK_TYPE_LABEL, type DueTone, type TaskType } from '@/features/enquiries/workflow'
+import type { DueAnchor } from '@/lib/domain/deadline'
 
 export { ADDABLE_TASK_TYPES } from '@/features/enquiries/workflow'
 export type { TaskType } from '@/features/enquiries/workflow'
@@ -215,7 +216,10 @@ export type TaskInput = {
   status: string
   stage: string | null
   type: string
-  dueAt: Date | null
+  /** Effective due date, already resolved by resolveTaskDueDate (docs/25 Part 2, Rule D0). */
+  resolvedDueAt: Date | null
+  /** The task's anchor, so the board can tell "awaiting a shoot" apart from "no date". */
+  dueAnchor: DueAnchor | null
   order: number
   completedByName: string | null
   completedAt: Date | null
@@ -258,7 +262,6 @@ export function buildProjectBoard(
   facts: ProjectFacts,
   tasks: TaskInput[],
   formatDate: (d: Date) => string,
-  shootDate: Date | null = null,
   now: Date | null = null,
 ): ProjectBoard {
   const isDone = (t: TaskInput): boolean => {
@@ -276,13 +279,10 @@ export function buildProjectBoard(
         const type = (t.type as TaskType) ?? 'TODO'
         const isAuto = type === 'AUTO'
         const done = isDone(t)
-        const offset = PROJECT_TASK_SCHEDULE[t.title]
-        let dueDate: Date | null = t.dueAt ?? null
-        let noDate = false
-        if (!dueDate && offset !== undefined) {
-          if (shootDate) dueDate = addDays(shootDate, offset)
-          else noDate = true
-        }
+        // Due date is resolved upstream by resolveTaskDueDate (Rule D0). A shoot-anchored task with no
+        // shoot yet resolves to null → show "no date yet" rather than treating it as overdue.
+        const dueDate: Date | null = t.resolvedDueAt
+        const noDate = dueDate === null && t.dueAnchor === 'SHOOT'
         const blockedBy = PROJECT_TASK_BLOCKED_BY[t.title] ?? null
         return {
           id: t.id,

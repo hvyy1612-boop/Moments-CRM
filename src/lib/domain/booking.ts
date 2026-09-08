@@ -193,6 +193,16 @@ export async function rescheduleBooking(
         },
       })
 
+      // Rule D5 (docs/25 Part 2): only NOT-done SHOOT tasks linked to THIS booking, without a manual
+      // override, follow the move — repoint them to the successor so repeated reschedules resolve
+      // correctly. FIXED / JOB_CONFIRMED and completed tasks do not move; no stored due date is shifted
+      // (Rule D2) — the next resolveTaskDueDate read yields the new dates. Unlinked shoot tasks follow
+      // the job's primary shoot automatically.
+      await tx.workItem.updateMany({
+        where: { bookingId, dueAnchor: 'SHOOT', dueOverrideAt: null, status: { not: 'COMPLETED' } },
+        data: { bookingId: booking.id },
+      })
+
       for (const assignment of previous.assignments) {
         const clash = await tx.resourceAssignment.findFirst({
           where: {

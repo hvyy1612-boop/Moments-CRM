@@ -2,12 +2,14 @@ import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
 import { getJobBalance } from './money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
+import { makeShootDateOf, resolveTaskDueDate, type DeadlineContext } from './deadline'
 import {
   buildProjectBoard,
   DEFAULT_PROJECT_TASKS,
   OPTIONAL_STAGE_TASKS,
   PROJECT_STAGE_KEYS,
   PROJECT_STAGES,
+  PROJECT_TASK_SCHEDULE,
   stageLabel,
   type ProjectBoard,
   type ProjectFacts,
@@ -35,6 +37,10 @@ async function seedIfNeeded(tx: Tx, projectId: string, companyId: string) {
       title: t.title,
       status: 'PENDING' as const,
       order: i,
+      // Deadline foundation (docs/25 Part 2): every default task is shoot-anchored; the offset is
+      // stored on the row (from PROJECT_TASK_SCHEDULE) so a rename never breaks the schedule.
+      dueAnchor: 'SHOOT' as const,
+      dueOffsetDays: PROJECT_TASK_SCHEDULE[t.title] ?? 0,
     })),
   })
   await tx.auditLog.create({
@@ -55,9 +61,10 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     where: { id: projectId },
     select: {
       companyId: true,
+      confirmedByClientAt: true,
       invoices: { select: INVOICE_MONEY_SELECT },
       galleries: { select: { status: true } },
-      bookings: { orderBy: { startsAt: 'desc' }, take: 1, select: { startsAt: true } },
+      bookings: { select: { id: true, startsAt: true, status: true, rescheduledFromId: true } },
     },
   })
 
@@ -72,12 +79,24 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
       status: true,
       stage: true,
       type: true,
-      dueAt: true,
+      dueAnchor: true,
+      dueOffsetDays: true,
+      dueDateFixed: true,
+      dueOverrideAt: true,
+      bookingId: true,
       order: true,
       completedAt: true,
       completedBy: { select: { name: true } },
     },
   })
+
+  // One deadline resolver for the whole board (Rule D0): shoot dates come from the job's bookings
+  // (a linked task follows its own shoot; an unlinked one follows the primary shoot), JOB_CONFIRMED
+  // from the confirm date.
+  const ctx: DeadlineContext = {
+    shootDateOf: makeShootDateOf(project.bookings),
+    jobConfirmedAt: project.confirmedByClientAt,
+  }
 
   // "Paid in full" via the Money foundation (docs/25): there is a real obligation (excludes DRAFT/VOID
   // and credit notes) and nothing is owed on it. Agreed value is irrelevant here, so pass null.
@@ -93,13 +112,14 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     status: w.status,
     stage: w.stage,
     type: w.type,
-    dueAt: w.dueAt,
+    resolvedDueAt: resolveTaskDueDate(w, ctx),
+    dueAnchor: w.dueAnchor,
     order: w.order,
     completedByName: w.completedBy?.name ?? null,
     completedAt: w.completedAt ?? null,
   }))
 
-  return buildProjectBoard(facts, tasks, formatSydneyDate, project.bookings[0]?.startsAt ?? null, new Date())
+  return buildProjectBoard(facts, tasks, formatSydneyDate, new Date())
 }
 
 async function loadTask(taskId: string) {
@@ -130,6 +150,8 @@ export async function addProjectStageBlock(projectId: string, stage: string, act
         title: t.title,
         status: 'PENDING' as const,
         order: i,
+        dueAnchor: 'SHOOT' as const,
+        dueOffsetDays: PROJECT_TASK_SCHEDULE[t.title] ?? 0,
       })),
     })
     await tx.auditLog.create({
@@ -177,7 +199,8 @@ export async function addProjectTask(
         title: clean,
         status: 'PENDING',
         order: (last?.order ?? 0) + 1,
-        dueAt,
+        // A staff-added task is manually dated (or undated): the date is an override, not an anchor.
+        dueOverrideAt: dueAt,
       },
     })
     await tx.auditLog.create({
@@ -193,13 +216,14 @@ export async function addProjectTask(
   })
 }
 
-/** Rename a task and/or change its due date. */
-export async function updateProjectTask(taskId: string, title: string, dueAt: Date | null, actorUserId: string) {
+/** Rename a task and/or set its manual due date. A manual date is an override (Rule D1); passing null
+ *  clears the override so the task follows its anchor again. */
+export async function updateProjectTask(taskId: string, title: string, dueAt: Date | null, actorUserId: string | null) {
   const clean = title.trim()
   if (!clean) throw new Error('A task needs a title.')
   const task = await loadTask(taskId)
   await prisma.$transaction(async (tx) => {
-    await tx.workItem.update({ where: { id: taskId }, data: { title: clean, dueAt } })
+    await tx.workItem.update({ where: { id: taskId }, data: { title: clean, dueOverrideAt: dueAt } })
     await tx.auditLog.create({
       data: {
         companyId: task.companyId,

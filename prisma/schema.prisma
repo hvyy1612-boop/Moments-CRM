@@ -108,6 +108,14 @@ enum BookingStatus {
   COMPLETED
 }
 
+// How a job task's base due date is derived (docs/25 Part 2). No MANUAL anchor: a manual date is
+// WorkItem.dueOverrideAt (Rule D1).
+enum DueAnchor {
+  SHOOT
+  JOB_CONFIRMED
+  FIXED
+}
+
 enum ResourceType {
   PHOTOGRAPHER
   VIDEOGRAPHER
@@ -759,6 +767,7 @@ model Booking {
   assignments     ResourceAssignment[]
   rescheduledFrom Booking?             @relation("BookingReschedule", fields: [rescheduledFromId], references: [id], onDelete: SetNull)
   rescheduledTo   Booking[]            @relation("BookingReschedule")
+  workItems       WorkItem[]
 
   @@index([projectId])
   @@index([status])
@@ -1094,7 +1103,14 @@ model WorkItem {
   title             String         @db.VarChar(150)
   status            WorkItemStatus @default(PENDING)
   order             Int            @default(0)
-  dueAt             DateTime?      @map("due_at") @db.Timestamptz // optional per-task due date (editable)
+  dueAt             DateTime?      @map("due_at") @db.Timestamptz // enquiry/lead tasks: manual/anchored date (project tasks use the fields below)
+  // Deadline foundation (docs/25 Part 2): project tasks derive their due date from an anchor + offset,
+  // resolved by resolveTaskDueDate. A manual date is dueOverrideAt (Rule D1), never a MANUAL anchor.
+  dueAnchor         DueAnchor?     @map("due_anchor")
+  dueOffsetDays     Int            @default(0) @map("due_offset_days") // days from the anchor (negative = before)
+  dueDateFixed      DateTime?      @map("due_date_fixed") @db.Timestamptz // the date for anchor = FIXED
+  dueOverrideAt     DateTime?      @map("due_override_at") @db.Timestamptz // staff manual override; null = follow the anchor
+  bookingId         String?        @map("booking_id") @db.VarChar(30) // for SHOOT tasks: which shoot (multi-shoot jobs)
   completedByUserId String?        @map("completed_by_user_id") @db.VarChar(30)
   completedAt       DateTime?      @map("completed_at") @db.Timestamptz
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz
@@ -1102,10 +1118,12 @@ model WorkItem {
   company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   enquiry     Enquiry? @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
   project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  booking     Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
   completedBy User?    @relation("WorkItemCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
 
   @@index([enquiryId])
   @@index([projectId])
+  @@index([bookingId])
   @@map("work_items")
 }
 

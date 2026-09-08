@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db'
 import { formatSydneyDate, formatSydneyTime, sydneyLocalToUtc, sydneyYmd, systemClock } from '@/lib/time'
 import { addDays, ENQUIRY_TASK_SCHEDULE } from '@/features/enquiries/workflow'
-import { PROJECT_TASK_SCHEDULE } from '@/features/projects/workflow'
+import { makeShootDateOf, resolveTaskDueDate } from './deadline'
 
 /**
  * "Today" - the studio's morning cockpit (BR-CAL). Not a generic task list: it unifies what needs
@@ -58,8 +58,14 @@ export async function getTodayCockpit(): Promise<TodayCockpit> {
       },
       select: {
         id: true, title: true, dueAt: true,
+        dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true, bookingId: true,
         enquiry: { select: { id: true, name: true, createdAt: true } },
-        project: { select: { id: true, client: { select: { displayName: true } }, bookings: { orderBy: { startsAt: 'desc' }, take: 1, select: { startsAt: true } } } },
+        project: {
+          select: {
+            id: true, confirmedByClientAt: true, client: { select: { displayName: true } },
+            bookings: { select: { id: true, startsAt: true, status: true, rescheduledFromId: true } },
+          },
+        },
       },
     }),
     prisma.booking.findMany({
@@ -80,9 +86,18 @@ export async function getTodayCockpit(): Promise<TodayCockpit> {
 
   for (const w of tasks) {
     const isLead = Boolean(w.enquiry)
-    const anchor = isLead ? w.enquiry!.createdAt : (w.project?.bookings[0]?.startsAt ?? null)
-    const offset = isLead ? ENQUIRY_TASK_SCHEDULE[w.title] : PROJECT_TASK_SCHEDULE[w.title]
-    const date = w.dueAt ?? (anchor && offset !== undefined ? addDays(anchor, offset) : null)
+    // Leads anchor to the enquiry date; jobs use the one deadline resolver (Rule D0), so an un-booked
+    // job's shoot tasks stay undated (out of the way) until a shoot is scheduled.
+    let date: Date | null
+    if (isLead) {
+      const offset = ENQUIRY_TASK_SCHEDULE[w.title]
+      date = w.dueAt ?? (offset !== undefined ? addDays(w.enquiry!.createdAt, offset) : null)
+    } else {
+      date = resolveTaskDueDate(w, {
+        shootDateOf: makeShootDateOf(w.project?.bookings ?? []),
+        jobConfirmedAt: w.project?.confirmedByClientAt ?? null,
+      })
+    }
     if (!date) continue // undated tasks (e.g. a job with no shoot date yet) are not "due" yet
     const ms = date.getTime()
     const line: TaskLine = {
