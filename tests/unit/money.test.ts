@@ -130,19 +130,41 @@ describe('getJobBalance — outstanding and overpayment aggregated separately (R
     expect(job.netPosition.toString()).toBe('300') // reference figure only
   })
 
-  it('M-e: deposit paid in full but agreed value higher → uninvoicedRemainder > 0 (job not settled)', () => {
+  it('M-e: deposit paid in full but agreed value higher → uninvoicedRemainder > 0, NOT settled', () => {
     const deposit = invoice({ total: d(1500), transactions: [charge(1500)] })
-    const job = getJobBalance([deposit], d(5000))
+    const job = getJobBalance([deposit], d(5000)) // agreed value known (accepted quote / package snapshot)
     expect(job.outstanding.toString()).toBe('0')
     expect(job.invoicedObligation.toString()).toBe('1500')
-    expect(job.agreedContractValue.toString()).toBe('5000')
-    expect(job.uninvoicedRemainder.toString()).toBe('3500')
+    expect(job.agreedContractValue?.toString()).toBe('5000')
+    expect(job.uninvoicedRemainder?.toString()).toBe('3500')
+    expect(job.isFullySettled).toBe(false)
   })
 
-  it('M-4b: no accepted quote → agreed value falls back to invoiced obligation', () => {
-    const job = getJobBalance([invoice({ total: d(2000) })], null)
-    expect(job.agreedContractValue.toString()).toBe('2000')
-    expect(job.uninvoicedRemainder.toString()).toBe('0')
+  it('M-4b: no known agreed value → UNKNOWN, never assumed settled (no fallback to invoiced)', () => {
+    const job = getJobBalance([invoice({ total: d(2000), transactions: [charge(2000)] })], null)
+    expect(job.agreedContractValue).toBeNull()
+    expect(job.agreedValueKnown).toBe(false)
+    expect(job.uninvoicedRemainder).toBeNull()
+    expect(job.outstanding.toString()).toBe('0')
+    expect(job.isFullySettled).toBe(false) // fully paid but agreed value unknown → cannot conclude settled
+  })
+
+  it('agreed value known, fully invoiced and paid → isFullySettled', () => {
+    const job = getJobBalance([invoice({ total: d(2000), transactions: [charge(2000)] })], d(2000))
+    expect(job.uninvoicedRemainder?.toString()).toBe('0')
+    expect(job.isFullySettled).toBe(true)
+  })
+
+  it('VOID invoice with money history → money surfaces as overpayment, never vanishes (Rule M1/M3)', () => {
+    const voided = invoice({ status: 'VOID', total: d(1000), transactions: [charge(100)] })
+    const b = getInvoiceBalance(voided)
+    expect(b.obligation.toString()).toBe('0')
+    expect(b.owed.toString()).toBe('0')
+    expect(b.paidNet.toString()).toBe('100')
+    expect(b.overpaymentToResolve.toString()).toBe('100')
+    const job = getJobBalance([voided], null)
+    expect(job.overpaymentToResolve.toString()).toBe('100') // still in the job total, flagged for resolution
+    expect(job.paidNet.toString()).toBe('100')
   })
 
   it('DRAFT invoices never inflate the job obligation (old-data safety)', () => {
@@ -159,6 +181,6 @@ describe('getJobBalance — outstanding and overpayment aggregated separately (R
     const job = getJobBalance([deposit, supplementary], d(2000))
     expect(job.invoicedObligation.toString()).toBe('2000')
     expect(job.outstanding.toString()).toBe('500')
-    expect(job.uninvoicedRemainder.toString()).toBe('0')
+    expect(job.uninvoicedRemainder?.toString()).toBe('0')
   })
 })
