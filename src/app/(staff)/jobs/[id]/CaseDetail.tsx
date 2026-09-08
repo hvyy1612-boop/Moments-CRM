@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/form'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
-import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
+import { formatSydneyDate, formatSydneyDateTime, sydneyDateTimeParts } from '@/lib/time'
 import { getProjectBoard } from '@/lib/domain/project-workflow'
 import { getJobBalance } from '@/lib/domain/money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
@@ -140,6 +140,14 @@ export async function CaseDetail({
   // status and production progress are separate axes (the Hybrid model): the operational board is never
   // gated on lifecycle status (docs/24 Increment 1).
   const board = await getProjectBoard(project.id)
+  // Time-of-day for tasks a staff member gave a manual date+time (stored as dueOverrideAt). The board
+  // row only carries the date, so the edit form reads the time from here to pre-fill its time input.
+  const taskOverrides = await prisma.workItem.findMany({
+    where: { projectId: project.id, dueOverrideAt: { not: null } },
+    select: { id: true, dueOverrideAt: true },
+  })
+  const taskTimes: Record<string, string> = {}
+  for (const w of taskOverrides) if (w.dueOverrideAt) taskTimes[w.id] = sydneyDateTimeParts(w.dueOverrideAt).time
   const communications = await prisma.communication.findMany({
     where: { projectId: project.id },
     orderBy: { createdAt: 'asc' },
@@ -281,6 +289,7 @@ export async function CaseDetail({
                 allDone={board.allDone}
                 projectId={project.id}
                 csrf={csrf}
+                taskTimes={taskTimes}
               />
             </section>
 

@@ -197,10 +197,10 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
     }
   }
 
-  // Upcoming workflow tasks (to-dos with a due date) as all-day markers - HoneyBook / Google-Tasks
-  // style: informational, do not block a time slot; overdue is toned red. APPOINTMENT (shown above)
-  // and AUTO (system rows) are excluded. Job tasks only appear once the job has a shoot date to
-  // anchor to, which is why an un-booked job stays quiet.
+  // Upcoming workflow tasks (to-dos with a due date) - HoneyBook / Google-Tasks style. A task the
+  // staff gave an explicit date AND time (a manual override) sits in that time slot; an anchored task
+  // with no set time stays an informational all-day marker. Overdue is toned red. APPOINTMENT (shown
+  // above) and AUTO (system rows) are excluded. Job tasks only appear once they have a resolvable date.
   if (want('lead') || want('job')) {
     const tasks = await prisma.workItem.findMany({
       where: { type: { notIn: ['APPOINTMENT', 'AUTO'] }, status: 'PENDING' },
@@ -213,13 +213,13 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
       const isLead = Boolean(w.enquiry)
       const category: CalCategory = isLead ? 'lead' : 'job'
       if (!want(category)) continue
-      const { date } = resolveCalendarDate(w)
+      const { date, timed } = resolveCalendarDate(w)
       if (!date || date.getTime() < startUtc.getTime() || date.getTime() >= endUtc.getTime()) continue
       items.push({
         id: `t_${w.id}`, kind: 'task', refId: w.id, dayKey: sydneyDateKey(date),
-        startMin: null, endMin: null,
+        startMin: timed ? sydneyMinutes(date) : null, endMin: null,
         primary: w.title, secondary: isLead ? w.enquiry!.name : (w.project?.client.displayName ?? 'Job'),
-        category, tone: tone(date.getTime(), false, nowMs), timeLabel: null,
+        category, tone: tone(date.getTime(), false, nowMs), timeLabel: timed ? formatSydneyTime(date) : null,
         href: isLead ? `/enquiries/${w.enquiry!.id}` : `/jobs/${w.project!.id}`,
         editable: false, location: null, status: null, conflict: false, done: false,
       })
