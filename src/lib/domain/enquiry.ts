@@ -39,7 +39,7 @@ export type CreateEnquiryInput = {
   coverage?: string | null
   gettingReadyLocation?: string | null
   ceremonyLocation?: string | null
-  guestCount?: string | null
+  weddingDetails?: string | null
   styleReason?: string | null
   heardAbout?: string | null
 }
@@ -70,7 +70,7 @@ export async function createEnquiry(input: CreateEnquiryInput, actorUserId: stri
         coverage: input.coverage ?? null,
         gettingReadyLocation: input.gettingReadyLocation ?? null,
         ceremonyLocation: input.ceremonyLocation ?? null,
-        guestCount: input.guestCount ?? null,
+        weddingDetails: input.weddingDetails ?? null,
         styleReason: input.styleReason ?? null,
         heardAbout: input.heardAbout ?? null,
         source: input.source ?? 'WEBSITE',

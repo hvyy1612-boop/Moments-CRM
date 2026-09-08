@@ -64,7 +64,7 @@ export default async function EnquiryDetailPage({
       coverage: true,
       gettingReadyLocation: true,
       ceremonyLocation: true,
-      guestCount: true,
+      weddingDetails: true,
       styleReason: true,
       heardAbout: true,
       status: true,
@@ -269,15 +269,15 @@ export default async function EnquiryDetailPage({
           const add = (label: string, v: string | null | undefined) => {
             if (v && v.trim()) details.push({ label, value: v })
           }
-          add('Partner', enquiry.partnerName)
-          add('Photo / video', enquiry.coverage)
+          add("Partner's name", enquiry.partnerName)
+          add('Photography, videography or both', enquiry.coverage)
           add('Event type', enquiry.eventType ? titleCase(enquiry.eventType) : null)
-          add('Event date', enquiry.eventDate ? formatSydneyDate(enquiry.eventDate) : null)
-          add('Getting-ready location', enquiry.gettingReadyLocation)
-          add('Ceremony & reception', enquiry.ceremonyLocation)
-          add('Guest count', enquiry.guestCount)
-          add('How they heard', enquiry.heardAbout)
-          add('Draws them to our style', enquiry.styleReason)
+          add('Wedding / event date', enquiry.eventDate ? formatSydneyDate(enquiry.eventDate) : null)
+          add('Getting-ready location/s', enquiry.gettingReadyLocation)
+          add('Ceremony and reception location', enquiry.ceremonyLocation)
+          add('About the wedding day (incl. guest numbers)', enquiry.weddingDetails)
+          add('How they heard about us', enquiry.heardAbout)
+          add('What draws them to our style', enquiry.styleReason)
           if (details.length === 0) return null
           return (
             <div className="mt-4 rounded-md border border-line bg-surface p-5">

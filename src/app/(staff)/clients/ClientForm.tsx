@@ -110,15 +110,6 @@ export function ClientForm({
             <Field label="Wedding / event date" htmlFor="eventDate">
               <TextInput id="eventDate" name="eventDate" type="date" />
             </Field>
-            <Field label="Getting-ready location/s" htmlFor="gettingReadyLocation">
-              <TextInput id="gettingReadyLocation" name="gettingReadyLocation" placeholder="If known" />
-            </Field>
-            <Field label="Ceremony & reception location" htmlFor="ceremonyLocation">
-              <TextInput id="ceremonyLocation" name="ceremonyLocation" placeholder="If known" />
-            </Field>
-            <Field label="Approx. guest count" htmlFor="guestCount">
-              <TextInput id="guestCount" name="guestCount" placeholder="e.g. 120" />
-            </Field>
             <Field label="How did they hear about us?" htmlFor="heardAbout">
               <Select id="heardAbout" name="heardAbout" defaultValue="">
                 <option value="">Choose an option</option>
@@ -141,8 +132,18 @@ export function ClientForm({
               </Select>
             </Field>
           </div>
-          <div className="mt-4">
-            <Field label="What draws them to our style?" htmlFor="styleReason">
+          {/* Descriptive fields, full width and un-abbreviated, to match the public website enquiry form. */}
+          <div className="mt-4 flex flex-col gap-4">
+            <Field label="Where is the 'getting-ready' location/s? (if known, or if they'd like it photographed / filmed)" htmlFor="gettingReadyLocation">
+              <Textarea id="gettingReadyLocation" name="gettingReadyLocation" placeholder="If known" />
+            </Field>
+            <Field label="Where is the ceremony and reception location?" htmlFor="ceremonyLocation">
+              <Textarea id="ceremonyLocation" name="ceremonyLocation" placeholder="If known" />
+            </Field>
+            <Field label="Tell us more about the wedding day, including how many guests are attending" htmlFor="weddingDetails">
+              <Textarea id="weddingDetails" name="weddingDetails" placeholder="Number of guests, the style of the day, and anything else they've shared." />
+            </Field>
+            <Field label="What draws them to our photography / videography style?" htmlFor="styleReason">
               <Textarea id="styleReason" name="styleReason" placeholder="Optional — what appealed to them about our photography / videography" />
             </Field>
           </div>
