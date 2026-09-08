@@ -60,19 +60,32 @@ export type InvoiceBalance = {
 }
 
 export type JobBalance = {
-  agreedContractValue: D
+  /** Known agreed value (accepted quote total, or a direct booking's package price snapshot); null =
+   *  unknown. Never derived from what has been invoiced — an unknown agreed value must not let the
+   *  system conclude the job is fully invoiced / settled (docs/25 Rule M4b). */
+  agreedContractValue: D | null
+  agreedValueKnown: boolean
   invoicedObligation: D
-  uninvoicedRemainder: D
+  /** null when the agreed value is unknown (cannot say how much is left to invoice). */
+  uninvoicedRemainder: D | null
   paidNet: D
   outstanding: D
   overpaymentToResolve: D
   netPosition: D
+  /** True only when the agreed value is known AND fully invoiced AND nothing owed AND no overpayment
+   *  to resolve. This is the primitive close-job / paid-in-full gates must use. */
+  isFullySettled: boolean
   invoices: InvoiceBalance[]
 }
 
 const creditNoteIsEffective = (cn: CreditNote): boolean => cn.status === undefined || cn.status === 'SUCCEEDED'
 
-/** Net cash held = SUCCEEDED CHARGE(+) − SUCCEEDED REFUND(−) − SUCCEEDED REVERSAL(−) (Rule M2b). */
+/**
+ * Net cash held = SUCCEEDED CHARGE(+) − SUCCEEDED REFUND(−) − SUCCEEDED REVERSAL(−) (Rule M2b).
+ * NOTE: REVERSAL is currently never produced anywhere in the app (only REFUND is, via refundPayment);
+ * subtracting it is the conservative default matching the existing convention (dashboard collected-cash).
+ * If a REVERSAL producer is ever added, confirm its sign/target before trusting this direction.
+ */
 export function computePaidNet(transactions: LedgerTxn[]): D {
   return transactions.reduce((sum, t) => {
     if (t.status !== 'SUCCEEDED') return sum
@@ -131,26 +144,39 @@ export function getInvoiceBalance(inv: InvoiceMoneyInput): InvoiceBalance {
 /**
  * Whole-job money (docs/25 §1.2). `outstanding` and `overpaymentToResolve` are summed INDEPENDENTLY
  * (Rule M3): an overpaid invoice never silently offsets an underpaid one. `netPosition` is a display
- * reference only. `agreedContractValue` comes from the accepted quote; with none it falls back to the
- * invoiced obligation (Rule M4b).
+ * reference only.
+ *
+ * `agreedContractValue` is supplied by the caller as a KNOWN value — the accepted quote total, or a
+ * direct booking's `Project.packagePriceSnapshot` — or `null` when neither exists. It is NEVER derived
+ * from what has been invoiced: an unknown agreed value leaves `uninvoicedRemainder = null` and
+ * `isFullySettled = false`, so paying a deposit invoice can never masquerade as a settled job
+ * (docs/25 Rule M4b).
  */
-export function getJobBalance(invoices: InvoiceMoneyInput[], acceptedQuoteTotal: D | null): JobBalance {
+export function getJobBalance(invoices: InvoiceMoneyInput[], agreedContractValue: D | null): JobBalance {
   const per = invoices.map(getInvoiceBalance)
   const invoicedObligation = per.reduce((s, b) => s.add(b.obligation), ZERO)
   const paidNet = per.reduce((s, b) => s.add(b.paidNet), ZERO)
   const outstanding = per.reduce((s, b) => s.add(b.owed), ZERO)
   const overpaymentToResolve = per.reduce((s, b) => s.add(b.overpaymentToResolve), ZERO)
-  const agreedContractValue = acceptedQuoteTotal ?? invoicedObligation
-  const uninvoicedRemainder = dMax(agreedContractValue.sub(invoicedObligation), ZERO)
+  const agreedValueKnown = agreedContractValue !== null
+  const uninvoicedRemainder = agreedContractValue !== null ? dMax(agreedContractValue.sub(invoicedObligation), ZERO) : null
   const netPosition = invoicedObligation.sub(paidNet)
+  const isFullySettled =
+    agreedValueKnown &&
+    outstanding.lessThanOrEqualTo(ZERO) &&
+    overpaymentToResolve.lessThanOrEqualTo(ZERO) &&
+    uninvoicedRemainder !== null &&
+    uninvoicedRemainder.lessThanOrEqualTo(ZERO)
   return {
     agreedContractValue,
+    agreedValueKnown,
     invoicedObligation,
     uninvoicedRemainder,
     paidNet,
     outstanding,
     overpaymentToResolve,
     netPosition,
+    isFullySettled,
     invoices: per,
   }
 }
