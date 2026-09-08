@@ -22,8 +22,8 @@ function catClass(item: CalItem): string {
     item.category === 'payment' ? 'bg-peach text-ink'
     : item.category === 'event' ? 'bg-sunk text-ink'
     : item.category === 'lead' ? 'bg-lav text-ink'
-    : item.kind === 'booking' || item.kind === 'appointment' ? 'bg-sage text-ink'
-    : 'bg-butter text-ink'
+    : item.kind === 'booking' ? 'bg-sage text-ink'
+    : 'bg-lost text-ink'
   return item.tone === 'overdue' ? `${base} ring-1 ring-lost-ink/40` : base
 }
 

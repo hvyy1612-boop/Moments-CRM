@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { InvoiceDocument } from '@/components/InvoiceDocument'
+import { InvoiceFit } from '@/components/InvoiceFit'
 import { PrintButton } from '@/components/PrintButton'
 
 export const runtime = 'nodejs'
@@ -42,6 +43,7 @@ export default async function InvoicePrintPage({
         <Link href={`/jobs/${id}`} className="text-sm font-bold text-accent hover:underline">&lt;- Back to job</Link>
         <PrintButton />
       </div>
+      <InvoiceFit />
       <InvoiceDocument invoice={invoice} />
     </div>
   )
