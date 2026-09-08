@@ -1,14 +1,6 @@
 import { Button } from '@/components/ui/Button'
 import { Checkbox, Field, Select, TextInput, Textarea } from '@/components/ui/form'
 
-const SOURCES = [
-  { value: 'MANUAL', label: 'Manual' },
-  { value: 'REFERRAL', label: 'Referral' },
-  { value: 'WEBSITE', label: 'Website' },
-  { value: 'INSTAGRAM', label: 'Instagram' },
-  { value: 'OTHER', label: 'Other' },
-]
-
 export type ClientFormValues = {
   firstName?: string | null
   lastName?: string | null
@@ -113,22 +105,19 @@ export function ClientForm({
             <Field label="How did they hear about us?" htmlFor="heardAbout">
               <Select id="heardAbout" name="heardAbout" defaultValue="">
                 <option value="">Choose an option</option>
-                <option value="Instagram">Instagram</option>
                 <option value="Google">Google</option>
+                <option value="Gemini">Gemini</option>
+                <option value="ChatGPT">ChatGPT</option>
+                <option value="Word of mouth">Word of mouth</option>
+                <option value="Instagram">Instagram</option>
                 <option value="Facebook">Facebook</option>
-                <option value="Referral">Referral (friend / family)</option>
-                <option value="Wedding expo">Wedding expo</option>
-                <option value="Returning client">Returning client</option>
-                <option value="Other">Other</option>
-              </Select>
-            </Field>
-            <Field label="Source" htmlFor="source">
-              <Select id="source" name="source" defaultValue="MANUAL">
-                {SOURCES.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
+                <option value="TikTok">TikTok</option>
+                <option value="Pinterest">Pinterest</option>
+                <option value="Easy Weddings">Easy Weddings</option>
+                <option value="Wedshed">Wedshed</option>
+                <option value="One Fine Day">One Fine Day</option>
+                <option value="Blog post">Blog post</option>
+                <option value="Unknown">Unknown</option>
               </Select>
             </Field>
           </div>
@@ -144,7 +133,7 @@ export function ClientForm({
               <Textarea id="weddingDetails" name="weddingDetails" placeholder="Number of guests, the style of the day, and anything else they've shared." />
             </Field>
             <Field label="What draws them to our photography / videography style?" htmlFor="styleReason">
-              <Textarea id="styleReason" name="styleReason" placeholder="Optional — what appealed to them about our photography / videography" />
+              <Textarea id="styleReason" name="styleReason" placeholder="What appealed to them about our photography / videography (optional)" />
             </Field>
           </div>
         </div>

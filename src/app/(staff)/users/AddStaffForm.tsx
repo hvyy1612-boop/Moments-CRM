@@ -18,7 +18,7 @@ export function AddStaffForm({ csrf }: { csrf: string }) {
         <div className="rounded-md border border-line bg-delivered p-4">
           <div className="text-sm font-bold text-delivered-ink">Account created for {state.name}</div>
           <p className="mt-1 text-sm text-ink-muted">
-            Copy these now and give them to the staff member — the password is shown only once. They’ll set
+            Copy these now and give them to the staff member. The password is shown only once. They’ll set
             their own password on first sign-in.
           </p>
           <dl className="mt-3 flex flex-col gap-2">
