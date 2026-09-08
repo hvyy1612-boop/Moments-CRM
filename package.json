@@ -18,6 +18,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "assert:test-db": "node scripts/assert-test-db.mjs",
+    "test:db:migrate": "node scripts/assert-test-db.mjs && DATABASE_URL=\"$TEST_DATABASE_URL\" DIRECT_URL=\"${TEST_DIRECT_URL:-$TEST_DATABASE_URL}\" prisma migrate deploy",
     "e2e": "playwright test",
     "audit:high": "npm audit --audit-level=high",
     "check:routes": "node scripts/audit-routes.mjs",
