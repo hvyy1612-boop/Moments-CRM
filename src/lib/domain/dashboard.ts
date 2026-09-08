@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/db'
 import { stageLabel } from '@/features/projects/workflow'
+import { getInvoiceBalance } from './money'
+import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
 
 export type DashboardPeriod = '30d' | '90d' | 'year'
 const PERIOD_DAYS: Record<Exclude<DashboardPeriod, 'year'>, number> = { '30d': 30, '90d': 90 }
@@ -84,7 +86,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
     prisma.enquiry.findMany({ where: { createdAt: { gte: prevStart } }, select: { status: true, source: true, createdAt: true } }),
     prisma.invoice.findMany({
       where: { status: { in: INVOICE_COUNTED as unknown as string[] } as never },
-      select: { total: true, amountPaid: true, status: true, dueAt: true, issuedAt: true, createdAt: true, project: { select: { package: { select: { name: true } } } } },
+      select: { issuedAt: true, createdAt: true, project: { select: { package: { select: { name: true } } } }, ...INVOICE_MONEY_SELECT },
     }),
     prisma.paymentTransaction.findMany({
       where: { status: 'SUCCEEDED', createdAt: { gte: start } },
@@ -151,10 +153,12 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   }
   const revenueByService: Bar[] = [...svcMap.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 6)
 
-  const unpaid = svcInvoices.filter((i) => (INVOICE_UNPAID as unknown as string[]).includes(i.status as string) && num(i.total) - num(i.amountPaid) > 0.005)
+  const unpaid = svcInvoices
+    .filter((i) => (INVOICE_UNPAID as unknown as string[]).includes(i.status as string))
+    .map((i) => ({ i, bal: num(getInvoiceBalance(toInvoiceMoneyInput(i)).owed) }))
+    .filter((x) => x.bal > 0.005)
   const aging = { current: 0, d1: 0, d8: 0, d30: 0, total: 0 }
-  for (const i of unpaid) {
-    const bal = num(i.total) - num(i.amountPaid)
+  for (const { i, bal } of unpaid) {
     aging.total += bal
     const overdueDays = i.dueAt ? Math.floor((now.getTime() - i.dueAt.getTime()) / 86_400_000) : -1
     if (overdueDays <= 0) aging.current += bal

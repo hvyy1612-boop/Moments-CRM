@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
 import type { ClientInput } from '@/lib/validation/client'
 import { requireCompany } from './project'
+import { INVOICE_MONEY_SELECT } from './invoice-money'
 
 function deriveDisplayName(input: ClientInput): string {
   const person = [input.firstName, input.lastName].filter(Boolean).join(' ').trim()
@@ -249,7 +250,7 @@ export async function getClientPortalByToken(token: string) {
         select: {
           id: true, name: true, code: true, lifecycleStatus: true,
           bookings: { where: { status: { not: 'CANCELLED' } }, orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true } },
-          invoices: { orderBy: { createdAt: 'desc' }, select: { accessToken: true, invoiceNumber: true, total: true, amountPaid: true, status: true } },
+          invoices: { orderBy: { createdAt: 'desc' }, select: { accessToken: true, invoiceNumber: true, ...INVOICE_MONEY_SELECT } },
           galleries: { where: { status: 'PUBLISHED' }, orderBy: { createdAt: 'desc' }, select: { accessToken: true, title: true } },
           questionnaires: { orderBy: { createdAt: 'desc' }, select: { accessToken: true, title: true, status: true } },
         },

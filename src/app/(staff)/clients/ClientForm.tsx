@@ -47,8 +47,8 @@ export function ClientForm({
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="First name" htmlFor="firstName">
-          <TextInput id="firstName" name="firstName" defaultValue={v.firstName ?? ''} autoComplete="given-name" />
+        <Field label="First name" htmlFor="firstName" required>
+          <TextInput id="firstName" name="firstName" required defaultValue={v.firstName ?? ''} autoComplete="given-name" />
         </Field>
         <Field label="Last name" htmlFor="lastName">
           <TextInput id="lastName" name="lastName" defaultValue={v.lastName ?? ''} autoComplete="family-name" />

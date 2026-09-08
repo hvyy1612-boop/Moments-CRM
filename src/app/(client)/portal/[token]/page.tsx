@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getClientPortalByToken } from '@/lib/domain/client'
+import { getInvoiceBalance } from '@/lib/domain/money'
+import { toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate } from '@/lib/time'
 import { titleCase } from '@/lib/text'
@@ -41,12 +43,15 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
                   <div className="mt-3">
                     <div className="text-xs font-bold uppercase tracking-wide text-muted">Invoices</div>
                     <ul className="mt-1 flex flex-col gap-1">
-                      {p.invoices.map((inv, i) => (
+                      {p.invoices.map((inv, i) => {
+                        const owed = getInvoiceBalance(toInvoiceMoneyInput(inv)).owed
+                        return (
                         <li key={i} className="flex items-center justify-between gap-2 text-sm">
-                          <span className="text-ink-muted">{inv.invoiceNumber} · {inv.total.sub(inv.amountPaid).greaterThan(0) ? `${formatAud(inv.total.sub(inv.amountPaid))} due` : 'paid'}</span>
+                          <span className="text-ink-muted">{inv.invoiceNumber} · {owed.greaterThan(0) ? `${formatAud(owed)} due` : 'paid'}</span>
                           {inv.accessToken ? <Link href={`/invoice/${inv.accessToken}`} className="font-bold text-accent hover:underline">View</Link> : null}
                         </li>
-                      ))}
+                        )
+                      })}
                     </ul>
                   </div>
                 ) : null}

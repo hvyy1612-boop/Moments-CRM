@@ -6,6 +6,8 @@ import { StatusTag } from '@/components/ui/StatusTag'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { getInvoiceBalance } from '@/lib/domain/money'
+import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate } from '@/lib/time'
 import { titleCase } from '@/lib/text'
@@ -101,12 +103,9 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     select: {
       id: true,
       invoiceNumber: true,
-      status: true,
-      total: true,
-      amountPaid: true,
       issuedAt: true,
-      dueAt: true,
       project: { select: { id: true, client: { select: { displayName: true } } } },
+      ...INVOICE_MONEY_SELECT, // status, total, dueAt + the ledger facts for the balance
     },
   })
 
@@ -118,7 +117,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     issued: inv.issuedAt,
     due: inv.dueAt,
     total: formatAud(inv.total),
-    balance: formatAud(inv.total.sub(inv.amountPaid)),
+    balance: formatAud(getInvoiceBalance(toInvoiceMoneyInput(inv)).owed),
   }))
   const outstanding = rows.filter((r) => invoiceGroup(r.status) === 'outstanding')
   const paid = rows.filter((r) => invoiceGroup(r.status) === 'paid')
