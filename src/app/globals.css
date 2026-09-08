@@ -130,6 +130,11 @@ body {
   line-height: 1.55;
 }
 
+.donut-sub {
+  font-size: 10px;
+  line-height: 1.25;
+}
+
 .landing-wordmark {
   display: block;
   width: clamp(250px, 40vw, 460px);

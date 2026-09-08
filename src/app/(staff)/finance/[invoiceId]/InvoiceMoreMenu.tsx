@@ -35,7 +35,7 @@ export function InvoiceMoreMenu({ csrf, invoiceId, projectId, isDraft, canVoid, 
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="More actions"
-        className="flex h-9 w-9 items-center justify-center rounded-md border border-line bg-surface text-ink-muted hover:bg-paper hover:text-ink"
+        className="flex h-9 w-9 items-center justify-center rounded-md border border-line-strong bg-surface text-ink-muted transition-colors hover:bg-sunk hover:text-ink"
       >
         <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5"><circle cx="4" cy="10" r="1.6" /><circle cx="10" cy="10" r="1.6" /><circle cx="16" cy="10" r="1.6" /></svg>
       </button>

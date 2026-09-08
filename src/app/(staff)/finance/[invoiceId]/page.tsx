@@ -3,7 +3,6 @@ import { Prisma } from '@prisma/client'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
-import { Button } from '@/components/ui/Button'
 import { InvoiceDocument } from '@/components/InvoiceDocument'
 import { PrintButton } from '@/components/PrintButton'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
@@ -25,6 +24,9 @@ function ymd(date: Date): string {
   const { year, month, day } = sydneyYmd(date)
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
+
+const QUIET_BTN =
+  'inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk'
 
 export default async function InvoiceWorkspacePage({ params }: { params: Promise<{ invoiceId: string }> }) {
   const user = await requireRole('/finance/[invoiceId]')
@@ -126,20 +128,30 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
       <div className="print:hidden">
       <AppShell user={user} csrf={csrf} active="finance">
       <div>
-        {/* Header */}
-        <Link href="/finance" className="text-sm font-bold text-accent hover:underline">&lt;- Payments</Link>
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="font-serif text-2xl font-semibold text-ink">Invoice #{inv.invoiceNumber}</h1>
-            <p className="mt-1 text-sm text-ink-muted">
+        {/* Header (matches the Clients detail page: chevron back-link, ruled title, quiet actions). */}
+        <Link href="/finance" className="inline-flex items-center gap-0.5 text-sm text-ink-muted transition-colors hover:text-ink">
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+          Payments
+        </Link>
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-4 border-b border-line pb-5">
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-semibold leading-tight text-ink">Invoice #{inv.invoiceNumber}</h1>
+            <p className="mt-0.5 text-sm text-ink-muted">
               Status: <span className="font-semibold capitalize text-ink">{inv.status.toLowerCase().replace(/_/g, ' ')}</span>
-              {' · '}{c.displayName} · <Link href={`/jobs/${inv.project.id}`} className="text-accent hover:underline">{inv.project.name}</Link>
+              {' · '}{c.displayName} · <Link href={`/jobs/${inv.project.id}`} className="text-accent-ink hover:underline">{inv.project.name}</Link>
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <PrintButton label="Download PDF" />
+          <div className="flex flex-wrap items-center gap-2">
+            <PrintButton
+              label="Download PDF"
+              className={QUIET_BTN}
+              icon={<svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>}
+            />
             {inv.accessToken ? (
-              <Link href={`/invoice/${inv.accessToken}`} target="_blank"><Button size="sm">Client view</Button></Link>
+              <Link href={`/invoice/${inv.accessToken}`} target="_blank" className={QUIET_BTN}>
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-8 8M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" /></svg>
+                Client view
+              </Link>
             ) : null}
             <InvoiceMoreMenu csrf={csrf} invoiceId={inv.id} projectId={inv.project.id} isDraft={isDraft} canVoid={canVoid} canDelete={unpaid} />
           </div>
