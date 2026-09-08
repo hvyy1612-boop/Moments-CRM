@@ -103,12 +103,60 @@ describe('Money foundation against a real DB (docs/25 Part 1)', () => {
     expect(job.isFullySettled).toBe(false)
   })
 
-  // KNOWN FINDING F-1 (docs/25 "Known findings"): recordPayment is NOT concurrency-safe. A probe of two
-  // simultaneous $1000 payments on a $1000 invoice produced fulfilled=2, charges=2, ledger paidNet=2000
-  // but cache amountPaid=1000 — a silent overpay hidden by the cache. It reads the invoice under READ
-  // COMMITTED without a row lock and rebuilds amountPaid from a stale read. Fix before wiring online/
-  // concurrent payments OR before any screen trusts the cache: lock the invoice row (SELECT … FOR UPDATE)
-  // and recompute amountPaid from the ledger inside the transaction, re-checking `remaining`. Skipped
-  // (not flaky-committed) — see the spec finding.
-  it.skip('recordPayment concurrency: cache must equal the ledger (hardening pending, finding F-1)', () => {})
+  const chargeCount = (invoiceId: string) =>
+    prisma.paymentTransaction.count({ where: { payment: { invoiceId }, type: 'CHARGE', status: 'SUCCEEDED' } })
+
+  describe('F-1: concurrency + idempotency for money writers (fixed; regression)', () => {
+    it('two concurrent full payments on a $1000 invoice → exactly one succeeds; ledger == cache == 1000', async () => {
+      const invId = await issuedInvoice(await newProject(), '1000')
+      const r = await Promise.allSettled([pay(invId, '1000'), pay(invId, '1000')])
+      expect(r.filter((x) => x.status === 'fulfilled')).toHaveLength(1)
+      const bal = await getInvoiceBalanceById(invId)
+      expect(bal?.paidNet.toString()).toBe('1000')
+      expect(await cache(invId)).toBe('1000') // cache == ledger, no silent overpay
+      expect(await chargeCount(invId)).toBe(1)
+    })
+
+    it('two concurrent valid payments ($400 + $600) → both succeed; total $1000', async () => {
+      const invId = await issuedInvoice(await newProject(), '1000')
+      const r = await Promise.allSettled([pay(invId, '400'), pay(invId, '600')])
+      expect(r.filter((x) => x.status === 'fulfilled')).toHaveLength(2)
+      const bal = await getInvoiceBalanceById(invId)
+      expect(bal?.paidNet.toString()).toBe('1000')
+      expect(bal?.owed.toString()).toBe('0')
+      expect(await cache(invId)).toBe('1000')
+    })
+
+    it('retry of the same payment request (same idempotency key) records only one charge', async () => {
+      const invId = await issuedInvoice(await newProject(), '1000')
+      const key = `idem-${randomUUID()}`
+      await recordPayment(invId, { paymentMethod: 'BANK_TRANSFER', amount: '500' }, null, { idempotencyKey: key })
+      await recordPayment(invId, { paymentMethod: 'BANK_TRANSFER', amount: '500' }, null, { idempotencyKey: key }) // retry
+      expect(await chargeCount(invId)).toBe(1)
+      const bal = await getInvoiceBalanceById(invId)
+      expect(bal?.paidNet.toString()).toBe('500')
+    })
+
+    it('two concurrent refunds exceeding refundable → no over-refund; cache == ledger', async () => {
+      const invId = await issuedInvoice(await newProject(), '1000')
+      await pay(invId, '1000')
+      const payment = await prisma.payment.findFirst({ where: { invoiceId: invId }, orderBy: { createdAt: 'desc' } })
+      const r = await Promise.allSettled([
+        refundPayment(payment!.id, '600', {}, null),
+        refundPayment(payment!.id, '600', {}, null),
+      ])
+      expect(r.filter((x) => x.status === 'fulfilled')).toHaveLength(1) // 600 + 600 > 1000 captured
+      const bal = await getInvoiceBalanceById(invId)
+      expect(bal?.paidNet.toString()).toBe('400') // 1000 − 600
+      expect(await cache(invId)).toBe('400')
+    })
+
+    it('payment concurrent with void → never a VOID invoice holding unprocessed money', async () => {
+      const invId = await issuedInvoice(await newProject(), '1000')
+      await Promise.allSettled([pay(invId, '1000'), voidInvoice(invId, null)])
+      const inv = await prisma.invoice.findUnique({ where: { id: invId }, select: { status: true } })
+      const paidNet = (await getInvoiceBalanceById(invId))?.paidNet.toString() ?? '0'
+      expect(inv?.status === 'VOID' && paidNet !== '0').toBe(false)
+    })
+  })
 })
