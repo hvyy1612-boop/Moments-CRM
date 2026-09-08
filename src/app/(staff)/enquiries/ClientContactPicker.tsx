@@ -105,11 +105,11 @@ export function ClientContactPicker({ errors }: { errors?: { name?: string; emai
         )
       ) : (
         <div className="flex flex-col gap-3">
-          <Field label="Client name" htmlFor="enq-name" error={errors?.name}>
-            <TextInput id="enq-name" name="name" autoFocus autoComplete="off" hasError={Boolean(errors?.name)} />
+          <Field label="Client name" htmlFor="enq-name" error={errors?.name} required>
+            <TextInput id="enq-name" name="name" required autoFocus autoComplete="off" hasError={Boolean(errors?.name)} />
           </Field>
-          <Field label="Client email" htmlFor="enq-email" error={errors?.email}>
-            <TextInput id="enq-email" name="email" type="email" autoComplete="off" hasError={Boolean(errors?.email)} />
+          <Field label="Client email" htmlFor="enq-email" error={errors?.email} required>
+            <TextInput id="enq-email" name="email" type="email" required autoComplete="off" hasError={Boolean(errors?.email)} />
           </Field>
           <Field label="Phone" htmlFor="enq-phone">
             <TextInput id="enq-phone" name="phone" autoComplete="off" />

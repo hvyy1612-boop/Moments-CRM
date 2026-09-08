@@ -24,5 +24,10 @@ export const clientSchema = z.object({
   isCompany: z.boolean().optional(),
   notes: optionalText(2000),
 })
+  // A client must be identifiable: at least a first/last name, or a company name for a business.
+  .refine((d) => Boolean(d.firstName || d.lastName || d.company), {
+    message: 'Enter the client name.',
+    path: ['firstName'],
+  })
 
 export type ClientInput = z.infer<typeof clientSchema>
