@@ -135,10 +135,10 @@ export function ClientForm({
           {/* Descriptive fields, full width and un-abbreviated, to match the public website enquiry form. */}
           <div className="mt-4 flex flex-col gap-4">
             <Field label="Where is the 'getting-ready' location/s? (if known, or if they'd like it photographed / filmed)" htmlFor="gettingReadyLocation">
-              <Textarea id="gettingReadyLocation" name="gettingReadyLocation" placeholder="If known" />
+              <Textarea id="gettingReadyLocation" name="gettingReadyLocation" placeholder="Enter the getting-ready location/s" />
             </Field>
             <Field label="Where is the ceremony and reception location?" htmlFor="ceremonyLocation">
-              <Textarea id="ceremonyLocation" name="ceremonyLocation" placeholder="If known" />
+              <Textarea id="ceremonyLocation" name="ceremonyLocation" placeholder="Enter the ceremony and reception location" />
             </Field>
             <Field label="Tell us more about the wedding day, including how many guests are attending" htmlFor="weddingDetails">
               <Textarea id="weddingDetails" name="weddingDetails" placeholder="Number of guests, the style of the day, and anything else they've shared." />
