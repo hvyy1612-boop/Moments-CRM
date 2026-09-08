@@ -9,7 +9,13 @@ import { searchClientsAction, type ClientMatch } from './actions'
  * one inline. Emits a hidden `clientId` (when an existing client is chosen); otherwise the new-client
  * fields (name / email / phone) are submitted and the server creates/links the client.
  */
-export function ClientContactPicker({ errors }: { errors?: { name?: string; email?: string } }) {
+export function ClientContactPicker({
+  errors,
+  onFieldInput,
+}: {
+  errors?: { name?: string; email?: string }
+  onFieldInput?: (field: 'name' | 'email') => void
+}) {
   const [mode, setMode] = useState<'search' | 'new'>('search')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<ClientMatch[]>([])
@@ -106,10 +112,26 @@ export function ClientContactPicker({ errors }: { errors?: { name?: string; emai
       ) : (
         <div className="flex flex-col gap-3">
           <Field label="Client name" htmlFor="enq-name" error={errors?.name} required>
-            <TextInput id="enq-name" name="name" required autoFocus autoComplete="off" hasError={Boolean(errors?.name)} />
+            <TextInput
+              id="enq-name"
+              name="name"
+              required
+              autoFocus
+              autoComplete="off"
+              hasError={Boolean(errors?.name)}
+              onInput={() => onFieldInput?.('name')}
+            />
           </Field>
           <Field label="Client email" htmlFor="enq-email" error={errors?.email} required>
-            <TextInput id="enq-email" name="email" type="email" required autoComplete="off" hasError={Boolean(errors?.email)} />
+            <TextInput
+              id="enq-email"
+              name="email"
+              type="email"
+              required
+              autoComplete="off"
+              hasError={Boolean(errors?.email)}
+              onInput={() => onFieldInput?.('email')}
+            />
           </Field>
           <Field label="Phone" htmlFor="enq-phone">
             <TextInput id="enq-phone" name="phone" autoComplete="off" />

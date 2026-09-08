@@ -10,12 +10,41 @@ import { ClientContactPicker } from './ClientContactPicker'
 
 const INITIAL: AddEnquiryState = { status: 'idle' }
 
+type ClientErrors = { name?: string; email?: string; contact?: string }
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** Same required-field checks the server runs, done in the browser so staff see the red line the
+ * moment they submit a blank starred field (Google/Facebook style) instead of a native tooltip. */
+function validateContact(fd: FormData): ClientErrors {
+  // An existing client was picked - nothing else to fill in.
+  if (String(fd.get('clientId') ?? '').trim()) return {}
+  // Search mode with nothing chosen: the new-client fields are not even on screen.
+  if (!fd.has('name')) {
+    return { contact: 'Add a client for this enquiry. Search for an existing one, or fill in the new client details.' }
+  }
+  const name = String(fd.get('name') ?? '').trim()
+  const email = String(fd.get('email') ?? '').trim()
+  const errs: ClientErrors = {}
+  if (!name) errs.name = "Please enter the client's name."
+  if (!email) errs.email = 'Please enter an email address.'
+  else if (!EMAIL_RE.test(email)) errs.email = 'Please enter a valid email address.'
+  return errs
+}
+
 /** "Add enquiry" opens a compact sheet that creates a REAL Enquiry (a lead) and opens it. */
 export function AddEnquiryButton({ csrf }: { csrf: string }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [state, action, pending] = useActionState(addEnquiryAction, INITIAL)
-  const errors = state.status === 'error' ? (state.errors ?? {}) : {}
+  const [clientErrors, setClientErrors] = useState<ClientErrors>({})
+  const serverErrors = state.status === 'error' ? (state.errors ?? {}) : {}
+  // Client-side check wins while it stands; the server's answer fills in once the form actually posts.
+  const errors = {
+    name: clientErrors.name ?? serverErrors.name,
+    email: clientErrors.email ?? serverErrors.email,
+  }
+  const topMessage = clientErrors.contact ?? (state.status === 'error' ? state.message : undefined)
 
   useEffect(() => {
     if (state.status === 'created') router.push(`/enquiries/${state.enquiryId}`)
@@ -25,7 +54,10 @@ export function AddEnquiryButton({ csrf }: { csrf: string }) {
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setClientErrors({})
+          setOpen(true)
+        }}
         className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
       >
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
@@ -48,11 +80,28 @@ export function AddEnquiryButton({ csrf }: { csrf: string }) {
               </button>
             </div>
 
-            {state.status === 'error' && state.message ? <div className="mb-3"><Alert tone="danger" title={state.message} /></div> : null}
+            {topMessage ? <div className="mb-3"><Alert tone="danger" title={topMessage} /></div> : null}
 
-            <form action={action} className="flex flex-col gap-4">
+            <form
+              action={action}
+              noValidate
+              onSubmit={(e) => {
+                const found = validateContact(new FormData(e.currentTarget))
+                // Block the post and show the red lines when a starred field is empty or wrong.
+                if (found.name || found.email || found.contact) {
+                  e.preventDefault()
+                  setClientErrors(found)
+                } else {
+                  setClientErrors({})
+                }
+              }}
+              className="flex flex-col gap-4"
+            >
               <input type="hidden" name="csrf" value={csrf} />
-              <ClientContactPicker errors={errors} />
+              <ClientContactPicker
+                errors={errors}
+                onFieldInput={(field) => setClientErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev))}
+              />
               <Field label="Event type" htmlFor="enq-type">
                 <TextInput id="enq-type" name="eventType" placeholder="Wedding, Events, Portrait" autoComplete="off" />
               </Field>
