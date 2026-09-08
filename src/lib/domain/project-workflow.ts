@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
+import { getJobBalance } from './money'
+import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
 import {
   buildProjectBoard,
   DEFAULT_PROJECT_TASKS,
@@ -48,7 +50,7 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     where: { id: projectId },
     select: {
       companyId: true,
-      invoices: { select: { total: true, amountPaid: true } },
+      invoices: { select: INVOICE_MONEY_SELECT },
       galleries: { select: { status: true } },
       bookings: { orderBy: { startsAt: 'desc' }, take: 1, select: { startsAt: true } },
     },
@@ -72,11 +74,10 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     },
   })
 
-  const totalInvoiced = project.invoices.reduce((s, i) => s + Number(i.total), 0)
-  const totalPaid = project.invoices.reduce((s, i) => s + Number(i.amountPaid), 0)
+  const jobMoney = getJobBalance(project.invoices.map(toInvoiceMoneyInput), null)
   const facts: ProjectFacts = {
     gallerySent: project.galleries.some((g) => g.status === 'PUBLISHED'),
-    finalPaid: totalInvoiced > 0 && totalPaid >= totalInvoiced,
+    finalPaid: jobMoney.invoicedObligation.greaterThan(0) && jobMoney.outstanding.lessThanOrEqualTo(0),
   }
 
   const tasks: TaskInput[] = items.map((w) => ({
@@ -303,7 +304,7 @@ const AUTO_COMPLETE_FROM = new Set(['BOOKING_REQUESTED', 'CONFIRMED', 'IN_PRODUC
 export async function maybeAutoCompleteJob(tx: Tx, projectId: string, actorUserId: string | null) {
   const project = await tx.project.findUnique({
     where: { id: projectId },
-    select: { companyId: true, lifecycleStatus: true, invoices: { select: { total: true, amountPaid: true } } },
+    select: { companyId: true, lifecycleStatus: true, invoices: { select: INVOICE_MONEY_SELECT } },
   })
   if (!project || !AUTO_COMPLETE_FROM.has(project.lifecycleStatus)) return
 
@@ -313,8 +314,8 @@ export async function maybeAutoCompleteJob(tx: Tx, projectId: string, actorUserI
   ])
   if (total === 0 || pending > 0) return
 
-  const outstanding = project.invoices.reduce((sum, i) => sum + (Number(i.total) - Number(i.amountPaid)), 0)
-  if (outstanding > 0.005) return
+  const { outstanding } = getJobBalance(project.invoices.map(toInvoiceMoneyInput), null)
+  if (outstanding.greaterThan(0)) return
 
   await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'COMPLETED' } })
   await tx.auditLog.create({

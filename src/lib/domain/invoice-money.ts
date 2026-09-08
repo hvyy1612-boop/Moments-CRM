@@ -7,36 +7,38 @@ import {
   type JobBalance,
 } from './money'
 
-const INVOICE_MONEY_SELECT = {
+export const INVOICE_MONEY_SELECT = {
   status: true,
   total: true,
   dueAt: true,
   instalments: { select: { label: true, dueAt: true, amount: true, sortOrder: true } },
   payments: { select: { transactions: { select: { type: true, status: true, amount: true } } } },
+  creditNotes: { where: { NOT: { status: 'VOIDED' } }, select: { amount: true } },
 } as const
 
-type InvoiceMoneyRow = {
+export type InvoiceMoneyRow = {
   status: InvoiceMoneyInput['status']
   total: InvoiceMoneyInput['total']
   dueAt: Date | null
   instalments: InvoiceMoneyInput['instalments']
   payments: { transactions: InvoiceMoneyInput['transactions'] }[]
+  creditNotes: { amount: InvoiceMoneyInput['total'] }[]
 }
 
-function toInput(inv: InvoiceMoneyRow): InvoiceMoneyInput {
+export function toInvoiceMoneyInput(inv: InvoiceMoneyRow): InvoiceMoneyInput {
   return {
     status: inv.status,
     total: inv.total,
     dueAt: inv.dueAt,
     instalments: inv.instalments,
     transactions: inv.payments.flatMap((p) => p.transactions),
-    creditNotes: [],
+    creditNotes: inv.creditNotes.map((c) => ({ amount: c.amount })), // effective only (VOIDED filtered out)
   }
 }
 
 export async function getInvoiceBalanceById(invoiceId: string): Promise<InvoiceBalance | null> {
   const inv = await prisma.invoice.findUnique({ where: { id: invoiceId }, select: INVOICE_MONEY_SELECT })
-  return inv ? getInvoiceBalance(toInput(inv)) : null
+  return inv ? getInvoiceBalance(toInvoiceMoneyInput(inv)) : null
 }
 
 export async function getJobBalanceByProjectId(projectId: string): Promise<JobBalance> {
@@ -46,5 +48,5 @@ export async function getJobBalanceByProjectId(projectId: string): Promise<JobBa
     prisma.quoteVersion.findFirst({ where: { quote: { projectId }, status: 'ACCEPTED' }, select: { total: true } }),
   ])
   const agreed = acceptedQuote?.total ?? project?.packagePriceSnapshot ?? null
-  return getJobBalance(invoices.map(toInput), agreed)
+  return getJobBalance(invoices.map(toInvoiceMoneyInput), agreed)
 }
