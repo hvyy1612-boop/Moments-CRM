@@ -56,10 +56,10 @@ export function Donut({
   }
   return (
     <div className="flex flex-wrap items-center gap-6">
-      <div className="relative h-32 w-32 shrink-0 rounded-full" style={{ backgroundImage: `conic-gradient(${stops.join(', ')})` }}>
-        <div className="absolute inset-[27%] flex flex-col items-center justify-center rounded-full bg-surface text-center">
-          <span className="text-2xl font-semibold leading-none text-ink">{centre}</span>
-          <span className="mt-0.5 text-xs text-muted">{centreLabel}</span>
+      <div className="relative h-36 w-36 shrink-0 rounded-full" style={{ backgroundImage: `conic-gradient(${stops.join(', ')})` }}>
+        <div className="absolute inset-[20%] flex flex-col items-center justify-center rounded-full bg-surface px-1 text-center leading-none">
+          <span className="text-lg font-semibold text-ink">{centre}</span>
+          <span className="donut-sub mt-1 text-muted">{centreLabel}</span>
         </div>
       </div>
       <ul className="min-w-36 flex-1 space-y-1.5">

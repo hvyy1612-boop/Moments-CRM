@@ -169,6 +169,13 @@ body {
   line-height: 1.55;
 }
 
+/* Small caption inside a donut centre (e.g. "active jobs" / "total revenue"); kept tiny so it fits
+   the white hole without spilling onto the coloured ring. */
+.donut-sub {
+  font-size: 10px;
+  line-height: 1.25;
+}
+
 /*
  * Public landing masthead. The "moments" wordmark is the studio's script logo (public/landing/
  * wordmark.png - the same brand mark as the sign-in page, background keyed to transparent), sized
