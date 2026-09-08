@@ -12,8 +12,9 @@ import {
  * arithmetic to the pure functions in `money.ts`, so every screen shares one derivation. Fetches are
  * batched (a job's invoices in a single query) to avoid N+1 on list pages.
  *
- * `creditNotes` is `[]` until the CreditNote model + migration land on the test DB; the mapping is
- * ready to include them without touching call-sites.
+ * Credit notes are fetched here (effective only — VOIDED excluded) and folded into the obligation by
+ * `money.ts`. This read path is separate from the always-on writers, so a DB without the credit_notes
+ * migration still records payments; only these derivations need the table.
  */
 
 const INVOICE_MONEY_SELECT = {
@@ -22,6 +23,7 @@ const INVOICE_MONEY_SELECT = {
   dueAt: true,
   instalments: { select: { label: true, dueAt: true, amount: true, sortOrder: true } },
   payments: { select: { transactions: { select: { type: true, status: true, amount: true } } } },
+  creditNotes: { where: { NOT: { status: 'VOIDED' } }, select: { amount: true } },
 } as const
 
 type InvoiceMoneyRow = {
@@ -30,6 +32,7 @@ type InvoiceMoneyRow = {
   dueAt: Date | null
   instalments: InvoiceMoneyInput['instalments']
   payments: { transactions: InvoiceMoneyInput['transactions'] }[]
+  creditNotes: { amount: InvoiceMoneyInput['total'] }[]
 }
 
 function toInput(inv: InvoiceMoneyRow): InvoiceMoneyInput {
@@ -39,7 +42,7 @@ function toInput(inv: InvoiceMoneyRow): InvoiceMoneyInput {
     dueAt: inv.dueAt,
     instalments: inv.instalments,
     transactions: inv.payments.flatMap((p) => p.transactions),
-    creditNotes: [],
+    creditNotes: inv.creditNotes.map((c) => ({ amount: c.amount })), // effective only (VOIDED filtered out)
   }
 }
 
