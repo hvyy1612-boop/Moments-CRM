@@ -143,7 +143,7 @@ export function Finance({
 
               <div className="mt-2">
                 <Link href={`/jobs/${projectId}/invoice/${invoice.id}`} target="_blank" className="text-sm font-bold text-accent hover:underline">
-                  View / PDF -&gt;
+                  View / PDF →
                 </Link>
               </div>
               {invoice.accessToken ? (

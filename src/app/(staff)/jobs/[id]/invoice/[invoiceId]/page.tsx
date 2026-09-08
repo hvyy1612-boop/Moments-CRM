@@ -40,7 +40,7 @@ export default async function InvoicePrintPage({
   return (
     <div className="min-h-screen bg-paper px-4 py-8">
       <div className="mx-auto mb-4 flex max-w-3xl items-center justify-between print:hidden">
-        <Link href={`/jobs/${id}`} className="text-sm font-bold text-accent hover:underline">&lt;- Back to job</Link>
+        <Link href={`/jobs/${id}`} className="text-sm font-bold text-accent hover:underline">← Back to job</Link>
         <PrintButton />
       </div>
       <InvoiceFit />

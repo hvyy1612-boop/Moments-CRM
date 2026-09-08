@@ -441,7 +441,7 @@ function EventPeek({ peek, onEnter, onLeave }: { peek: { item: CalItem; x: numbe
       </div>
       {it.href ? (
         <div className="border-t border-line px-3 py-2">
-          <Link href={it.href} className="text-xs font-bold text-accent hover:underline">Open {it.category === 'lead' ? 'enquiry' : it.category === 'job' ? 'job' : 'client'} -&gt;</Link>
+          <Link href={it.href} className="text-xs font-bold text-accent hover:underline">Open {it.category === 'lead' ? 'enquiry' : it.category === 'job' ? 'job' : 'client'} →</Link>
         </div>
       ) : null}
     </div>
@@ -486,7 +486,7 @@ export function SyncButton({ feedPath }: { feedPath: string }) {
             <button type="button" onClick={copy} className="h-8 shrink-0 rounded border border-line-strong px-3 text-xs font-bold text-ink-muted hover:text-ink">{copied ? 'Copied' : 'Copy'}</button>
           </div>
           <a href={webcal} className="mt-2 block text-xs font-bold text-accent hover:underline">Open in Apple Calendar (.ics)</a>
-          <p className="mt-2 text-xs text-ink-muted">Google Calendar: Other calendars -&gt; From URL -&gt; paste the link.</p>
+          <p className="mt-2 text-xs text-ink-muted">Google Calendar: Other calendars → From URL → paste the link.</p>
         </div>
       ) : null}
     </div>
