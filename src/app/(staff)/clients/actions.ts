@@ -89,7 +89,7 @@ export async function createClientAction(formData: FormData): Promise<void> {
       coverage: str('coverage'),
       gettingReadyLocation: str('gettingReadyLocation'),
       ceremonyLocation: str('ceremonyLocation'),
-      guestCount: str('guestCount'),
+      weddingDetails: str('weddingDetails'),
       styleReason: str('styleReason'),
       heardAbout: str('heardAbout'),
     },

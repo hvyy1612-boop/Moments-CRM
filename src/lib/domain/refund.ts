@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
+import { lockInvoiceRow, refreshInvoiceAmountPaid } from './invoice-ledger'
 
 export async function cancelProject(
   projectId: string,
@@ -54,17 +55,21 @@ export async function refundPayment(
   return prisma.$transaction(async (tx) => {
     const payment = await tx.payment.findUnique({
       where: { id: paymentId },
-      include: { transactions: true, refunds: true },
+      select: { id: true, invoiceId: true, projectId: true, currency: true },
     })
     if (!payment) throw new Error('Payment not found.')
 
-    const capturedFromTx = payment.transactions
-      .filter((t) => t.type === 'CHARGE' && t.status === 'SUCCEEDED')
+    await lockInvoiceRow(tx, payment.invoiceId)
+    const txns = await tx.paymentTransaction.findMany({
+      where: { paymentId, status: 'SUCCEEDED' },
+      select: { type: true, amount: true },
+    })
+    const captured = txns
+      .filter((t) => t.type === 'CHARGE')
       .reduce((sum, t) => sum.add(t.amount), new Prisma.Decimal(0))
-    const captured = capturedFromTx.greaterThan(0) ? capturedFromTx : payment.amount
-    const alreadyRefunded = payment.refunds
-      .filter((r) => r.status !== 'FAILED')
-      .reduce((sum, r) => sum.add(r.amount), new Prisma.Decimal(0))
+    const alreadyRefunded = txns
+      .filter((t) => t.type === 'REFUND' || t.type === 'REVERSAL')
+      .reduce((sum, t) => sum.add(t.amount), new Prisma.Decimal(0))
     if (alreadyRefunded.add(refundAmount).greaterThan(captured)) {
       throw new Error('Refund exceeds the amount captured on this payment.')
     }
@@ -102,17 +107,10 @@ export async function refundPayment(
 
     const invoice = await tx.invoice.findUnique({
       where: { id: payment.invoiceId },
-      select: { id: true, total: true, amountPaid: true, status: true },
+      select: { total: true, status: true },
     })
-    if (invoice && invoice.status !== 'VOID') {
-      const newPaid = invoice.amountPaid.sub(refundAmount)
-      const clamped = newPaid.lessThan(0) ? new Prisma.Decimal(0) : newPaid
-      const status = clamped.lessThanOrEqualTo(0)
-        ? 'ISSUED'
-        : clamped.lessThan(invoice.total)
-          ? 'PARTIALLY_PAID'
-          : 'PAID'
-      await tx.invoice.update({ where: { id: invoice.id }, data: { amountPaid: clamped, status } })
+    if (invoice) {
+      await refreshInvoiceAmountPaid(tx, payment.invoiceId, invoice.total, invoice.status)
     }
 
     const project = await tx.project.findUnique({

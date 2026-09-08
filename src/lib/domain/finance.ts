@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { splitGstInclusive } from '@/lib/money'
 import { sydneyLocalToUtc, systemClock } from '@/lib/time'
 import type { CreateInvoiceInput, CreateInvoiceLinesInput, RecordPaymentInput } from '@/lib/validation/finance'
+import { invoicePaidNet, lockInvoiceRow, refreshInvoiceAmountPaid } from './invoice-ledger'
 import { maybeAutoCompleteJob } from './project-workflow'
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
@@ -318,9 +319,12 @@ export async function updateInvoiceWithLines(
 
 export async function voidInvoice(invoiceId: string, actorUserId: string | null) {
   return prisma.$transaction(async (tx) => {
-    const inv = await tx.invoice.findUnique({ where: { id: invoiceId }, select: { id: true, status: true, amountPaid: true } })
+    await lockInvoiceRow(tx, invoiceId)
+    const inv = await tx.invoice.findUnique({ where: { id: invoiceId }, select: { id: true, status: true } })
     if (!inv) throw new Error('Invoice not found.')
-    if (inv.amountPaid.gt(0)) throw new Error('This invoice has payments recorded. Refund it instead of voiding.')
+
+    const paidNet = await invoicePaidNet(tx, invoiceId)
+    if (paidNet.greaterThan(0)) throw new Error('This invoice has payments recorded. Refund it instead of voiding.')
     if (inv.status === 'VOID') return inv
     await tx.invoice.update({ where: { id: invoiceId }, data: { status: 'VOID' } })
     await tx.auditLog.create({ data: { action: 'invoice.voided', entityType: 'Invoice', entityId: invoiceId, actorUserId } })
@@ -385,63 +389,78 @@ export async function recordPayment(
   invoiceId: string,
   input: RecordPaymentInput,
   actorUserId: string | null,
+  opts: { idempotencyKey?: string | null } = {},
 ) {
   const now = systemClock.now()
   const amount = new Prisma.Decimal(input.amount)
   if (amount.lessThanOrEqualTo(0)) throw new Error('Enter an amount greater than zero.')
+  const idempotencyKey = opts.idempotencyKey ?? null
 
   return prisma.$transaction(async (tx) => {
+
+    await lockInvoiceRow(tx, invoiceId)
     const invoice = await tx.invoice.findUnique({
       where: { id: invoiceId },
-      select: {
-        id: true,
-        projectId: true,
-        type: true,
-        status: true,
-        total: true,
-        amountPaid: true,
-      },
+      select: { id: true, projectId: true, type: true, status: true, total: true },
     })
     if (!invoice) throw new Error('Invoice not found.')
     if (invoice.status === 'VOID') throw new Error('This invoice has been voided.')
-    if (invoice.status === 'PAID') throw new Error('This invoice is already paid in full.')
 
-    const remaining = invoice.total.sub(invoice.amountPaid)
+    if (idempotencyKey) {
+      const prior = await tx.paymentTransaction.findFirst({
+        where: { provider: 'manual', externalTransactionId: idempotencyKey },
+        select: { payment: { select: { id: true } } },
+      })
+      if (prior) {
+        const already = await invoicePaidNet(tx, invoiceId)
+        return { paidInFull: already.greaterThanOrEqualTo(invoice.total), idempotentReplay: true }
+      }
+    }
+
+    const paidNet = await invoicePaidNet(tx, invoiceId)
+    if (invoice.status === 'PAID' || paidNet.greaterThanOrEqualTo(invoice.total)) {
+      throw new Error('This invoice is already paid in full.')
+    }
+    const remaining = invoice.total.sub(paidNet)
     if (amount.greaterThan(remaining)) {
       throw new Error(`That is more than the balance due (${remaining.toFixed(2)}).`)
     }
 
-    const payment = await tx.payment.create({
-      data: {
-        invoiceId,
-        projectId: invoice.projectId,
-        status: 'PAID',
-        amount,
-        paymentMethod: input.paymentMethod,
-        receivedAt: now,
-        recordedByUserId: actorUserId,
-        transactions: {
-          create: {
-            provider: 'manual',
-            type: 'CHARGE',
-            amount,
-            status: 'SUCCEEDED',
-            processedAt: now,
-            metadata: input.reference ? { reference: input.reference } : undefined,
+    let payment
+    try {
+      payment = await tx.payment.create({
+        data: {
+          invoiceId,
+          projectId: invoice.projectId,
+          status: 'PAID',
+          amount,
+          paymentMethod: input.paymentMethod,
+          receivedAt: now,
+          recordedByUserId: actorUserId,
+          transactions: {
+            create: {
+              provider: 'manual',
+              externalTransactionId: idempotencyKey,
+              type: 'CHARGE',
+              amount,
+              status: 'SUCCEEDED',
+              processedAt: now,
+              metadata: input.reference ? { reference: input.reference } : undefined,
+            },
           },
         },
-      },
-    })
+      })
+    } catch (err) {
 
-    const newAmountPaid = invoice.amountPaid.add(amount)
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002' && idempotencyKey) {
+        const already = await invoicePaidNet(tx, invoiceId)
+        return { paidInFull: already.greaterThanOrEqualTo(invoice.total), idempotentReplay: true }
+      }
+      throw err
+    }
+
+    const newAmountPaid = await refreshInvoiceAmountPaid(tx, invoiceId, invoice.total, invoice.status)
     const paidInFull = newAmountPaid.greaterThanOrEqualTo(invoice.total)
-    await tx.invoice.update({
-      where: { id: invoiceId },
-      data: {
-        amountPaid: newAmountPaid,
-        status: paidInFull ? 'PAID' : 'PARTIALLY_PAID',
-      },
-    })
 
     if (paidInFull) {
 

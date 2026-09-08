@@ -529,7 +529,7 @@ model Enquiry {
   coverage             String?     @db.VarChar(30)
   gettingReadyLocation String?     @map("getting_ready_location") @db.Text
   ceremonyLocation     String?     @map("ceremony_location") @db.Text
-  guestCount           String?     @map("guest_count") @db.VarChar(100)
+  weddingDetails       String?     @map("wedding_details") @db.Text
   styleReason          String?     @map("style_reason") @db.Text
   heardAbout           String?     @map("heard_about") @db.VarChar(120)
   source             EnquirySource @default(WEBSITE)
