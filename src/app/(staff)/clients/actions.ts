@@ -71,6 +71,7 @@ export async function createClientAction(formData: FormData): Promise<void> {
   const source = (Object.values(EnquirySource) as string[]).includes(sourceRaw)
     ? (sourceRaw as EnquirySource)
     : EnquirySource.MANUAL
+  const str = (k: string) => String(formData.get(k) ?? '').trim() || null
 
   const enquiry = await createEnquiry(
     {
@@ -89,6 +90,13 @@ export async function createClientAction(formData: FormData): Promise<void> {
       eventDate,
       message: data.notes ?? null,
       source,
+      partnerName: str('partnerName'),
+      coverage: str('coverage'),
+      gettingReadyLocation: str('gettingReadyLocation'),
+      ceremonyLocation: str('ceremonyLocation'),
+      guestCount: str('guestCount'),
+      styleReason: str('styleReason'),
+      heardAbout: str('heardAbout'),
     },
     user.id,
   )
