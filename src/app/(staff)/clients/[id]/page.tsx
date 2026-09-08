@@ -8,6 +8,8 @@ import { StatusTag } from '@/components/ui/StatusTag'
 import { Button } from '@/components/ui/Button'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { ensureClientPortalToken } from '@/lib/domain/client'
+import { getInvoiceBalance } from '@/lib/domain/money'
+import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
 import { CopyLinkField } from '@/components/ui/CopyLinkField'
 import { ClientNotesList } from './ClientNotesList'
 import { requireRole } from '@/lib/auth/guard'
@@ -177,7 +179,7 @@ export default async function ClientDetailPage({
   if (!client) notFound()
   const portalToken = await ensureClientPortalToken(client.id)
 
-  const [enquiries, communications, invoiceAgg, invoiceList] = await Promise.all([
+  const [enquiries, communications, invoiceList] = await Promise.all([
     prisma.enquiry.findMany({
       // Open leads only. A booked enquiry is the Job shown below, so it must not double-list here.
       where: {
@@ -206,43 +208,36 @@ export default async function ClientDetailPage({
       take: 8,
       select: { id: true, direction: true, body: true, createdAt: true, subject: true },
     }),
-    prisma.invoice.aggregate({
-      where: { project: { clientId: id } },
-      _sum: { total: true, amountPaid: true },
-    }),
     prisma.invoice.findMany({
       where: { project: { clientId: id } },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
         invoiceNumber: true,
-        status: true,
-        total: true,
-        amountPaid: true,
-        dueAt: true,
         accessToken: true,
         project: { select: { id: true, code: true } },
-        instalments: {
-          where: { status: { not: 'PAID' } },
-          orderBy: { dueAt: 'asc' },
-          take: 1,
-          select: { dueAt: true },
-        },
+        ...INVOICE_MONEY_SELECT, // status, total, dueAt, instalments, payments, creditNotes
       },
     }),
   ])
 
   const cityLine = [client.suburb, client.state, client.postcode].filter(Boolean).join(' ')
   const addressLines = [client.street, cityLine, client.country].filter(Boolean)
-  const invoiced = invoiceAgg._sum.total ?? new Prisma.Decimal(0)
-  const paid = invoiceAgg._sum.amountPaid ?? new Prisma.Decimal(0)
-  const due = invoiced.sub(paid)
+
+  // Every client-money figure comes from the Money foundation (docs/25 Part 1), derived from the one
+  // invoice fetch above: Invoiced = Σ obligation (credit-aware, excludes DRAFT/VOID), Paid = Σ paidNet,
+  // Outstanding = Σ owed (no overpayment netting). No second aggregate query, no stale caches.
+  const invoiceBalances = invoiceList.map((inv) => ({ inv, bal: getInvoiceBalance(toInvoiceMoneyInput(inv)) }))
+  const invoiced = invoiceBalances.reduce((s, { bal }) => s.add(bal.obligation), new Prisma.Decimal(0))
+  const paid = invoiceBalances.reduce((s, { bal }) => s.add(bal.paidNet), new Prisma.Decimal(0))
+  const due = invoiceBalances.reduce((s, { bal }) => s.add(bal.owed), new Prisma.Decimal(0))
 
   const nowMs = Date.now()
-  const invoiceRows = invoiceList.map((inv) => {
-    const balance = inv.total.sub(inv.amountPaid)
-    const paidInFull = balance.lte(0)
-    const nextDueAt = inv.instalments[0]?.dueAt ?? inv.dueAt ?? null
+  const invoiceRows = invoiceBalances.map(({ inv, bal }) => {
+    const balance = bal.owed
+    const paidInFull = bal.obligation.greaterThan(0) && bal.owed.lte(0)
+    // Next unpaid instalment from the DERIVED schedule (money.ts), never the stale instalment.status.
+    const nextDueAt = bal.instalments.find((i) => i.state !== 'PAID')?.dueAt ?? inv.dueAt ?? null
     let dueLabel: string
     let overdue = false
     if (paidInFull) {
@@ -271,7 +266,7 @@ export default async function ClientDetailPage({
       dueLabel,
       overdue,
       portalPath: inv.accessToken ? `/invoice/${inv.accessToken}` : null,
-      canDelete: inv.amountPaid.lte(0),
+      canDelete: bal.paidNet.lte(0),
     }
   })
 

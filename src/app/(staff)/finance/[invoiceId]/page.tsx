@@ -10,6 +10,7 @@ import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { listActivePackages } from '@/lib/domain/package'
+import { getInvoiceBalanceById } from '@/lib/domain/invoice-money'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyTime, sydneyYmd } from '@/lib/time'
 import { titleCase } from '@/lib/text'
@@ -36,7 +37,8 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
-  const inv = await prisma.invoice.findUnique({
+  const [inv, money] = await Promise.all([
+    prisma.invoice.findUnique({
     where: { id: invoiceId },
     select: {
       id: true, invoiceNumber: true, type: true, status: true, subtotal: true, taxTotal: true, total: true,
@@ -61,10 +63,14 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
         },
       },
     },
-  })
+    }),
+    getInvoiceBalanceById(invoiceId), // ledger-derived, credit-aware (docs/25 Part 1)
+  ])
   if (!inv) notFound()
 
-  const balance = inv.total.sub(inv.amountPaid)
+  // Balance due comes from the Money foundation (subtracts credit notes, clamps overpayment to 0).
+  // amountPaid is the ledger cache; money.paidNet equals it, so "Paid" can keep using amountPaid.
+  const balance = money ? money.owed : inv.total.sub(inv.amountPaid)
   const isDraft = inv.status === 'DRAFT'
   const canPay = inv.status !== 'DRAFT' && inv.status !== 'PAID' && inv.status !== 'VOID'
   const unpaid = inv.amountPaid.lte(0)

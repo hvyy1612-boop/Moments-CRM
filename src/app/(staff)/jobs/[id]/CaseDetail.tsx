@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
@@ -10,6 +9,8 @@ import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
 import { getProjectBoard } from '@/lib/domain/project-workflow'
+import { getJobBalance } from '@/lib/domain/money'
+import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
 import { statusLabel } from '@/features/projects/lifecycle'
 import { listActivePackages } from '@/lib/domain/package'
 import { AppShell } from '../../AppShell'
@@ -106,7 +107,7 @@ export async function CaseDetail({
           },
         },
       },
-      invoices: { select: { id: true, total: true, amountPaid: true } },
+      invoices: { select: INVOICE_MONEY_SELECT },
       galleries: {
         orderBy: { createdAt: 'desc' },
         include: { items: { orderBy: { sortOrder: 'asc' } } },
@@ -180,10 +181,8 @@ export async function CaseDetail({
   }))
 
   const invoiceCount = project.invoices.length
-  const invoiceOutstanding = project.invoices.reduce(
-    (sum, i) => sum.add(i.total).sub(i.amountPaid),
-    new Prisma.Decimal(0),
-  )
+  // Outstanding via the Money foundation (docs/25): Σ per-invoice `owed`, credit-aware.
+  const invoiceOutstanding = getJobBalance(project.invoices.map(toInvoiceMoneyInput), null).outstanding
 
   // DELIVERED != CLOSED: a delivered (COMPLETED) job stays visible until it is settled and its tasks
   // are done, then staff close it (guarded by closeJob). See docs/24 Increment 2.
