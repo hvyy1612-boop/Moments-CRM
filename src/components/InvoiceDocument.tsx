@@ -30,13 +30,14 @@ export type InvoiceDoc = {
 }
 
 /**
- * Print-only page geometry (A4, 10mm margins => a 190x277mm content area). The doc is a flex column that
- * fills the full page height, so a short invoice spreads down the sheet (footer pinned to the bottom via
- * print:mt-auto) instead of bunching at the top. `zoom` (set by InvoiceFit from --inv-scale) shrinks a
- * long invoice just enough to stay on one page - zoom, unlike transform, also shrinks the layout box so
- * pagination sees one page. No px/rem/hex literals so the design-token check stays green.
+ * Print-only page geometry. `@page margin:0` (the doc supplies its own 10mm inset via print:p-[10mm])
+ * means Chrome has no page margin to print its own header/footer in, so the browser's URL/date/page-number
+ * never appears even if "Headers and footers" is ticked. The invoice flows naturally (like the on-screen
+ * preview) - no forced fill. `zoom` (set by InvoiceFit from --inv-scale) shrinks a long invoice just enough
+ * to stay on one page; zoom, unlike transform, shrinks the layout box so pagination sees one page. No
+ * px/rem/hex literals so the design-token check stays green.
  */
-const PAGE_CSS = '@media print{@page{size:A4;margin:10mm}.inv-doc{box-shadow:none!important;zoom:var(--inv-scale,1)}}'
+const PAGE_CSS = '@media print{@page{size:A4;margin:0}.inv-doc{box-shadow:none!important;zoom:var(--inv-scale,1)}}'
 
 function text(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
@@ -104,7 +105,7 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
   const badge = status === 'PAID' ? 'Paid in full' : status === 'VOID' ? 'Void' : null
 
   return (
-    <div className="inv-doc mx-auto flex w-full max-w-[210mm] flex-col rounded-md border border-line bg-surface p-[12mm] text-ink shadow-sm print:min-h-[277mm] print:max-w-none print:rounded-none print:border-0 print:p-0 print:shadow-none">
+    <div className="inv-doc mx-auto w-full max-w-[210mm] rounded-md border border-line bg-surface p-[12mm] text-ink shadow-sm print:max-w-none print:rounded-none print:border-0 print:p-[10mm] print:shadow-none">
       {/* Header: wordmark | TAX INVOICE + meta */}
       <div className="flex flex-wrap items-start justify-between gap-6 border-b border-line-strong pb-3">
         <div>
@@ -225,9 +226,8 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
         </div>
       </div>
 
-      {/* Payment instructions + notes. print:mt-auto pins this + the footer to the bottom of the page so
-          a short invoice fills the sheet instead of leaving a big empty gap under the totals. */}
-      <div className="mt-5 grid grid-cols-1 gap-5 border-t border-line pt-4 text-sm sm:grid-cols-2 print:mt-auto">
+      {/* Payment instructions + notes */}
+      <div className="mt-5 grid grid-cols-1 gap-5 border-t border-line pt-4 text-sm sm:grid-cols-2">
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-muted">Payment instructions</div>
           <div className="mt-2 space-y-0.5 text-ink-muted">
