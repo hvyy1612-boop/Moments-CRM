@@ -62,7 +62,7 @@ export async function createClientAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
   const data = parseClient(formData)
-  await createClient(data, user.id)
+  const client = await createClient(data, user.id)
 
   const name = [data.firstName, data.lastName].filter(Boolean).join(' ') || data.company || data.email
   const eventDateRaw = String(formData.get('eventDate') ?? '').trim()
@@ -75,6 +75,7 @@ export async function createClientAction(formData: FormData): Promise<void> {
 
   const enquiry = await createEnquiry(
     {
+      clientId: client.id,
       name,
       firstName: data.firstName ?? null,
       lastName: data.lastName ?? null,

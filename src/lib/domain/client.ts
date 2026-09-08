@@ -52,6 +52,14 @@ export async function createClient(input: ClientInput, actorUserId: string) {
   })
 }
 
+/** Find an existing client by email, or create one. Used when a lead/enquiry needs a linked client
+ *  (Studio-Ninja "Primary Client Contact"): a person is one Client, reused across enquiries/jobs. */
+export async function findOrCreateClient(input: ClientInput, actorUserId: string) {
+  const existing = await prisma.client.findUnique({ where: { email: input.email } })
+  if (existing) return existing
+  return createClient(input, actorUserId)
+}
+
 /** Edit a client's contact details. */
 export async function updateClient(clientId: string, input: ClientInput, actorUserId: string) {
   return prisma.$transaction(async (tx) => {

@@ -34,6 +34,7 @@ export type CreateEnquiryInput = {
   message?: string | null
   source?: EnquirySource
   ownerUserId?: string | null
+  clientId?: string | null
   // Wedding-enquiry detail fields (parity with the public website enquiry form).
   partnerName?: string | null
   coverage?: string | null
@@ -52,6 +53,7 @@ export async function createEnquiry(input: CreateEnquiryInput, actorUserId: stri
       data: {
         companyId: company.id,
         ownerUserId: input.ownerUserId ?? null,
+        clientId: input.clientId ?? null,
         name: input.name,
         firstName: input.firstName ?? null,
         lastName: input.lastName ?? null,

@@ -6,6 +6,7 @@ import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput, Textarea } from '@/components/ui/form'
 import { addEnquiryAction, type AddEnquiryState } from './actions'
+import { ClientContactPicker } from './ClientContactPicker'
 
 const INITIAL: AddEnquiryState = { status: 'idle' }
 
@@ -51,20 +52,10 @@ export function AddEnquiryButton({ csrf }: { csrf: string }) {
 
             <form action={action} className="flex flex-col gap-4">
               <input type="hidden" name="csrf" value={csrf} />
-              <Field label="Client name" htmlFor="enq-name" error={errors.name}>
-                <TextInput id="enq-name" name="name" autoFocus autoComplete="off" hasError={Boolean(errors.name)} />
+              <ClientContactPicker errors={errors} />
+              <Field label="Event type" htmlFor="enq-type">
+                <TextInput id="enq-type" name="eventType" placeholder="Wedding, Events, Portrait" autoComplete="off" />
               </Field>
-              <Field label="Client email" htmlFor="enq-email" error={errors.email}>
-                <TextInput id="enq-email" name="email" type="email" autoComplete="off" hasError={Boolean(errors.email)} />
-              </Field>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="Phone" htmlFor="enq-phone">
-                  <TextInput id="enq-phone" name="phone" autoComplete="off" />
-                </Field>
-                <Field label="Event type" htmlFor="enq-type">
-                  <TextInput id="enq-type" name="eventType" placeholder="Wedding, Events, Portrait" autoComplete="off" />
-                </Field>
-              </div>
               <Field label="Note / first message" htmlFor="enq-note">
                 <Textarea id="enq-note" name="message" rows={3} />
               </Field>
