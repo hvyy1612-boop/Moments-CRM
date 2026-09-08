@@ -12,7 +12,6 @@ import { ClientRowMenu } from './ClientRowMenu'
 import { SortSelect, DEFAULT_SORT, type SortValue } from './SortSelect'
 import { FilterMenu } from './FilterMenu'
 import { ColumnsMenu } from './ColumnsMenu'
-import { ClientsMoreMenu } from './ClientsMoreMenu'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Clients - Moments' }
@@ -128,6 +127,26 @@ export default async function ClientsPage({
                 className="h-9 w-64 rounded-md border border-line bg-surface pl-9 pr-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent focus:ring-1 focus:ring-accent"
               />
             </form>
+            {/* Import / Export surfaced as primary buttons (were hidden in a "..." menu). Import opens the
+                bulk CSV page; Export is a plain anchor so the CSV route's attachment downloads in place. */}
+            <Link
+              href="/clients/import"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 3v12" /><path d="m8 11 4 4 4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+              </svg>
+              Import
+            </Link>
+            <a
+              href={exportHref}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 15V3" /><path d="m8 7 4-4 4 4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+              </svg>
+              Export
+            </a>
             <Link
               href="/clients/new"
               className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
@@ -149,7 +168,6 @@ export default async function ClientsPage({
             <FilterMenu source={source} type={type} jobs={jobs} />
             <SortSelect value={sort} />
             <ColumnsMenu />
-            <ClientsMoreMenu exportHref={exportHref} />
           </div>
         </div>
 

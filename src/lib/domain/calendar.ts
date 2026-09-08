@@ -99,6 +99,13 @@ function tone(dueMs: number | null, done: boolean, nowMs: number): CalItem['tone
   return null
 }
 
+function jobAnchor(
+  project: { bookings: { startsAt: Date }[]; confirmedByClientAt: Date | null; createdAt: Date } | null | undefined,
+): Date | null {
+  if (!project) return null
+  return project.bookings[0]?.startsAt ?? project.confirmedByClientAt ?? project.createdAt ?? null
+}
+
 async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, now: Date): Promise<CalItem[]> {
   const nowMs = now.getTime()
   const want = (c: CalCategory) => filter === 'all' || filter === c
@@ -127,14 +134,14 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
       where: { type: 'APPOINTMENT', status: { in: ['PENDING', 'COMPLETED'] } },
       select: { id: true, title: true, dueAt: true, status: true,
         enquiry: { select: { id: true, name: true, createdAt: true } },
-        project: { select: { id: true, client: { select: { displayName: true } },
+        project: { select: { id: true, confirmedByClientAt: true, createdAt: true, client: { select: { displayName: true } },
           bookings: { orderBy: { startsAt: 'desc' }, take: 1, select: { startsAt: true } } } } },
     })
     for (const w of appts) {
       const isLead = Boolean(w.enquiry)
       const category: CalCategory = isLead ? 'lead' : 'job'
       if (!want(category)) continue
-      const anchor = isLead ? w.enquiry!.createdAt : (w.project?.bookings[0]?.startsAt ?? null)
+      const anchor = isLead ? w.enquiry!.createdAt : jobAnchor(w.project)
       const offset = isLead ? ENQUIRY_TASK_SCHEDULE[w.title] : PROJECT_TASK_SCHEDULE[w.title]
       const date = w.dueAt ?? (anchor && offset !== undefined ? addDays(anchor, offset) : null)
       if (!date || date.getTime() < startUtc.getTime() || date.getTime() >= endUtc.getTime()) continue
@@ -157,13 +164,13 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
       where: { type: { notIn: ['APPOINTMENT', 'AUTO'] }, status: 'PENDING' },
       select: { id: true, title: true, dueAt: true,
         enquiry: { select: { id: true, name: true, createdAt: true } },
-        project: { select: { id: true, client: { select: { displayName: true } }, bookings: { orderBy: { startsAt: 'desc' }, take: 1, select: { startsAt: true } } } } },
+        project: { select: { id: true, confirmedByClientAt: true, createdAt: true, client: { select: { displayName: true } }, bookings: { orderBy: { startsAt: 'desc' }, take: 1, select: { startsAt: true } } } } },
     })
     for (const w of tasks) {
       const isLead = Boolean(w.enquiry)
       const category: CalCategory = isLead ? 'lead' : 'job'
       if (!want(category)) continue
-      const anchor = isLead ? w.enquiry!.createdAt : (w.project?.bookings[0]?.startsAt ?? null)
+      const anchor = isLead ? w.enquiry!.createdAt : jobAnchor(w.project)
       const offset = isLead ? ENQUIRY_TASK_SCHEDULE[w.title] : PROJECT_TASK_SCHEDULE[w.title]
       const date = w.dueAt ?? (anchor && offset !== undefined ? addDays(anchor, offset) : null)
       if (!date || date.getTime() < startUtc.getTime() || date.getTime() >= endUtc.getTime()) continue
@@ -401,7 +408,7 @@ export async function getIcsForToken(token: string): Promise<string | null> {
     }),
     prisma.workItem.findMany({
       where: { companyId: company.id, type: 'APPOINTMENT', status: { in: ['PENDING', 'COMPLETED'] } },
-      select: { id: true, title: true, dueAt: true, enquiry: { select: { name: true, createdAt: true } }, project: { select: { client: { select: { displayName: true } }, bookings: { orderBy: { startsAt: 'desc' }, take: 1, select: { startsAt: true } } } } },
+      select: { id: true, title: true, dueAt: true, enquiry: { select: { name: true, createdAt: true } }, project: { select: { confirmedByClientAt: true, createdAt: true, client: { select: { displayName: true } }, bookings: { orderBy: { startsAt: 'desc' }, take: 1, select: { startsAt: true } } } } },
     }),
   ])
 
@@ -411,7 +418,7 @@ export async function getIcsForToken(token: string): Promise<string | null> {
   for (const e of events) lines.push(...vevent(`e_${e.id}`, dtstamp, e.startsAt, e.endsAt, e.allDay, e.title, e.location))
   for (const w of appts) {
     const isLead = Boolean(w.enquiry)
-    const anchor = isLead ? w.enquiry!.createdAt : (w.project?.bookings[0]?.startsAt ?? null)
+    const anchor = isLead ? w.enquiry!.createdAt : jobAnchor(w.project)
     const offset = isLead ? ENQUIRY_TASK_SCHEDULE[w.title] : PROJECT_TASK_SCHEDULE[w.title]
     const date = w.dueAt ?? (anchor && offset !== undefined ? addDays(anchor, offset) : null)
     if (!date || date.getTime() < start.getTime() || date.getTime() >= end.getTime()) continue
