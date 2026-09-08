@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { InvoiceDocument } from '@/components/InvoiceDocument'
+import { InvoiceFit } from '@/components/InvoiceFit'
 import { PrintButton } from '@/components/PrintButton'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
@@ -209,6 +210,7 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
 
       {/* Print target: only the invoice sheet prints, so the PDF is the invoice alone — one page for a
           short invoice, with no app chrome and no blank trailing pages. */}
+      <InvoiceFit />
       <div className="hidden print:block">
         <InvoiceDocument invoice={inv} />
       </div>
