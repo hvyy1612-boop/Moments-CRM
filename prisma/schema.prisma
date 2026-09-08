@@ -1065,6 +1065,64 @@ model OutboxEvent {
   @@map("outbox_events")
 }
 
+// One notification to one recipient (docs/25 Part 4). The single send-retry unit: both event-driven
+// (outbox processor) and time-driven (payment reminder scanner) notifications converge here (Rule N1).
+model NotificationDispatch {
+  id                     String    @id @default(cuid()) @db.VarChar(30)
+  kind                   String    @db.VarChar(40) // payment_reminder | shoot_reminder | invoice_issued | ...
+  targetType             String    @map("target_type") @db.VarChar(30)
+  targetId               String    @map("target_id") @db.VarChar(30)
+  milestone              String    @db.VarChar(40) // e.g. due_-3 / due_0 / shoot_-1
+  recipientHash          String    @map("recipient_hash") @db.VarChar(64)
+  scheduleVersion        Int       @default(1) @map("schedule_version") // bumped on reschedule (Rule N7)
+  // UNIQUE: recreating (event re-processed, cron re-run) never inserts a duplicate (Rule N2).
+  dedupeKey              String    @unique @map("dedupe_key") @db.VarChar(255)
+  recipientEmail         String    @map("recipient_email") @db.VarChar(255)
+  subject                String    @db.VarChar(255)
+  body                   String    @db.Text
+  // PENDING | SENDING | PROVIDER_ACCEPTED | FAILED | IN_DOUBT | SKIPPED_NO_PROVIDER (Rule N7).
+  sendState              String    @default("PENDING") @map("send_state") @db.VarChar(30)
+  // Separate axis from sendState (Rule N7): null | DELIVERED | BOUNCED | COMPLAINED (from the webhook).
+  deliveryResult         String?   @map("delivery_result") @db.VarChar(20)
+  attempts               Int       @default(0)
+  lockedBy               String?   @map("locked_by") @db.VarChar(64)
+  lockedUntil            DateTime? @map("locked_until") @db.Timestamptz
+  leaseToken             String?   @map("lease_token") @db.VarChar(64)
+  providerIdempotencyKey String    @map("provider_idempotency_key") @db.VarChar(255)
+  providerMessageId      String?   @map("provider_message_id") @db.VarChar(255)
+  firstSentToProviderAt  DateTime? @map("first_sent_to_provider_at") @db.Timestamptz
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([sendState])
+  @@index([providerMessageId])
+  @@map("notification_dispatches")
+}
+
+// Raw delivery signals from the provider webhook (docs/25 Rule N8). Deduped by providerEventId; may
+// arrive before the dispatch row exists (buffered, reconciled by providerMessageId later).
+model NotificationDeliveryEvent {
+  id                String   @id @default(cuid()) @db.VarChar(30)
+  providerEventId   String   @unique @map("provider_event_id") @db.VarChar(255)
+  providerMessageId String   @map("provider_message_id") @db.VarChar(255)
+  type              String   @db.VarChar(20) // delivered | bounced | complained
+  dispatchId        String?  @map("dispatch_id") @db.VarChar(30) // set once reconciled to a dispatch
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([providerMessageId])
+  @@map("notification_delivery_events")
+}
+
+// A recipient address marked bad by a hard bounce / complaint (Rule N8): auto-reminders to it stop.
+model NotificationSuppression {
+  recipientHash String   @id @map("recipient_hash") @db.VarChar(64)
+  recipientEmail String  @map("recipient_email") @db.VarChar(255)
+  reason        String   @db.VarChar(20) // bounced | complained
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("notification_suppressions")
+}
+
 // ---------- Backlog: collaboration, changes, finance edges (docs/16 E-J) ----------
 
 // What has been exchanged with the client on a project (call, email, note, message from the portal).

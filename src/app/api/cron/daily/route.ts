@@ -5,6 +5,14 @@ import { getEnquiryBoard } from '@/lib/domain/enquiry-workflow'
 import { getProjectBoard } from '@/lib/domain/project-workflow'
 import { markOverdueInvoices } from '@/lib/domain/finance'
 import { sendTaskDigestEmail } from '@/lib/email'
+import {
+  processOutboxOnce,
+  reconcileBufferedEvents,
+  releaseExpiredLeases,
+  resolveSettledOverdueFollowups,
+  scanPaymentReminders,
+  sendDispatch,
+} from '@/lib/domain/notifications'
 import { OPEN_STATUSES } from '@/features/enquiries/status'
 import { CLOSED_STATUSES } from '@/features/projects/lifecycle'
 
@@ -23,6 +31,20 @@ export async function GET(req: Request): Promise<Response> {
 
   // Flip outstanding, past-due invoices to OVERDUE before the digest runs.
   const overdueInvoices = await markOverdueInvoices()
+
+  // Notification pipeline (docs/25 Part 4). Reminders converge on NotificationDispatch and are sent
+  // through one lease-guarded worker; with no RESEND provider configured every send is
+  // SKIPPED_NO_PROVIDER (Rule N9) — the reminders are still recorded, never faked as delivered.
+  await releaseExpiredLeases()
+  await reconcileBufferedEvents()
+  let outboxGuard = 0
+  while ((await processOutboxOnce()).processed > 0 && outboxGuard++ < 50) {
+    /* drain the business-event backlog into dispatches */
+  }
+  const reminders = await scanPaymentReminders()
+  await resolveSettledOverdueFollowups()
+  const pending = await prisma.notificationDispatch.findMany({ where: { sendState: 'PENDING' }, select: { id: true }, take: 200 })
+  for (const d of pending) await sendDispatch(d.id)
 
   const overdue: string[] = []
   const today: string[] = []
@@ -58,7 +80,7 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   if (overdue.length === 0 && today.length === 0) {
-    return NextResponse.json({ ok: true, sent: 0, invoicesMarkedOverdue: overdueInvoices.marked })
+    return NextResponse.json({ ok: true, sent: 0, invoicesMarkedOverdue: overdueInvoices.marked, reminders })
   }
 
   const staff = await prisma.user.findMany({
@@ -69,5 +91,5 @@ export async function GET(req: Request): Promise<Response> {
     await sendTaskDigestEmail({ to: u.email, name: u.name, overdue, today })
   }
 
-  return NextResponse.json({ ok: true, staff: staff.length, overdue: overdue.length, today: today.length })
+  return NextResponse.json({ ok: true, staff: staff.length, overdue: overdue.length, today: today.length, reminders })
 }
