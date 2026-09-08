@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { formatSydneyTime, sydneyLocalToUtc, sydneyYmd, systemClock } from '@/lib/time'
 import { addDays, ENQUIRY_TASK_SCHEDULE } from '@/features/enquiries/workflow'
-import { PROJECT_TASK_SCHEDULE } from '@/features/projects/workflow'
+import { makeShootDateOf, resolveTaskDueDate, type BookingLike, type DueAnchor } from './deadline'
 
 export type CalCategory = 'lead' | 'job' | 'event' | 'payment'
 export type CalendarFilter = 'all' | 'lead' | 'job' | 'event' | 'payment'
@@ -99,11 +99,29 @@ function tone(dueMs: number | null, done: boolean, nowMs: number): CalItem['tone
   return null
 }
 
-function jobAnchor(
-  project: { bookings: { startsAt: Date }[]; confirmedByClientAt: Date | null; createdAt: Date } | null | undefined,
-): Date | null {
-  if (!project) return null
-  return project.bookings[0]?.startsAt ?? project.confirmedByClientAt ?? project.createdAt ?? null
+type CalWorkItem = {
+  title: string
+  dueAt: Date | null
+  dueAnchor: DueAnchor | null
+  dueOffsetDays: number
+  dueDateFixed: Date | null
+  dueOverrideAt: Date | null
+  bookingId: string | null
+  enquiry: { createdAt: Date } | null
+  project: { confirmedByClientAt: Date | null; bookings: BookingLike[] } | null
+}
+
+function resolveCalendarDate(w: CalWorkItem): { date: Date | null; timed: boolean } {
+  if (w.enquiry) {
+    const offset = ENQUIRY_TASK_SCHEDULE[w.title]
+    const date = w.dueAt ?? (offset !== undefined ? addDays(w.enquiry.createdAt, offset) : null)
+    return { date, timed: Boolean(w.dueAt) }
+  }
+  const date = resolveTaskDueDate(w, {
+    shootDateOf: makeShootDateOf(w.project?.bookings ?? []),
+    jobConfirmedAt: w.project?.confirmedByClientAt ?? null,
+  })
+  return { date, timed: Boolean(w.dueOverrideAt) }
 }
 
 async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, now: Date): Promise<CalItem[]> {
@@ -133,19 +151,17 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
     const appts = await prisma.workItem.findMany({
       where: { type: 'APPOINTMENT', status: { in: ['PENDING', 'COMPLETED'] } },
       select: { id: true, title: true, dueAt: true, status: true,
+        dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true, bookingId: true,
         enquiry: { select: { id: true, name: true, createdAt: true } },
-        project: { select: { id: true, confirmedByClientAt: true, createdAt: true, client: { select: { displayName: true } },
-          bookings: { orderBy: { startsAt: 'desc' }, take: 1, select: { startsAt: true } } } } },
+        project: { select: { id: true, confirmedByClientAt: true, client: { select: { displayName: true } },
+          bookings: { select: { id: true, startsAt: true, status: true, rescheduledFromId: true } } } } },
     })
     for (const w of appts) {
       const isLead = Boolean(w.enquiry)
       const category: CalCategory = isLead ? 'lead' : 'job'
       if (!want(category)) continue
-      const anchor = isLead ? w.enquiry!.createdAt : jobAnchor(w.project)
-      const offset = isLead ? ENQUIRY_TASK_SCHEDULE[w.title] : PROJECT_TASK_SCHEDULE[w.title]
-      const date = w.dueAt ?? (anchor && offset !== undefined ? addDays(anchor, offset) : null)
+      const { date, timed } = resolveCalendarDate(w)
       if (!date || date.getTime() < startUtc.getTime() || date.getTime() >= endUtc.getTime()) continue
-      const timed = Boolean(w.dueAt)
       const done = w.status === 'COMPLETED'
       items.push({
         id: `w_${w.id}`, kind: 'appointment', refId: w.id, dayKey: sydneyDateKey(date),
@@ -163,16 +179,15 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
     const tasks = await prisma.workItem.findMany({
       where: { type: { notIn: ['APPOINTMENT', 'AUTO'] }, status: 'PENDING' },
       select: { id: true, title: true, dueAt: true,
+        dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true, bookingId: true,
         enquiry: { select: { id: true, name: true, createdAt: true } },
-        project: { select: { id: true, confirmedByClientAt: true, createdAt: true, client: { select: { displayName: true } }, bookings: { orderBy: { startsAt: 'desc' }, take: 1, select: { startsAt: true } } } } },
+        project: { select: { id: true, confirmedByClientAt: true, client: { select: { displayName: true } }, bookings: { select: { id: true, startsAt: true, status: true, rescheduledFromId: true } } } } },
     })
     for (const w of tasks) {
       const isLead = Boolean(w.enquiry)
       const category: CalCategory = isLead ? 'lead' : 'job'
       if (!want(category)) continue
-      const anchor = isLead ? w.enquiry!.createdAt : jobAnchor(w.project)
-      const offset = isLead ? ENQUIRY_TASK_SCHEDULE[w.title] : PROJECT_TASK_SCHEDULE[w.title]
-      const date = w.dueAt ?? (anchor && offset !== undefined ? addDays(anchor, offset) : null)
+      const { date } = resolveCalendarDate(w)
       if (!date || date.getTime() < startUtc.getTime() || date.getTime() >= endUtc.getTime()) continue
       items.push({
         id: `t_${w.id}`, kind: 'task', refId: w.id, dayKey: sydneyDateKey(date),
@@ -408,7 +423,7 @@ export async function getIcsForToken(token: string): Promise<string | null> {
     }),
     prisma.workItem.findMany({
       where: { companyId: company.id, type: 'APPOINTMENT', status: { in: ['PENDING', 'COMPLETED'] } },
-      select: { id: true, title: true, dueAt: true, enquiry: { select: { name: true, createdAt: true } }, project: { select: { confirmedByClientAt: true, createdAt: true, client: { select: { displayName: true } }, bookings: { orderBy: { startsAt: 'desc' }, take: 1, select: { startsAt: true } } } } },
+      select: { id: true, title: true, dueAt: true, dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true, bookingId: true, enquiry: { select: { name: true, createdAt: true } }, project: { select: { confirmedByClientAt: true, client: { select: { displayName: true } }, bookings: { select: { id: true, startsAt: true, status: true, rescheduledFromId: true } } } } },
     }),
   ])
 
@@ -418,12 +433,9 @@ export async function getIcsForToken(token: string): Promise<string | null> {
   for (const e of events) lines.push(...vevent(`e_${e.id}`, dtstamp, e.startsAt, e.endsAt, e.allDay, e.title, e.location))
   for (const w of appts) {
     const isLead = Boolean(w.enquiry)
-    const anchor = isLead ? w.enquiry!.createdAt : jobAnchor(w.project)
-    const offset = isLead ? ENQUIRY_TASK_SCHEDULE[w.title] : PROJECT_TASK_SCHEDULE[w.title]
-    const date = w.dueAt ?? (anchor && offset !== undefined ? addDays(anchor, offset) : null)
+    const { date, timed } = resolveCalendarDate(w)
     if (!date || date.getTime() < start.getTime() || date.getTime() >= end.getTime()) continue
     const who = isLead ? w.enquiry!.name : (w.project?.client.displayName ?? 'Job')
-    const timed = Boolean(w.dueAt)
     lines.push(...vevent(`w_${w.id}`, dtstamp, date, timed ? new Date(date.getTime() + 30 * 60_000) : null, !timed, `${who} - ${appointmentKind(w.title)}`, null))
   }
   lines.push('END:VCALENDAR')

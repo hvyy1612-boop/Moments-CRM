@@ -85,6 +85,12 @@ enum BookingStatus {
   COMPLETED
 }
 
+enum DueAnchor {
+  SHOOT
+  JOB_CONFIRMED
+  FIXED
+}
+
 enum ResourceType {
   PHOTOGRAPHER
   VIDEOGRAPHER
@@ -692,6 +698,7 @@ model Booking {
   assignments     ResourceAssignment[]
   rescheduledFrom Booking?             @relation("BookingReschedule", fields: [rescheduledFromId], references: [id], onDelete: SetNull)
   rescheduledTo   Booking[]            @relation("BookingReschedule")
+  workItems       WorkItem[]
 
   @@index([projectId])
   @@index([status])
@@ -1002,6 +1009,11 @@ model WorkItem {
   status            WorkItemStatus @default(PENDING)
   order             Int            @default(0)
   dueAt             DateTime?      @map("due_at") @db.Timestamptz
+  dueAnchor         DueAnchor?     @map("due_anchor")
+  dueOffsetDays     Int            @default(0) @map("due_offset_days")
+  dueDateFixed      DateTime?      @map("due_date_fixed") @db.Timestamptz
+  dueOverrideAt     DateTime?      @map("due_override_at") @db.Timestamptz
+  bookingId         String?        @map("booking_id") @db.VarChar(30)
   completedByUserId String?        @map("completed_by_user_id") @db.VarChar(30)
   completedAt       DateTime?      @map("completed_at") @db.Timestamptz
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz
@@ -1009,10 +1021,12 @@ model WorkItem {
   company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   enquiry     Enquiry? @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
   project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  booking     Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
   completedBy User?    @relation("WorkItemCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
 
   @@index([enquiryId])
   @@index([projectId])
+  @@index([bookingId])
   @@map("work_items")
 }
 

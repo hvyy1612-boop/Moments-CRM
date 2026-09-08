@@ -10,10 +10,15 @@ const optionalText = (max: number) =>
     .transform((v) => (v ? v : undefined))
 
 export const enquirySchema = z.object({
-  name: z.string().trim().min(1, 'Enter a name.').max(120),
+  name: z.string({ invalid_type_error: "Please enter the client's name." }).trim().min(1, "Please enter the client's name.").max(120, 'That name is too long.'),
   firstName: optionalText(80),
   lastName: optionalText(80),
-  email: z.string().trim().min(1, 'Enter an email.').max(254).email('Enter a valid email.'),
+  email: z
+    .string({ invalid_type_error: 'Please enter an email address.' })
+    .trim()
+    .min(1, 'Please enter an email address.')
+    .max(254, 'That email is too long.')
+    .email('Please enter a valid email address.'),
   phone: optionalText(40),
   street: optionalText(200),
   suburb: optionalText(100),

@@ -68,11 +68,14 @@ export async function addEnquiryAction(_prev: AddEnquiryState, formData: FormDat
     client = await prisma.client.findUnique({ where: { id: existingClientId } })
     if (!client) return { status: 'error', message: 'That client no longer exists.' }
   } else {
-    const parsed = enquirySchema.safeParse({
-      name: formData.get('name'),
-      email: formData.get('email'),
-      phone: formData.get('phone') ?? '',
-    })
+
+    const name = String(formData.get('name') ?? '').trim()
+    const email = String(formData.get('email') ?? '').trim()
+    const phone = String(formData.get('phone') ?? '').trim()
+    if (!name && !email) {
+      return { status: 'error', message: 'Add a client for this enquiry. Search for an existing one, or fill in the new client details.' }
+    }
+    const parsed = enquirySchema.safeParse({ name, email, phone })
     if (!parsed.success) {
       const f = parsed.error.flatten().fieldErrors
       return { status: 'error', errors: { name: f.name?.[0], email: f.email?.[0] } }

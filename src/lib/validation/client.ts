@@ -13,7 +13,12 @@ export const clientSchema = z.object({
   firstName: optionalText(80),
   lastName: optionalText(80),
   company: optionalText(150),
-  email: z.string().trim().min(1, 'Enter an email.').max(254).email('Enter a valid email.'),
+  email: z
+    .string({ invalid_type_error: 'Please enter an email address.' })
+    .trim()
+    .min(1, 'Please enter an email address.')
+    .max(254, 'That email is too long.')
+    .email('Please enter a valid email address.'),
   phone: optionalText(40),
   street: optionalText(200),
   suburb: optionalText(100),
@@ -25,7 +30,7 @@ export const clientSchema = z.object({
 })
   // A client must be identifiable: at least a first/last name, or a company name for a business.
   .refine((d) => Boolean(d.firstName || d.lastName || d.company), {
-    message: 'Enter the client name.',
+    message: "Please enter the client's name.",
     path: ['firstName'],
   })
 

@@ -172,6 +172,11 @@ export async function rescheduleBooking(
         },
       })
 
+      await tx.workItem.updateMany({
+        where: { bookingId, dueAnchor: 'SHOOT', dueOverrideAt: null, status: { not: 'COMPLETED' } },
+        data: { bookingId: booking.id },
+      })
+
       for (const assignment of previous.assignments) {
         const clash = await tx.resourceAssignment.findFirst({
           where: {
