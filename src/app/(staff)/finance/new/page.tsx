@@ -42,7 +42,7 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
 
     return (
       <AppShell user={user} csrf={csrf} active="finance">
-        <Link href="/finance" className="text-sm font-bold text-accent hover:underline">&lt;- Payments</Link>
+        <Link href="/finance" className="text-sm font-bold text-accent hover:underline">← Payments</Link>
         <h1 className="mt-2 font-serif text-2xl font-semibold text-ink">New invoice</h1>
         <p className="mt-1 text-sm text-ink-muted">{project.client.displayName} · {project.name} ({project.code})</p>
         {isClosed ? (
@@ -70,7 +70,7 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
 
   return (
     <AppShell user={user} csrf={csrf} active="finance">
-      <Link href="/finance" className="text-sm font-bold text-accent hover:underline">&lt;- Payments</Link>
+      <Link href="/finance" className="text-sm font-bold text-accent hover:underline">← Payments</Link>
       <h1 className="mt-2 font-serif text-2xl font-semibold text-ink">New invoice</h1>
       <p className="mt-1 text-sm text-ink-muted">{clientName ? `Choose a job for ${clientName} to invoice.` : 'Choose a job to invoice.'}</p>
       {jobs.length === 0 ? (

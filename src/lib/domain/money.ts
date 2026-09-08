@@ -47,13 +47,18 @@ export type InvoiceBalance = {
 }
 
 export type JobBalance = {
-  agreedContractValue: D
+
+  agreedContractValue: D | null
+  agreedValueKnown: boolean
   invoicedObligation: D
-  uninvoicedRemainder: D
+
+  uninvoicedRemainder: D | null
   paidNet: D
   outstanding: D
   overpaymentToResolve: D
   netPosition: D
+
+  isFullySettled: boolean
   invoices: InvoiceBalance[]
 }
 
@@ -107,23 +112,31 @@ export function getInvoiceBalance(inv: InvoiceMoneyInput): InvoiceBalance {
   }
 }
 
-export function getJobBalance(invoices: InvoiceMoneyInput[], acceptedQuoteTotal: D | null): JobBalance {
+export function getJobBalance(invoices: InvoiceMoneyInput[], agreedContractValue: D | null): JobBalance {
   const per = invoices.map(getInvoiceBalance)
   const invoicedObligation = per.reduce((s, b) => s.add(b.obligation), ZERO)
   const paidNet = per.reduce((s, b) => s.add(b.paidNet), ZERO)
   const outstanding = per.reduce((s, b) => s.add(b.owed), ZERO)
   const overpaymentToResolve = per.reduce((s, b) => s.add(b.overpaymentToResolve), ZERO)
-  const agreedContractValue = acceptedQuoteTotal ?? invoicedObligation
-  const uninvoicedRemainder = dMax(agreedContractValue.sub(invoicedObligation), ZERO)
+  const agreedValueKnown = agreedContractValue !== null
+  const uninvoicedRemainder = agreedContractValue !== null ? dMax(agreedContractValue.sub(invoicedObligation), ZERO) : null
   const netPosition = invoicedObligation.sub(paidNet)
+  const isFullySettled =
+    agreedValueKnown &&
+    outstanding.lessThanOrEqualTo(ZERO) &&
+    overpaymentToResolve.lessThanOrEqualTo(ZERO) &&
+    uninvoicedRemainder !== null &&
+    uninvoicedRemainder.lessThanOrEqualTo(ZERO)
   return {
     agreedContractValue,
+    agreedValueKnown,
     invoicedObligation,
     uninvoicedRemainder,
     paidNet,
     outstanding,
     overpaymentToResolve,
     netPosition,
+    isFullySettled,
     invoices: per,
   }
 }
