@@ -66,6 +66,7 @@ export function AppShell({
   active,
   action,
   bareHeader = false,
+  hideAddNew = false,
   children,
 }: {
   user: SessionUser
@@ -75,6 +76,8 @@ export function AppShell({
   action?: ReactNode
   /** When true, hide the top utility bar so the page can render its own full-width header (Clients). */
   bareHeader?: boolean
+  /** Hide the generic "Add new" menu on pages that already have their own primary add action (Calendar). */
+  hideAddNew?: boolean
   children: ReactNode
 }) {
   const items = NAV.filter((n) => !n.permission || can(user, n.permission))
@@ -108,7 +111,7 @@ export function AppShell({
           </div>
           <div className="flex-1" />
           <CommandPalette />
-          <AddNewMenu />
+          {hideAddNew ? null : <AddNewMenu />}
           {action}
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-accent-tint font-serif text-sm text-accent-ink md:hidden">
             {initial}

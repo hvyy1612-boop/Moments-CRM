@@ -71,6 +71,7 @@ export default async function CalendarPage({
       user={user}
       csrf={csrf}
       active="calendar"
+      hideAddNew
       action={
         <div className="flex items-center gap-2">
           <SyncButton feedPath={feedPath} />
