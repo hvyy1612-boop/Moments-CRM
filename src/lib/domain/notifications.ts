@@ -129,14 +129,37 @@ export async function releaseExpiredLeases(now: Date = systemClock.now()): Promi
 }
 
 /** Is this dispatch still worth sending right now? (Rule N11 fresh read.) A payment reminder is dropped
- *  once its instalment/invoice is settled or the invoice is VOID/DRAFT. */
-async function isStillRelevant(d: { kind: string; targetType: string; targetId: string; milestone: string }): Promise<boolean> {
+ *  once its instalment/invoice is settled or the invoice is VOID/DRAFT; a shoot reminder is dropped once
+ *  its booking is cancelled or the shoot has already happened — so the worker never sends stale info even
+ *  if a cancel path forgot to invalidate it up front. */
+async function isStillRelevant(
+  d: { kind: string; targetType: string; targetId: string; milestone: string },
+  now: Date,
+): Promise<boolean> {
   if (d.kind === 'payment_reminder' && d.targetType === 'Invoice') {
     const bal = await getInvoiceBalanceById(d.targetId)
     if (!bal) return false
     return bal.owed.greaterThan(0)
   }
+  if (d.kind === 'shoot_reminder' && d.targetType === 'Booking') {
+    const b = await prisma.booking.findUnique({ where: { id: d.targetId }, select: { status: true, startsAt: true } })
+    if (!b || b.status === 'CANCELLED') return false
+    return b.startsAt.getTime() > now.getTime()
+  }
   return true
+}
+
+/** The company that owns a dispatch's target, for the automation kill-switch check. */
+async function dispatchCompanyId(d: { targetType: string; targetId: string }): Promise<string | null> {
+  if (d.targetType === 'Invoice') {
+    const inv = await prisma.invoice.findUnique({ where: { id: d.targetId }, select: { project: { select: { companyId: true } } } })
+    return inv?.project.companyId ?? null
+  }
+  if (d.targetType === 'Booking') {
+    const b = await prisma.booking.findUnique({ where: { id: d.targetId }, select: { project: { select: { companyId: true } } } })
+    return b?.project.companyId ?? null
+  }
+  return null
 }
 
 /**
@@ -146,7 +169,7 @@ async function isStillRelevant(d: { kind: string; targetType: string; targetId: 
 export async function sendDispatch(
   dispatchId: string,
   opts: { workerId?: string; now?: Date; sender?: (args: { to: string; subject: string; html: string; idempotencyKey: string }) => Promise<SendResult> } = {},
-): Promise<{ sendState: string } | { skipped: true }> {
+): Promise<{ sendState: string } | { skipped: true } | { held: true }> {
   const workerId = opts.workerId ?? `worker-${randomUUID().slice(0, 8)}`
   const now = opts.now ?? systemClock.now()
   const sender = opts.sender ?? sendEmailWithResult
@@ -157,9 +180,18 @@ export async function sendDispatch(
 
   // Fresh read (Rule N11): a payment recorded minutes ago cancels its reminder — record a terminal,
   // non-delivered state so it never re-sends.
-  if (!(await isStillRelevant(before))) {
+  if (!(await isStillRelevant(before, now))) {
     await prisma.notificationDispatch.update({ where: { id: dispatchId }, data: { sendState: 'SKIPPED_STALE' } })
     return { skipped: true }
+  }
+
+  // Kill switch: the worker must NOT reach the provider while a company's client emails are off — even
+  // for dispatches already queued while it was on. Held (left PENDING), not sent; when re-enabled these
+  // resume, still gated by the fresh read above. (An email already ACCEPTED by the provider cannot be
+  // recalled — the switch only governs what has not yet been sent.)
+  const companyId = await dispatchCompanyId(before)
+  if (companyId && !(await getAutomationSettings(companyId)).clientEmailsEnabled) {
+    return { held: true }
   }
 
   const leaseToken = await claimDispatch(dispatchId, workerId, now)

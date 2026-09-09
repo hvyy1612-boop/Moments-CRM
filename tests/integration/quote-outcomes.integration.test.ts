@@ -34,7 +34,8 @@ describe('quote outcomes (integration, real DB)', () => {
 
     const project = await prisma.project.findUnique({ where: { id: projectId } })
     // Declining a quote is a quote-level fact - it must NOT move the operational lifecycle (docs/24).
-    expect(project?.lifecycleStatus).toBe('CONFIRMED')
+    // A converted enquiry starts at BOOKING_REQUESTED (frozen operating model); the decline leaves it there.
+    expect(project?.lifecycleStatus).toBe('BOOKING_REQUESTED')
     expect(project?.lostReason).toBeNull()
 
     const quote = await prisma.quote.findUnique({
@@ -66,21 +67,21 @@ describe('quote outcomes (integration, real DB)', () => {
 
     const project = await prisma.project.findUnique({ where: { id: projectId } })
     // Revising a quote must not move the operational lifecycle (docs/24 Increment 1).
-    expect(project?.lifecycleStatus).toBe('CONFIRMED')
+    expect(project?.lifecycleStatus).toBe('BOOKING_REQUESTED')
   })
 
-  it('quoting a confirmed job leaves its operational lifecycle CONFIRMED (only commercial moves)', async () => {
+  it('quoting a booked job leaves its operational lifecycle unchanged (only commercial moves)', async () => {
     const conv = await convertEnquiry((await createEnquiry({ name: 'Quoter', email: email() })).id)
     const before = await prisma.project.findUnique({ where: { id: conv.projectId! } })
-    expect(before?.lifecycleStatus).toBe('CONFIRMED')
+    expect(before?.lifecycleStatus).toBe('BOOKING_REQUESTED') // convert lands here (frozen model)
 
     const q = await createQuote(conv.projectId!, null)
     await saveQuoteDraft(q.versionId, [{ description: 'Coverage', quantity: 1, unitPrice: '2000' }], null)
     await sendQuote(q.quoteId, null)
 
     const after = await prisma.project.findUnique({ where: { id: conv.projectId! } })
-    expect(after?.lifecycleStatus).toBe('CONFIRMED')
-    expect(after?.commercialStatus).toBe('QUOTED')
+    expect(after?.lifecycleStatus).toBe('BOOKING_REQUESTED') // operational lifecycle unchanged
+    expect(after?.commercialStatus).toBe('QUOTED') // only the commercial axis moves
   })
 
   it('an accepted quote cannot be revised', async () => {

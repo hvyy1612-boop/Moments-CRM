@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
 import { lockInvoiceRow, refreshInvoiceAmountPaid } from './invoice-ledger'
+import { invalidateShootReminders } from './notifications'
 
 /**
  * Cancellation and refunds (F-FIN-02). Financial records are never hard-deleted - a refund is a new
@@ -28,10 +29,18 @@ export async function cancelProject(
       where: { booking: { projectId }, status: 'ACTIVE' },
       data: { status: 'CANCELLED' },
     })
+    // Capture the bookings being cancelled so their unsent shoot reminders can be invalidated below.
+    const cancelledBookings = await tx.booking.findMany({
+      where: { projectId, status: { in: ['TENTATIVE', 'CONFIRMED'] } },
+      select: { id: true },
+    })
     await tx.booking.updateMany({
       where: { projectId, status: { in: ['TENTATIVE', 'CONFIRMED'] } },
       data: { status: 'CANCELLED', cancelledAt: now },
     })
+    // Rule N7 (docs/25 Part 4): a cancelled shoot's unsent reminders are invalidated so no old-schedule
+    // notice is sent. The send worker also re-checks the booking status before sending (defence in depth).
+    for (const b of cancelledBookings) await invalidateShootReminders(tx, b.id)
     await tx.auditLog.create({
       data: {
         companyId: project.companyId,

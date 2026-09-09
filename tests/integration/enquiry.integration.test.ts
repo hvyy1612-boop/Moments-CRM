@@ -27,14 +27,16 @@ describe('enquiry backbone (integration, real DB)', () => {
     expect(e.convertedProjectId).toBeNull()
   })
 
-  it('converts: upserts a client and creates a QUALIFYING project, idempotently', async () => {
+  it('converts: upserts a client and creates a BOOKING_REQUESTED project, idempotently', async () => {
     const e = await createEnquiry({ name: 'Sarah Nguyen', email: email(), eventType: 'Wedding' })
     const r1 = await convertEnquiry(e.id)
     expect(r1.alreadyConverted).toBe(false)
 
     const project = await prisma.project.findUnique({ where: { id: r1.projectId! } })
     const client = await prisma.client.findUnique({ where: { id: r1.clientId! } })
-    expect(project?.lifecycleStatus).toBe('QUALIFYING')
+    // A converted (won) enquiry becomes a booked job pending confirmation — BOOKING_REQUESTED — per the
+    // frozen operating model; QUALIFYING is a deprecated pre-freeze state.
+    expect(project?.lifecycleStatus).toBe('BOOKING_REQUESTED')
     expect(client?.status).toBe('PROSPECT')
     expect(client?.source).toBe('ENQUIRY')
 

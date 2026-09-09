@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
 import { createEnquiry, convertEnquiry } from '@/lib/domain/enquiry'
 import { createBooking, rescheduleBooking } from '@/lib/domain/booking'
+import { cancelProject } from '@/lib/domain/refund'
 import { createInvoice, issueInvoice, recordPayment } from '@/lib/domain/finance'
 import type { SendResult } from '@/lib/email'
 import { setAutomationSettings } from '@/lib/domain/automation'
@@ -113,6 +114,7 @@ describe('Notifications & reminders against a real DB (docs/25 Part 4)', () => {
   })
 
   it('N-d: in-doubt — sent to provider >24h ago with no ack → IN_DOUBT, not blindly resent', async () => {
+    await setAutomation({ clientEmailsEnabled: true })
     const invId = await issuedInvoiceDue(await newProject(), '1000', 30) // future → always relevant
     const id = await enqueueDispatch(prisma, {
       kind: 'payment_reminder', targetType: 'Invoice', targetId: invId, milestone: 'x',
@@ -124,6 +126,7 @@ describe('Notifications & reminders against a real DB (docs/25 Part 4)', () => {
   })
 
   it('N-d: within 24h of first send → safe to resend with the same key', async () => {
+    await setAutomation({ clientEmailsEnabled: true })
     const invId = await issuedInvoiceDue(await newProject(), '1000', 30)
     const id = await enqueueDispatch(prisma, {
       kind: 'payment_reminder', targetType: 'Invoice', targetId: invId, milestone: 'y',
@@ -178,10 +181,26 @@ describe('Notifications & reminders against a real DB (docs/25 Part 4)', () => {
   })
 
   it('N-h: with no provider configured a dispatch is SKIPPED_NO_PROVIDER, never SENT', async () => {
+    await setAutomation({ clientEmailsEnabled: true }) // switch on, but no RESEND key in tests
     const invId = await issuedInvoiceDue(await newProject(), '1000', 30)
     const id = (await enqueueDispatch(prisma, { kind: 'payment_reminder', targetType: 'Invoice', targetId: invId, milestone: 'np', recipientEmail: email(), subject: 's', body: 'b' }))!
     const res = await sendDispatch(id) // default sender; RESEND_API_KEY is absent in tests
     expect(res).toEqual({ sendState: 'SKIPPED_NO_PROVIDER' })
+  })
+
+  it('kill switch blocks the WORKER, not just creation: a queued dispatch is held, not sent, while off', async () => {
+    await setAutomation({ clientEmailsEnabled: true })
+    const invId = await issuedInvoiceDue(await newProject(), '1000', 30)
+    const id = (await enqueueDispatch(prisma, { kind: 'payment_reminder', targetType: 'Invoice', targetId: invId, milestone: 'ks', recipientEmail: email(), subject: 's', body: 'b' }))!
+    // Turn the switch OFF after the dispatch is already queued.
+    await setAutomation({ clientEmailsEnabled: false })
+    const held = await sendDispatch(id, { sender: throwingSender }) // provider must NOT be called
+    expect(held).toEqual({ held: true })
+    expect((await prisma.notificationDispatch.findUnique({ where: { id }, select: { sendState: true } }))?.sendState).toBe('PENDING') // held, still queued
+    // Re-enable → the held dispatch resumes (still fresh-read gated).
+    await setAutomation({ clientEmailsEnabled: true })
+    const sent = await sendDispatch(id, { sender: accepting })
+    expect(sent).toEqual({ sendState: 'PROVIDER_ACCEPTED' })
   })
 
   it('N-i: rescheduling invalidates the old schedule’s unsent shoot reminder', async () => {
@@ -261,5 +280,25 @@ describe('Notifications & reminders against a real DB (docs/25 Part 4)', () => {
     expect(n).toBe(1)
     const row = await prisma.notificationDispatch.findUnique({ where: { id }, select: { sendState: true } })
     expect(row?.sendState).toBe('SKIPPED_STALE')
+  })
+
+  it('cancel flow end-to-end: cancelProject invalidates the shoot reminder AND the worker re-checks status', async () => {
+    await setAutomation({ clientEmailsEnabled: true })
+    const projectId = await newProject()
+    await prisma.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'CONFIRMED' } })
+    const booking = await createBooking(projectId, { startsAt: '2027-06-20T10:00', endsAt: '2027-06-20T18:00' }, null)
+    const wiredId = (await enqueueDispatch(prisma, { kind: 'shoot_reminder', targetType: 'Booking', targetId: booking.id, milestone: 'shoot_-1', recipientEmail: email(), subject: 's', body: 'b' }))!
+
+    // 1) The real cancel operation invalidates the reminder (not just the standalone primitive).
+    await cancelProject(projectId, 'client cancelled', null)
+    expect((await prisma.booking.findUnique({ where: { id: booking.id }, select: { status: true } }))?.status).toBe('CANCELLED')
+    expect((await prisma.notificationDispatch.findUnique({ where: { id: wiredId }, select: { sendState: true } }))?.sendState).toBe('SKIPPED_STALE')
+
+    // 2) Defence in depth: even a reminder that slipped through as PENDING is dropped by the worker's
+    //    fresh read once its booking is cancelled — the provider is never called.
+    const strayId = (await enqueueDispatch(prisma, { kind: 'shoot_reminder', targetType: 'Booking', targetId: booking.id, milestone: 'shoot_0', recipientEmail: email(), subject: 's', body: 'b' }))!
+    const res = await sendDispatch(strayId, { sender: throwingSender })
+    expect(res).toEqual({ skipped: true })
+    expect((await prisma.notificationDispatch.findUnique({ where: { id: strayId }, select: { sendState: true } }))?.sendState).toBe('SKIPPED_STALE')
   })
 })
