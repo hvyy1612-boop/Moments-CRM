@@ -32,7 +32,8 @@ export async function GET(req: Request): Promise<Response> {
   while ((await processOutboxOnce()).processed > 0 && outboxGuard++ < 50) {
     /* drain the business-event backlog into dispatches */
   }
-  const reminders = await scanPaymentReminders()
+  const reminderScan = await scanPaymentReminders()
+  const reminders = { enqueued: reminderScan.enqueued, followups: reminderScan.followups }
   await resolveSettledOverdueFollowups()
   const pending = await prisma.notificationDispatch.findMany({ where: { sendState: 'PENDING' }, select: { id: true }, take: 200 })
   for (const d of pending) await sendDispatch(d.id)

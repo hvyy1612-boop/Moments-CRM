@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
 import { lockInvoiceRow, refreshInvoiceAmountPaid } from './invoice-ledger'
+import { invalidateShootReminders } from './notifications'
 
 export async function cancelProject(
   projectId: string,
@@ -22,10 +23,17 @@ export async function cancelProject(
       where: { booking: { projectId }, status: 'ACTIVE' },
       data: { status: 'CANCELLED' },
     })
+
+    const cancelledBookings = await tx.booking.findMany({
+      where: { projectId, status: { in: ['TENTATIVE', 'CONFIRMED'] } },
+      select: { id: true },
+    })
     await tx.booking.updateMany({
       where: { projectId, status: { in: ['TENTATIVE', 'CONFIRMED'] } },
       data: { status: 'CANCELLED', cancelledAt: now },
     })
+
+    for (const b of cancelledBookings) await invalidateShootReminders(tx, b.id)
     await tx.auditLog.create({
       data: {
         companyId: project.companyId,

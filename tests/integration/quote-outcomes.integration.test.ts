@@ -33,7 +33,7 @@ describe('quote outcomes (integration, real DB)', () => {
 
     const project = await prisma.project.findUnique({ where: { id: projectId } })
 
-    expect(project?.lifecycleStatus).toBe('CONFIRMED')
+    expect(project?.lifecycleStatus).toBe('BOOKING_REQUESTED')
     expect(project?.lostReason).toBeNull()
 
     const quote = await prisma.quote.findUnique({
@@ -65,20 +65,20 @@ describe('quote outcomes (integration, real DB)', () => {
 
     const project = await prisma.project.findUnique({ where: { id: projectId } })
 
-    expect(project?.lifecycleStatus).toBe('CONFIRMED')
+    expect(project?.lifecycleStatus).toBe('BOOKING_REQUESTED')
   })
 
-  it('quoting a confirmed job leaves its operational lifecycle CONFIRMED (only commercial moves)', async () => {
+  it('quoting a booked job leaves its operational lifecycle unchanged (only commercial moves)', async () => {
     const conv = await convertEnquiry((await createEnquiry({ name: 'Quoter', email: email() })).id)
     const before = await prisma.project.findUnique({ where: { id: conv.projectId! } })
-    expect(before?.lifecycleStatus).toBe('CONFIRMED')
+    expect(before?.lifecycleStatus).toBe('BOOKING_REQUESTED')
 
     const q = await createQuote(conv.projectId!, null)
     await saveQuoteDraft(q.versionId, [{ description: 'Coverage', quantity: 1, unitPrice: '2000' }], null)
     await sendQuote(q.quoteId, null)
 
     const after = await prisma.project.findUnique({ where: { id: conv.projectId! } })
-    expect(after?.lifecycleStatus).toBe('CONFIRMED')
+    expect(after?.lifecycleStatus).toBe('BOOKING_REQUESTED')
     expect(after?.commercialStatus).toBe('QUOTED')
   })
 

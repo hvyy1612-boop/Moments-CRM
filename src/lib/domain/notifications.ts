@@ -4,6 +4,7 @@ import { sydneyYmd, systemClock } from '@/lib/time'
 import { MS_PER_DAY } from '@/features/enquiries/workflow'
 import { sendEmailWithResult, type SendResult } from '@/lib/email'
 import { getInvoiceBalanceById } from './invoice-money'
+import { getAutomationSettings, type AutomationSettings } from './automation'
 
 type Client = typeof prisma | Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
@@ -106,19 +107,39 @@ export async function releaseExpiredLeases(now: Date = systemClock.now()): Promi
   return res.count
 }
 
-async function isStillRelevant(d: { kind: string; targetType: string; targetId: string; milestone: string }): Promise<boolean> {
+async function isStillRelevant(
+  d: { kind: string; targetType: string; targetId: string; milestone: string },
+  now: Date,
+): Promise<boolean> {
   if (d.kind === 'payment_reminder' && d.targetType === 'Invoice') {
     const bal = await getInvoiceBalanceById(d.targetId)
     if (!bal) return false
     return bal.owed.greaterThan(0)
   }
+  if (d.kind === 'shoot_reminder' && d.targetType === 'Booking') {
+    const b = await prisma.booking.findUnique({ where: { id: d.targetId }, select: { status: true, startsAt: true } })
+    if (!b || b.status === 'CANCELLED') return false
+    return b.startsAt.getTime() > now.getTime()
+  }
   return true
+}
+
+async function dispatchCompanyId(d: { targetType: string; targetId: string }): Promise<string | null> {
+  if (d.targetType === 'Invoice') {
+    const inv = await prisma.invoice.findUnique({ where: { id: d.targetId }, select: { project: { select: { companyId: true } } } })
+    return inv?.project.companyId ?? null
+  }
+  if (d.targetType === 'Booking') {
+    const b = await prisma.booking.findUnique({ where: { id: d.targetId }, select: { project: { select: { companyId: true } } } })
+    return b?.project.companyId ?? null
+  }
+  return null
 }
 
 export async function sendDispatch(
   dispatchId: string,
   opts: { workerId?: string; now?: Date; sender?: (args: { to: string; subject: string; html: string; idempotencyKey: string }) => Promise<SendResult> } = {},
-): Promise<{ sendState: string } | { skipped: true }> {
+): Promise<{ sendState: string } | { skipped: true } | { held: true }> {
   const workerId = opts.workerId ?? `worker-${randomUUID().slice(0, 8)}`
   const now = opts.now ?? systemClock.now()
   const sender = opts.sender ?? sendEmailWithResult
@@ -127,9 +148,14 @@ export async function sendDispatch(
   if (!before) throw new Error('Dispatch not found.')
   if (before.sendState !== 'PENDING') return { sendState: before.sendState }
 
-  if (!(await isStillRelevant(before))) {
+  if (!(await isStillRelevant(before, now))) {
     await prisma.notificationDispatch.update({ where: { id: dispatchId }, data: { sendState: 'SKIPPED_STALE' } })
     return { skipped: true }
+  }
+
+  const companyId = await dispatchCompanyId(before)
+  if (companyId && !(await getAutomationSettings(companyId)).clientEmailsEnabled) {
+    return { held: true }
   }
 
   const leaseToken = await claimDispatch(dispatchId, workerId, now)
@@ -221,12 +247,29 @@ export async function invalidateShootReminders(client: Client, bookingId: string
   return res.count
 }
 
-export async function scanPaymentReminders(now: Date = systemClock.now()): Promise<{ enqueued: number; followups: number }> {
+export type ReminderImpactItem =
+  | { type: 'reminder'; invoiceId: string; milestone: string; recipientEmail: string; amount: string; wouldSend: boolean }
+  | { type: 'followup'; invoiceId: string; projectId: string; wouldCreate: boolean }
+
+export async function scanPaymentReminders(
+  now: Date = systemClock.now(),
+  opts: { preview?: boolean } = {},
+): Promise<{ enqueued: number; followups: number; impact: ReminderImpactItem[] }> {
+  const preview = opts.preview === true
   const invoices = await prisma.invoice.findMany({
     where: { status: { in: ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'OVERDUE'] } },
     select: { id: true, projectId: true, billingEmailSnapshot: true, project: { select: { companyId: true, client: { select: { email: true } } } } },
   })
   const nowDay = sydneyDayNumber(now)
+  const settingsCache = new Map<string, AutomationSettings>()
+  const settingsFor = async (companyId: string): Promise<AutomationSettings> => {
+    const hit = settingsCache.get(companyId)
+    if (hit) return hit
+    const s = await getAutomationSettings(companyId)
+    settingsCache.set(companyId, s)
+    return s
+  }
+  const impact: ReminderImpactItem[] = []
   let enqueued = 0
   let followups = 0
 
@@ -235,50 +278,67 @@ export async function scanPaymentReminders(now: Date = systemClock.now()): Promi
     if (!bal || bal.owed.lessThanOrEqualTo(0)) continue
     const recipient = inv.billingEmailSnapshot ?? inv.project.client.email
     if (!recipient) continue
+    const settings = await settingsFor(inv.project.companyId)
 
     for (let index = 0; index < bal.instalments.length; index++) {
       const inst = bal.instalments[index]!
       if (inst.remaining.lessThanOrEqualTo(0) || !inst.dueAt) continue
+
+      if (settings.remindersActiveFrom && inst.dueAt.getTime() < settings.remindersActiveFrom.getTime()) continue
       const dueDay = sydneyDayNumber(inst.dueAt)
       const reached = PAYMENT_MILESTONES.filter((m) => nowDay >= dueDay + m)
       if (reached.length === 0) continue
       const current = Math.max(...reached)
-      if (current >= FOLLOWUP_MILESTONE) {
 
-        if (await ensureOverdueFollowup(inv.id, inv.projectId, inv.project.companyId)) followups++
+      if (current >= FOLLOWUP_MILESTONE) {
+        impact.push({ type: 'followup', invoiceId: inv.id, projectId: inv.projectId, wouldCreate: settings.internalFollowupsEnabled })
+        if (!preview && settings.internalFollowupsEnabled) {
+          if (await ensureOverdueFollowup(inv.id, inv.projectId, inv.project.companyId)) followups++
+        }
         continue
       }
 
-      const id = await enqueueDispatch(prisma, {
-        kind: 'payment_reminder',
-        targetType: 'Invoice',
-        targetId: inv.id,
-        milestone: `inst${index}_due_${current}`,
-        recipientEmail: recipient,
-        subject: `Payment reminder - ${inst.remaining.toFixed(2)} due`,
-        body: `A payment of ${inst.remaining.toFixed(2)} is due. Thank you - Moments Photography and Film.`,
-      })
-      if (id) enqueued++
+      impact.push({ type: 'reminder', invoiceId: inv.id, milestone: `inst${index}_due_${current}`, recipientEmail: recipient, amount: inst.remaining.toFixed(2), wouldSend: settings.clientEmailsEnabled })
+      if (!preview && settings.clientEmailsEnabled) {
+        const id = await enqueueDispatch(prisma, {
+          kind: 'payment_reminder',
+          targetType: 'Invoice',
+          targetId: inv.id,
+          milestone: `inst${index}_due_${current}`,
+          recipientEmail: recipient,
+          subject: `Payment reminder - ${inst.remaining.toFixed(2)} due`,
+          body: `A payment of ${inst.remaining.toFixed(2)} is due. Thank you - Moments Photography and Film.`,
+        })
+        if (id) enqueued++
+      }
     }
   }
-  return { enqueued, followups }
+  return { enqueued, followups, impact }
 }
 
 const OVERDUE_FOLLOWUP_TITLE = 'Follow up on overdue payment'
 
+function followupId(invoiceId: string): string {
+  return 'of' + createHash('sha256').update(invoiceId).digest('hex').slice(0, 28)
+}
+
 async function ensureOverdueFollowup(invoiceId: string, projectId: string, companyId: string): Promise<boolean> {
-  const existing = await prisma.workItem.findFirst({
-    where: { projectId, kind: 'OVERDUE_FOLLOWUP', title: { contains: invoiceId } , status: 'PENDING' },
-    select: { id: true },
-  })
-  if (existing) return false
-  await prisma.workItem.create({
-    data: {
-      companyId, projectId, kind: 'OVERDUE_FOLLOWUP', stage: 'delivery', type: 'TODO',
-      title: `${OVERDUE_FOLLOWUP_TITLE} (${invoiceId})`, status: 'PENDING', order: 9999,
-    },
-  })
-  return true
+  const id = followupId(invoiceId)
+  const existing = await prisma.workItem.findUnique({ where: { id }, select: { id: true } })
+  try {
+    await prisma.workItem.upsert({
+      where: { id },
+      create: {
+        id, companyId, projectId, kind: 'OVERDUE_FOLLOWUP', stage: 'delivery', type: 'TODO',
+        title: `${OVERDUE_FOLLOWUP_TITLE} (${invoiceId})`, status: 'PENDING', order: 9999,
+      },
+      update: {}, // already exists → leave as-is; never a duplicate row
+    })
+  } catch {
+    // A concurrent worker won the insert race on the same deterministic id — the row now exists, which
+    // is exactly the desired end state, so this is a no-op (never a duplicate).
+  }
+  return !existing
 }
 
 export async function processOutboxOnce(now: Date = systemClock.now()): Promise<{ processed: number }> {
@@ -294,10 +354,11 @@ export async function processOutboxOnce(now: Date = systemClock.now()): Promise<
       if (invoiceId) {
         const inv = await prisma.invoice.findUnique({
           where: { id: invoiceId },
-          select: { id: true, invoiceNumber: true, billingEmailSnapshot: true, total: true, project: { select: { client: { select: { email: true } } } } },
+          select: { id: true, invoiceNumber: true, billingEmailSnapshot: true, total: true, project: { select: { companyId: true, client: { select: { email: true } } } } },
         })
         const recipient = inv?.billingEmailSnapshot ?? inv?.project.client.email ?? null
-        if (inv && recipient) {
+
+        if (inv && recipient && (await getAutomationSettings(inv.project.companyId)).clientEmailsEnabled) {
           await enqueueDispatch(prisma, {
             kind: 'invoice_issued',
             targetType: 'Invoice',
