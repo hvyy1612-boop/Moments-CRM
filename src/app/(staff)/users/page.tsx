@@ -5,6 +5,7 @@ import { requireRole } from '@/lib/auth/guard'
 import { TEAMS } from '@/lib/auth/teams'
 import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
+import { PageHeader } from '@/components/PageHeader'
 import { AppShell } from '../AppShell'
 import { AddStaffForm } from './AddStaffForm'
 import { StaffTeams, type StaffRowData, type TeamGroup } from './StaffTeams'
@@ -44,11 +45,11 @@ export default async function UsersPage() {
   return (
     <AppShell user={user} csrf={csrf} active="users">
       <div className="mx-auto max-w-3xl">
-        <h1 className="font-serif text-2xl font-semibold text-ink">Staff</h1>
-        <p className="mt-1 text-base text-ink-muted">
-          You create the accounts here. Each staff member gets a Staff ID and a one-time password, then
-          sets their own password on first sign-in. There is no public sign-up.
-        </p>
+        <PageHeader
+          eyebrow="System"
+          title="Users"
+          description="Create staff accounts here. Each staff member gets a Staff ID and a one-time password, then sets their own password on first sign-in. There is no public sign-up."
+        />
 
         <section className="mt-6 rounded-md border border-line bg-surface p-5">
           <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Add staff</h2>

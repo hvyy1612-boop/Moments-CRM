@@ -35,7 +35,6 @@ export function EditableTaskRow({
   const [, startTransition] = useTransition()
 
   function toggle() {
-    if (task.blocked && !done) return
     startTransition(async () => {
       setDone(!done)
       const data = new FormData()
@@ -51,16 +50,12 @@ export function EditableTaskRow({
       <button
         type="button"
         onClick={toggle}
-        disabled={task.blocked && !done}
         aria-label={done ? 'Reopen task' : 'Mark done'}
         aria-pressed={done}
-        title={task.blocked && !done ? `Complete "${task.blockedBy}" first` : undefined}
         className={`mt-0.5 flex h-4 w-4 items-center justify-center rounded border text-xs transition-colors ${
           done
             ? 'border-delivered-ink bg-delivered text-delivered-ink'
-            : task.blocked
-              ? 'cursor-not-allowed border-line-strong text-transparent opacity-50'
-              : 'border-line-strong text-transparent hover:border-ink'
+            : 'border-line-strong text-transparent hover:border-ink'
         }`}
       >
         ✓

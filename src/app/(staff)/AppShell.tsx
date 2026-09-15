@@ -1,10 +1,8 @@
 import type { ReactNode } from 'react'
-import Link from 'next/link'
-import { CommandPalette } from '@/components/CommandPalette'
-import { AddNewMenu } from '@/components/AddNewMenu'
 import { can, type Permission } from '@/lib/auth/authz'
 import type { SessionUser } from '@/lib/auth/guard'
-import { Sidebar } from './Sidebar'
+import { getRecentAlerts } from '@/lib/domain/alerts'
+import { AppChrome } from './AppChrome'
 
 export type NavKey =
   | 'dashboard'
@@ -58,13 +56,10 @@ const NAV: NavItem[] = [
   { key: 'users', label: 'Users', href: '/users', group: 'System', built: true, permission: 'USER_MANAGE', icon: svg(<><circle cx="9" cy="8" r="3" /><path d="M3 20a6 6 0 0 1 12 0" /><path d="M16 3.5a3 3 0 0 1 0 5.8M21 20a5 5 0 0 0-4-4.9" /></>) },
 ]
 
-export function AppShell({
+export async function AppShell({
   user,
   csrf,
   active,
-  action,
-  bareHeader = false,
-  hideAddNew = false,
   children,
 }: {
   user: SessionUser
@@ -79,64 +74,21 @@ export function AppShell({
   children: ReactNode
 }) {
   const items = NAV.filter((n) => !n.permission || can(user, n.permission))
-  const current = NAV.find((n) => n.key === active)
   const initial = user.name.trim().charAt(0).toUpperCase() || 'U'
+  const alerts = await getRecentAlerts()
 
   return (
-    <div className="flex min-h-screen bg-paper">
-      {/* Collapsible desktop sidebar (icon rail + account menu) - see Sidebar.tsx. */}
-      <Sidebar
-        items={items}
-        groups={GROUPS}
-        active={active}
-        userName={user.name}
-        userRole={user.role}
-        initial={initial}
-        csrf={csrf}
-      />
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* Top bar (D-21): hidden when the page renders its own full-width header (bareHeader). */}
-        {bareHeader ? null : (
-        <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b border-line bg-surface px-5 sm:px-8">
-          <div className="min-w-0">
-            <div className="text-xs uppercase tracking-widest text-muted">
-              {current?.group ?? 'Moments'}
-            </div>
-            <div className="font-serif text-xl font-semibold leading-none text-ink">
-              {current?.label ?? 'Moments'}
-            </div>
-          </div>
-          <div className="flex-1" />
-          <CommandPalette />
-          {hideAddNew ? null : <AddNewMenu />}
-          {action}
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-accent-tint font-serif text-sm text-accent-ink md:hidden">
-            {initial}
-          </span>
-        </header>
-        )}
-
-        {/* Mobile navigation (below md, where the sidebar is hidden). */}
-        <nav className="flex gap-1 overflow-x-auto border-b border-line bg-surface px-4 py-2 md:hidden">
-          {items
-            .filter((i) => i.built)
-            .map((item) => (
-              <Link
-                key={item.key}
-                href={item.href}
-                aria-current={item.key === active ? 'page' : undefined}
-                className={`shrink-0 rounded px-2.5 py-1.5 text-sm ${
-                  item.key === active ? 'bg-sunk font-medium text-ink' : 'text-ink-muted'
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
-        </nav>
-
-        <main className="w-full flex-1 px-6 py-8 sm:px-8">{children}</main>
-      </div>
-    </div>
+    <AppChrome
+      items={items}
+      groups={GROUPS}
+      active={active}
+      initial={initial}
+      userName={user.name}
+      userRole={user.role}
+      csrf={csrf}
+      alerts={alerts}
+    >
+      {children}
+    </AppChrome>
   )
 }
