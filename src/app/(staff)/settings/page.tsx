@@ -4,6 +4,7 @@ import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { ResetLinkGenerator } from '@/features/settings/components/ResetLinkGenerator'
+import { PageHeader } from '@/components/PageHeader'
 import { AppShell } from '../AppShell'
 
 export const runtime = 'nodejs'
@@ -24,6 +25,7 @@ export default async function SettingsPage() {
 
   return (
     <AppShell user={user} csrf={csrf} active="settings">
+      <PageHeader eyebrow="System" title="Settings" description="Studio configuration and account tools." />
       {can(user, 'USER_MANAGE') ? (
         <div className="mb-4">
           <ResetLinkGenerator csrf={csrf} />

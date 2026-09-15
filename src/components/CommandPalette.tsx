@@ -57,14 +57,17 @@ export function CommandPalette() {
 
   return (
     <>
+      {/* Global search: a wide field-styled trigger that opens the command palette (reuses the real
+          cross-entity search below). Neutral fill, no harsh border, per the shared nav. */}
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="hidden items-center gap-2 rounded border border-line bg-surface px-3 py-1.5 text-sm text-ink-muted hover:text-ink sm:flex"
+        aria-label="Search"
+        className="flex h-10 w-full items-center gap-2.5 rounded-lg bg-sunk px-3.5 text-sm text-ink-muted transition-colors hover:bg-line"
       >
-        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
-        Search
-        <span className="rounded border border-line-strong px-1.5 text-xs font-bold">⌘K</span>
+        <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
+        <span className="min-w-0 flex-1 truncate text-left">Search clients, enquiries, jobs, invoices...</span>
+        <span className="hidden shrink-0 rounded border border-line-strong px-1.5 text-xs font-bold sm:inline">⌘K</span>
       </button>
 
       {open ? (

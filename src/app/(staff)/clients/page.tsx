@@ -109,8 +109,8 @@ export default async function ClientsPage({
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
       <div className="w-full">
-        {/* Header */}
-        <div className="text-xs text-muted">Studio / Clients</div>
+        {/* Header (shared PageHeader pattern: uppercase section eyebrow, then title + description). */}
+        <div className="text-xs font-semibold uppercase tracking-widest text-muted">Studio</div>
         <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-3xl font-semibold text-ink">Clients</h1>

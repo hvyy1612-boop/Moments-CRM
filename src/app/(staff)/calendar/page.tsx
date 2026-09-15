@@ -12,6 +12,7 @@ import {
   type CalendarView,
 } from '@/lib/domain/calendar'
 import { getTodayCockpit } from '@/lib/domain/today'
+import { PageHeader } from '@/components/PageHeader'
 import { AppShell } from '../AppShell'
 import { AddEventButton, CalendarClient, SyncButton } from './CalendarClient'
 import { AgendaView } from './AgendaView'
@@ -67,18 +68,18 @@ export default async function CalendarPage({
   }
 
   return (
-    <AppShell
-      user={user}
-      csrf={csrf}
-      active="calendar"
-      hideAddNew
-      action={
-        <div className="flex items-center gap-2">
-          <SyncButton feedPath={feedPath} />
-          {canManage ? <AddEventButton csrf={csrf} clients={clients} date={cockpit ? '' : (data?.todayDateKey ?? '')} /> : null}
-        </div>
-      }
-    >
+    <AppShell user={user} csrf={csrf} active="calendar">
+      <PageHeader
+        eyebrow="Operations"
+        title="Calendar"
+        description="Manage bookings, shoots and studio activity."
+        actions={
+          <>
+            <SyncButton feedPath={feedPath} />
+            {canManage ? <AddEventButton csrf={csrf} clients={clients} date={cockpit ? '' : (data?.todayDateKey ?? '')} /> : null}
+          </>
+        }
+      />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <h1 className="min-w-44 font-serif text-2xl font-semibold text-ink">{isAgenda ? `Today - ${cockpit!.dateLabel}` : data!.label}</h1>

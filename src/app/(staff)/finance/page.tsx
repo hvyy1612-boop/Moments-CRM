@@ -131,8 +131,8 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   return (
     <AppShell user={user} csrf={csrf} active="finance" bareHeader>
       <div className="w-full">
-        {/* Header (matches the Clients list) */}
-        <div className="text-xs text-muted">Operations / Payments</div>
+        {/* Header (shared PageHeader pattern: uppercase section eyebrow, then title + description). */}
+        <div className="text-xs font-semibold uppercase tracking-widest text-muted">Operations</div>
         <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-3xl font-semibold text-ink">Payments</h1>

@@ -6,6 +6,7 @@ import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { maskEmail } from '@/lib/text'
 import { formatSydneyDateTime } from '@/lib/time'
+import { PageHeader } from '@/components/PageHeader'
 import { AppShell } from '../AppShell'
 
 export const runtime = 'nodejs'
@@ -52,11 +53,11 @@ export default async function ActivityPage() {
   return (
     <AppShell user={user} csrf={csrf} active="activity">
       <div>
-        <h1 className="font-serif text-2xl text-ink">Activity</h1>
-        <p className="mt-1 text-sm text-ink-muted">
-          Sign-in history and a record of what happened. Times are Sydney local time and email addresses
-          are masked. Read-only: nothing here can be changed.
-        </p>
+        <PageHeader
+          eyebrow="System"
+          title="Activity"
+          description="Sign-in history and a record of what happened. Times are Sydney local and email addresses are masked. Read-only: nothing here can be changed."
+        />
 
         <section className="mt-8">
           <h2 className="text-lg">Sign-in activity</h2>
