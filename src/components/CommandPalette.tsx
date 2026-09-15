@@ -67,7 +67,6 @@ export function CommandPalette() {
       >
         <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
         <span className="min-w-0 flex-1 truncate text-left">Search clients, enquiries, jobs, invoices...</span>
-        <span className="hidden shrink-0 rounded border border-line-strong px-1.5 text-xs font-bold sm:inline">⌘K</span>
       </button>
 
       {open ? (
