@@ -42,13 +42,16 @@ export function TopNav({
     return () => window.removeEventListener('mousedown', onDown)
   }, [menuOpen])
 
+  // The left region mirrors the sidebar grid: header pl-2 matches the sidebar nav's px-2, and the
+  // hamburger's px-3 matches a nav item's px-3 - so the hamburger icon lands on the same column as the
+  // Dashboard/Clients icons below, and the logo lines up with the nav labels.
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-2 bg-paper px-3 sm:gap-3 sm:px-5">
+    <header className="sticky top-0 z-30 flex h-16 items-center bg-paper pl-2 pr-3 sm:pr-5">
       <button
         type="button"
         onClick={onToggle}
         aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-sunk hover:text-ink"
+        className="flex h-9 shrink-0 items-center justify-center rounded-md px-3 text-ink-muted transition-colors hover:bg-sunk hover:text-ink"
       >
         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M4 6h16M4 12h16M4 18h16" />
@@ -59,12 +62,13 @@ export function TopNav({
         <Image src="/landing/wordmark.png" alt="Moments" width={655} height={148} priority className="h-6 w-auto sm:h-7" />
       </Link>
 
-      <div className="flex min-w-0 flex-1 justify-center px-1 sm:px-4">
+      <div className="flex min-w-0 flex-1 justify-center px-3 sm:px-6">
         <div className="w-full max-w-xl">
           <CommandPalette />
         </div>
       </div>
 
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
       <NotificationBell alerts={alerts} />
 
       <div ref={menuRef} className="relative shrink-0">
@@ -97,6 +101,7 @@ export function TopNav({
             </div>
           </div>
         ) : null}
+      </div>
       </div>
     </header>
   )
