@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { BackLink } from '@/components/BackLink'
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { StatusTag } from '@/components/ui/StatusTag'
@@ -100,10 +101,7 @@ export default async function EnquiryDetailPage({
   return (
     <AppShell user={user} csrf={csrf} active="enquiries" bareHeader>
       <div className="w-full">
-        <Link href={backHref} className="inline-flex items-center gap-0.5 text-sm text-ink-muted transition-colors hover:text-ink">
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
-          Enquiries
-        </Link>
+        <BackLink href={backHref} label="Enquiries" />
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <h1 className="text-3xl font-semibold text-ink">{enquiry.name}</h1>

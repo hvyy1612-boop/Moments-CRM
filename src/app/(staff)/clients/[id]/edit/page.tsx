@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import { BackLink } from '@/components/BackLink'
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
@@ -42,10 +42,7 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
       <div className="mx-auto max-w-2xl">
-        <Link href={`/clients/${client.id}`} className="inline-flex items-center gap-0.5 text-sm text-ink-muted transition-colors hover:text-ink">
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
-          Back
-        </Link>
+        <BackLink href={`/clients/${client.id}`} label="Back" />
         <h1 className="mt-3 text-2xl font-semibold text-ink">Edit {client.displayName}</h1>
         <ClientForm
           action={updateClientAction}

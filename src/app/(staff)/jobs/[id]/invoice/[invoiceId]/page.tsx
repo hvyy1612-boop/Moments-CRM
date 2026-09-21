@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import { BackLink } from '@/components/BackLink'
 import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
@@ -40,7 +40,7 @@ export default async function InvoicePrintPage({
   return (
     <div className="min-h-screen bg-paper px-4 py-8">
       <div className="mx-auto mb-4 flex max-w-3xl items-center justify-between print:hidden">
-        <Link href={`/jobs/${id}`} className="text-sm font-bold text-accent hover:underline">← Back to job</Link>
+        <BackLink href={`/jobs/${id}`} label="Back to job" />
         <PrintButton />
       </div>
       <InvoiceFit />

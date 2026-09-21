@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import { BackLink } from '@/components/BackLink'
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
@@ -60,7 +60,7 @@ export default async function StaffRosterPage({ params }: { params: Promise<{ te
       <div className="print:hidden">
         <AppShell user={user} csrf={csrf} active="users">
           <div className="mx-auto max-w-3xl">
-            <Link href="/users" className="text-sm font-bold text-accent hover:underline">← Users</Link>
+            <BackLink href="/users" label="Users" />
             <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
               <h1 className="font-serif text-2xl font-semibold text-ink">{teamDef.label} roster</h1>
               <PrintButton label="Download PDF" />

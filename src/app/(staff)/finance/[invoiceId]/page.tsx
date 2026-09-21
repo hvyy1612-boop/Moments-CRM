@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Prisma } from '@prisma/client'
 import Link from 'next/link'
+import { BackLink } from '@/components/BackLink'
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { InvoiceDocument } from '@/components/InvoiceDocument'
@@ -139,10 +140,7 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
       <AppShell user={user} csrf={csrf} active="finance">
       <div>
         {/* Header (matches the Clients detail page: chevron back-link, ruled title, quiet actions). */}
-        <Link href="/finance" className="inline-flex items-center gap-0.5 text-sm text-ink-muted transition-colors hover:text-ink">
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
-          Payments
-        </Link>
+        <BackLink href="/finance" label="Payments" />
         <div className="mt-3 flex flex-wrap items-start justify-between gap-4 border-b border-line pb-5">
           <div className="min-w-0">
             <h1 className="truncate text-2xl font-semibold leading-tight text-ink">Invoice #{inv.invoiceNumber}</h1>

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
+import { BackLink } from '@/components/BackLink'
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { Prisma, type EnquiryStatus } from '@prisma/client'
@@ -273,10 +274,7 @@ export default async function ClientDetailPage({
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
       <div className="w-full">
-        <Link href={backHref} className="inline-flex items-center gap-0.5 text-sm text-ink-muted transition-colors hover:text-ink">
-          <svg className="h-4 w-4" {...svg}><path d="M15 6l-6 6 6 6" /></svg>
-          Clients
-        </Link>
+        <BackLink href={backHref} label="Clients" />
 
         {/* Header: identity + quiet actions. */}
         <div className="mt-3 flex flex-wrap items-start justify-between gap-4 border-b border-line pb-5">

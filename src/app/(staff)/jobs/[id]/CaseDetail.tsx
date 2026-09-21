@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { BackLink } from '@/components/BackLink'
 import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { CopyLinkField } from '@/components/ui/CopyLinkField'
@@ -229,10 +230,7 @@ export async function CaseDetail({
   return (
     <AppShell user={user} csrf={csrf} active={section} bareHeader>
       <div className="w-full">
-        <Link href={backHref} className="inline-flex items-center gap-0.5 text-sm text-ink-muted transition-colors hover:text-ink">
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
-          {backLabel}
-        </Link>
+        <BackLink href={backHref} label={backLabel} />
         <div className="mt-3 flex flex-wrap items-baseline justify-between gap-3">
           <div>
             <h1 className="text-xl">{project.client.displayName}</h1>
