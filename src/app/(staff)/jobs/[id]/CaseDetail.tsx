@@ -277,9 +277,9 @@ export async function CaseDetail({
         ) : null}
 
         {board && board.stages.length > 0 ? (
-          <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {/* Workflow board: Studio-Ninja phased checklist over the business records (Hybrid, docs/23). */}
-            <section className="rounded border border-line bg-surface p-5">
+          <div className="mt-6 grid grid-cols-1 items-start gap-4 lg:grid-cols-5">
+            {/* LEFT: the workflow board - the dominant operational column (Hybrid, docs/23). */}
+            <section className="rounded border border-line bg-surface p-5 lg:col-span-3">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h2 className="text-xs font-bold uppercase tracking-wide text-muted">Workflow</h2>
                 <HistoryLogModal entries={history} />
@@ -293,6 +293,8 @@ export async function CaseDetail({
               />
             </section>
 
+            {/* RIGHT: Conversation + the job-support sections, stacked as a sidebar. */}
+            <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
             {/* Conversation: reuses the Communication model, kept separate from the workflow. */}
             <section className="rounded border border-line bg-surface p-5">
               <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Conversation</h2>
@@ -349,10 +351,8 @@ export async function CaseDetail({
                 </form>
               </div>
             </section>
-          </div>
-        ) : null}
 
-        <section className="mt-6 rounded border border-line bg-surface p-5">
+            <section className="rounded border border-line bg-surface p-5">
           <h2 className="text-lg">Client</h2>
           <dl className="mt-2 grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
             <div>
@@ -369,7 +369,7 @@ export async function CaseDetail({
           ) : null}
         </section>
 
-        <section className="mt-6 rounded border border-line bg-surface p-5">
+        <section className="rounded border border-line bg-surface p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <h2 className="text-lg">Quote</h2>
             {version ? (
@@ -438,7 +438,7 @@ export async function CaseDetail({
         </section>
 
         {quoteAccepted ? (
-          <section className="mt-6 rounded border border-line bg-surface p-5">
+          <section className="rounded border border-line bg-surface p-5">
             <div className="flex flex-wrap items-baseline justify-between gap-3">
               <h2 className="text-lg">Contract</h2>
               {contractVersion ? (
@@ -482,7 +482,7 @@ export async function CaseDetail({
         ) : null}
 
         {isConfirmed ? (
-          <section className="mt-6 rounded border border-line bg-surface p-5">
+          <section className="rounded border border-line bg-surface p-5">
             <h2 className="text-lg">Scheduling</h2>
             <Scheduling
               csrf={csrf}
@@ -494,7 +494,7 @@ export async function CaseDetail({
         ) : null}
 
         {canInvoice ? (
-          <section className="mt-6 rounded border border-line bg-surface p-5">
+          <section className="rounded border border-line bg-surface p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg">Invoices &amp; payments</h2>
@@ -511,10 +511,13 @@ export async function CaseDetail({
         ) : null}
 
         {isConfirmed ? (
-          <section className="mt-6 rounded border border-line bg-surface p-5">
+          <section className="rounded border border-line bg-surface p-5">
             <h2 className="text-lg">Delivery</h2>
             <Delivery csrf={csrf} projectId={project.id} gallery={galleryView} />
           </section>
+        ) : null}
+            </div>
+          </div>
         ) : null}
       </div>
     </AppShell>
