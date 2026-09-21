@@ -4,16 +4,25 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 const PERIODS: { value: string; label: string }[] = [
-  { value: '30d', label: '30 days' },
-  { value: '90d', label: '90 days' },
-  { value: 'year', label: 'This year' },
+  { value: 'today', label: 'Today' },
+  { value: '7d', label: '7 days' },
+  { value: 'month', label: 'Month' },
+  { value: 'custom', label: 'Custom' },
 ]
+
+const segClass = (active: boolean) =>
+  `rounded-md px-3 py-1.5 text-sm transition-colors ${active ? 'bg-surface font-medium text-ink shadow-sm' : 'text-ink-muted hover:text-ink'}`
+
+/** "2026-09-01" -> "01 Sep" (noon parse avoids a timezone day-shift on the label). */
+function dayMonth(key: string): string {
+  const d = new Date(`${key}T12:00:00`)
+  if (Number.isNaN(d.getTime())) return key
+  return new Intl.DateTimeFormat('en-AU', { day: '2-digit', month: 'short' }).format(d)
+}
 
 /**
  * Service filter as a custom dropdown so the trigger stays compact (fits the selected label + chevron)
- * while the menu is free to expand wider than the trigger and show long service names in full - a
- * native <select> sizes its trigger to the widest option, which is what made it too wide. Same visual
- * language as the rest of the CRM (rounded-lg, border-line, bg-surface, text-sm).
+ * while the menu is free to expand wider than the trigger and show long service names in full.
  */
 function ServiceSelect({ value, options, onChange }: { value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false)
@@ -52,10 +61,7 @@ function ServiceSelect({ value, options, onChange }: { value: string; options: {
         </svg>
       </button>
       {open ? (
-        <div
-          role="listbox"
-          className="absolute right-0 z-50 mt-1 max-h-80 w-max min-w-full max-w-sm overflow-y-auto rounded-lg border border-line bg-surface py-1 shadow-lg"
-        >
+        <div role="listbox" className="absolute right-0 z-50 mt-1 max-h-80 w-max min-w-full max-w-sm overflow-y-auto rounded-lg border border-line bg-surface py-1 shadow-lg">
           {options.map((o) => {
             const selected = o.value === value
             return (
@@ -87,36 +93,149 @@ function ServiceSelect({ value, options, onChange }: { value: string; options: {
   )
 }
 
-export function DashboardFilters({ period, service, services }: { period: string; service: string; services: string[] }) {
+const dateInput = 'h-9 w-full rounded-md border border-line bg-surface px-2.5 text-sm text-ink outline-none transition-colors focus:border-accent'
+
+export function DashboardFilters({ period, service, services, from, to }: { period: string; service: string; services: string[]; from?: string; to?: string }) {
   const router = useRouter()
   const params = useSearchParams()
+  const [customOpen, setCustomOpen] = useState(false)
+  const [fromDate, setFromDate] = useState(from ?? '')
+  const [toDate, setToDate] = useState(to ?? '')
+  const [err, setErr] = useState<string | null>(null)
+  const customRef = useRef<HTMLDivElement>(null)
 
-  function set(key: string, value: string, def: string) {
+  // Keep the popover inputs in sync if the applied range changes from elsewhere.
+  useEffect(() => {
+    setFromDate(from ?? '')
+    setToDate(to ?? '')
+  }, [from, to])
+
+  useEffect(() => {
+    if (!customOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (customRef.current && !customRef.current.contains(e.target as Node)) setCustomOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCustomOpen(false)
+    }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [customOpen])
+
+  // Mutate the query string, preserving the other filters (so the range works with the service filter).
+  function pushParams(mut: (p: URLSearchParams) => void) {
     const p = new URLSearchParams(params.toString())
-    if (value === def) p.delete(key)
-    else p.set(key, value)
+    mut(p)
     const qs = p.toString()
     router.push(qs ? `/dashboard?${qs}` : '/dashboard')
   }
 
+  function selectPeriod(value: string) {
+    if (value === 'custom') {
+      setErr(null)
+      setCustomOpen((o) => !o)
+      return
+    }
+    setCustomOpen(false)
+    pushParams((p) => {
+      if (value === '7d') p.delete('period')
+      else p.set('period', value)
+      p.delete('from')
+      p.delete('to')
+    })
+  }
+
+  function applyCustom() {
+    if (!fromDate || !toDate) {
+      setErr('Choose both a From and a To date.')
+      return
+    }
+    if (fromDate > toDate) {
+      setErr('The From date must be on or before the To date.')
+      return
+    }
+    setErr(null)
+    setCustomOpen(false)
+    pushParams((p) => {
+      p.set('period', 'custom')
+      p.set('from', fromDate)
+      p.set('to', toDate)
+    })
+  }
+
+  function clearCustom() {
+    setFromDate('')
+    setToDate('')
+    setErr(null)
+    setCustomOpen(false)
+    pushParams((p) => {
+      p.delete('period')
+      p.delete('from')
+      p.delete('to')
+    })
+  }
+
+  const rangeLabel = period === 'custom' && from && to ? `${dayMonth(from)} – ${dayMonth(to)}` : null
   const serviceOptions = [{ value: 'all', label: 'All services' }, ...services.map((s) => ({ value: s, label: s }))]
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className="flex items-center rounded-lg bg-sunk p-0.5">
-        {PERIODS.map((p) => (
-          <button
-            key={p.value}
-            type="button"
-            onClick={() => set('period', p.value, '90d')}
-            aria-pressed={period === p.value}
-            className={`rounded-md px-3 py-1.5 text-sm transition-colors ${period === p.value ? 'bg-surface font-medium text-ink shadow-sm' : 'text-ink-muted hover:text-ink'}`}
-          >
-            {p.label}
-          </button>
-        ))}
+        {PERIODS.map((p) => {
+          const active = period === p.value
+          if (p.value === 'custom') {
+            return (
+              <div key="custom" ref={customRef} className="relative">
+                <button type="button" onClick={() => selectPeriod('custom')} aria-pressed={active} aria-haspopup="dialog" aria-expanded={customOpen} className={segClass(active)}>
+                  Custom{rangeLabel ? <span className="ml-1.5 font-normal text-ink-muted">{rangeLabel}</span> : null}
+                </button>
+                {customOpen ? (
+                  <div role="dialog" aria-label="Custom date range" className="absolute right-0 top-11 z-50 w-72 rounded-lg border border-line bg-surface p-3 shadow-lg">
+                    <div className="flex gap-2">
+                      <label className="flex-1">
+                        <span className="mb-1 block text-xs font-medium text-muted">From date</span>
+                        <input type="date" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} aria-label="From date" className={dateInput} />
+                      </label>
+                      <label className="flex-1">
+                        <span className="mb-1 block text-xs font-medium text-muted">To date</span>
+                        <input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} aria-label="To date" className={dateInput} />
+                      </label>
+                    </div>
+                    {err ? <p className="mt-2 text-xs text-danger">{err}</p> : null}
+                    <div className="mt-3 flex items-center justify-end gap-2">
+                      <button type="button" onClick={clearCustom} className="rounded-md px-3 py-1.5 text-sm font-medium text-ink-muted hover:text-ink">
+                        Clear
+                      </button>
+                      <button type="button" onClick={applyCustom} className="rounded-md bg-ink px-3 py-1.5 text-sm font-medium text-surface hover:opacity-90">
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )
+          }
+          return (
+            <button key={p.value} type="button" onClick={() => selectPeriod(p.value)} aria-pressed={active} className={segClass(active)}>
+              {p.label}
+            </button>
+          )
+        })}
       </div>
-      <ServiceSelect value={service} options={serviceOptions} onChange={(v) => set('service', v, 'all')} />
+      <ServiceSelect
+        value={service}
+        options={serviceOptions}
+        onChange={(v) =>
+          pushParams((p) => {
+            if (v === 'all') p.delete('service')
+            else p.set('service', v)
+          })
+        }
+      />
     </div>
   )
 }
