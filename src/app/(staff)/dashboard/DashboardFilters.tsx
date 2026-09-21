@@ -93,7 +93,7 @@ function ServiceSelect({ value, options, onChange }: { value: string; options: {
   )
 }
 
-const dateInput = 'h-9 w-full rounded-md border border-line bg-surface px-2.5 text-sm text-ink outline-none transition-colors focus:border-accent'
+const dateInput = 'h-9 rounded-md border border-line bg-surface px-2.5 text-sm text-ink outline-none transition-colors focus:border-accent'
 
 export function DashboardFilters({ period, service, services, from, to }: { period: string; service: string; services: string[]; from?: string; to?: string }) {
   const router = useRouter()
@@ -102,28 +102,22 @@ export function DashboardFilters({ period, service, services, from, to }: { peri
   const [fromDate, setFromDate] = useState(from ?? '')
   const [toDate, setToDate] = useState(to ?? '')
   const [err, setErr] = useState<string | null>(null)
-  const customRef = useRef<HTMLDivElement>(null)
 
-  // Keep the popover inputs in sync if the applied range changes from elsewhere.
+  // Keep the inputs in sync if the applied range changes from elsewhere.
   useEffect(() => {
     setFromDate(from ?? '')
     setToDate(to ?? '')
   }, [from, to])
 
+  // Escape closes the inline custom row (it lives in normal flow, so no click-outside dismissal -
+  // that would fight the native date picker's own popup).
   useEffect(() => {
     if (!customOpen) return
-    const onDown = (e: MouseEvent) => {
-      if (customRef.current && !customRef.current.contains(e.target as Node)) setCustomOpen(false)
-    }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setCustomOpen(false)
     }
-    window.addEventListener('mousedown', onDown)
     window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('mousedown', onDown)
-      window.removeEventListener('keydown', onKey)
-    }
+    return () => window.removeEventListener('keydown', onKey)
   }, [customOpen])
 
   // Mutate the query string, preserving the other filters (so the range works with the service filter).
@@ -183,59 +177,62 @@ export function DashboardFilters({ period, service, services, from, to }: { peri
   const serviceOptions = [{ value: 'all', label: 'All services' }, ...services.map((s) => ({ value: s, label: s }))]
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="flex items-center rounded-lg bg-sunk p-0.5">
-        {PERIODS.map((p) => {
-          const active = period === p.value
-          if (p.value === 'custom') {
+    // A vertical, right-aligned stack: the filter row, and - only when Custom is active - an inline
+    // date-range row directly beneath it. Both sit in normal document flow, so opening Custom grows the
+    // header and pushes the KPI cards down instead of floating over them.
+    <div className="flex flex-col items-end gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex items-center rounded-lg bg-sunk p-0.5">
+          {PERIODS.map((p) => {
+            const active = period === p.value
             return (
-              <div key="custom" ref={customRef} className="relative">
-                <button type="button" onClick={() => selectPeriod('custom')} aria-pressed={active} aria-haspopup="dialog" aria-expanded={customOpen} className={segClass(active)}>
-                  Custom{rangeLabel ? <span className="ml-1.5 font-normal text-ink-muted">{rangeLabel}</span> : null}
-                </button>
-                {customOpen ? (
-                  <div role="dialog" aria-label="Custom date range" className="absolute right-0 top-11 z-50 w-72 rounded-lg border border-line bg-surface p-3 shadow-lg">
-                    <div className="flex gap-2">
-                      <label className="flex-1">
-                        <span className="mb-1 block text-xs font-medium text-muted">From date</span>
-                        <input type="date" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} aria-label="From date" className={dateInput} />
-                      </label>
-                      <label className="flex-1">
-                        <span className="mb-1 block text-xs font-medium text-muted">To date</span>
-                        <input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} aria-label="To date" className={dateInput} />
-                      </label>
-                    </div>
-                    {err ? <p className="mt-2 text-xs text-danger">{err}</p> : null}
-                    <div className="mt-3 flex items-center justify-end gap-2">
-                      <button type="button" onClick={clearCustom} className="rounded-md px-3 py-1.5 text-sm font-medium text-ink-muted hover:text-ink">
-                        Clear
-                      </button>
-                      <button type="button" onClick={applyCustom} className="rounded-md bg-ink px-3 py-1.5 text-sm font-medium text-surface hover:opacity-90">
-                        Apply
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
+              <button
+                key={p.value}
+                type="button"
+                onClick={() => selectPeriod(p.value)}
+                aria-pressed={active}
+                aria-expanded={p.value === 'custom' ? customOpen : undefined}
+                className={segClass(active)}
+              >
+                {p.label}
+                {p.value === 'custom' && rangeLabel ? <span className="ml-1.5 font-normal text-ink-muted">{rangeLabel}</span> : null}
+              </button>
             )
+          })}
+        </div>
+        <ServiceSelect
+          value={service}
+          options={serviceOptions}
+          onChange={(v) =>
+            pushParams((p) => {
+              if (v === 'all') p.delete('service')
+              else p.set('service', v)
+            })
           }
-          return (
-            <button key={p.value} type="button" onClick={() => selectPeriod(p.value)} aria-pressed={active} className={segClass(active)}>
-              {p.label}
-            </button>
-          )
-        })}
+        />
       </div>
-      <ServiceSelect
-        value={service}
-        options={serviceOptions}
-        onChange={(v) =>
-          pushParams((p) => {
-            if (v === 'all') p.delete('service')
-            else p.set('service', v)
-          })
-        }
-      />
+
+      {customOpen ? (
+        <div role="group" aria-label="Custom date range" className="flex flex-col items-end gap-1">
+          <div className="flex flex-wrap items-end justify-end gap-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted">From date</span>
+              <input type="date" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} aria-label="From date" className={dateInput} />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted">To date</span>
+              <input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} aria-label="To date" className={dateInput} />
+            </label>
+            <button type="button" onClick={clearCustom} className="h-9 rounded-md px-3 text-sm font-medium text-ink-muted transition-colors hover:text-ink">
+              Clear
+            </button>
+            <button type="button" onClick={applyCustom} className="h-9 rounded-md bg-ink px-3 text-sm font-medium text-surface transition-opacity hover:opacity-90">
+              Apply
+            </button>
+          </div>
+          {err ? <p className="text-xs text-danger">{err}</p> : null}
+        </div>
+      ) : null}
     </div>
   )
 }
