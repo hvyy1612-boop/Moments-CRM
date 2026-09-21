@@ -184,7 +184,9 @@ export function DashboardFilters({ period, service, services, from, to }: { peri
       <div className="flex flex-wrap items-center justify-end gap-2">
         <div className="flex items-center rounded-lg bg-sunk p-0.5">
           {PERIODS.map((p) => {
-            const active = period === p.value
+            // While the custom editor is open, "Custom" is the highlighted segment (not the underlying
+            // applied period) so the control matches what the user is doing.
+            const active = p.value === 'custom' ? period === 'custom' || customOpen : period === p.value && !customOpen
             return (
               <button
                 key={p.value}
