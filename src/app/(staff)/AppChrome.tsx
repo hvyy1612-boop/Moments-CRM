@@ -90,7 +90,9 @@ export function AppChrome({
 
       <div className="flex">
         <Sidebar items={items} groups={groups} active={active} collapsed={collapsed} />
-        <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 sm:py-8">{children}</main>
+        {/* Page content starts snug under the top nav (shared across every page): a small fixed top
+            padding at all widths, with only the horizontal and bottom padding growing on larger screens. */}
+        <main className="min-w-0 flex-1 px-4 pb-6 pt-1.5 sm:px-8 sm:pb-8">{children}</main>
       </div>
     </div>
   )
