@@ -5,10 +5,9 @@ import { Prisma, type ClientSource, type ClientType } from '@prisma/client'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { formatSydneyDate } from '@/lib/time'
 import { titleCase } from '@/lib/text'
 import { AppShell } from '../AppShell'
-import { ClientRowMenu } from './ClientRowMenu'
+import { ClientsTable } from './ClientsTable'
 import { SortSelect, DEFAULT_SORT, type SortValue } from './SortSelect'
 import { FilterMenu } from './FilterMenu'
 import { ColumnsMenu } from './ColumnsMenu'
@@ -29,14 +28,6 @@ function orderFor(sort: SortValue): Prisma.ClientOrderByWithRelationInput {
     case 'fewest-jobs': return { projects: { _count: 'asc' } }
     default: return { createdAt: 'desc' }
   }
-}
-
-/** Initials for the avatar chip, e.g. "Ha Vy Tran" -> "HT". */
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '?'
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
-  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
 }
 
 export default async function ClientsPage({
@@ -180,51 +171,7 @@ export default async function ClientsPage({
             {q ? `No clients match "${q}".` : 'No clients yet. Add your first client above, or convert an enquiry.'}
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="clients-table w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
-                  <th className="py-2 pr-4 font-medium">Client</th>
-                  <th data-col="phone" className="py-2 pr-4 font-medium">Phone</th>
-                  <th data-col="source" className="py-2 pr-4 font-medium">Source</th>
-                  <th data-col="jobs" className="py-2 pr-4 font-medium">Jobs</th>
-                  <th data-col="since" className="py-2 pr-4 font-medium">Client since</th>
-                  <th className="w-10 py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id} className="group border-b border-line transition-colors last:border-b-0 hover:bg-paper">
-                    <td className="py-3 pr-4">
-                      <Link href={`/clients/${row.id}${backParam}`} className="flex items-center gap-3">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">
-                          {initials(row.name)}
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{row.name}</span>
-                          <span className="block truncate text-xs text-ink-muted">{row.email}</span>
-                        </span>
-                      </Link>
-                    </td>
-                    <td data-col="phone" className="tabular py-3 pr-4 text-ink-muted">{row.phone ?? '-'}</td>
-                    <td data-col="source" className="py-3 pr-4 text-ink-muted">{row.source}</td>
-                    <td data-col="jobs" className="tabular py-3 pr-4 text-ink">{row.projects}</td>
-                    <td data-col="since" className="tabular py-3 pr-4 text-ink-muted">{formatSydneyDate(row.since)}</td>
-                    <td className="py-3">
-                      <ClientRowMenu
-                        clientId={row.id}
-                        name={row.name}
-                        email={row.email}
-                        csrf={csrf}
-                        canDelete={user.role === 'ADMIN'}
-                        backParam={backParam}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ClientsTable rows={rows} csrf={csrf} canDelete={user.role === 'ADMIN'} backParam={backParam} />
         )}
       </div>
     </AppShell>

@@ -9,7 +9,6 @@ const KEY = 'clients.hiddenCols'
  *  data-col via a scoped <style>, so the server-rendered table stays simple. */
 export function ColumnsMenu() {
   const [open, setOpen] = useState(false)
-  const [ready, setReady] = useState(false)
   const [hidden, setHidden] = useState<string[]>([])
 
   useEffect(() => {
@@ -19,7 +18,6 @@ export function ColumnsMenu() {
     } catch {
       /* private mode / blocked storage: show all columns */
     }
-    setReady(true)
   }, [])
 
   function toggle(col: string) {
@@ -27,6 +25,8 @@ export function ColumnsMenu() {
       const next = prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]
       try {
         localStorage.setItem(KEY, JSON.stringify(next))
+        // The shared DataTable reads the same key; tell it to re-read and re-lay-out its columns.
+        window.dispatchEvent(new Event(`datatable:${KEY}`))
       } catch {
         /* ignore */
       }
@@ -36,9 +36,6 @@ export function ColumnsMenu() {
 
   return (
     <div className="relative">
-      {ready && hidden.length > 0 ? (
-        <style>{hidden.map((c) => `.clients-table [data-col="${c}"]{display:none}`).join('')}</style>
-      ) : null}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
