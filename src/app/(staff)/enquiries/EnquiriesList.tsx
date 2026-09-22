@@ -1,9 +1,12 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
+import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { Popover } from './Popover'
-import { EnquiryRow, type EnquiryRowData } from './EnquiryRow'
+import { StageControl } from './StageControl'
 import { AddEnquiryButton } from './AddEnquiryButton'
+import { EnquiryActionsCell, initials, waitingLabel, type EnquiryRowData } from './EnquiryRow'
 
 // UI REDESIGN PHASE ONLY. Tabs / search / sort / filter operate on the already-loaded page data
 // (visual filtering). None of them change enquiry stage, tasks, or any backend record.
@@ -34,35 +37,22 @@ const WAITING_FILTERS: { key: WaitingKey; label: string }[] = [
   { key: 'CLIENT', label: 'Client' },
 ]
 
-function SearchIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
-    </svg>
-  )
-}
-
 export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: string }) {
-  const [q, setQ] = useState('')
   const [tab, setTab] = useState<TabKey>('all')
   const [sort, setSort] = useState<SortKey>('waiting')
   const [waiting, setWaiting] = useState<WaitingKey>('any')
 
-  const searched = useMemo(() => {
-    const needle = q.trim().toLowerCase()
-    if (!needle) return rows
-    return rows.filter((r) => [r.name, r.event].some((f) => f.toLowerCase().includes(needle)))
-  }, [rows, q])
-
+  // Tab counts are the totals per stage (the active-search field, owned by DataTable, filters WITHIN
+  // the selected tab - matching the Jobs list).
   const counts = useMemo(() => {
     const map: Record<TabKey, number> = { all: 0, NEW: 0, CONTACTED: 0, QUALIFIED: 0, CONVERTED: 0, LOST: 0 }
-    for (const t of TABS) map[t.key] = searched.filter((r) => t.match(r.status)).length
+    for (const t of TABS) map[t.key] = rows.filter((r) => t.match(r.status)).length
     return map
-  }, [searched])
+  }, [rows])
 
   const visible = useMemo(() => {
     const activeTab = TABS.find((t) => t.key === tab)!
-    let out = searched.filter((r) => activeTab.match(r.status))
+    let out = rows.filter((r) => activeTab.match(r.status))
     if (waiting !== 'any') out = out.filter((r) => r.waitingOn === waiting)
     out = [...out]
     // Cancelled: newest cancellation on top (updatedAt = when it was cancelled), ignoring the sort control.
@@ -71,9 +61,28 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
     else if (sort === 'newest') out.sort((a, b) => b.createdMs - a.createdMs)
     else out.sort((a, b) => a.name.localeCompare(b.name))
     return out
-  }, [searched, tab, waiting, sort])
+  }, [rows, tab, waiting, sort])
 
   const sortLabel = SORTS.find((s) => s.key === sort)!.label
+
+  const columns: DataColumn<EnquiryRowData>[] = [
+    {
+      key: 'client',
+      header: 'Client',
+      width: '2fr',
+      cell: (r) => (
+        <Link href={`/enquiries/${r.id}`} className="flex min-w-0 items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">{initials(r.name)}</span>
+          <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.name}</span>
+        </Link>
+      ),
+    },
+    { key: 'event', header: 'Event', width: '1.4fr', cell: (r) => <span className="block truncate text-ink-muted">{r.event}</span> },
+    { key: 'stage', header: 'Stage', width: '1.4fr', cell: (r) => <StageControl enquiryId={r.id} status={r.status} csrf={csrf} /> },
+    { key: 'waiting', header: 'Waiting on', width: '1fr', cell: (r) => <span className="text-ink-muted">{waitingLabel(r.waitingOn)}</span> },
+    { key: 'shoot', header: 'Shoot date', width: '1.2fr', cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{r.shootDate ?? 'Not set'}</span> },
+    { key: 'actions', header: '', width: '2.75em', align: 'right', cell: (r) => <EnquiryActionsCell row={r} csrf={csrf} /> },
+  ]
 
   return (
     <div className="w-full">
@@ -85,16 +94,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
           <p className="mt-1 text-sm text-ink-muted">Your sales pipeline - from first enquiry to booking. Booked leads stay here as a record and also open as a Job.</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="relative">
-            <SearchIcon />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search enquiries"
-              aria-label="Search enquiries"
-              className="h-9 w-64 rounded-md border border-line bg-surface pl-9 pr-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent focus:ring-1 focus:ring-accent"
-            />
-          </div>
+          {/* Search moved into the table's own active-search field (client-side, live). */}
           <AddEnquiryButton csrf={csrf} />
         </div>
       </div>
@@ -168,31 +168,18 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
       </div>
 
       {/* Table */}
-      {visible.length === 0 ? (
-        <p className="py-16 text-center text-sm text-ink-muted">
-          {q ? 'No enquiries match your search.' : 'No enquiries in this view yet.'}
-        </p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
-                <th className="py-2 pr-4 font-medium">Client</th>
-                <th className="py-2 pr-4 font-medium">Event</th>
-                <th className="py-2 pr-4 font-medium">Stage</th>
-                <th className="py-2 pr-4 font-medium">Waiting on</th>
-                <th className="py-2 pr-4 font-medium">Shoot date</th>
-                <th className="w-10 py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((row) => (
-                <EnquiryRow key={row.id} row={row} csrf={csrf} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <div className="mt-4">
+        <DataTable
+          ariaLabel="Enquiries"
+          columns={columns}
+          rows={visible}
+          rowKey={(r) => r.id}
+          pageSize={30}
+          search={(r) => `${r.name} ${r.event}`}
+          searchPlaceholder="Search enquiries"
+          emptyMessage="No enquiries in this view yet."
+        />
+      </div>
     </div>
   )
 }

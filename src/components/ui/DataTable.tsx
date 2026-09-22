@@ -98,7 +98,7 @@ export function DataTable<T>({
   return (
     <div>
       {search ? (
-        <div className="mb-3 flex">
+        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
           <div className="flex h-9 w-full max-w-sm items-center gap-2 rounded-md border border-line bg-surface px-3 text-sm transition-colors focus-within:border-accent">
             <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
             <input
@@ -114,6 +114,12 @@ export function DataTable<T>({
               </button>
             ) : null}
           </div>
+          {/* Carbon active-search: always show the result count while searching, including "0 results". */}
+          {q ? (
+            <span className="tabular text-sm text-ink-muted" role="status" aria-live="polite">
+              {total} {total === 1 ? 'result' : 'results'}
+            </span>
+          ) : null}
         </div>
       ) : null}
 
@@ -132,8 +138,22 @@ export function DataTable<T>({
           </div>
 
           {total === 0 ? (
-            <div className="py-16 text-center text-sm text-ink-muted">
-              {q ? `No matches for "${query.trim()}".` : emptyMessage}
+            <div className="flex flex-col items-center gap-3 py-16 text-center text-sm text-ink-muted">
+              {q ? (
+                <>
+                  <span>No matches for &ldquo;{query.trim()}&rdquo;. Try a different search.</span>
+                  <button
+                    type="button"
+                    onClick={() => setQuery('')}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 font-medium text-ink transition-colors hover:bg-sunk"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                    Clear search
+                  </button>
+                </>
+              ) : (
+                emptyMessage
+              )}
             </div>
           ) : (
             pageRows.map((row) => (
