@@ -108,19 +108,7 @@ export default async function ClientsPage({
             <p className="mt-1 text-sm text-ink-muted">Manage client profiles and contact information.</p>
           </div>
           <div className="flex items-center gap-2">
-            <form method="get" className="relative">
-              {sort !== DEFAULT_SORT ? <input type="hidden" name="sort" value={sort} /> : null}
-              <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
-              </svg>
-              <input
-                name="q"
-                defaultValue={q}
-                placeholder="Search clients"
-                aria-label="Search clients"
-                className="h-9 w-64 rounded-md border border-line bg-surface pl-9 pr-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent focus:ring-1 focus:ring-accent"
-              />
-            </form>
+            {/* Search moved into the table's own active-search field (client-side, live). */}
             {/* Import / Export surfaced as primary buttons (were hidden in a "..." menu). Import opens the
                 bulk CSV page; Export is a plain anchor so the CSV route's attachment downloads in place. */}
             <Link

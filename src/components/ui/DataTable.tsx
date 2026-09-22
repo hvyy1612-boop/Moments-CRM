@@ -9,10 +9,10 @@ import { useEffect, useState } from 'react'
  * alignment - via a CSS grid whose `grid-template-columns` is shared by the header and every row, so
  * columns always line up. Each page supplies only its own column schema (widths as `fr` ratios, or a
  * fixed `em` track for the action column), following data-table theory: size to content, one dominant
- * identifier column, numbers right-aligned. Optional client-side pagination adds a Carbon-style footer.
+ * identifier column, numbers right-aligned. Optional client-side active search + pagination.
  *
- * Note: the column `cell` renderers are functions, so the schema (and this component's callers) must
- * live in a client component - a server page passes only the plain row data down to that client table.
+ * Note: the column `cell` renderers (and `search`) are functions, so the schema and this component's
+ * callers must live in a client component - a server page passes only the plain row data down.
  */
 export type DataColumn<T> = {
   key: string
@@ -34,6 +34,8 @@ export function DataTable<T>({
   ariaLabel,
   storageKey,
   pageSize,
+  search,
+  searchPlaceholder = 'Search',
 }: {
   columns: DataColumn<T>[]
   rows: T[]
@@ -45,10 +47,14 @@ export function DataTable<T>({
   storageKey?: string
   /** When set, the table paginates client-side and shows a footer (items-per-page + page controls). */
   pageSize?: number
+  /** When set, an open search field filters the rows live (case-insensitive) against this row text. */
+  search?: (row: T) => string
+  searchPlaceholder?: string
 }) {
   const [hidden, setHidden] = useState<string[]>([])
   const [perPage, setPerPage] = useState(pageSize ?? 0)
   const [page, setPage] = useState(1)
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     if (!storageKey) return
@@ -66,19 +72,23 @@ export function DataTable<T>({
     return () => window.removeEventListener(evt, read)
   }, [storageKey])
 
-  // A changed result set (search / filter) returns the viewer to the first page.
-  useEffect(() => {
-    setPage(1)
-  }, [rows.length])
-
   const visible = hidden.length ? columns.filter((c) => !hidden.includes(c.key)) : columns
   const template = visible.map((c) => c.width).join(' ')
 
+  // Active search: filter the loaded rows live (any-field substring, case-insensitive).
+  const q = query.trim().toLowerCase()
+  const filtered = search && q ? rows.filter((r) => search(r).toLowerCase().includes(q)) : rows
+
+  // A changed result set (search or an upstream data change) returns the viewer to the first page.
+  useEffect(() => {
+    setPage(1)
+  }, [filtered.length])
+
   const paginated = perPage > 0
-  const total = rows.length
+  const total = filtered.length
   const totalPages = paginated ? Math.max(1, Math.ceil(total / perPage)) : 1
   const current = Math.min(page, totalPages)
-  const pageRows = paginated ? rows.slice((current - 1) * perPage, current * perPage) : rows
+  const pageRows = paginated ? filtered.slice((current - 1) * perPage, current * perPage) : filtered
   const start = total === 0 ? 0 : (current - 1) * perPage + 1
   const end = Math.min(current * perPage, total)
 
@@ -87,6 +97,26 @@ export function DataTable<T>({
 
   return (
     <div>
+      {search ? (
+        <div className="mb-3 flex">
+          <div className="flex h-9 w-full max-w-sm items-center gap-2 rounded-md border border-line bg-surface px-3 text-sm transition-colors focus-within:border-accent">
+            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
+              className="min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-muted"
+            />
+            {query ? (
+              <button type="button" onClick={() => setQuery('')} aria-label="Clear search" className="shrink-0 text-ink-muted hover:text-ink">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <div className="overflow-x-auto">
         <div role="table" aria-label={ariaLabel} className="min-w-[56em] text-sm">
           <div
@@ -102,7 +132,9 @@ export function DataTable<T>({
           </div>
 
           {total === 0 ? (
-            <div className="py-16 text-center text-sm text-ink-muted">{emptyMessage}</div>
+            <div className="py-16 text-center text-sm text-ink-muted">
+              {q ? `No matches for "${query.trim()}".` : emptyMessage}
+            </div>
           ) : (
             pageRows.map((row) => (
               <div
