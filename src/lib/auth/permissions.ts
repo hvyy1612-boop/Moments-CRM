@@ -49,6 +49,8 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/clients/[id]/edit': { roles: ['ADMIN', 'STUDIO'] },
   '/calendar': { roles: ['ADMIN', 'STUDIO'] },
   '/finance': { roles: ['ADMIN', 'STUDIO'] },
+  // Interactive price calculator: build a quote estimate from the fixed-price catalogue.
+  '/pricing': { roles: ['ADMIN', 'STUDIO'] },
   // Company configuration is owner-level, not a day-to-day staff workflow.
   '/settings': { roles: ['ADMIN'] },
   // Notification automation go-live control (docs/25 Part 4): switch client emails / follow-ups on.
