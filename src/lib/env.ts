@@ -71,3 +71,11 @@ export const googleEnabled = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_S
 
 /** Stripe online payment is available only when the secret and webhook secret are present (BR-OP08). */
 export const stripeEnabled = Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET)
+
+/**
+ * Whether the email provider can actually deliver: both the Resend key and a verified sender must be
+ * present (docs/25 Part 4). This is the delivery gate, DISTINCT from the per-company automation switch
+ * (`clientEmailsEnabled`) — a company must turn automation on AND the provider must be configured before
+ * any client reminder is sent. With no provider, a send records SKIPPED_NO_PROVIDER (never a fake sent).
+ */
+export const emailProviderReady = Boolean(env.RESEND_API_KEY && env.EMAIL_FROM)

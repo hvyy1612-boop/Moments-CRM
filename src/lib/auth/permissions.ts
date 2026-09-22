@@ -19,6 +19,8 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/api/health': { public: true },
   // Vercel Cron endpoint: guarded by CRON_SECRET inside the route, not by a session.
   '/api/cron/daily': { secret: true },
+  // Resend delivery webhook: guarded by the Svix signature (RESEND_WEBHOOK_SECRET) inside the route.
+  '/api/webhooks/resend': { secret: true },
   '/api/calendar/feed': { token: true },
   // Google staff sign-in OAuth: reached before a session exists; guarded internally by OAuth state.
   '/api/auth/google': { public: true },
@@ -49,6 +51,8 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/finance': { roles: ['ADMIN', 'STUDIO'] },
   // Company configuration is owner-level, not a day-to-day staff workflow.
   '/settings': { roles: ['ADMIN'] },
+  // Notification automation go-live control (docs/25 Part 4): switch client emails / follow-ups on.
+  '/settings/notifications': { roles: ['ADMIN'] },
   '/users': { roles: ['ADMIN'] },
   // Printable staff roster (per team) — the source for the "Download PDF" export.
   '/users/roster/[team]': { roles: ['ADMIN'] },
