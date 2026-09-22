@@ -5,16 +5,14 @@ import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { formatSydneyDate } from '@/lib/time'
-import { resolveLabel, type StatusLabel } from '@/features/projects/labels'
+import { resolveLabel } from '@/features/projects/labels'
 import { CLOSED_STATUSES } from '@/features/projects/lifecycle'
-import { PROJECT_STAGES, stageLabel } from '@/features/projects/workflow'
+import { PROJECT_STAGES } from '@/features/projects/workflow'
 import { getCompanyStatusLabels } from '@/lib/domain/status-labels'
-import { StatusPicker } from '@/features/projects/components/StatusPicker'
 import { AppShell } from '../AppShell'
+import { JobsTable, type JobRow } from './JobsTable'
 import { JobSortSelect, JOB_DEFAULT_SORT, type JobSortValue } from './JobSortSelect'
 import { JobFilterMenu } from './JobFilterMenu'
-import { JobRowMenu } from './JobRowMenu'
 import { AddJobButton } from './AddJobButton'
 
 export const runtime = 'nodejs'
@@ -25,27 +23,6 @@ const SORTS: JobSortValue[] = ['newest', 'oldest', 'stage', 'client-asc']
 // Reading order of the workflow stages, so "Sort by stage" clusters the pipeline Planning -> Delivery.
 const STAGE_RANK = new Map(PROJECT_STAGES.map((s, i) => [s.key, i]))
 const stageRank = (key: string | null) => (key && STAGE_RANK.has(key) ? STAGE_RANK.get(key)! : PROJECT_STAGES.length)
-
-/** Avatar initials, e.g. "Olivia & Ben" -> "OB". Mirrors the Clients / Enquiries lists. */
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '?'
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
-  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
-}
-
-type Row = {
-  id: string
-  code: string
-  name: string
-  client: string
-  clientId: string
-  label: StatusLabel
-  closed: boolean
-  enquiredAt: Date
-  nextTask: string | null
-  nextStage: string | null
-}
 
 export default async function JobsPage({
   searchParams,
@@ -83,7 +60,7 @@ export default async function JobsPage({
   ])
   const canEdit = can(user, 'PROJECT_EDIT')
 
-  let rows: Row[] = projects.map((p) => {
+  let rows: JobRow[] = projects.map((p) => {
     const next = p.workItems.find((t) => t.status !== 'COMPLETED') // first pending staff task
     const checklistDone = p.workItems.length > 0 && !next
     // The tag shows "Complete" as soon as the checklist is finished (no manual override). A job only
@@ -160,16 +137,7 @@ export default async function JobsPage({
             <p className="mt-1 text-sm text-ink-muted">Booked work from planning through the shoot, editing and delivery.</p>
           </div>
           <div className="flex items-center gap-2">
-            <form method="get" className="relative">
-              {sort !== JOB_DEFAULT_SORT ? <input type="hidden" name="sort" value={sort} /> : null}
-              {status ? <input type="hidden" name="status" value={status} /> : null}
-              {task ? <input type="hidden" name="task" value={task} /> : null}
-              {tab === 'completed' ? <input type="hidden" name="tab" value={tab} /> : null}
-              <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
-              </svg>
-              <input name="q" defaultValue={q} placeholder="Search jobs" aria-label="Search jobs" className="h-9 w-64 rounded-md border border-line bg-surface pl-9 pr-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent focus:ring-1 focus:ring-accent" />
-            </form>
+            {/* Search moved into the table's own active-search field (client-side, live). */}
             {canEdit ? <AddJobButton csrf={csrf} /> : null}
           </div>
         </div>
@@ -209,57 +177,7 @@ export default async function JobsPage({
                   : 'No jobs yet. Use Add job to create one.'}
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
-                  <th className="py-2 pr-4 font-medium">Client</th>
-                  <th className="py-2 pr-4 font-medium">Job</th>
-                  <th className="py-2 pr-4 font-medium">Enquired</th>
-                  <th className="py-2 pr-4 font-medium">Next task</th>
-                  <th className="py-2 pr-4 font-medium">Status</th>
-                  <th className="w-10 py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id} className="group border-b border-line align-middle transition-colors last:border-b-0 hover:bg-paper">
-                    <td className="py-3 pr-4">
-                      {/* Avatar + name mirror the Clients / Enquiries lists. The primary identifier opens
-                          the JOB (its task workflow), not the client profile - that stays in the row menu. */}
-                      <Link href={`/jobs/${row.id}${backParam}`} className="flex items-center gap-3">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">{initials(row.client)}</span>
-                        <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{row.client}</span>
-                      </Link>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <Link href={`/jobs/${row.id}${backParam}`} className="block">
-                        <span className="block font-medium text-ink transition-colors group-hover:text-accent-ink">{row.name}</span>
-                        <span className="tabular block text-xs text-ink-muted">{row.code}</span>
-                      </Link>
-                    </td>
-                    <td className="tabular py-3 pr-4 text-ink-muted">{formatSydneyDate(row.enquiredAt)}</td>
-                    <td className="py-3 pr-4">
-                      {row.nextTask ? (
-                        <>
-                          <span className="block text-ink">{row.nextTask}</span>
-                          {row.nextStage ? <span className="block text-xs text-ink-muted">{stageLabel(row.nextStage)}</span> : null}
-                        </>
-                      ) : (
-                        <span className="text-ink-muted">No pending task</span>
-                      )}
-                    </td>
-                    <td className="py-3 pr-4">
-                      <StatusPicker projectId={row.id} current={row.label} labels={labels} csrf={csrf} canEdit={canEdit} />
-                    </td>
-                    <td className="py-3">
-                      <JobRowMenu jobId={row.id} clientId={row.clientId} backParam={backParam} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <JobsTable rows={rows} backParam={backParam} labels={labels} csrf={csrf} canEdit={canEdit} />
         )}
       </div>
     </AppShell>
