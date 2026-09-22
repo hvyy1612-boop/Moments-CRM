@@ -1,10 +1,12 @@
 'use client'
 
+import { SearchField } from './SearchField'
+
 /**
- * The one active-search field for the whole app, shaped to the Carbon "Active search" pattern: a search
- * icon + placeholder (no visible label), a live text field, an X clear button, no Go/Search button, and
- * the result count always shown while searching (including "0 results"). Used by the shared DataTable
- * and by grouped views (Payments) so every list searches and reads identically.
+ * The LOCAL active search used by every list (in-table, filter-in-place). It is the `local` variant of
+ * the shared `SearchField`, plus the Carbon "always show the result count while searching" line (incl.
+ * "0 results"). The global top-nav search uses the same SearchField with `variant="global"`, so the two
+ * share one anatomy and differ only by scope.
  */
 export function ActiveSearchField({
   value,
@@ -21,20 +23,8 @@ export function ActiveSearchField({
   const searching = value.trim().length > 0
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <div className="flex h-9 w-full max-w-sm items-center gap-2 rounded-md border border-line bg-surface px-3 text-sm transition-colors focus-within:border-accent">
-        <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          aria-label={placeholder}
-          className="min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-muted"
-        />
-        {value ? (
-          <button type="button" onClick={() => onChange('')} aria-label="Clear search" className="shrink-0 text-ink-muted hover:text-ink">
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
-          </button>
-        ) : null}
+      <div className="w-full max-w-sm">
+        <SearchField value={value} onChange={onChange} variant="local" placeholder={placeholder} />
       </div>
       {searching && resultCount !== undefined ? (
         <span className="tabular text-sm text-ink-muted" role="status" aria-live="polite">

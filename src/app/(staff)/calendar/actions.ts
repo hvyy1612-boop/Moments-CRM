@@ -99,9 +99,9 @@ export async function markTaskDoneAction(formData: FormData): Promise<void> {
   revalidatePath('/calendar')
 }
 
-export type SearchHit = { type: 'Client' | 'Job' | 'Enquiry'; label: string; sub: string | null; href: string }
+export type SearchHit = { type: 'Client' | 'Enquiry' | 'Job' | 'Invoice'; label: string; sub: string | null; href: string }
 
-/** Command palette (Cmd/Ctrl-K) - search clients, jobs and enquiries by name. */
+/** Global search - clients, enquiries, jobs and invoices by name/number, grouped in that order. */
 export async function searchEntitiesAction(query: string): Promise<SearchHit[]> {
   const user = await getSessionUser()
   if (!user) return []
@@ -109,21 +109,26 @@ export async function searchEntitiesAction(query: string): Promise<SearchHit[]> 
   if (q.length < 2) return []
   const contains = { contains: q, mode: 'insensitive' as const }
 
-  const [clients, projects, enquiries] = await Promise.all([
+  const [clients, enquiries, projects, invoices] = await Promise.all([
     can(user, 'CLIENT_VIEW')
       ? prisma.client.findMany({ where: { archivedAt: null, OR: [{ displayName: contains }, { email: contains }] }, take: 5, select: { id: true, displayName: true, email: true } })
-      : Promise.resolve([]),
-    can(user, 'PROJECT_VIEW')
-      ? prisma.project.findMany({ where: { OR: [{ name: contains }, { code: contains }, { client: { displayName: contains } }] }, take: 5, select: { id: true, name: true, code: true, client: { select: { displayName: true } } } })
       : Promise.resolve([]),
     can(user, 'ENQUIRY_VIEW')
       ? prisma.enquiry.findMany({ where: { OR: [{ name: contains }, { email: contains }] }, take: 5, select: { id: true, name: true, eventType: true } })
       : Promise.resolve([]),
+    can(user, 'PROJECT_VIEW')
+      ? prisma.project.findMany({ where: { OR: [{ name: contains }, { code: contains }, { client: { displayName: contains } }] }, take: 5, select: { id: true, name: true, code: true, client: { select: { displayName: true } } } })
+      : Promise.resolve([]),
+    can(user, 'FINANCE_VIEW')
+      ? prisma.invoice.findMany({ where: { OR: [{ invoiceNumber: contains }, { project: { client: { displayName: contains } } }] }, take: 5, orderBy: { createdAt: 'desc' }, select: { id: true, invoiceNumber: true, project: { select: { client: { select: { displayName: true } } } } } })
+      : Promise.resolve([]),
   ])
 
+  // Order defines the group order in the results panel: Clients, Enquiries, Jobs, Invoices.
   return [
     ...clients.map((c): SearchHit => ({ type: 'Client', label: c.displayName, sub: c.email, href: `/clients/${c.id}` })),
-    ...projects.map((p): SearchHit => ({ type: 'Job', label: p.client.displayName, sub: `${p.name} - ${p.code}`, href: `/jobs/${p.id}` })),
     ...enquiries.map((e): SearchHit => ({ type: 'Enquiry', label: e.name, sub: e.eventType, href: `/enquiries/${e.id}` })),
+    ...projects.map((p): SearchHit => ({ type: 'Job', label: p.client.displayName, sub: `${p.name} - ${p.code}`, href: `/jobs/${p.id}` })),
+    ...invoices.map((inv): SearchHit => ({ type: 'Invoice', label: inv.project.client.displayName, sub: inv.invoiceNumber, href: `/finance/${inv.id}` })),
   ]
 }
