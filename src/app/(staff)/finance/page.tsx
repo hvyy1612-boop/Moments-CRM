@@ -32,26 +32,28 @@ type Row = {
 function InvoiceTable({ rows }: { rows: Row[] }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-sm">
+      {/* Fixed layout + shared column widths so every group's table (Outstanding, Paid, ...) lines up
+          instead of each one auto-sizing its columns to its own rows. */}
+      <table className="w-full table-fixed border-collapse text-sm">
         <thead>
           <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
-            <th className="py-2 pr-4 font-medium">Invoice</th>
-            <th className="py-2 pr-4 font-medium">Client</th>
-            <th className="py-2 pr-4 font-medium">Issued</th>
-            <th className="py-2 pr-4 font-medium">Due</th>
-            <th className="py-2 pr-4 text-right font-medium">Total</th>
-            <th className="py-2 pr-4 text-right font-medium">Balance</th>
-            <th className="py-2 font-medium">Status</th>
+            <th className="w-[15%] py-2 pr-4 font-medium">Invoice</th>
+            <th className="w-[24%] py-2 pr-4 font-medium">Client</th>
+            <th className="w-[13%] py-2 pr-4 font-medium">Issued</th>
+            <th className="w-[10%] py-2 pr-4 font-medium">Due</th>
+            <th className="w-[13%] py-2 pr-4 text-right font-medium">Total</th>
+            <th className="w-[13%] py-2 pr-4 text-right font-medium">Balance</th>
+            <th className="w-[12%] py-2 font-medium">Status</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.id} className="group border-b border-line transition-colors last:border-b-0 hover:bg-paper">
               <td className="py-3 pr-4">
-                <Link href={`/finance/${row.id}`} className="tabular font-medium text-accent-ink hover:underline">{row.number}</Link>
+                <Link href={`/finance/${row.id}`} className="tabular block truncate font-medium text-accent-ink hover:underline">{row.number}</Link>
               </td>
               <td className="py-3 pr-4">
-                <Link href={`/finance/${row.id}`} className="font-medium text-ink transition-colors group-hover:text-accent-ink">{row.client}</Link>
+                <Link href={`/finance/${row.id}`} className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{row.client}</Link>
               </td>
               <td className="tabular py-3 pr-4 text-ink-muted">{row.issued ? formatSydneyDate(row.issued) : '-'}</td>
               <td className="tabular py-3 pr-4 text-ink-muted">{row.due ? formatSydneyDate(row.due) : '-'}</td>
