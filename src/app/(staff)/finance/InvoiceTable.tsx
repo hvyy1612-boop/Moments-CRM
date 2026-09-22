@@ -31,7 +31,7 @@ export function InvoiceTable({ rows }: { rows: Row[] }) {
     { key: 'due', header: 'Due', width: '1fr', cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{r.due ? formatSydneyDate(r.due) : '-'}</span> },
     { key: 'total', header: 'Total', width: '1.1fr', align: 'right', cell: (r) => <span className="tabular text-ink">{r.total}</span> },
     { key: 'balance', header: 'Balance', width: '1.1fr', align: 'right', cell: (r) => <span className="tabular text-ink">{r.balance}</span> },
-    { key: 'status', header: 'Status', width: '1fr', cell: (r) => <StatusTag kind={INVOICE_KIND[r.status] ?? 'hold'}>{titleCase(r.status)}</StatusTag> },
+    { key: 'status', header: 'Status', width: '1fr', align: 'right', cell: (r) => <StatusTag kind={INVOICE_KIND[r.status] ?? 'hold'}>{titleCase(r.status)}</StatusTag> },
   ]
 
   return <DataTable ariaLabel="Invoices" columns={columns} rows={rows} rowKey={(r) => r.id} />
