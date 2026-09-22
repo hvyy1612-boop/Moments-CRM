@@ -1,54 +1,25 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
-import { Prisma } from '@prisma/client'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { getInvoiceBalance } from '@/lib/domain/money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
 import { formatAud } from '@/lib/money'
-import { invoiceGroup } from '@/features/finance/invoice-status'
 import { AppShell } from '../AppShell'
-import { InvoiceTable, type Row } from './InvoiceTable'
+import { PaymentsView } from './PaymentsView'
+import { type Row } from './InvoiceTable'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Payments - Moments' }
 
-
-/** A grouped section: a Clients-style "Title · N" toolbar over its own clean table. */
-function Group({ title, rows, first }: { title: string; rows: Row[]; first: boolean }) {
-  if (rows.length === 0) return null
-  return (
-    <section className={first ? 'mt-7' : 'mt-10'}>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
-        <div className="text-sm text-ink">
-          {title} <span className="text-ink-muted">· {rows.length}</span>
-        </div>
-      </div>
-      <InvoiceTable rows={rows} />
-    </section>
-  )
-}
-
-export default async function FinancePage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+export default async function FinancePage() {
   const user = await requireRole('/finance')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
-  const sp = await searchParams
-  const q = (sp.q ?? '').trim()
-  const where: Prisma.InvoiceWhereInput = q
-    ? {
-        OR: [
-          { invoiceNumber: { contains: q, mode: 'insensitive' } },
-          { project: { client: { displayName: { contains: q, mode: 'insensitive' } } } },
-        ],
-      }
-    : {}
-
   const invoices = await prisma.invoice.findMany({
-    where,
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
@@ -61,7 +32,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
 
   // Balance per row is the ledger-derived `owed` (credit-aware, overpayment clamped) — one derivation
   // shared with the invoice detail and job views (docs/25 Part 1). The nested select keeps it a single
-  // query, so the list stays free of N+1.
+  // query, so the list stays free of N+1. Grouping + active search now live in the client PaymentsView.
   const rows: Row[] = invoices.map((inv) => ({
     id: inv.id,
     number: inv.invoiceNumber,
@@ -72,9 +43,6 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     total: formatAud(inv.total),
     balance: formatAud(getInvoiceBalance(toInvoiceMoneyInput(inv)).owed),
   }))
-  const outstanding = rows.filter((r) => invoiceGroup(r.status) === 'outstanding')
-  const paid = rows.filter((r) => invoiceGroup(r.status) === 'paid')
-  const other = rows.filter((r) => invoiceGroup(r.status) === 'other')
 
   return (
     <AppShell user={user} csrf={csrf} active="finance" bareHeader>
@@ -87,18 +55,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
             <p className="mt-1 text-sm text-ink-muted">Track invoices, balances and payment status.</p>
           </div>
           <div className="flex items-center gap-2">
-            <form method="get" className="relative">
-              <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
-              </svg>
-              <input
-                name="q"
-                defaultValue={q}
-                placeholder="Search invoices"
-                aria-label="Search invoices"
-                className="h-9 w-64 rounded-md border border-line bg-surface pl-9 pr-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent focus:ring-1 focus:ring-accent"
-              />
-            </form>
+            {/* Search moved into PaymentsView's active-search field (client-side, live, across groups). */}
             <Link
               href="/finance/new"
               className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
@@ -111,18 +68,10 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
           </div>
         </div>
 
-        {/* Groups */}
-        {rows.length === 0 ? (
-          <p className="py-16 text-center text-sm text-ink-muted">
-            {q ? `No invoices match "${q}".` : 'No invoices yet. Create one with New invoice, or raise it from a job.'}
-          </p>
-        ) : (
-          <>
-            <Group title="Outstanding" rows={outstanding} first />
-            <Group title="Paid" rows={paid} first={outstanding.length === 0} />
-            <Group title="Draft & void" rows={other} first={outstanding.length === 0 && paid.length === 0} />
-          </>
-        )}
+        {/* Active search + grouped tables (Outstanding / Paid / Draft & void). */}
+        <div className="mt-7">
+          <PaymentsView rows={rows} />
+        </div>
       </div>
     </AppShell>
   )
