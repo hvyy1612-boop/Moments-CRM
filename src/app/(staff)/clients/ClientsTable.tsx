@@ -59,5 +59,5 @@ export function ClientsTable({ rows, csrf, canDelete, backParam }: { rows: Clien
     },
   ]
 
-  return <DataTable ariaLabel="Clients" columns={columns} rows={rows} rowKey={(r) => r.id} storageKey="clients.hiddenCols" />
+  return <DataTable ariaLabel="Clients" columns={columns} rows={rows} rowKey={(r) => r.id} storageKey="clients.hiddenCols" pageSize={30} />
 }

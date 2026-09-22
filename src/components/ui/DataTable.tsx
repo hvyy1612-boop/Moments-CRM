@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
  * alignment - via a CSS grid whose `grid-template-columns` is shared by the header and every row, so
  * columns always line up. Each page supplies only its own column schema (widths as `fr` ratios, or a
  * fixed `em` track for the action column), following data-table theory: size to content, one dominant
- * identifier column, numbers right-aligned. See references in the design notes.
+ * identifier column, numbers right-aligned. Optional client-side pagination adds a Carbon-style footer.
  *
  * Note: the column `cell` renderers are functions, so the schema (and this component's callers) must
  * live in a client component - a server page passes only the plain row data down to that client table.
@@ -24,6 +24,7 @@ export type DataColumn<T> = {
 }
 
 const alignCls = (a?: 'left' | 'right') => (a === 'right' ? 'justify-end text-right' : 'justify-start text-left')
+const PAGE_SIZES = [15, 30, 50, 100]
 
 export function DataTable<T>({
   columns,
@@ -32,6 +33,7 @@ export function DataTable<T>({
   emptyMessage = 'Nothing here yet.',
   ariaLabel,
   storageKey,
+  pageSize,
 }: {
   columns: DataColumn<T>[]
   rows: T[]
@@ -41,8 +43,12 @@ export function DataTable<T>({
   /** When set, column keys listed in localStorage[storageKey] are hidden (per-viewer show/hide). The
    *  control writing that key must dispatch `datatable:<storageKey>` so the table re-reads. */
   storageKey?: string
+  /** When set, the table paginates client-side and shows a footer (items-per-page + page controls). */
+  pageSize?: number
 }) {
   const [hidden, setHidden] = useState<string[]>([])
+  const [perPage, setPerPage] = useState(pageSize ?? 0)
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
     if (!storageKey) return
@@ -60,43 +66,92 @@ export function DataTable<T>({
     return () => window.removeEventListener(evt, read)
   }, [storageKey])
 
+  // A changed result set (search / filter) returns the viewer to the first page.
+  useEffect(() => {
+    setPage(1)
+  }, [rows.length])
+
   const visible = hidden.length ? columns.filter((c) => !hidden.includes(c.key)) : columns
   const template = visible.map((c) => c.width).join(' ')
 
-  return (
-    <div className="overflow-x-auto">
-      <div role="table" aria-label={ariaLabel} className="min-w-[56em] text-sm">
-        <div
-          role="row"
-          className="grid items-center border-b border-line text-xs uppercase tracking-wide text-muted"
-          style={{ gridTemplateColumns: template }}
-        >
-          {visible.map((c) => (
-            <div key={c.key} role="columnheader" className={`flex ${alignCls(c.align)} px-4 py-2 font-medium`}>
-              {c.header}
-            </div>
-          ))}
-        </div>
+  const paginated = perPage > 0
+  const total = rows.length
+  const totalPages = paginated ? Math.max(1, Math.ceil(total / perPage)) : 1
+  const current = Math.min(page, totalPages)
+  const pageRows = paginated ? rows.slice((current - 1) * perPage, current * perPage) : rows
+  const start = total === 0 ? 0 : (current - 1) * perPage + 1
+  const end = Math.min(current * perPage, total)
 
-        {rows.length === 0 ? (
-          <div className="py-16 text-center text-sm text-ink-muted">{emptyMessage}</div>
-        ) : (
-          rows.map((row) => (
-            <div
-              key={rowKey(row)}
-              role="row"
-              className="group grid items-center border-b border-line transition-colors last:border-b-0 hover:bg-paper"
-              style={{ gridTemplateColumns: template }}
-            >
-              {visible.map((c) => (
-                <div key={c.key} role="cell" className={`flex min-w-0 ${alignCls(c.align)} px-4 py-3`}>
-                  {c.cell(row)}
-                </div>
-              ))}
-            </div>
-          ))
-        )}
+  const pageBtn =
+    'flex h-8 w-8 items-center justify-center rounded-md text-ink-muted transition-colors enabled:hover:bg-sunk enabled:hover:text-ink disabled:opacity-40'
+
+  return (
+    <div>
+      <div className="overflow-x-auto">
+        <div role="table" aria-label={ariaLabel} className="min-w-[56em] text-sm">
+          <div
+            role="row"
+            className="grid items-center border-b border-line text-xs uppercase tracking-wide text-muted"
+            style={{ gridTemplateColumns: template }}
+          >
+            {visible.map((c) => (
+              <div key={c.key} role="columnheader" className={`flex ${alignCls(c.align)} px-4 py-2 font-medium`}>
+                {c.header}
+              </div>
+            ))}
+          </div>
+
+          {total === 0 ? (
+            <div className="py-16 text-center text-sm text-ink-muted">{emptyMessage}</div>
+          ) : (
+            pageRows.map((row) => (
+              <div
+                key={rowKey(row)}
+                role="row"
+                className="group grid items-center border-b border-line transition-colors last:border-b-0 hover:bg-paper"
+                style={{ gridTemplateColumns: template }}
+              >
+                {visible.map((c) => (
+                  <div key={c.key} role="cell" className={`flex min-w-0 ${alignCls(c.align)} px-4 py-3`}>
+                    {c.cell(row)}
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
       </div>
+
+      {paginated && total > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-2 text-sm text-ink-muted">
+          <div className="flex items-center gap-2">
+            <label htmlFor="dt-per-page">Items per page:</label>
+            <select
+              id="dt-per-page"
+              value={perPage}
+              onChange={(e) => {
+                setPerPage(Number(e.target.value))
+                setPage(1)
+              }}
+              className="h-8 rounded-md border border-line bg-surface px-2 text-sm text-ink outline-none transition-colors focus:border-accent"
+            >
+              {(PAGE_SIZES.includes(perPage) ? PAGE_SIZES : [perPage, ...PAGE_SIZES]).map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+            <span className="tabular ml-1">{start}&ndash;{end} of {total}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="tabular">Page {current} of {totalPages}</span>
+            <button type="button" aria-label="Previous page" disabled={current <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className={pageBtn}>
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+            </button>
+            <button type="button" aria-label="Next page" disabled={current >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className={pageBtn}>
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
