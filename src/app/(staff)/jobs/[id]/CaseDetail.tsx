@@ -28,6 +28,7 @@ import { ProjectWorkflow } from './ProjectWorkflow'
 import { Delivery } from './Delivery'
 import { QuoteBuilder } from './QuoteBuilder'
 import { Scheduling } from './Scheduling'
+import { ChangeRequestsSection } from './ChangeRequestsSection'
 
 const QUOTE_TONE: Record<string, Tone> = {
   DRAFT: 'neutral',
@@ -507,6 +508,8 @@ export async function CaseDetail({
             </div>
           </section>
         ) : null}
+
+        {isConfirmed ? <ChangeRequestsSection projectId={project.id} csrf={csrf} /> : null}
 
         {isConfirmed ? (
           <section className="rounded border border-line bg-surface p-5">
