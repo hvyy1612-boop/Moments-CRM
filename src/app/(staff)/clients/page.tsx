@@ -153,14 +153,16 @@ export default async function ClientsPage({
           </div>
         </div>
 
-        {/* Table */}
-        {rows.length === 0 ? (
-          <p className="py-16 text-center text-sm text-ink-muted">
-            {q ? `No clients match "${q}".` : 'No clients yet. Add your first client above, or convert an enquiry.'}
-          </p>
-        ) : (
-          <ClientsTable rows={rows} csrf={csrf} canDelete={user.role === 'ADMIN'} backParam={backParam} />
-        )}
+        {/* Table (mt-4 so the active search sits below the toolbar with the same gap as Enquiries). */}
+        <div className="mt-4">
+          {rows.length === 0 ? (
+            <p className="py-16 text-center text-sm text-ink-muted">
+              {q ? `No clients match "${q}".` : 'No clients yet. Add your first client above, or convert an enquiry.'}
+            </p>
+          ) : (
+            <ClientsTable rows={rows} csrf={csrf} canDelete={user.role === 'ADMIN'} backParam={backParam} />
+          )}
+        </div>
       </div>
     </AppShell>
   )

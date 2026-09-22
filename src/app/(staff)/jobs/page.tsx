@@ -166,19 +166,22 @@ export default async function JobsPage({
           </div>
         </div>
 
-        {rows.length === 0 ? (
-          <p className="py-16 text-center text-sm text-ink-muted">
-            {q || status || task
-              ? 'No jobs match these filters.'
-              : tab === 'completed'
-                ? 'No completed jobs yet.'
-                : activeCount + completedCount > 0
-                  ? 'No active jobs right now - everything is complete.'
-                  : 'No jobs yet. Use Add job to create one.'}
-          </p>
-        ) : (
-          <JobsTable rows={rows} backParam={backParam} labels={labels} csrf={csrf} canEdit={canEdit} />
-        )}
+        {/* Table (mt-4 so the active search sits below the toolbar with the same gap as Enquiries). */}
+        <div className="mt-4">
+          {rows.length === 0 ? (
+            <p className="py-16 text-center text-sm text-ink-muted">
+              {q || status || task
+                ? 'No jobs match these filters.'
+                : tab === 'completed'
+                  ? 'No completed jobs yet.'
+                  : activeCount + completedCount > 0
+                    ? 'No active jobs right now - everything is complete.'
+                    : 'No jobs yet. Use Add job to create one.'}
+            </p>
+          ) : (
+            <JobsTable rows={rows} backParam={backParam} labels={labels} csrf={csrf} canEdit={canEdit} />
+          )}
+        </div>
       </div>
     </AppShell>
   )
