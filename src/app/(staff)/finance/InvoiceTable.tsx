@@ -23,7 +23,7 @@ export type Row = {
  * this same schema, so the columns line up across groups. Money (Total, Balance) is right-aligned per
  * data-table theory; dates and text are left-aligned.
  */
-export function InvoiceTable({ rows }: { rows: Row[] }) {
+export function InvoiceTable({ rows, pageSize }: { rows: Row[]; pageSize?: number }) {
   const columns: DataColumn<Row>[] = [
     { key: 'invoice', header: 'Invoice', width: '1.25fr', cell: (r) => <Link href={`/finance/${r.id}`} className="tabular block whitespace-nowrap font-medium text-accent-ink hover:underline">{r.number}</Link> },
     { key: 'client', header: 'Client', width: '1.75fr', cell: (r) => <Link href={`/finance/${r.id}`} className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.client}</Link> },
@@ -34,5 +34,5 @@ export function InvoiceTable({ rows }: { rows: Row[] }) {
     { key: 'status', header: 'Status', width: '1fr', align: 'right', cell: (r) => <StatusTag kind={INVOICE_KIND[r.status] ?? 'hold'}>{titleCase(r.status)}</StatusTag> },
   ]
 
-  return <DataTable ariaLabel="Invoices" columns={columns} rows={rows} rowKey={(r) => r.id} />
+  return <DataTable ariaLabel="Invoices" columns={columns} rows={rows} rowKey={(r) => r.id} pageSize={pageSize} />
 }

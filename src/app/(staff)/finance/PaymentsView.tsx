@@ -15,7 +15,7 @@ function Group({ title, rows, first }: { title: string; rows: Row[]; first: bool
           {title} <span className="text-ink-muted">· {rows.length}</span>
         </div>
       </div>
-      <InvoiceTable rows={rows} />
+      <InvoiceTable rows={rows} pageSize={30} />
     </section>
   )
 }
