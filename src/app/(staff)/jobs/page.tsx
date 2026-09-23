@@ -129,7 +129,7 @@ export default async function JobsPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="jobs" bareHeader>
-      <div className="w-full max-w-6xl">
+      <div className="w-full max-w-7xl">
         <div className="text-xs font-semibold uppercase tracking-widest text-muted">Studio</div>
         <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-md">

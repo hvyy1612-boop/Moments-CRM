@@ -46,7 +46,7 @@ export default async function FinancePage() {
 
   return (
     <AppShell user={user} csrf={csrf} active="finance" bareHeader>
-      <div className="w-full max-w-6xl">
+      <div className="w-full max-w-7xl">
         {/* Header (shared PageHeader pattern: uppercase section eyebrow, then title + description). */}
         <div className="text-xs font-semibold uppercase tracking-widest text-muted">Operations</div>
         <div className="mt-1 flex flex-wrap items-start justify-between gap-4">

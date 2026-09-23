@@ -85,7 +85,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
   ]
 
   return (
-    <div className="w-full max-w-6xl">
+    <div className="w-full max-w-7xl">
       {/* Header */}
       <div className="text-xs font-semibold uppercase tracking-widest text-muted">Studio</div>
       <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
