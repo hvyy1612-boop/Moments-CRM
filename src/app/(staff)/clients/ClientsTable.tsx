@@ -33,7 +33,7 @@ export function ClientsTable({ rows, csrf, canDelete, backParam }: { rows: Clien
     {
       key: 'client',
       header: 'Client',
-      width: '2.6fr',
+      width: 'minmax(14em, 1fr)',
       cell: (r) => (
         <Link href={`/clients/${r.id}${backParam}`} className="flex min-w-0 items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">
@@ -46,10 +46,10 @@ export function ClientsTable({ rows, csrf, canDelete, backParam }: { rows: Clien
         </Link>
       ),
     },
-    { key: 'phone', header: 'Phone', width: '1.2fr', cell: (r) => <span className="tabular block truncate text-ink-muted">{r.phone ?? '-'}</span> },
-    { key: 'source', header: 'Source', width: '1.1fr', cell: (r) => <span className="block truncate text-ink-muted">{r.source}</span> },
-    { key: 'jobs', header: 'Jobs', width: '0.6fr', align: 'right', cell: (r) => <span className="tabular text-ink">{r.projects}</span> },
-    { key: 'since', header: 'Client since', width: '1.3fr', cell: (r) => <span className="tabular block truncate text-ink-muted">{formatSydneyDate(r.since)}</span> },
+    { key: 'phone', header: 'Phone', width: '10em', cell: (r) => <span className="tabular block truncate text-ink-muted">{r.phone ?? '-'}</span> },
+    { key: 'source', header: 'Source', width: '9em', cell: (r) => <span className="block truncate text-ink-muted">{r.source}</span> },
+    { key: 'jobs', header: 'Jobs', width: '4em', align: 'right', cell: (r) => <span className="tabular text-ink">{r.projects}</span> },
+    { key: 'since', header: 'Client since', width: '9em', cell: (r) => <span className="tabular block truncate text-ink-muted">{formatSydneyDate(r.since)}</span> },
     {
       key: 'actions',
       header: '',

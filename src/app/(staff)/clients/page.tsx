@@ -99,7 +99,9 @@ export default async function ClientsPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
-      <div className="w-full">
+      {/* Content measure: cap the list to a readable width so the table doesn't sprawl on wide screens
+          (Fluent/Atlassian). Header, toolbar and table cap together, staying aligned. */}
+      <div className="w-full max-w-6xl">
         {/* Header (shared PageHeader pattern: uppercase section eyebrow, then title + description). */}
         <div className="text-xs font-semibold uppercase tracking-widest text-muted">Studio</div>
         <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
