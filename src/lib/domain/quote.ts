@@ -14,6 +14,8 @@ function computeTotals(lines: QuoteLineInput[]) {
     const lineTotal = new Prisma.Decimal(line.unitPrice).mul(line.quantity)
     total = total.add(lineTotal)
     return {
+      lineType: line.lineType ?? 'custom',
+      referenceId: line.referenceId ?? null,
       description: line.description,
       quantity: line.quantity,
       unitPrice: new Prisma.Decimal(line.unitPrice),
@@ -52,10 +54,13 @@ export async function createQuote(projectId: string, createdByUserId: string | n
 }
 
 /** Replace the draft version's lines and recompute totals. Only a DRAFT version may be edited. */
+export type QuotePresentation = { introduction?: string | null; poNumber?: string | null; notes?: string | null }
+
 export async function saveQuoteDraft(
   versionId: string,
   lines: QuoteLineInput[],
   validUntil: Date | null,
+  presentation: QuotePresentation = {},
 ) {
   const { computed, subtotal, taxTotal, total } = computeTotals(lines)
   return prisma.$transaction(async (tx) => {
@@ -69,7 +74,15 @@ export async function saveQuoteDraft(
     })
     await tx.quoteVersion.update({
       where: { id: versionId },
-      data: { subtotal, taxTotal, total, validUntil },
+      data: {
+        subtotal,
+        taxTotal,
+        total,
+        validUntil,
+        introduction: presentation.introduction ?? null,
+        poNumber: presentation.poNumber ?? null,
+        notes: presentation.notes ?? null,
+      },
     })
     return { subtotal, taxTotal, total }
   })

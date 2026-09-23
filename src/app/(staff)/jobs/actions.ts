@@ -98,14 +98,24 @@ export async function saveQuoteAction(
     return { status: 'error', message: 'Could not read the quote lines.' }
   }
 
-  const parsed = saveQuoteSchema.safeParse({ lines, validUntil: formData.get('validUntil') ?? '' })
+  const parsed = saveQuoteSchema.safeParse({
+    lines,
+    validUntil: formData.get('validUntil') ?? '',
+    introduction: formData.get('introduction') ?? '',
+    poNumber: formData.get('poNumber') ?? '',
+    notes: formData.get('notes') ?? '',
+  })
   if (!parsed.success) {
     return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the quote.' }
   }
   const validUntil = parsed.data.validUntil ? new Date(parsed.data.validUntil) : null
 
   try {
-    await saveQuoteDraft(versionId, parsed.data.lines, validUntil)
+    await saveQuoteDraft(versionId, parsed.data.lines, validUntil, {
+      introduction: parsed.data.introduction,
+      poNumber: parsed.data.poNumber,
+      notes: parsed.data.notes,
+    })
   } catch (error) {
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not save.' }
   }

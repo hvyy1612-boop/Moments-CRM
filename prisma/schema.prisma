@@ -648,6 +648,11 @@ model QuoteVersion {
   discountTotal        Decimal        @default(0) @map("discount_total") @db.Decimal(12, 2)
   taxTotal             Decimal        @default(0) @map("tax_total") @db.Decimal(12, 2)
   total                Decimal        @default(0) @db.Decimal(12, 2)
+  // Presentation fields for a Studio-Ninja-style staff quote (docs/31): a covering note, an optional
+  // client PO reference, and free-form notes. Purely how the quote reads; do not affect totals.
+  introduction         String?        @db.Text
+  poNumber             String?        @map("po_number") @db.VarChar(60)
+  notes                String?        @db.Text
   validUntil           DateTime?      @map("valid_until") @db.Timestamptz
   createdByUserId      String?        @map("created_by_user_id") @db.VarChar(30)
   sentToClientAt       DateTime?      @map("sent_to_client_at") @db.Timestamptz

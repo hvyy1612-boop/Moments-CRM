@@ -11,6 +11,10 @@ export const quoteLineSchema = z.object({
     .string()
     .trim()
     .regex(/^\d+(\.\d{1,2})?$/, 'Enter an amount like 3500 or 3500.00.'),
+  // What the line is: a catalogue package, an add-on product, or a free-typed custom line. Presentation
+  // only (groups the line under Packages vs Add-ons); does not change the maths.
+  lineType: z.enum(['custom', 'package', 'addon']).optional(),
+  referenceId: z.string().trim().max(30).optional().nullable(),
 })
 
 export const saveQuoteSchema = z.object({
@@ -21,6 +25,9 @@ export const saveQuoteSchema = z.object({
     .optional()
     .or(z.literal(''))
     .transform((v) => (v ? v : undefined)),
+  introduction: z.string().trim().max(2000).optional().or(z.literal('')).transform((v) => (v ? v : null)),
+  poNumber: z.string().trim().max(60).optional().or(z.literal('')).transform((v) => (v ? v : null)),
+  notes: z.string().trim().max(2000).optional().or(z.literal('')).transform((v) => (v ? v : null)),
 })
 
 export const acceptQuoteSchema = z.object({
