@@ -112,7 +112,7 @@ export function DataTable<T>({
             style={{ gridTemplateColumns: template }}
           >
             {visible.map((c) => (
-              <div key={c.key} role="columnheader" className={`flex ${alignCls(c.align)} px-4 py-2 font-medium`}>
+              <div key={c.key} role="columnheader" className={`flex ${alignCls(c.align)} whitespace-nowrap px-4 py-2 font-medium`}>
                 {c.header}
               </div>
             ))}
