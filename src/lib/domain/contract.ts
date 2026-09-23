@@ -80,6 +80,7 @@ export async function createContractFromAcceptedQuote(projectId: string, created
     if (!acceptedVersion) throw new Error('Accept a quote before creating the contract.')
 
     const project = acceptedVersion.quote.project
+    if (!project) throw new Error('This quote is not linked to a job yet.')
     const snapshot = buildContractTerms({
       projectCode: project.code,
       clientName: project.client.displayName,

@@ -5,8 +5,10 @@ import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Field, Select, TextInput, Textarea } from '@/components/ui/form'
 import { estimateTotals, estimateDeposit, toCents, formatCents } from '@/lib/pricing-estimate'
-import { saveQuoteAction, sendQuoteAction, type QuoteActionState } from '../actions'
-import type { PackageOption } from './InvoiceEditor'
+import type { QuoteActionState } from '../actions'
+
+type QuoteFormAction = (prev: QuoteActionState, formData: FormData) => Promise<QuoteActionState>
+type QuotePackage = { id: string; name: string; price: string }
 
 /**
  * Studio-Ninja-style staff quote builder (docs/31). The quote is assembled by staff from the catalogue:
@@ -31,6 +33,9 @@ export function QuoteBuilder({
   initialPoNumber,
   initialNotes,
   packages,
+  saveAction,
+  sendAction,
+  sendLabel = 'Send to client',
 }: {
   csrf: string
   projectId: string
@@ -41,12 +46,15 @@ export function QuoteBuilder({
   initialIntroduction: string
   initialPoNumber: string
   initialNotes: string
-  packages: PackageOption[]
+  packages: QuotePackage[]
+  saveAction: QuoteFormAction
+  sendAction: QuoteFormAction
+  sendLabel?: string
 }) {
   const [lines, setLines] = useState<Line[]>(initialLines)
   const [depositPercent, setDepositPercent] = useState('30')
-  const [saveState, save, saving] = useActionState(saveQuoteAction, IDLE)
-  const [sendState, send, sending] = useActionState(sendQuoteAction, IDLE)
+  const [saveState, save, saving] = useActionState(saveAction, IDLE)
+  const [sendState, send, sending] = useActionState(sendAction, IDLE)
 
   const est = estimateTotals(lines.map((l) => ({ unitPriceCents: toCents(l.unitPrice), quantity: l.quantity || 0 })))
   const pct = Math.min(100, Math.max(0, Number.parseInt(depositPercent || '0', 10) || 0))
@@ -75,6 +83,7 @@ export function QuoteBuilder({
         <input type="hidden" name="csrf" value={csrf} />
         <input type="hidden" name="versionId" value={versionId} />
         <input type="hidden" name="projectId" value={projectId} />
+        <input type="hidden" name="quoteId" value={quoteId} />
         <input type="hidden" name="linesJson" value={JSON.stringify(lines)} />
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -162,7 +171,7 @@ export function QuoteBuilder({
         <input type="hidden" name="quoteId" value={quoteId} />
         <input type="hidden" name="projectId" value={projectId} />
         <p className="text-sm text-ink-muted">Save the draft first, then send the quote to the client.</p>
-        <Button type="submit" loading={sending} className="mt-3">Send to client</Button>
+        <Button type="submit" loading={sending} className="mt-3">{sendLabel}</Button>
       </form>
     </div>
   )

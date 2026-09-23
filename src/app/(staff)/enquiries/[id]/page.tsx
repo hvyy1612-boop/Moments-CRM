@@ -24,6 +24,7 @@ import {
   sendReplyAction,
   updateEnquiryAction,
 } from '../actions'
+import { createQuoteForEnquiryAction } from '../../quotes/actions'
 import { EnquiryWorkflow } from './EnquiryWorkflow'
 
 export const runtime = 'nodejs'
@@ -151,6 +152,11 @@ export default async function EnquiryDetailPage({
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
               {open ? (
                 <>
+                  <form action={createQuoteForEnquiryAction}>
+                    <input type="hidden" name="csrf" value={csrf} />
+                    <input type="hidden" name="enquiryId" value={enquiry.id} />
+                    <Button type="submit" size="sm">Create quote</Button>
+                  </form>
                   <form action={convertEnquiryAction}>
                     <input type="hidden" name="csrf" value={csrf} />
                     <input type="hidden" name="enquiryId" value={enquiry.id} />

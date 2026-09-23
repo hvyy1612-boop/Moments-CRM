@@ -3,6 +3,7 @@ import { Prisma, type DeclineReason } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
 import type { QuoteLineInput } from '@/lib/validation/quote'
+import { convertEnquiryCore } from './enquiry'
 
 const GST_DIVISOR = new Prisma.Decimal(11)
 const ROUND_HALF_UP = 4 // Decimal.js rounding mode; money rounds half up (BR-X03)
@@ -160,10 +161,12 @@ export async function acceptQuoteByToken(viewToken: string, acceptedName: string
       },
     })
     await tx.quote.update({ where: { id: quote.id }, data: { status: 'ACCEPTED' } })
-    await tx.project.update({
-      where: { id: quote.projectId },
-      data: { commercialStatus: 'ACCEPTED' },
-    })
+    if (quote.projectId) {
+      await tx.project.update({
+        where: { id: quote.projectId },
+        data: { commercialStatus: 'ACCEPTED' },
+      })
+    }
     await tx.auditLog.create({
       data: {
         action: 'quote.accepted',
@@ -329,4 +332,124 @@ export async function reviseQuoteTx(
     },
   })
   return { quoteId, versionId: newVersion.id, versionNumber: nextNumber }
+}
+
+// ── docs/31: Enquiry-stage quotes (Studio-Ninja model) ─────────────────────────────────────────────
+
+/** Display number for a quote, e.g. seq 23 → "Q-0023". */
+export function formatQuoteNumber(seq: number | null | undefined): string {
+  return seq ? `Q-${String(seq).padStart(4, '0')}` : 'Q-draft'
+}
+
+/**
+ * Create a quote that belongs to an ENQUIRY (docs/31): the canonical path. No Project is created — the
+ * quote lives on the lead until it is accepted. Assigns the next per-company sequential number and an
+ * empty DRAFT version 1.
+ */
+export async function createQuoteForEnquiry(enquiryId: string, createdByUserId: string | null) {
+  return prisma.$transaction(async (tx) => {
+    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId }, select: { id: true, status: true } })
+    if (!enquiry) throw new Error('Enquiry not found.')
+    if (enquiry.status === 'LOST' || enquiry.status === 'ARCHIVED') throw new Error('Reopen the enquiry before quoting it.')
+    const agg = await tx.quote.aggregate({ _max: { seq: true } })
+    const seq = (agg._max.seq ?? 0) + 1
+    const quote = await tx.quote.create({
+      data: {
+        enquiryId: enquiry.id,
+        seq,
+        viewToken: randomBytes(24).toString('base64url'),
+        status: 'DRAFT',
+        versions: { create: { versionNumber: 1, status: 'DRAFT', createdByUserId } },
+      },
+      include: { versions: true },
+    })
+    const version = quote.versions[0]
+    if (!version) throw new Error('Quote version was not created.')
+    await tx.quote.update({ where: { id: quote.id }, data: { currentVersionId: version.id } })
+    await tx.auditLog.create({
+      data: { action: 'quote.created', entityType: 'Quote', entityId: quote.id, actorUserId: createdByUserId, afterData: { enquiryId: enquiry.id, seq } },
+    })
+    return { quoteId: quote.id, versionId: version.id }
+  })
+}
+
+/**
+ * Accept a quote (docs/31): the single controlled transition that turns the Enquiry into a Job. Staff
+ * command (app is staff-only). ONE transaction: mark ACCEPTED + freeze the version, supersede sibling
+ * quotes, convert the enquiry (idempotent) into a Job, and link both ways. Retries on the per-year
+ * project-code unique collision, same as convertEnquiry. Any failure rolls the whole thing back.
+ */
+export async function acceptQuote(quoteId: string, actorUserId: string | null = null) {
+  const now = systemClock.now()
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const quote = await tx.quote.findUnique({ where: { id: quoteId }, include: { currentVersion: true, enquiry: true } })
+        if (!quote) throw new Error('Quote not found.')
+        if (!quote.enquiryId || !quote.enquiry) throw new Error('This quote is not linked to an enquiry.')
+        const version = quote.currentVersion
+        if (!version) throw new Error('This quote has no version to accept.')
+        if (quote.status !== 'SENT' && quote.status !== 'VIEWED') throw new Error('Only a sent quote can be accepted.')
+        if (version.total.lessThanOrEqualTo(0)) throw new Error('Add at least one line before accepting.')
+        if (quote.enquiry.status === 'LOST' || quote.enquiry.status === 'ARCHIVED') throw new Error('Reopen the enquiry before accepting a quote.')
+
+        const otherAccepted = await tx.quote.findFirst({ where: { enquiryId: quote.enquiryId, status: 'ACCEPTED', NOT: { id: quote.id } }, select: { id: true } })
+        if (otherAccepted) throw new Error('Another quote on this enquiry has already been accepted.')
+
+        // Accept + freeze this quote/version.
+        await tx.quoteVersion.update({ where: { id: version.id }, data: { status: 'ACCEPTED', acceptedByClientAt: now } })
+        await tx.quote.update({ where: { id: quote.id }, data: { status: 'ACCEPTED' } })
+        // Supersede the enquiry's other open quotes (never edited in place).
+        await tx.quote.updateMany({
+          where: { enquiryId: quote.enquiryId, NOT: { id: quote.id }, status: { in: ['DRAFT', 'SENT', 'VIEWED'] } },
+          data: { status: 'SUPERSEDED' },
+        })
+
+        // Convert the enquiry into a Job (idempotent) and link both ways.
+        const conv = await convertEnquiryCore(tx, quote.enquiryId, actorUserId, now)
+        if (!conv.projectId) throw new Error('Converting the enquiry did not produce a job.')
+        await tx.project.update({ where: { id: conv.projectId }, data: { sourceQuoteId: quote.id, commercialStatus: 'ACCEPTED' } })
+        await tx.quote.update({ where: { id: quote.id }, data: { projectId: conv.projectId } })
+
+        await tx.auditLog.create({ data: { action: 'quote.accepted', entityType: 'Quote', entityId: quote.id, actorUserId, afterData: { enquiryId: quote.enquiryId, projectId: conv.projectId } } })
+        await tx.outboxEvent.create({ data: { eventType: 'quote.accepted', aggregateType: 'Quote', aggregateId: quote.id, payload: { quoteId: quote.id, enquiryId: quote.enquiryId, projectId: conv.projectId } } })
+        return { quoteId: quote.id, projectId: conv.projectId }
+      })
+    } catch (error) {
+      const isUnique = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
+      if (isUnique && attempt < 4) continue
+      throw error
+    }
+  }
+}
+
+export type QuoteListRow = {
+  id: string
+  number: string
+  clientName: string
+  total: Prisma.Decimal
+  status: QuoteStatusValue
+  updatedAt: Date
+}
+type QuoteStatusValue = 'DRAFT' | 'SENT' | 'VIEWED' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED' | 'SUPERSEDED'
+
+/** All quotes for the Quotes list, newest first. Dual-reads the client from the enquiry (new) or the
+ *  project (legacy) during the migration window (docs/31). */
+export async function listQuotes(): Promise<QuoteListRow[]> {
+  const quotes = await prisma.quote.findMany({
+    orderBy: [{ seq: 'desc' }, { createdAt: 'desc' }],
+    include: {
+      currentVersion: { select: { total: true, updatedAt: true } },
+      enquiry: { select: { name: true, client: { select: { displayName: true } } } },
+      project: { select: { client: { select: { displayName: true } } } },
+    },
+  })
+  return quotes.map((q) => ({
+    id: q.id,
+    number: formatQuoteNumber(q.seq),
+    clientName: q.enquiry?.client?.displayName ?? q.enquiry?.name ?? q.project?.client?.displayName ?? 'Unknown',
+    total: q.currentVersion?.total ?? new Prisma.Decimal(0),
+    status: q.status as QuoteStatusValue,
+    updatedAt: q.currentVersion?.updatedAt ?? q.updatedAt,
+  }))
 }

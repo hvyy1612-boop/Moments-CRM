@@ -20,7 +20,9 @@ import {
   createContractAction,
   createQuoteAction,
   logProjectClientReplyAction,
+  saveQuoteAction,
   sendProjectReplyAction,
+  sendQuoteAction,
 } from '../actions'
 import { ContractSend } from './ContractSend'
 import { HistoryLogModal, type HistoryEntry } from './HistoryLogModal'
@@ -403,6 +405,8 @@ export async function CaseDetail({
               initialPoNumber={version.poNumber ?? ''}
               initialNotes={version.notes ?? ''}
               packages={packageOptions}
+              saveAction={saveQuoteAction}
+              sendAction={sendQuoteAction}
             />
           ) : (
             <div className="mt-4">

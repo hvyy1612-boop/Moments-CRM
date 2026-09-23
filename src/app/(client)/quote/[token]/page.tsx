@@ -21,9 +21,12 @@ export default async function ClientQuotePage({ params }: { params: Promise<{ to
     include: {
       currentVersion: { include: { lines: { orderBy: { sortOrder: 'asc' } } } },
       project: { include: { client: { select: { displayName: true } } } },
+      enquiry: { include: { client: { select: { displayName: true } } } },
     },
   })
   if (!quote || !quote.currentVersion) notFound()
+  // Client comes from the enquiry (new) or the project (legacy) — docs/31 dual-read.
+  const clientName = quote.enquiry?.client?.displayName ?? quote.enquiry?.name ?? quote.project?.client?.displayName ?? 'you'
 
   const version = quote.currentVersion
   if (version.status === 'DRAFT') notFound() // not sent yet
@@ -36,7 +39,7 @@ export default async function ClientQuotePage({ params }: { params: Promise<{ to
     <main className="mx-auto w-full max-w-lg px-4 py-12">
       <p className="text-sm font-medium uppercase tracking-wide text-accent">Moments Photography and Film</p>
       <h1 className="mt-2 text-2xl text-ink">Your quote</h1>
-      <p className="mt-1 text-ink-muted">Prepared for {quote.project.client.displayName}.</p>
+      <p className="mt-1 text-ink-muted">Prepared for {clientName}.</p>
 
       <section className="mt-8 rounded border border-line bg-surface p-5">
         <ul className="flex flex-col">

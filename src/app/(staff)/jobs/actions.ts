@@ -147,7 +147,7 @@ export async function sendQuoteAction(
     where: { id: quoteId },
     include: { project: { include: { client: { select: { email: true, displayName: true } } } } },
   })
-  if (quote) {
+  if (quote?.project) {
     const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
     await sendQuoteEmail({
       to: quote.project.client.email,

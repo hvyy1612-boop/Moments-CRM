@@ -503,6 +503,7 @@ model Project {
   source               String?          @db.VarChar(50) // nguồn enquiry (I-6 taxonomy, TBD)
   sourceDetail         String?          @map("source_detail") @db.VarChar(255)
   packageId            String?          @map("package_id") @db.VarChar(30) // direct booking: gói đã chọn
+  sourceQuoteId        String?          @unique @map("source_quote_id") @db.VarChar(30) // docs/31: accepted quote that created this Job (1-1)
   packagePriceSnapshot Decimal?         @map("package_price_snapshot") @db.Decimal(12, 2) // giá gói chốt lúc đặt
   confirmToken         String?          @unique @map("confirm_token") @db.VarChar(64) // link khách xác nhận (thay quote/contract)
   confirmedByClientAt  DateTime?        @map("confirmed_by_client_at") @db.Timestamptz
@@ -519,7 +520,8 @@ model Project {
   client                 Client          @relation(fields: [clientId], references: [id], onDelete: Restrict)
   owner                  User?           @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   package                Package?        @relation(fields: [packageId], references: [id], onDelete: SetNull)
-  quotes                 Quote[]
+  quotes                 Quote[]         @relation("ProjectQuotes")
+  sourceQuote            Quote?          @relation("ProjectSourceQuote", fields: [sourceQuoteId], references: [id], onDelete: SetNull)
   contracts              Contract[]
   bookings               Booking[]
   workItems              WorkItem[]
@@ -609,6 +611,7 @@ model Enquiry {
   client           Client?  @relation("ClientEnquiries", fields: [clientId], references: [id], onDelete: SetNull)
   convertedClient  Client?  @relation("EnquiryConvertedClient", fields: [convertedClientId], references: [id], onDelete: SetNull)
   convertedProject Project? @relation("EnquiryConvertedProject", fields: [convertedProjectId], references: [id], onDelete: SetNull)
+  quotes           Quote[]  @relation("EnquiryQuotes")
   communications   Communication[]
   workItems        WorkItem[]
 
@@ -623,18 +626,25 @@ model Enquiry {
 
 model Quote {
   id               String      @id @default(cuid()) @db.VarChar(30)
-  projectId        String      @map("project_id") @db.VarChar(30)
+  // docs/31: a quote belongs to an ENQUIRY (canonical). projectId is LEGACY/compat (set on accept) and
+  // therefore nullable now. seq = per-company sequential number for the display id (Q-0001).
+  enquiryId        String?     @map("enquiry_id") @db.VarChar(30)
+  projectId        String?     @map("project_id") @db.VarChar(30)
+  seq              Int?
   viewToken        String      @unique @map("view_token") @db.VarChar(64) // client xem quote qua link
   status           QuoteStatus @default(DRAFT) // cache của current version
   currentVersionId String?     @unique @map("current_version_id") @db.VarChar(30)
   createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  project        Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  enquiry        Enquiry?       @relation("EnquiryQuotes", fields: [enquiryId], references: [id], onDelete: SetNull)
+  project        Project?       @relation("ProjectQuotes", fields: [projectId], references: [id], onDelete: Restrict)
+  sourcedProject Project?       @relation("ProjectSourceQuote")
   currentVersion QuoteVersion?  @relation("QuoteCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
   versions       QuoteVersion[] @relation("QuoteVersions")
 
   @@index([projectId])
+  @@index([enquiryId])
   @@map("quotes")
 }
 

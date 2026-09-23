@@ -214,7 +214,20 @@ export async function convertEnquiry(enquiryId: string, actorUserId: string | nu
 }
 
 async function runConvertEnquiry(enquiryId: string, actorUserId: string | null, now: Date) {
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction((tx) => convertEnquiryCore(tx, enquiryId, actorUserId, now))
+}
+
+/**
+ * Transaction-aware core of {@link convertEnquiry} (docs/31): upsert the client + create/return the Job.
+ * Idempotent. Exposed so `acceptQuote` can convert in the SAME transaction that accepts the quote, so a
+ * quote is never ACCEPTED without its Job (or vice-versa).
+ */
+export async function convertEnquiryCore(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  enquiryId: string,
+  actorUserId: string | null,
+  now: Date,
+) {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
     if (!enquiry) throw new Error('Enquiry not found.')
     if (enquiry.status === 'CONVERTED') {
@@ -305,7 +318,6 @@ async function runConvertEnquiry(enquiryId: string, actorUserId: string | null, 
     })
 
     return { clientId: client.id, projectId: project.id, alreadyConverted: false }
-  })
 }
 
 /**
