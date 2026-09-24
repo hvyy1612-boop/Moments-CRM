@@ -53,6 +53,36 @@ export function Field({
   )
 }
 
+/**
+ * A responsive grid for a row of short, related form fields (dates, ids, short metadata): 1 column on
+ * mobile, 2 on tablet, 4 on desktop. Reusable across complex business forms so field rows are laid out by
+ * the layout system, not per-page pixel widths. Long-form inputs (textareas, line items) stay full width
+ * outside a FieldGrid.
+ */
+export function FieldGrid({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4${className ? ` ${className}` : ''}`}>{children}</div>
+}
+
+/**
+ * A titled form section. Hierarchy comes from typography + whitespace, not a bordered card (Apple-like
+ * restraint): a small heading, optional description, an optional right-aligned control, then the content.
+ * Sections are separated by the parent's vertical gap.
+ */
+export function FormSection({ title, description, control, children }: { title: string; description?: string; control?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold text-ink">{title}</h2>
+          {description ? <p className="mt-0.5 text-xs text-muted">{description}</p> : null}
+        </div>
+        {control}
+      </div>
+      {children}
+    </section>
+  )
+}
+
 type InputProps = InputHTMLAttributes<HTMLInputElement> & { hasError?: boolean }
 export function TextInput({ hasError = false, className, ...rest }: InputProps) {
   return <input className={`${controlBase} h-10 ${borderFor(hasError)} ${className ?? ''}`} {...rest} />
