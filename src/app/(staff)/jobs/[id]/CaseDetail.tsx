@@ -211,6 +211,7 @@ export async function CaseDetail({
     price: p.basePriceInclGst.toString(),
     description: p.description,
     inclusions: p.inclusions,
+    details: p.inclusions ?? p.description, // snapshot source for the quote line
     isAddOn: p.isAddOn,
   }))
 
@@ -400,10 +401,12 @@ export async function CaseDetail({
                 unitPrice: line.unitPrice.toString(),
                 lineType: (line.lineType === 'package' || line.lineType === 'addon' ? line.lineType : 'custom') as 'custom' | 'package' | 'addon',
                 referenceId: line.referenceId,
+                details: line.details,
               }))}
               initialIntroduction={version.introduction ?? ''}
               initialPoNumber={version.poNumber ?? ''}
               initialNotes={version.notes ?? ''}
+              initialDepositPercent={version.depositPercent != null ? String(version.depositPercent) : ''}
               packages={packageOptions}
               saveAction={saveQuoteAction}
               sendAction={sendQuoteAction}

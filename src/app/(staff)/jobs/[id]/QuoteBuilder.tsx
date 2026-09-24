@@ -8,7 +8,7 @@ import { estimateTotals, estimateDeposit, toCents, formatCents } from '@/lib/pri
 import type { QuoteActionState } from '../actions'
 
 type QuoteFormAction = (prev: QuoteActionState, formData: FormData) => Promise<QuoteActionState>
-type QuotePackage = { id: string; name: string; price: string }
+type QuotePackage = { id: string; name: string; price: string; details?: string | null }
 
 /**
  * Studio-Ninja-style staff quote builder (docs/31). The quote is assembled by staff from the catalogue:
@@ -18,7 +18,7 @@ type QuotePackage = { id: string; name: string; price: string }
  */
 
 type LineType = 'custom' | 'package' | 'addon'
-type Line = { description: string; quantity: number; unitPrice: string; lineType: LineType; referenceId?: string | null }
+type Line = { description: string; quantity: number; unitPrice: string; lineType: LineType; referenceId?: string | null; details?: string | null }
 
 const IDLE: QuoteActionState = { status: 'idle' }
 
@@ -32,6 +32,7 @@ export function QuoteBuilder({
   initialIntroduction,
   initialPoNumber,
   initialNotes,
+  initialDepositPercent,
   packages,
   saveAction,
   sendAction,
@@ -46,13 +47,14 @@ export function QuoteBuilder({
   initialIntroduction: string
   initialPoNumber: string
   initialNotes: string
+  initialDepositPercent: string
   packages: QuotePackage[]
   saveAction: QuoteFormAction
   sendAction: QuoteFormAction
   sendLabel?: string
 }) {
   const [lines, setLines] = useState<Line[]>(initialLines)
-  const [depositPercent, setDepositPercent] = useState('30')
+  const [depositPercent, setDepositPercent] = useState(initialDepositPercent || '30')
   const [saveState, save, saving] = useActionState(saveAction, IDLE)
   const [sendState, send, sending] = useActionState(sendAction, IDLE)
 
@@ -62,7 +64,7 @@ export function QuoteBuilder({
 
   const addPackage = (id: string) => {
     const pkg = packages.find((p) => p.id === id)
-    if (pkg) setLines((cur) => [...cur, { description: pkg.name, quantity: 1, unitPrice: pkg.price, lineType: 'package', referenceId: pkg.id }])
+    if (pkg) setLines((cur) => [...cur, { description: pkg.name, quantity: 1, unitPrice: pkg.price, lineType: 'package', referenceId: pkg.id, details: pkg.details ?? null }])
   }
   const addRow = (lineType: LineType) => setLines((cur) => [...cur, { description: '', quantity: 1, unitPrice: '', lineType }])
   const update = (index: number, patch: Partial<Line>) => setLines((cur) => cur.map((l, i) => (i === index ? { ...l, ...patch } : l)))
@@ -84,6 +86,7 @@ export function QuoteBuilder({
         <input type="hidden" name="versionId" value={versionId} />
         <input type="hidden" name="projectId" value={projectId} />
         <input type="hidden" name="quoteId" value={quoteId} />
+        <input type="hidden" name="depositPercent" value={depositPercent} />
         <input type="hidden" name="linesJson" value={JSON.stringify(lines)} />
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

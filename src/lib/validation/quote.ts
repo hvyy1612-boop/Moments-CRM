@@ -15,6 +15,8 @@ export const quoteLineSchema = z.object({
   // only (groups the line under Packages vs Add-ons); does not change the maths.
   lineType: z.enum(['custom', 'package', 'addon']).optional(),
   referenceId: z.string().trim().max(30).optional().nullable(),
+  // Immutable snapshot of a package's inclusions at quote time (one item per line). Presentation only.
+  details: z.string().trim().max(4000).optional().nullable(),
 })
 
 export const saveQuoteSchema = z.object({
@@ -28,6 +30,12 @@ export const saveQuoteSchema = z.object({
   introduction: z.string().trim().max(2000).optional().or(z.literal('')).transform((v) => (v ? v : null)),
   poNumber: z.string().trim().max(60).optional().or(z.literal('')).transform((v) => (v ? v : null)),
   notes: z.string().trim().max(2000).optional().or(z.literal('')).transform((v) => (v ? v : null)),
+  depositPercent: z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => (v ? Math.min(100, Math.max(0, Math.round(Number(v)) || 0)) : null)),
 })
 
 export const acceptQuoteSchema = z.object({

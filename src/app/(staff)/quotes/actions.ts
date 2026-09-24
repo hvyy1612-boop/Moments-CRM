@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
-import { createQuoteForEnquiry, saveQuoteDraft, sendQuote, acceptQuote, reviseQuote } from '@/lib/domain/quote'
+import { createQuoteForEnquiry, saveQuoteDraft, sendQuote, acceptQuote, reviseQuote, duplicateQuote } from '@/lib/domain/quote'
 import { saveQuoteSchema } from '@/lib/validation/quote'
 
 /**
@@ -40,7 +40,7 @@ export async function createQuoteForEnquiryAction(formData: FormData): Promise<v
   } catch {
     redirect(`/enquiries/${enquiryId}?quoteError=1`)
   }
-  redirect(`/quotes/${quoteId}`)
+  redirect(`/quotes/${quoteId}/edit`)
 }
 
 /** Save the draft (lines + presentation). Matches QuoteBuilder's action signature. */
@@ -64,6 +64,7 @@ export async function saveQuoteAction(_prev: QuoteActionState, formData: FormDat
     introduction: formData.get('introduction') ?? '',
     poNumber: formData.get('poNumber') ?? '',
     notes: formData.get('notes') ?? '',
+    depositPercent: formData.get('depositPercent') ?? '',
   })
   if (!parsed.success) return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the quote.' }
   const validUntil = parsed.data.validUntil ? new Date(parsed.data.validUntil) : null
@@ -72,6 +73,7 @@ export async function saveQuoteAction(_prev: QuoteActionState, formData: FormDat
       introduction: parsed.data.introduction,
       poNumber: parsed.data.poNumber,
       notes: parsed.data.notes,
+      depositPercent: parsed.data.depositPercent,
     })
   } catch (error) {
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not save.' }
@@ -98,6 +100,23 @@ export async function sendQuoteAction(_prev: QuoteActionState, formData: FormDat
   return { status: 'success' }
 }
 
+/** Share/send the quote from the detail page (void form action): mark it SENT, then refresh the detail.
+ *  This does NOT send an email (no provider); the detail page shows a copy-able client link. */
+export async function shareQuoteAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const quoteId = str(formData, 'quoteId')
+  if (!quoteId) return
+  try {
+    await sendQuote(quoteId, user.id)
+  } catch (error) {
+    redirect(`/quotes/${quoteId}?shareError=${encodeURIComponent(error instanceof Error ? error.message : 'Could not share.')}`)
+  }
+  revalidatePath(`/quotes/${quoteId}`)
+  redirect(`/quotes/${quoteId}`)
+}
+
 /** Accept the quote → convert the enquiry into a Job (one transaction), then open the new Job. */
 export async function acceptQuoteAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
@@ -116,6 +135,23 @@ export async function acceptQuoteAction(formData: FormData): Promise<void> {
   redirect(projectId ? `/jobs/${projectId}` : `/quotes/${quoteId}`)
 }
 
+/** Duplicate a quote as a fresh DRAFT, then open its editor. */
+export async function duplicateQuoteAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const quoteId = str(formData, 'quoteId')
+  if (!quoteId) return
+  let newId: string
+  try {
+    const res = await duplicateQuote(quoteId, user.id)
+    newId = res.quoteId
+  } catch {
+    redirect(`/quotes/${quoteId}`)
+  }
+  redirect(`/quotes/${newId}/edit`)
+}
+
 /** Revise a sent quote: a new DRAFT version supersedes the current one. */
 export async function reviseQuoteAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
@@ -129,5 +165,5 @@ export async function reviseQuoteAction(formData: FormData): Promise<void> {
     // fall through to refresh
   }
   revalidatePath(`/quotes/${quoteId}`)
-  redirect(`/quotes/${quoteId}`)
+  redirect(`/quotes/${quoteId}/edit`)
 }

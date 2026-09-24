@@ -663,6 +663,7 @@ model QuoteVersion {
   introduction         String?        @db.Text
   poNumber             String?        @map("po_number") @db.VarChar(60)
   notes                String?        @db.Text
+  depositPercent       Int?           @map("deposit_percent") // docs/31: booking deposit %; balance = 100 - this
   validUntil           DateTime?      @map("valid_until") @db.Timestamptz
   createdByUserId      String?        @map("created_by_user_id") @db.VarChar(30)
   sentToClientAt       DateTime?      @map("sent_to_client_at") @db.Timestamptz
@@ -694,6 +695,7 @@ model QuoteLine {
   lineType       String   @default("custom") @map("line_type") @db.VarChar(30) // custom | package | addon
   referenceId    String?  @map("reference_id") @db.VarChar(30)
   description    String   @db.VarChar(500)
+  details        String?  @db.Text // docs/31: immutable snapshot of the package inclusions at quote time
   quantity       Int      @default(1)
   unitPrice      Decimal  @default(0) @map("unit_price") @db.Decimal(12, 2)
   discount       Decimal  @default(0) @db.Decimal(12, 2)

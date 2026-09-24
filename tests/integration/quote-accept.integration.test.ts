@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
 import { createEnquiry } from '@/lib/domain/enquiry'
-import { acceptQuote, createQuoteForEnquiry, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
+import { acceptQuote, createQuoteForEnquiry, duplicateQuote, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 
 const email = () => `it-${randomUUID()}@moments.test`
 
@@ -76,5 +76,59 @@ describe('acceptQuote — enquiry-stage quote → job (docs/31, integration)', (
     const { quoteId } = await sentEnquiryQuote()
     await acceptQuote(quoteId, null)
     await expect(acceptQuote(quoteId, null)).rejects.toThrow()
+  })
+
+  it('an expired quote cannot be accepted', async () => {
+    const enquiry = await createEnquiry({ name: 'Lead', email: email() })
+    const q = await createQuoteForEnquiry(enquiry.id, null)
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    await saveQuoteDraft(q.versionId, [{ description: 'X', quantity: 1, unitPrice: '2000' }], past)
+    await sendQuote(q.quoteId, null)
+    await expect(acceptQuote(q.quoteId, null)).rejects.toThrow(/expired/i)
+  })
+
+  it('accepting does NOT create a deposit invoice (workflow does that later)', async () => {
+    const { quoteId } = await sentEnquiryQuote()
+    const res = await acceptQuote(quoteId, null)
+    const invoiceCount = await prisma.invoice.count({ where: { projectId: res.projectId } })
+    expect(invoiceCount).toBe(0)
+  })
+
+  it('an accepted quote is protected from direct financial editing', async () => {
+    const { quoteId } = await sentEnquiryQuote()
+    await acceptQuote(quoteId, null)
+    const accepted = await prisma.quote.findUnique({ where: { id: quoteId }, select: { currentVersionId: true } })
+    await expect(
+      saveQuoteDraft(accepted!.currentVersionId!, [{ description: 'Sneaky', quantity: 1, unitPrice: '1' }], null),
+    ).rejects.toThrow(/draft/i)
+  })
+
+  it('deposit percent is persisted for the payment schedule', async () => {
+    const enquiry = await createEnquiry({ name: 'Lead', email: email() })
+    const q = await createQuoteForEnquiry(enquiry.id, null)
+    await saveQuoteDraft(q.versionId, [{ description: 'Pkg', quantity: 1, unitPrice: '3000' }], null, { depositPercent: 30 })
+    const version = await prisma.quoteVersion.findUnique({ where: { id: q.versionId }, select: { depositPercent: true } })
+    expect(version?.depositPercent).toBe(30)
+  })
+
+  it('duplicate makes a clean DRAFT copy: new number, copied lines, no lifecycle metadata', async () => {
+    const { quoteId } = await sentEnquiryQuote('4200')
+    await acceptQuote(quoteId, null) // source is now ACCEPTED with sent/accepted timestamps
+    const dup = await duplicateQuote(quoteId, null)
+
+    const copy = await prisma.quote.findUnique({
+      where: { id: dup.quoteId },
+      include: { currentVersion: { include: { lines: true } } },
+    })
+    const src = await prisma.quote.findUnique({ where: { id: quoteId }, select: { seq: true, enquiryId: true } })
+    expect(copy?.status).toBe('DRAFT')
+    expect(copy?.seq).toBeGreaterThan(src!.seq!)
+    expect(copy?.enquiryId).toBe(src!.enquiryId)
+    expect(copy?.currentVersion?.status).toBe('DRAFT')
+    expect(copy?.currentVersion?.lines.length).toBe(1)
+    expect(copy?.currentVersion?.total.toString()).toBe('4200')
+    // No lifecycle metadata copied.
+    expect(copy?.currentVersion?.sentToClientAt).toBeNull()
+    expect(copy?.currentVersion?.acceptedByClientAt).toBeNull()
   })
 })

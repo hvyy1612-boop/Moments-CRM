@@ -18,6 +18,7 @@ function computeTotals(lines: QuoteLineInput[]) {
       lineType: line.lineType ?? 'custom',
       referenceId: line.referenceId ?? null,
       description: line.description,
+      details: line.details ?? null,
       quantity: line.quantity,
       unitPrice: new Prisma.Decimal(line.unitPrice),
       lineTotal,
@@ -55,7 +56,12 @@ export async function createQuote(projectId: string, createdByUserId: string | n
 }
 
 /** Replace the draft version's lines and recompute totals. Only a DRAFT version may be edited. */
-export type QuotePresentation = { introduction?: string | null; poNumber?: string | null; notes?: string | null }
+export type QuotePresentation = {
+  introduction?: string | null
+  poNumber?: string | null
+  notes?: string | null
+  depositPercent?: number | null
+}
 
 export async function saveQuoteDraft(
   versionId: string,
@@ -83,6 +89,7 @@ export async function saveQuoteDraft(
         introduction: presentation.introduction ?? null,
         poNumber: presentation.poNumber ?? null,
         notes: presentation.notes ?? null,
+        depositPercent: presentation.depositPercent ?? null,
       },
     })
     return { subtotal, taxTotal, total }
@@ -391,6 +398,7 @@ export async function acceptQuote(quoteId: string, actorUserId: string | null = 
         if (!version) throw new Error('This quote has no version to accept.')
         if (quote.status !== 'SENT' && quote.status !== 'VIEWED') throw new Error('Only a sent quote can be accepted.')
         if (version.total.lessThanOrEqualTo(0)) throw new Error('Add at least one line before accepting.')
+        if (version.validUntil && version.validUntil.getTime() < now.getTime()) throw new Error('This quote has expired; revise it before accepting.')
         if (quote.enquiry.status === 'LOST' || quote.enquiry.status === 'ARCHIVED') throw new Error('Reopen the enquiry before accepting a quote.')
 
         const otherAccepted = await tx.quote.findFirst({ where: { enquiryId: quote.enquiryId, status: 'ACCEPTED', NOT: { id: quote.id } }, select: { id: true } })
@@ -433,13 +441,26 @@ export type QuoteListRow = {
 }
 type QuoteStatusValue = 'DRAFT' | 'SENT' | 'VIEWED' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED' | 'SUPERSEDED'
 
+/**
+ * Effective (display) status: a non-accepted quote past its valid-until date reads as EXPIRED (docs/31).
+ * Accepted/declined/superseded quotes never become expired. This is a pure derivation over the stored
+ * status — the backend is the source of truth; acceptQuote enforces the same rule server-side.
+ */
+export function effectiveQuoteStatus(status: string, validUntil: Date | null, now: Date = systemClock.now()): QuoteStatusValue {
+  if ((status === 'DRAFT' || status === 'SENT' || status === 'VIEWED') && validUntil && validUntil.getTime() < now.getTime()) {
+    return 'EXPIRED'
+  }
+  return status as QuoteStatusValue
+}
+
 /** All quotes for the Quotes list, newest first. Dual-reads the client from the enquiry (new) or the
- *  project (legacy) during the migration window (docs/31). */
+ *  project (legacy) during the migration window (docs/31). Status reflects derived expiry. */
 export async function listQuotes(): Promise<QuoteListRow[]> {
+  const now = systemClock.now()
   const quotes = await prisma.quote.findMany({
     orderBy: [{ seq: 'desc' }, { createdAt: 'desc' }],
     include: {
-      currentVersion: { select: { total: true, updatedAt: true } },
+      currentVersion: { select: { total: true, updatedAt: true, validUntil: true } },
       enquiry: { select: { name: true, client: { select: { displayName: true } } } },
       project: { select: { client: { select: { displayName: true } } } },
     },
@@ -449,7 +470,75 @@ export async function listQuotes(): Promise<QuoteListRow[]> {
     number: formatQuoteNumber(q.seq),
     clientName: q.enquiry?.client?.displayName ?? q.enquiry?.name ?? q.project?.client?.displayName ?? 'Unknown',
     total: q.currentVersion?.total ?? new Prisma.Decimal(0),
-    status: q.status as QuoteStatusValue,
+    status: effectiveQuoteStatus(q.status, q.currentVersion?.validUntil ?? null, now),
     updatedAt: q.currentVersion?.updatedAt ?? q.updatedAt,
   }))
+}
+
+/**
+ * Duplicate a quote as a fresh DRAFT (docs/31): copies the commercial line snapshots + presentation +
+ * payment terms and the enquiry association, with a new number and view token. Never copies lifecycle
+ * metadata (sent/viewed/accepted, status history, contract/invoice links).
+ */
+export async function duplicateQuote(quoteId: string, actorUserId: string | null = null) {
+  return prisma.$transaction(async (tx) => {
+    const src = await tx.quote.findUnique({
+      where: { id: quoteId },
+      include: { currentVersion: { include: { lines: { orderBy: { sortOrder: 'asc' } } } } },
+    })
+    if (!src || !src.currentVersion) throw new Error('Quote not found.')
+    const v = src.currentVersion
+    const agg = await tx.quote.aggregate({ _max: { seq: true } })
+    const seq = (agg._max.seq ?? 0) + 1
+    const copy = await tx.quote.create({
+      data: {
+        enquiryId: src.enquiryId,
+        projectId: src.projectId, // keep the same association; not the accepted-quote link
+        seq,
+        viewToken: randomBytes(24).toString('base64url'),
+        status: 'DRAFT',
+        versions: {
+          create: {
+            versionNumber: 1,
+            status: 'DRAFT',
+            currency: v.currency,
+            subtotal: v.subtotal,
+            discountTotal: v.discountTotal,
+            taxTotal: v.taxTotal,
+            total: v.total,
+            validUntil: v.validUntil,
+            introduction: v.introduction,
+            poNumber: v.poNumber,
+            notes: v.notes,
+            depositPercent: v.depositPercent,
+            createdByUserId: actorUserId,
+          },
+        },
+      },
+      include: { versions: true },
+    })
+    const newVersion = copy.versions[0]!
+    if (v.lines.length > 0) {
+      await tx.quoteLine.createMany({
+        data: v.lines.map((line) => ({
+          quoteVersionId: newVersion.id,
+          lineType: line.lineType,
+          referenceId: line.referenceId,
+          description: line.description,
+          details: line.details,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          discount: line.discount,
+          tax: line.tax,
+          lineTotal: line.lineTotal,
+          sortOrder: line.sortOrder,
+        })),
+      })
+    }
+    await tx.quote.update({ where: { id: copy.id }, data: { currentVersionId: newVersion.id } })
+    await tx.auditLog.create({
+      data: { action: 'quote.duplicated', entityType: 'Quote', entityId: copy.id, actorUserId, afterData: { fromQuoteId: quoteId, seq } },
+    })
+    return { quoteId: copy.id, versionId: newVersion.id }
+  })
 }

@@ -104,6 +104,7 @@ export async function saveQuoteAction(
     introduction: formData.get('introduction') ?? '',
     poNumber: formData.get('poNumber') ?? '',
     notes: formData.get('notes') ?? '',
+    depositPercent: formData.get('depositPercent') ?? '',
   })
   if (!parsed.success) {
     return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the quote.' }
@@ -115,6 +116,7 @@ export async function saveQuoteAction(
       introduction: parsed.data.introduction,
       poNumber: parsed.data.poNumber,
       notes: parsed.data.notes,
+      depositPercent: parsed.data.depositPercent,
     })
   } catch (error) {
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not save.' }
