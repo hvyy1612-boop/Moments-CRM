@@ -9,6 +9,7 @@ import { titleCase } from '@/lib/text'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { ClientsTable } from './ClientsTable'
+import { ImportedBanner } from './ImportedBanner'
 import { SortSelect, DEFAULT_SORT, type SortValue } from './SortSelect'
 import { FilterMenu } from './FilterMenu'
 import { ColumnsMenu } from './ColumnsMenu'
@@ -34,7 +35,7 @@ function orderFor(sort: SortValue): Prisma.ClientOrderByWithRelationInput {
 export default async function ClientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; sort?: string; source?: string; type?: string; jobs?: string }>
+  searchParams: Promise<{ q?: string; sort?: string; source?: string; type?: string; jobs?: string; imported?: string }>
 }) {
   const user = await requireRole('/clients')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
@@ -43,6 +44,7 @@ export default async function ClientsPage({
   const sp = await searchParams
   const q = (sp.q ?? '').trim()
   const sort: SortValue = SORTS.includes(sp.sort as SortValue) ? (sp.sort as SortValue) : DEFAULT_SORT
+  const importedCount = Number.parseInt(sp.imported ?? '', 10) || 0
   const source = sp.source ?? ''
   const type = sp.type ?? ''
   const jobs = sp.jobs ?? ''
@@ -141,6 +143,8 @@ export default async function ClientsPage({
             </Link>
           </div>
         </div>
+
+        <ImportedBanner count={importedCount} />
 
         {/* Toolbar */}
         <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">

@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
+import { useActionState, useEffect, useRef, useState } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Field, FieldGrid, FormSection, Select, TextInput, Textarea } from '@/components/ui/form'
@@ -66,11 +66,32 @@ export function QuoteBuilder({
   const [sendOpen, setSendOpen] = useState(false)
   const [saveState, save, saving] = useActionState(saveAction, IDLE)
   const [sendState, send, sending] = useActionState(sendAction, IDLE)
+  const saveFormRef = useRef<HTMLFormElement>(null)
+  // "Send" auto-saves the current lines first (the send action reads the saved quote from the DB), then
+  // opens the compose dialog — so a user who just added items no longer sees "this quote has no items".
+  const pendingSendRef = useRef(false)
 
   // Close the Send dialog once the quote has gone out.
   useEffect(() => {
     if (sendState.status === 'success') setSendOpen(false)
   }, [sendState.status])
+
+  // After the auto-save triggered by "Send" resolves: open the dialog on success, or drop the intent on
+  // error (the save error — e.g. no lines — is shown inline). saveState is a fresh object per submit.
+  useEffect(() => {
+    if (!pendingSendRef.current) return
+    if (saveState.status === 'success') {
+      pendingSendRef.current = false
+      setSendOpen(true)
+    } else if (saveState.status === 'error') {
+      pendingSendRef.current = false
+    }
+  }, [saveState])
+
+  const startSend = () => {
+    pendingSendRef.current = true
+    saveFormRef.current?.requestSubmit()
+  }
 
   const est = estimateTotals(lines.map((l) => ({ unitPriceCents: toCents(l.unitPrice), quantity: l.quantity || 0 })))
   const pct = Math.min(100, Math.max(0, Number.parseInt(depositPercent || '0', 10) || 0))
@@ -95,7 +116,7 @@ export function QuoteBuilder({
       {saveState.status === 'success' ? <Alert tone="success" title="Draft saved" /> : null}
       {sendState.status === 'success' ? <Alert tone="success" title="Quote sent to the client." /> : null}
 
-      <form action={save} className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20em] lg:items-start">
+      <form ref={saveFormRef} action={save} className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20em] lg:items-start">
         <input type="hidden" name="csrf" value={csrf} />
         <input type="hidden" name="versionId" value={versionId} />
         <input type="hidden" name="projectId" value={projectId} />
@@ -204,8 +225,8 @@ export function QuoteBuilder({
       </form>
 
       <div className="border-t border-line pt-4">
-        <p className="text-sm text-ink-muted">Save the draft first, then send the quote to the client.</p>
-        <Button type="button" className="mt-3" onClick={() => setSendOpen(true)}>{sendLabel}</Button>
+        <p className="text-sm text-ink-muted">Sending saves your latest changes first, then opens the email to the client.</p>
+        <Button type="button" className="mt-3" loading={saving && pendingSendRef.current} onClick={startSend}>{sendLabel}</Button>
       </div>
 
       {sendOpen ? (

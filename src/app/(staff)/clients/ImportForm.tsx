@@ -99,7 +99,7 @@ function ImportResult({ result, onReset }: { result: Extract<ImportState, { stat
 
           <div className="mt-5 flex flex-wrap gap-2">
             {success ? (
-              <Link href="/clients"><Button>View clients</Button></Link>
+              <Link href={`/clients?imported=${created}`}><Button>View clients</Button></Link>
             ) : null}
             <Button type="button" variant="secondary" onClick={onReset}>Import more</Button>
           </div>

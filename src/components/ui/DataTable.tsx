@@ -37,6 +37,7 @@ export function DataTable<T>({
   pageSize,
   search,
   searchPlaceholder = 'Search',
+  rowClassName,
 }: {
   columns: DataColumn<T>[]
   rows: T[]
@@ -51,6 +52,8 @@ export function DataTable<T>({
   /** When set, an open search field filters the rows live (case-insensitive) against this row text. */
   search?: (row: T) => string
   searchPlaceholder?: string
+  /** Optional per-row classes (e.g. a highlight for newly-added rows). Applied on top of the base row. */
+  rowClassName?: (row: T) => string | undefined
 }) {
   const [hidden, setHidden] = useState<string[]>([])
   const [perPage, setPerPage] = useState(pageSize ?? 0)
@@ -129,7 +132,7 @@ export function DataTable<T>({
               <div
                 key={rowKey(row)}
                 role="row"
-                className="group grid items-center border-b border-line transition-colors last:border-b-0 hover:bg-paper"
+                className={`group grid items-center border-b border-line transition-colors last:border-b-0 hover:bg-paper ${rowClassName?.(row) ?? ''}`}
                 style={{ gridTemplateColumns: template }}
               >
                 {visible.map((c) => (

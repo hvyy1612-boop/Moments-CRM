@@ -24,6 +24,11 @@ function initials(name: string): string {
   return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
 }
 
+// A client created within this window is flagged "New" (tinted row + tag) so staff spot freshly-added or
+// just-imported profiles at a glance; it fades on its own once the window passes.
+const RECENT_ADD_MS = 10 * 60 * 1000
+const isRecentlyAdded = (since: Date) => Date.now() - new Date(since).getTime() < RECENT_ADD_MS
+
 /**
  * Clients column schema over the shared DataTable. ONE grid template (shared by the header and every row)
  * with content-weighted `minmax(floor, fr)` tracks: Client is the dominant identifier, Phone/Source/Since
@@ -44,7 +49,12 @@ export function ClientsTable({ rows, csrf, canDelete, backParam }: { rows: Clien
             {initials(r.name)}
           </span>
           <span className="min-w-0">
-            <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.name}</span>
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.name}</span>
+              {isRecentlyAdded(r.since) ? (
+                <span className="shrink-0 rounded bg-accent-tint px-1.5 py-0.5 text-xs font-semibold uppercase leading-none tracking-wide text-accent-ink">New</span>
+              ) : null}
+            </span>
             <span className="block truncate text-xs text-ink-muted">{r.email}</span>
           </span>
         </Link>
@@ -73,6 +83,7 @@ export function ClientsTable({ rows, csrf, canDelete, backParam }: { rows: Clien
       pageSize={30}
       search={(r) => `${r.name} ${r.email} ${r.phone ?? ''}`}
       searchPlaceholder="Search clients"
+      rowClassName={(r) => (isRecentlyAdded(r.since) ? 'bg-accent-tint/40' : undefined)}
     />
   )
 }
