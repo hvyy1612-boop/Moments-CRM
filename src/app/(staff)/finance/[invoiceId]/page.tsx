@@ -46,6 +46,7 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
       id: true, invoiceNumber: true, type: true, status: true, subtotal: true, taxTotal: true, total: true,
       amountPaid: true, invoiceDate: true, dueAt: true, poNumber: true, notes: true, accessToken: true,
       billingNameSnapshot: true, billingEmailSnapshot: true,
+      creditNotes: { where: { NOT: { status: 'VOIDED' } }, select: { amount: true } },
       lines: { orderBy: { sortOrder: 'asc' }, select: { itemName: true, description: true, quantity: true, unitPrice: true, discount: true, lineTotal: true } },
       instalments: { orderBy: { sortOrder: 'asc' }, select: { label: true, dueAt: true, amount: true, status: true } },
       payments: {
@@ -73,6 +74,8 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
   // Balance due comes from the Money foundation (subtracts credit notes, clamps overpayment to 0).
   // amountPaid is the ledger cache; money.paidNet equals it, so "Paid" can keep using amountPaid.
   const balance = money ? money.owed : inv.total.sub(inv.amountPaid)
+  // Credit-aware credits total for the printable so its balance matches the ledger (bug #5).
+  const docCredits = inv.creditNotes.reduce((s, cn) => s.add(cn.amount), new Prisma.Decimal(0))
   const isDraft = inv.status === 'DRAFT'
   const canPay = inv.status !== 'DRAFT' && inv.status !== 'PAID' && inv.status !== 'VOID'
   const unpaid = inv.amountPaid.lte(0)
@@ -207,7 +210,7 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
         {/* Invoice preview (demoted, screen only) */}
         <div className="mt-8">
           <CollapsiblePreview>
-            <InvoiceDocument invoice={inv} />
+            <InvoiceDocument invoice={{ ...inv, creditsTotal: docCredits }} />
           </CollapsiblePreview>
         </div>
       </div>
@@ -219,7 +222,7 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
           short invoice, with no app chrome and no blank trailing pages. */}
       <InvoiceFit />
       <div className="hidden print:block">
-        <InvoiceDocument invoice={inv} />
+        <InvoiceDocument invoice={{ ...inv, creditsTotal: docCredits }} />
       </div>
     </>
   )

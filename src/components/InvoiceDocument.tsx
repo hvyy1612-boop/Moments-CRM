@@ -17,6 +17,8 @@ export type InvoiceDoc = {
   notes: string | null
   total: D
   amountPaid: D
+  /** Sum of effective (non-void) credit notes on this invoice; reduces the balance due (bug #5). */
+  creditsTotal?: D
   billingNameSnapshot: string
   billingEmailSnapshot: string | null
   lines: { itemName: string | null; description: string; quantity: number; unitPrice: D; discount: D; lineTotal: D }[]
@@ -99,7 +101,11 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
   const gstTotal = rows.reduce((sum, r) => sum.add(r.gst), new Prisma.Decimal(0))
   const total = invoice.total
   const paid = invoice.amountPaid
-  const balance = total.sub(paid)
+  // Credit notes reduce the balance due, so the printable matches the ledger's credit-aware `owed`
+  // (bug #5) - never total - paid alone. Clamp at zero so an over-credited invoice never shows negative.
+  const credits = invoice.creditsTotal ?? new Prisma.Decimal(0)
+  const rawBalance = total.sub(paid).sub(credits)
+  const balance = rawBalance.lessThan(0) ? new Prisma.Decimal(0) : rawBalance
 
   const status = invoice.status ?? ''
   const badge = status === 'PAID' ? 'Paid in full' : status === 'VOID' ? 'Void' : null
@@ -219,6 +225,9 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
           <div className="flex justify-between py-0.5 text-ink-muted"><span>Subtotal (ex GST)</span><span className="tabular text-ink">{formatAud(subtotalEx)}</span></div>
           <div className="flex justify-between py-0.5 text-ink-muted"><span>GST 10%</span><span className="tabular text-ink">{formatAud(gstTotal)}</span></div>
           <div className="mt-1 flex justify-between border-t border-line-strong pt-2 text-base font-semibold text-ink"><span>Total (inc GST)</span><span className="tabular">{formatAud(total)}</span></div>
+          {credits.greaterThan(0) ? (
+            <div className="flex justify-between py-0.5 text-ink-muted"><span>Less credit notes</span><span className="tabular text-ink">-{formatAud(credits)}</span></div>
+          ) : null}
           {paid.greaterThan(0) ? (
             <div className="flex justify-between py-0.5 text-ink-muted"><span>Amount paid</span><span className="tabular text-ink">-{formatAud(paid)}</span></div>
           ) : null}

@@ -626,11 +626,12 @@ function invoiceToken(): string {
 /** Full invoice for the client portal (by access token), or null. No session required. */
 export async function getInvoiceByToken(token: string) {
   if (!token || token.length < 16) return null
-  return prisma.invoice.findUnique({
+  const inv = await prisma.invoice.findUnique({
     where: { accessToken: token },
     select: {
       invoiceNumber: true, type: true, status: true, total: true,
       amountPaid: true, invoiceDate: true, dueAt: true, poNumber: true, notes: true,
+      creditNotes: { where: { NOT: { status: 'VOIDED' } }, select: { amount: true } },
       billingNameSnapshot: true, billingEmailSnapshot: true,
       lines: { orderBy: { sortOrder: 'asc' }, select: { itemName: true, description: true, quantity: true, unitPrice: true, discount: true, lineTotal: true } },
       project: {
@@ -643,6 +644,10 @@ export async function getInvoiceByToken(token: string) {
       },
     },
   })
+  if (!inv) return null
+  // Fold effective credit notes into one credits total so the printable balance matches the ledger (bug #5).
+  const creditsTotal = inv.creditNotes.reduce((s, c) => s.add(c.amount), new Prisma.Decimal(0))
+  return { ...inv, creditsTotal }
 }
 
 /** Save the given line items as a reusable invoice template. */

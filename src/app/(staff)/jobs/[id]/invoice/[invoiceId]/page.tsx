@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { Prisma } from '@prisma/client'
 import { BackLink } from '@/components/BackLink'
 import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guard'
@@ -24,6 +25,7 @@ export default async function InvoicePrintPage({
       invoiceNumber: true, type: true, status: true, total: true,
       amountPaid: true, invoiceDate: true, dueAt: true, poNumber: true, notes: true,
       billingNameSnapshot: true, billingEmailSnapshot: true,
+      creditNotes: { where: { NOT: { status: 'VOIDED' } }, select: { amount: true } },
       lines: { orderBy: { sortOrder: 'asc' }, select: { itemName: true, description: true, quantity: true, unitPrice: true, discount: true, lineTotal: true } },
       project: {
         select: {
@@ -37,6 +39,9 @@ export default async function InvoicePrintPage({
   })
   if (!invoice || invoice.project.id !== id) notFound()
 
+  // Credit-aware credits total so the printable balance matches the ledger (bug #5).
+  const docCredits = invoice.creditNotes.reduce((s, cn) => s.add(cn.amount), new Prisma.Decimal(0))
+
   return (
     <div className="min-h-screen bg-paper px-4 py-8">
       <div className="mx-auto mb-4 flex max-w-3xl items-center justify-between print:hidden">
@@ -44,7 +49,7 @@ export default async function InvoicePrintPage({
         <PrintButton />
       </div>
       <InvoiceFit />
-      <InvoiceDocument invoice={invoice} />
+      <InvoiceDocument invoice={{ ...invoice, creditsTotal: docCredits }} />
     </div>
   )
 }
