@@ -330,19 +330,30 @@ function EmptyLines() {
 
 function LineRow({ line, onChange, onRemove, nameLabel }: { line: Line; onChange: (patch: Partial<Line>) => void; onRemove: () => void; nameLabel: string }) {
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-12">
-      <div className="sm:col-span-7">
-        <TextInput aria-label={nameLabel} placeholder={nameLabel} value={line.description} onChange={(e) => onChange({ description: e.target.value })} />
+    <div className="flex flex-col gap-2 rounded-md border border-line p-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-12">
+        <div className="sm:col-span-7">
+          <TextInput aria-label={nameLabel} placeholder={nameLabel} value={line.description} onChange={(e) => onChange({ description: e.target.value })} />
+        </div>
+        <div className="sm:col-span-2">
+          <TextInput aria-label="Quantity" inputMode="numeric" value={String(line.quantity)} onChange={(e) => onChange({ quantity: Number(e.target.value) || 0 })} />
+        </div>
+        <div className="sm:col-span-2">
+          <TextInput aria-label="Unit price" inputMode="decimal" placeholder="0.00" value={line.unitPrice} onChange={(e) => onChange({ unitPrice: e.target.value })} />
+        </div>
+        <div className="sm:col-span-1">
+          <Button type="button" variant="secondary" size="sm" onClick={onRemove} aria-label="Remove line">Remove</Button>
+        </div>
       </div>
-      <div className="sm:col-span-2">
-        <TextInput aria-label="Quantity" inputMode="numeric" value={String(line.quantity)} onChange={(e) => onChange({ quantity: Number(e.target.value) || 0 })} />
-      </div>
-      <div className="sm:col-span-2">
-        <TextInput aria-label="Unit price" inputMode="decimal" placeholder="0.00" value={line.unitPrice} onChange={(e) => onChange({ unitPrice: e.target.value })} />
-      </div>
-      <div className="sm:col-span-1">
-        <Button type="button" variant="secondary" size="sm" onClick={onRemove} aria-label="Remove line">Remove</Button>
-      </div>
+      {/* What's included — prefilled from the package's inclusions when added; shown on the client quote. */}
+      <Textarea
+        aria-label="What's included"
+        placeholder="What's included (one item per line) - shown on the client's quote"
+        rows={line.details ? 4 : 2}
+        value={line.details ?? ''}
+        onChange={(e) => onChange({ details: e.target.value })}
+        className="text-sm"
+      />
     </div>
   )
 }
