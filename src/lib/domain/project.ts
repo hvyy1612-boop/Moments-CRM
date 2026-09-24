@@ -159,7 +159,7 @@ export async function closeJob(projectId: string, actorUserId: string | null = n
   return prisma.$transaction(async (tx) => {
     const project = await tx.project.findUnique({
       where: { id: projectId },
-      select: { id: true, companyId: true, lifecycleStatus: true },
+      select: { id: true, companyId: true, lifecycleStatus: true, packagePriceSnapshot: true },
     })
     if (!project) throw new Error('Job not found.')
     if (project.lifecycleStatus === 'CLOSED') return { alreadyClosed: true }
@@ -174,9 +174,21 @@ export async function closeJob(projectId: string, actorUserId: string | null = n
       where: { projectId, status: { not: 'VOID' } },
       select: INVOICE_MONEY_SELECT,
     })
-    const { outstanding } = getJobBalance(invoices.map(toInvoiceMoneyInput), null)
-    if (outstanding.greaterThan(0)) {
-      throw new Error(`This job still has ${outstanding.toFixed(2)} outstanding.`)
+    // Close only a truly settled job: canonical isFullySettled (money.ts / docs/25 Rule M4b), never raw
+    // outstanding - so a job with no invoice or a deposit-only invoice cannot be closed (bug #3). Agreed
+    // value = the accepted quote total, else the package price snapshot, else null.
+    const acceptedQuote = await tx.quoteVersion.findFirst({
+      where: { quote: { projectId }, status: 'ACCEPTED' },
+      select: { total: true },
+    })
+    const agreed = acceptedQuote?.total ?? project.packagePriceSnapshot ?? null
+    const bal = getJobBalance(invoices.map(toInvoiceMoneyInput), agreed)
+    if (!bal.isFullySettled) {
+      if (bal.outstanding.greaterThan(0)) throw new Error(`This job still has ${bal.outstanding.toFixed(2)} outstanding.`)
+      if (bal.overpaymentToResolve.greaterThan(0)) throw new Error(`This job has ${bal.overpaymentToResolve.toFixed(2)} overpaid to resolve first.`)
+      if (!bal.agreedValueKnown) throw new Error('This job has no agreed value yet. Accept a quote or set a package price before closing.')
+      if (bal.uninvoicedRemainder && bal.uninvoicedRemainder.greaterThan(0)) throw new Error(`This job is not fully invoiced yet (${bal.uninvoicedRemainder.toFixed(2)} still to bill).`)
+      throw new Error('This job is not fully settled yet.')
     }
 
     const blocking = await tx.workItem.count({

@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
 import type { AddGalleryItemInput, CreateGalleryInput } from '@/lib/validation/delivery'
+import { maybeAutoCompleteJob } from './project-workflow'
 
 /**
  * Delivery. Once a project is confirmed, staff prepare a gallery of the finished work and publish it
@@ -109,10 +110,10 @@ export async function publishGallery(galleryId: string, actorUserId: string | nu
       where: { id: galleryId },
       data: { status: 'PUBLISHED', publishedAt: now },
     })
-    await tx.project.update({
-      where: { id: gallery.projectId },
-      data: { lifecycleStatus: 'COMPLETED' },
-    })
+    // Publishing a gallery is a delivery FACT, not a completion command. Defer to the guarded resolver
+    // (all tasks done AND fully settled AND still an active job) so a cancelled job is never resurrected
+    // and an unpaid one is not marked complete (bug #1).
+    await maybeAutoCompleteJob(tx, gallery.projectId, actorUserId)
     await tx.auditLog.create({
       data: {
         action: 'gallery.published',

@@ -296,9 +296,11 @@ export async function toggleProjectTask(taskId: string, actorUserId: string) {
   const completing = task.status !== 'COMPLETED'
 
   const stageRank = new Map(PROJECT_STAGES.map((s, i) => [s.key, i]))
+  const optionalStages = new Set(PROJECT_STAGES.filter((s) => s.optional).map((s) => s.key))
   const rankOf = (t: { stage: string | null; order: number }) =>
     (stageRank.get(t.stage ?? '') ?? 999) * 100_000 + t.order
   const target = rankOf(task)
+  const targetStage = task.stage ?? ''
 
   await prisma.$transaction(async (tx) => {
     if (completing) {
@@ -306,7 +308,13 @@ export async function toggleProjectTask(taskId: string, actorUserId: string) {
         where: { projectId: task.projectId!, status: 'PENDING', type: { not: 'AUTO' } },
         select: { id: true, stage: true, order: true },
       })
-      const ids = pending.filter((t) => rankOf(t) <= target).map((t) => t.id)
+      // Cascade reconciles only legitimate predecessors: earlier tasks in mandatory stages or the SAME
+      // stage. It never sweeps a DIFFERENT optional stage (Pre-shoot / Video / Film / Album) - ticking a
+      // Delivery task must not silently complete unfinished optional add-on work (bug #4).
+      const ids = pending
+        .filter((t) => rankOf(t) <= target)
+        .filter((t) => !optionalStages.has(t.stage ?? '') || (t.stage ?? '') === targetStage)
+        .map((t) => t.id)
       await tx.workItem.updateMany({
         where: { id: { in: ids } },
         data: { status: 'COMPLETED', completedByUserId: actorUserId, completedAt: new Date() },
@@ -354,7 +362,7 @@ const AUTO_COMPLETE_FROM = new Set(['BOOKING_REQUESTED', 'CONFIRMED', 'IN_PRODUC
 export async function maybeAutoCompleteJob(tx: Tx, projectId: string, actorUserId: string | null) {
   const project = await tx.project.findUnique({
     where: { id: projectId },
-    select: { companyId: true, lifecycleStatus: true, invoices: { select: INVOICE_MONEY_SELECT } },
+    select: { companyId: true, lifecycleStatus: true, packagePriceSnapshot: true, invoices: { select: INVOICE_MONEY_SELECT } },
   })
   if (!project || !AUTO_COMPLETE_FROM.has(project.lifecycleStatus)) return
 
@@ -364,10 +372,16 @@ export async function maybeAutoCompleteJob(tx: Tx, projectId: string, actorUserI
   ])
   if (total === 0 || pending > 0) return // checklist not finished
 
-  // Outstanding via the Money foundation (docs/25): Σ per-invoice `owed` (credit-aware, no overpayment
-  // netting). Agreed value is irrelevant to `outstanding`, so pass null and read only that field.
-  const { outstanding } = getJobBalance(project.invoices.map(toInvoiceMoneyInput), null)
-  if (outstanding.greaterThan(0)) return // still owed - stay active so the balance isn't forgotten
+  // "Settled" is the canonical isFullySettled (money.ts / docs/25 Rule M4b), NOT raw outstanding: a job
+  // with no invoice (outstanding 0) or only a deposit paid must NOT auto-complete (bug #3). Agreed value
+  // = the accepted quote total, else the direct booking's package price snapshot, else null (unknown).
+  const acceptedQuote = await tx.quoteVersion.findFirst({
+    where: { quote: { projectId }, status: 'ACCEPTED' },
+    select: { total: true },
+  })
+  const agreed = acceptedQuote?.total ?? project.packagePriceSnapshot ?? null
+  const { isFullySettled } = getJobBalance(project.invoices.map(toInvoiceMoneyInput), agreed)
+  if (!isFullySettled) return // not fully invoiced + paid - stay active so nothing is forgotten
 
   await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'COMPLETED' } })
   await tx.auditLog.create({
