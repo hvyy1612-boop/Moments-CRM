@@ -254,12 +254,14 @@ function SendQuoteDialog({
   error: string | null
   onClose: () => void
 }) {
-  const defaultSubject = 'Your quote from Moments Photography and Film'
+  const defaultSubject = 'Your quotation from Moments Photography and Film'
   const defaultMessage =
     `Dear ${clientName},\n\n` +
-    `Thank you for considering Moments Photography and Film. I've prepared your quote - you can review it and accept online using the button below.\n\n` +
-    `If you have any questions at all, please don't hesitate to get in touch.\n\n` +
-    `Warm regards,\nMoments Photography and Film`
+    `Thank you for considering Moments Photography and Film.\n\n` +
+    `Please find your quotation enclosed. You are welcome to review the full details and confirm your booking online using the button below.\n\n` +
+    `Should you have any questions or wish to discuss anything further, please do not hesitate to contact us.\n\n` +
+    `We look forward to the opportunity of working with you.\n\n` +
+    `Kind regards,\nMoments Photography and Film`
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
