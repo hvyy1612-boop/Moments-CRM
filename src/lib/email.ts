@@ -15,7 +15,10 @@ import { maskEmail } from '@/lib/text'
  */
 const LOG_LINKS = process.env.NODE_ENV !== 'production'
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
-const emailEnabled = Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM)
+// Two optional providers: Gmail/SMTP (send FROM your own mailbox) takes precedence over Resend.
+const smtpEnabled = Boolean(process.env.SMTP_USER && process.env.SMTP_PASS)
+const resendEnabled = Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM)
+const emailEnabled = smtpEnabled || resendEnabled
 
 async function deliver(args: {
   to: string
@@ -34,6 +37,26 @@ async function deliver(args: {
     return
   }
   try {
+    if (smtpEnabled) {
+      // Gmail/SMTP: send from the studio's own mailbox (SMTP_USER) using an app password. Gmail requires
+      // the "from" to be that authenticated account (or an alias), so it defaults to SMTP_USER.
+      const nodemailer = (await import('nodemailer')).default
+      const port = Number(process.env.SMTP_PORT ?? '465')
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST ?? 'smtp.gmail.com',
+        port,
+        secure: port === 465,
+        auth: { user: process.env.SMTP_USER!, pass: process.env.SMTP_PASS! },
+      })
+      await transporter.sendMail({
+        from: process.env.EMAIL_FROM ?? process.env.SMTP_USER!,
+        to: args.to,
+        subject: args.subject,
+        html: args.html,
+      })
+      logger.info(args.event, { to: maskEmail(args.to), delivered: true, via: 'smtp' })
+      return
+    }
     const res = await fetch(RESEND_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -46,7 +69,7 @@ async function deliver(args: {
       logger.error(`${args.event}.failed`, { to: maskEmail(args.to), status: res.status })
       return
     }
-    logger.info(args.event, { to: maskEmail(args.to), delivered: true })
+    logger.info(args.event, { to: maskEmail(args.to), delivered: true, via: 'resend' })
   } catch (error) {
     logger.error(`${args.event}.error`, {
       to: maskEmail(args.to),
@@ -74,6 +97,24 @@ export async function sendEmailWithResult(args: {
 }): Promise<SendResult> {
   if (!emailEnabled) return { outcome: 'SKIPPED_NO_PROVIDER' }
   try {
+    if (smtpEnabled) {
+      const nodemailer = (await import('nodemailer')).default
+      const port = Number(process.env.SMTP_PORT ?? '465')
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST ?? 'smtp.gmail.com',
+        port,
+        secure: port === 465,
+        auth: { user: process.env.SMTP_USER!, pass: process.env.SMTP_PASS! },
+      })
+      const info = await transporter.sendMail({
+        from: process.env.EMAIL_FROM ?? process.env.SMTP_USER!,
+        to: args.to,
+        subject: args.subject,
+        html: args.html,
+      })
+      logger.info('notification.send.accepted', { to: maskEmail(args.to), via: 'smtp' })
+      return { outcome: 'ACCEPTED', providerMessageId: info.messageId ?? null }
+    }
     const res = await fetch(RESEND_ENDPOINT, {
       method: 'POST',
       headers: {

@@ -25,6 +25,14 @@ const envSchema = z
     // adapter falls back to recording intent only (dev). EMAIL_FROM must be a Resend-verified sender.
     RESEND_API_KEY: z.string().min(1).optional(),
     EMAIL_FROM: z.string().min(1).optional(),
+    // Gmail (or any) SMTP delivery (optional). Set SMTP_USER + SMTP_PASS (a Gmail App password - 2FA
+    // must be on) to send real email FROM that Gmail account. SMTP_HOST/SMTP_PORT default to Gmail
+    // (smtp.gmail.com:465). When set, SMTP takes precedence over Resend. The "from" is EMAIL_FROM if
+    // set, otherwise SMTP_USER (Gmail requires the from to be the authenticated account or its alias).
+    SMTP_HOST: z.string().min(1).optional(),
+    SMTP_PORT: z.string().min(1).optional(),
+    SMTP_USER: z.string().min(1).optional(),
+    SMTP_PASS: z.string().min(1).optional(),
     // Authorises the Vercel Cron daily reminder call (Bearer token). Reminders run only when set.
     CRON_SECRET: z.string().min(1).optional(),
     STRIPE_SECRET_KEY: z.string().min(1).optional(),
@@ -51,6 +59,13 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         path: ['RESEND_API_KEY'],
         message: 'RESEND_API_KEY and EMAIL_FROM must be set together to send email',
+      })
+    }
+    if (Boolean(val.SMTP_USER) !== Boolean(val.SMTP_PASS)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['SMTP_USER'],
+        message: 'SMTP_USER and SMTP_PASS must be set together to send email via SMTP',
       })
     }
   })
