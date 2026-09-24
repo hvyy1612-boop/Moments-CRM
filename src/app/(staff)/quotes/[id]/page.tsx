@@ -14,11 +14,11 @@ import { formatSydneyDate } from '@/lib/time'
 import { PageHeader } from '@/components/PageHeader'
 import { BackLink } from '@/components/BackLink'
 import { Button } from '@/components/ui/Button'
-import { CopyLinkField } from '@/components/ui/CopyLinkField'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
-import { shareQuoteAction, acceptQuoteAction, reviseQuoteAction, duplicateQuoteAction } from '../actions'
+import { QuoteActionsMenu } from './QuoteActionsMenu'
+import { shareQuoteAction, acceptQuoteAction } from '../actions'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Quote - Moments' }
@@ -129,26 +129,34 @@ export default async function QuoteDetailPage({
       {sp.acceptError ? <div className="mb-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.acceptError}</div> : null}
       {sp.shareError ? <div className="mb-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.shareError}</div> : null}
 
-      {/* Action bar (status-aware) */}
+      {/* Action bar — about the QUOTE itself, status-aware. Primary = the main thing to do in this state;
+          cross-record navigation (Job/Contract/Invoice) lives in the metadata + related records, and
+          utilities (duplicate/revision/copy link) live in the ••• overflow. */}
       <div className="mb-5 flex flex-wrap items-center gap-2">
         {isDraft ? (
           <>
             <Link href={`/quotes/${id}/edit`}><Button>Edit</Button></Link>
+            <Link href={`/quotes/${id}/preview`}><Button variant="secondary">Preview quote</Button></Link>
             <FormButton action={shareQuoteAction} csrf={csrf} quoteId={id} label="Share quote" variant="secondary" />
           </>
-        ) : null}
-        {isSentOrViewed ? (
+        ) : (
           <>
-            <Link href={clientLinkPath} target="_blank"><Button variant="secondary">Open client view</Button></Link>
-            <FormButton action={acceptQuoteAction} csrf={csrf} quoteId={id} label="Mark as accepted" />
-            <FormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Revise" variant="secondary" />
+            <Link href={`/quotes/${id}/preview`}><Button>Preview quote</Button></Link>
+            {isSentOrViewed || eff === 'ACCEPTED' ? (
+              <Link href={clientLinkPath} target="_blank"><Button variant="secondary">Open client view</Button></Link>
+            ) : null}
+            {isSentOrViewed ? (
+              <FormButton action={acceptQuoteAction} csrf={csrf} quoteId={id} label="Mark as accepted" variant="secondary" />
+            ) : null}
           </>
-        ) : null}
-        {eff === 'ACCEPTED' && quote.project ? (
-          <Link href={`/jobs/${quote.project.id}`}><Button>Open job</Button></Link>
-        ) : null}
-        {eff === 'EXPIRED' ? <FormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Revise" /> : null}
-        <FormButton action={duplicateQuoteAction} csrf={csrf} quoteId={id} label="Duplicate" variant="ghost" />
+        )}
+        <QuoteActionsMenu
+          quoteId={id}
+          csrf={csrf}
+          clientLinkPath={clientLinkPath}
+          showCopyLink={isSentOrViewed || eff === 'ACCEPTED'}
+          showRevise={!isDraft}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -207,26 +215,17 @@ export default async function QuoteDetailPage({
         </div>
 
         <div className="flex flex-col gap-4">
-          {/* Client link */}
-          {(isSentOrViewed || eff === 'ACCEPTED') ? (
-            <section className="rounded-md border border-line bg-surface p-5">
-              <h2 className="mb-2 text-sm font-bold text-ink">Client link</h2>
-              <p className="mb-2 text-xs text-ink-muted">Share this private link with the client to view the quote.</p>
-              <CopyLinkField path={clientLinkPath} />
-            </section>
-          ) : null}
-
-          {/* Related records */}
+          {/* Related records — navigable rows (click the name to open), not primary quote actions. */}
           <section className="rounded-md border border-line bg-surface p-5">
             <h2 className="mb-3 text-sm font-bold text-ink">Related records</h2>
             <div className="flex flex-col gap-3 text-sm">
               <div>
                 <div className="text-xs uppercase tracking-wide text-muted">Contract</div>
-                {contract ? (
-                  <div className="mt-1 flex items-center justify-between gap-2">
-                    <span className="text-ink">Booking agreement</span>
+                {contract && quote.project ? (
+                  <Link href={`/jobs/${quote.project.id}`} className="mt-1 flex items-center justify-between gap-2 text-ink hover:text-accent">
+                    <span>Booking agreement <span aria-hidden className="text-muted">↗</span></span>
                     <StatusPill tone={contract.status === 'SIGNED' ? 'good' : 'info'}>{label(contract.status)}</StatusPill>
-                  </div>
+                  </Link>
                 ) : <p className="mt-1 text-ink-muted">No contract yet.</p>}
               </div>
               <div className="border-t border-line pt-3">
@@ -236,9 +235,11 @@ export default async function QuoteDetailPage({
                 ) : (
                   <ul className="mt-1 flex flex-col gap-1.5">
                     {invoices.map((inv) => (
-                      <li key={inv.id} className="flex items-center justify-between gap-2">
-                        <span className="text-ink">{inv.invoiceNumber} · {label(inv.type)}</span>
-                        <StatusPill tone={INVOICE_TONE[inv.status] ?? 'neutral'}>{inv.status.toLowerCase().replace(/_/g, ' ')}</StatusPill>
+                      <li key={inv.id}>
+                        <Link href={`/finance/${inv.id}`} className="flex items-center justify-between gap-2 text-ink hover:text-accent">
+                          <span>{inv.invoiceNumber} · {label(inv.type)} <span aria-hidden className="text-muted">↗</span></span>
+                          <StatusPill tone={INVOICE_TONE[inv.status] ?? 'neutral'}>{inv.status.toLowerCase().replace(/_/g, ' ')}</StatusPill>
+                        </Link>
                       </li>
                     ))}
                   </ul>
@@ -288,19 +289,20 @@ function Row({ term, value, strong, muted }: { term: string; value: string; stro
   )
 }
 
-function LineGroup({ title, lines }: { title: string; lines: { id: string; description: string; details: string | null; quantity: number; lineTotal: Prisma.Decimal }[] }) {
+function LineGroup({ title, lines }: { title: string; lines: { id: string; description: string; details: string | null; quantity: number; unitPrice: Prisma.Decimal; lineTotal: Prisma.Decimal }[] }) {
   if (lines.length === 0) return null
   return (
     <div>
       <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">{title}</h3>
-      <ul className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-3">
         {lines.map((l) => (
-          <li key={l.id} className="border-b border-line pb-2 last:border-b-0">
+          <li key={l.id} className="border-b border-line pb-3 last:border-b-0">
             <div className="flex items-start justify-between gap-3">
-              <span className="font-medium text-ink">{l.description} <span className="font-normal text-ink-muted">× {l.quantity}</span></span>
+              <span className="font-medium text-ink">{l.description}</span>
               <span className="tabular-nums text-ink">{formatAud(l.lineTotal)}</span>
             </div>
-            {l.details ? <p className="mt-1 whitespace-pre-line text-xs text-ink-muted">{l.details}</p> : null}
+            <div className="mt-0.5 text-xs text-muted">Qty {l.quantity} × {formatAud(l.unitPrice)}</div>
+            {l.details ? <p className="mt-1 whitespace-pre-line text-sm text-ink-muted">{l.details}</p> : null}
           </li>
         ))}
       </ul>
