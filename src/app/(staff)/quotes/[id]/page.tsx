@@ -136,7 +136,7 @@ export default async function QuoteDetailPage({
           <>
             <Link href={`/quotes/${id}/edit`}><Button>Edit</Button></Link>
             <Link href={`/quotes/${id}/preview`}><Button variant="secondary">Preview quote</Button></Link>
-            <FormButton action={shareQuoteAction} csrf={csrf} quoteId={id} label="Share quote" variant="secondary" />
+            <FormButton action={shareQuoteAction} csrf={csrf} quoteId={id} label="Send quote" variant="secondary" />
           </>
         ) : (
           <>
