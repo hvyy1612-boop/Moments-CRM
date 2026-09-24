@@ -16,6 +16,7 @@ import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyTime, sydneyYmd } from '@/lib/time'
 import { titleCase } from '@/lib/text'
 import { AppShell } from '../../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { InvoiceWorkspace } from './InvoiceWorkspace'
 import { CollapsiblePreview } from './CollapsiblePreview'
 import { InvoiceMoreMenu } from './InvoiceMoreMenu'
@@ -138,6 +139,7 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
     <>
       <div className="print:hidden">
       <AppShell user={user} csrf={csrf} active="finance">
+      <PageContainer variant="standard">
       <div>
         {/* Header (matches the Clients detail page: chevron back-link, ruled title, quiet actions). */}
         <BackLink href="/finance" label="Payments" />
@@ -209,7 +211,8 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
           </CollapsiblePreview>
         </div>
       </div>
-      </AppShell>
+      </PageContainer>
+    </AppShell>
       </div>
 
       {/* Print target: only the invoice sheet prints, so the PDF is the invoice alone — one page for a

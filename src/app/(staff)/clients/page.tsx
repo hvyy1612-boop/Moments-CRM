@@ -7,6 +7,7 @@ import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { titleCase } from '@/lib/text'
 import { AppShell } from '../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { ClientsTable } from './ClientsTable'
 import { SortSelect, DEFAULT_SORT, type SortValue } from './SortSelect'
 import { FilterMenu } from './FilterMenu'
@@ -99,9 +100,7 @@ export default async function ClientsPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
-      {/* Content measure: a generous cap (fills a normal wide screen, reins in only ultra-wide monitors).
-          Header, toolbar and table cap together, staying aligned. */}
-      <div className="w-full max-w-7xl">
+      <PageContainer variant="standard">
         {/* Header (shared PageHeader pattern: uppercase section eyebrow, then title + description). */}
         <div className="text-xs font-semibold uppercase tracking-widest text-muted">Studio</div>
         <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
@@ -165,7 +164,7 @@ export default async function ClientsPage({
             <ClientsTable rows={rows} csrf={csrf} canDelete={user.role === 'ADMIN'} backParam={backParam} />
           )}
         </div>
-      </div>
+      </PageContainer>
     </AppShell>
   )
 }

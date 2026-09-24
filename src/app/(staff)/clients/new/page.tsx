@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { AppShell } from '../../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { createClientAction } from '../actions'
 import { ClientForm } from '../ClientForm'
 
@@ -17,7 +18,7 @@ export default async function NewClientPage() {
 
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
-      <div className="mx-auto max-w-2xl">
+      <PageContainer variant="narrow">
         <BackLink href="/clients" label="Clients" />
         <h1 className="mt-3 text-2xl font-semibold text-ink">Add a client</h1>
         <p className="mt-1 text-base text-ink-muted">
@@ -25,7 +26,7 @@ export default async function NewClientPage() {
           work through, and becomes a job once you convert it.
         </p>
         <ClientForm action={createClientAction} csrf={csrf} submitLabel="Add client" showEnquiryFields />
-      </div>
+      </PageContainer>
     </AppShell>
   )
 }

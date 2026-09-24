@@ -18,6 +18,7 @@ import {
 } from '@/features/enquiries/status'
 import { getEnquiryBoard } from '@/lib/domain/enquiry-workflow'
 import { AppShell } from '../../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import {
   convertEnquiryAction,
   logClientReplyAction,
@@ -101,7 +102,7 @@ export default async function EnquiryDetailPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="enquiries" bareHeader>
-      <div className="w-full">
+      <PageContainer variant="standard">
         <BackLink href={backHref} label="Enquiries" />
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -338,7 +339,7 @@ export default async function EnquiryDetailPage({
             )}
           </div>
         </div>
-      </div>
+      </PageContainer>
     </AppShell>
   )
 }

@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
+import { COL } from '@/components/ui/tableColumns'
 import { formatSydneyDate } from '@/lib/time'
 import { ClientRowMenu } from './ClientRowMenu'
 
@@ -36,7 +37,7 @@ export function ClientsTable({ rows, csrf, canDelete, backParam }: { rows: Clien
     {
       key: 'client',
       header: 'Client',
-      width: 'minmax(17em, 1.5fr)',
+      width: COL.flexHigh,
       cell: (r) => (
         <Link href={`/clients/${r.id}${backParam}`} className="flex min-w-0 items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">
@@ -49,14 +50,14 @@ export function ClientsTable({ rows, csrf, canDelete, backParam }: { rows: Clien
         </Link>
       ),
     },
-    { key: 'phone', header: 'Phone', width: 'minmax(9em, 1fr)', cell: (r) => <span className="tabular block truncate text-ink-muted">{r.phone ?? '-'}</span> },
-    { key: 'source', header: 'Source', width: 'minmax(9em, 1fr)', cell: (r) => <span className="block truncate text-ink-muted">{r.source}</span> },
-    { key: 'jobs', header: 'Jobs', width: 'minmax(5em, 0.55fr)', cell: (r) => <span className="tabular text-ink">{r.projects}</span> },
-    { key: 'since', header: 'Client since', width: 'minmax(10em, 1fr)', cell: (r) => <span className="tabular block truncate whitespace-nowrap text-ink-muted">{formatSydneyDate(r.since)}</span> },
+    { key: 'phone', header: 'Phone', width: COL.constrained, cell: (r) => <span className="tabular block truncate text-ink-muted">{r.phone ?? '-'}</span> },
+    { key: 'source', header: 'Source', width: COL.constrained, cell: (r) => <span className="block truncate text-ink-muted">{r.source}</span> },
+    { key: 'jobs', header: 'Jobs', width: COL.count, cell: (r) => <span className="tabular text-ink">{r.projects}</span> },
+    { key: 'since', header: 'Client since', width: COL.constrained, cell: (r) => <span className="tabular block truncate whitespace-nowrap text-ink-muted">{formatSydneyDate(r.since)}</span> },
     {
       key: 'actions',
       header: '',
-      width: '2.75em',
+      width: COL.fixed,
       align: 'right',
       cell: (r) => <ClientRowMenu clientId={r.id} name={r.name} email={r.email} csrf={csrf} canDelete={canDelete} backParam={backParam} />,
     },

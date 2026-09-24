@@ -11,6 +11,7 @@ import { listActivePackages } from '@/lib/domain/package'
 import { listInvoiceTemplates } from '@/lib/domain/finance'
 import { titleCase } from '@/lib/text'
 import { AppShell } from '../../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { InvoiceEditor } from '../../jobs/[id]/InvoiceEditor'
 
 export const runtime = 'nodejs'
@@ -45,6 +46,7 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
 
     return (
       <AppShell user={user} csrf={csrf} active="finance">
+      <PageContainer variant="narrow">
         <BackLink href="/finance" label="Payments" />
         <h1 className="mt-2 font-serif text-2xl font-semibold text-ink">New invoice</h1>
         <p className="mt-1 text-sm text-ink-muted">{project.client.displayName} · {project.name} ({project.code})</p>
@@ -55,7 +57,8 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
         ) : (
           <InvoiceEditor csrf={csrf} projectId={project.id} packages={packages} templates={templates} />
         )}
-      </AppShell>
+      </PageContainer>
+    </AppShell>
     )
   }
 
@@ -75,6 +78,7 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
 
   return (
     <AppShell user={user} csrf={csrf} active="finance">
+      <PageContainer variant="narrow">
       <BackLink href="/finance" label="Payments" />
       <h1 className="mt-2 font-serif text-2xl font-semibold text-ink">New invoice</h1>
       <p className="mt-1 text-sm text-ink-muted">{clientName ? `Choose a job for ${clientName} to invoice.` : 'Choose a job to invoice.'}</p>
@@ -96,6 +100,7 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
           ))}
         </ul>
       )}
+    </PageContainer>
     </AppShell>
   )
 }

@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/Button'
 import { CopyLinkField } from '@/components/ui/CopyLinkField'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { AppShell } from '../../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { shareQuoteAction, acceptQuoteAction, reviseQuoteAction, duplicateQuoteAction } from '../actions'
 
 export const runtime = 'nodejs'
@@ -104,6 +105,7 @@ export default async function QuoteDetailPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="quotes">
+      <PageContainer variant="standard">
       <BackLink href="/quotes" label="Quotes" />
       <PageHeader
         eyebrow="Studio"
@@ -263,6 +265,7 @@ export default async function QuoteDetailPage({
           </section>
         </div>
       </div>
+    </PageContainer>
     </AppShell>
   )
 }

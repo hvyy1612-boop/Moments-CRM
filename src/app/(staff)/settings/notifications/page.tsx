@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button'
 import { Checkbox, TextInput } from '@/components/ui/form'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { AppShell } from '../../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { updateAutomationSettingsAction } from './actions'
 
 export const runtime = 'nodejs'
@@ -70,6 +71,7 @@ export default async function NotificationsSettingsPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="settings">
+      <PageContainer variant="narrow">
       <BackLink href="/settings" label="Settings" />
       <PageHeader
         eyebrow="System"
@@ -173,6 +175,7 @@ export default async function NotificationsSettingsPage({
           </div>
         )}
       </section>
+    </PageContainer>
     </AppShell>
   )
 }

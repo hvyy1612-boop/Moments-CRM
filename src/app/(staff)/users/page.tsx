@@ -7,6 +7,7 @@ import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
 import { PageHeader } from '@/components/PageHeader'
 import { AppShell } from '../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { AddStaffForm } from './AddStaffForm'
 import { StaffTeams, type StaffRowData, type TeamGroup } from './StaffTeams'
 
@@ -51,7 +52,7 @@ export default async function UsersPage() {
 
   return (
     <AppShell user={user} csrf={csrf} active="users">
-      <div className="mx-auto max-w-3xl">
+      <PageContainer variant="standard">
         <PageHeader
           eyebrow="System"
           title="Users"
@@ -73,7 +74,7 @@ export default async function UsersPage() {
           <span className="font-semibold text-ink">Remove</span> deletes the account and revokes access
         </p>
         <StaffTeams teams={teams} csrf={csrf} currentUserId={user.id} />
-      </div>
+      </PageContainer>
     </AppShell>
   )
 }

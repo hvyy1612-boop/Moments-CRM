@@ -102,6 +102,14 @@
   --radius-md: 8px;
   --radius-lg: 10px;
 
+  /* Page-content measures (Moments layout system; Carbon-inspired: fluid -> bounded -> centred). These
+     feed the PageContainer variants only - pages never hard-code a max-width. NARROW = readable/form
+     measure; STANDARD = list/table pages; WIDE = dense dashboards/detail. Tailwind v4 turns each
+     --container-* into a `max-w-*` utility (max-w-page-narrow / -standard / -wide). */
+  --container-page-narrow: 42rem;
+  --container-page-standard: 80rem;
+  --container-page-wide: 96rem;
+
   /* Type scale - hand-tuned (D-08), bumped up for readability (Monday benchmark). Base UI text 16px. */
   --text-xs: 13px;
   --text-sm: 15px;

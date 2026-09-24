@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
+import { COL } from '@/components/ui/tableColumns'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 
 export type QuoteRow = {
@@ -30,11 +31,11 @@ const label = (s: string) => s.charAt(0) + s.slice(1).toLowerCase()
  */
 export function QuotesTable({ rows }: { rows: QuoteRow[] }) {
   const columns: DataColumn<QuoteRow>[] = [
-    { key: 'quote', header: 'Quote', width: 'minmax(7em, 0.8fr)', cell: (r) => <Link href={`/quotes/${r.id}`} className="tabular block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.number}</Link> },
-    { key: 'client', header: 'Client', width: 'minmax(14em, 2fr)', cell: (r) => <span className="block truncate text-ink">{r.client}</span> },
-    { key: 'amount', header: 'Amount', width: 'minmax(7em, 0.8fr)', align: 'right', cell: (r) => <span className="tabular text-ink">{r.amount}</span> },
-    { key: 'status', header: 'Status', width: 'minmax(8em, 0.9fr)', cell: (r) => <StatusPill tone={STATUS_TONE[r.status] ?? 'neutral'}>{label(r.status)}</StatusPill> },
-    { key: 'updated', header: 'Updated', width: 'minmax(9em, 1fr)', cell: (r) => <span className="tabular block truncate whitespace-nowrap text-ink-muted">{r.updated}</span> },
+    { key: 'quote', header: 'Quote', width: COL.constrained, cell: (r) => <Link href={`/quotes/${r.id}`} className="tabular block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.number}</Link> },
+    { key: 'client', header: 'Client', width: COL.flexHigh, cell: (r) => <span className="block truncate text-ink">{r.client}</span> },
+    { key: 'amount', header: 'Amount', width: COL.constrained, align: 'right', cell: (r) => <span className="tabular text-ink">{r.amount}</span> },
+    { key: 'status', header: 'Status', width: COL.content, cell: (r) => <StatusPill tone={STATUS_TONE[r.status] ?? 'neutral'}>{label(r.status)}</StatusPill> },
+    { key: 'updated', header: 'Updated', width: COL.constrained, cell: (r) => <span className="tabular block truncate whitespace-nowrap text-ink-muted">{r.updated}</span> },
   ]
 
   return (

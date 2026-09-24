@@ -8,6 +8,7 @@ import { maskEmail } from '@/lib/text'
 import { formatSydneyDateTime } from '@/lib/time'
 import { PageHeader } from '@/components/PageHeader'
 import { AppShell } from '../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Activity - Moments' }
@@ -52,6 +53,7 @@ export default async function ActivityPage() {
 
   return (
     <AppShell user={user} csrf={csrf} active="activity">
+      <PageContainer variant="standard">
       <div>
         <PageHeader
           eyebrow="System"
@@ -139,6 +141,7 @@ export default async function ActivityPage() {
           </div>
         </section>
       </div>
+      </PageContainer>
     </AppShell>
   )
 }

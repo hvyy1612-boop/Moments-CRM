@@ -22,6 +22,7 @@ import { statusKind, statusLabel } from '@/features/projects/lifecycle'
 import { ENQUIRY_STAGE_LABEL, ENQUIRY_STAGE_KIND, OPEN_STATUSES, waitingLabel } from '@/features/enquiries/status'
 import { currentActionText } from '@/features/enquiries/workflow'
 import { AppShell } from '../../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { setClientConsentAction } from '../actions'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { DeleteClientButton } from './DeleteClientButton'
@@ -273,7 +274,7 @@ export default async function ClientDetailPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
-      <div className="w-full">
+      <PageContainer variant="standard">
         <BackLink href={backHref} label="Clients" />
 
         {/* Header: identity + quiet actions. */}
@@ -519,7 +520,7 @@ export default async function ClientDetailPage({
             </SectionCard>
           </div>
         </div>
-      </div>
+      </PageContainer>
     </AppShell>
   )
 }

@@ -10,6 +10,7 @@ import { CLOSED_STATUSES } from '@/features/projects/lifecycle'
 import { PROJECT_STAGES } from '@/features/projects/workflow'
 import { getCompanyStatusLabels } from '@/lib/domain/status-labels'
 import { AppShell } from '../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { JobsTable, type JobRow } from './JobsTable'
 import { JobSortSelect, JOB_DEFAULT_SORT, type JobSortValue } from './JobSortSelect'
 import { JobFilterMenu } from './JobFilterMenu'
@@ -129,7 +130,7 @@ export default async function JobsPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="jobs" bareHeader>
-      <div className="w-full max-w-7xl">
+      <PageContainer variant="standard">
         <div className="text-xs font-semibold uppercase tracking-widest text-muted">Studio</div>
         <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-md">
@@ -182,7 +183,7 @@ export default async function JobsPage({
             <JobsTable rows={rows} backParam={backParam} labels={labels} csrf={csrf} canEdit={canEdit} />
           )}
         </div>
-      </div>
+      </PageContainer>
     </AppShell>
   )
 }

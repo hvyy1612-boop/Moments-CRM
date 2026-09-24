@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
+import { PageContainer } from '@/components/PageContainer'
+import { COL } from '@/components/ui/tableColumns'
 import { Popover } from './Popover'
 import { StageControl } from './StageControl'
 import { AddEnquiryButton } from './AddEnquiryButton'
@@ -69,7 +71,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
     {
       key: 'client',
       header: 'Client',
-      width: '2fr',
+      width: COL.flexHigh,
       cell: (r) => (
         <Link href={`/enquiries/${r.id}`} className="flex min-w-0 items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">{initials(r.name)}</span>
@@ -77,15 +79,15 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
         </Link>
       ),
     },
-    { key: 'event', header: 'Event', width: '1.4fr', cell: (r) => <span className="block truncate text-ink-muted">{r.event}</span> },
-    { key: 'stage', header: 'Stage', width: '1.4fr', cell: (r) => <StageControl enquiryId={r.id} status={r.status} csrf={csrf} /> },
-    { key: 'waiting', header: 'Waiting on', width: '1fr', cell: (r) => <span className="text-ink-muted">{waitingLabel(r.waitingOn)}</span> },
-    { key: 'shoot', header: 'Shoot date', width: '1.2fr', cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{r.shootDate ?? 'Not set'}</span> },
-    { key: 'actions', header: '', width: '2.75em', align: 'right', cell: (r) => <EnquiryActionsCell row={r} csrf={csrf} /> },
+    { key: 'event', header: 'Event', width: COL.flexMedium, cell: (r) => <span className="block truncate text-ink-muted">{r.event}</span> },
+    { key: 'stage', header: 'Stage', width: COL.content, cell: (r) => <StageControl enquiryId={r.id} status={r.status} csrf={csrf} /> },
+    { key: 'waiting', header: 'Waiting on', width: COL.constrained, cell: (r) => <span className="text-ink-muted">{waitingLabel(r.waitingOn)}</span> },
+    { key: 'shoot', header: 'Shoot date', width: COL.constrained, cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{r.shootDate ?? 'Not set'}</span> },
+    { key: 'actions', header: '', width: COL.fixed, align: 'right', cell: (r) => <EnquiryActionsCell row={r} csrf={csrf} /> },
   ]
 
   return (
-    <div className="w-full max-w-7xl">
+    <PageContainer variant="standard">
       {/* Header */}
       <div className="text-xs font-semibold uppercase tracking-widest text-muted">Studio</div>
       <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
@@ -180,7 +182,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
           emptyMessage="No enquiries in this view yet."
         />
       </div>
-    </div>
+    </PageContainer>
   )
 }
 

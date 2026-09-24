@@ -8,6 +8,7 @@ import { getInvoiceBalance } from '@/lib/domain/money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
 import { formatAud } from '@/lib/money'
 import { AppShell } from '../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { PaymentsView } from './PaymentsView'
 import { type Row } from './InvoiceTable'
 
@@ -46,7 +47,7 @@ export default async function FinancePage() {
 
   return (
     <AppShell user={user} csrf={csrf} active="finance" bareHeader>
-      <div className="w-full max-w-7xl">
+      <PageContainer variant="standard">
         {/* Header (shared PageHeader pattern: uppercase section eyebrow, then title + description). */}
         <div className="text-xs font-semibold uppercase tracking-widest text-muted">Operations</div>
         <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
@@ -72,7 +73,7 @@ export default async function FinancePage() {
         <div className="mt-7">
           <PaymentsView rows={rows} />
         </div>
-      </div>
+      </PageContainer>
     </AppShell>
   )
 }

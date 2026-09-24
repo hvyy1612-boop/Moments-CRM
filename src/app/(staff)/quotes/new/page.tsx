@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { BackLink } from '@/components/BackLink'
 import { Button } from '@/components/ui/Button'
 import { AppShell } from '../../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { createQuoteForEnquiryAction } from '../actions'
 
 export const runtime = 'nodejs'
@@ -28,6 +29,7 @@ export default async function CreateQuotePage() {
 
   return (
     <AppShell user={user} csrf={csrf} active="quotes">
+      <PageContainer variant="narrow">
       <BackLink href="/quotes" label="Quotes" />
       <PageHeader eyebrow="Studio" title="Create quote" description="Choose the enquiry this quote is for." />
 
@@ -52,6 +54,7 @@ export default async function CreateQuotePage() {
           ))}
         </ul>
       )}
+    </PageContainer>
     </AppShell>
   )
 }

@@ -6,6 +6,7 @@ import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { AppShell } from '../../../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { updateClientAction } from '../../actions'
 import { ClientForm } from '../../ClientForm'
 
@@ -41,7 +42,7 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
 
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
-      <div className="mx-auto max-w-2xl">
+      <PageContainer variant="narrow">
         <BackLink href={`/clients/${client.id}`} label="Back" />
         <h1 className="mt-3 text-2xl font-semibold text-ink">Edit {client.displayName}</h1>
         <ClientForm
@@ -64,7 +65,7 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
             isCompany: client.type === 'BUSINESS',
           }}
         />
-      </div>
+      </PageContainer>
     </AppShell>
   )
 }

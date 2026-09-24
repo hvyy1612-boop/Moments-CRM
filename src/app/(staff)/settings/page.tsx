@@ -7,6 +7,7 @@ import { requireRole } from '@/lib/auth/guard'
 import { ResetLinkGenerator } from '@/features/settings/components/ResetLinkGenerator'
 import { PageHeader } from '@/components/PageHeader'
 import { AppShell } from '../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Settings - Moments' }
@@ -27,6 +28,7 @@ export default async function SettingsPage() {
 
   return (
     <AppShell user={user} csrf={csrf} active="settings">
+      <PageContainer variant="standard">
       <PageHeader eyebrow="System" title="Settings" description="Studio configuration and account tools." />
       {can(user, 'USER_MANAGE') ? (
         <div className="mb-4">
@@ -60,6 +62,7 @@ export default async function SettingsPage() {
           </div>
         ))}
       </div>
+      </PageContainer>
     </AppShell>
   )
 }

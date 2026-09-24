@@ -9,6 +9,7 @@ import { formatSydneyDate } from '@/lib/time'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { AppShell } from '../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { QuotesTable, type QuoteRow } from './QuotesTable'
 
 export const runtime = 'nodejs'
@@ -37,7 +38,7 @@ export default async function QuotesPage() {
   return (
     <AppShell user={user} csrf={csrf} active="quotes">
       {/* Content measure so the table fills a normal wide screen without sprawling (shared with the other lists). */}
-      <div className="w-full max-w-7xl">
+      <PageContainer variant="standard">
         <PageHeader
           eyebrow="Studio"
           title="Quotes"
@@ -53,7 +54,7 @@ export default async function QuotesPage() {
         <div className="mt-4">
           <QuotesTable rows={rows} />
         </div>
-      </div>
+      </PageContainer>
     </AppShell>
   )
 }

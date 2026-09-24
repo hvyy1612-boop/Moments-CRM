@@ -8,6 +8,7 @@ import { getDashboardData, type DashboardPeriod } from '@/lib/domain/dashboard'
 import { ENQUIRY_STAGE_LABEL } from '@/features/enquiries/status'
 import { Donut, HBars, RevenueChart } from '@/components/dashboard/DashCharts'
 import { AppShell } from '../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { DashboardFilters } from './DashboardFilters'
 
 export const runtime = 'nodejs'
@@ -136,7 +137,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return (
     <AppShell user={user} csrf={csrf} active="dashboard" bareHeader>
-      <div className="w-full">
+      <PageContainer variant="wide">
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-xl">
@@ -280,7 +281,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </section>
           </div>
         </div>
-      </div>
+      </PageContainer>
     </AppShell>
   )
 }

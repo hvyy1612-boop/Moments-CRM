@@ -3,6 +3,7 @@
 import type { ComponentProps } from 'react'
 import Link from 'next/link'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
+import { COL } from '@/components/ui/tableColumns'
 import { formatSydneyDate } from '@/lib/time'
 import { stageLabel } from '@/features/projects/workflow'
 import { StatusPicker } from '@/features/projects/components/StatusPicker'
@@ -38,7 +39,7 @@ export function JobsTable({ rows, backParam, labels, csrf, canEdit }: { rows: Jo
     {
       key: 'client',
       header: 'Client',
-      width: '1.8fr',
+      width: COL.flexHigh,
       cell: (r) => (
         <Link href={`/jobs/${r.id}${backParam}`} className="flex min-w-0 items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">{initials(r.client)}</span>
@@ -49,7 +50,7 @@ export function JobsTable({ rows, backParam, labels, csrf, canEdit }: { rows: Jo
     {
       key: 'job',
       header: 'Job',
-      width: '1.6fr',
+      width: COL.flexMedium,
       cell: (r) => (
         <Link href={`/jobs/${r.id}${backParam}`} className="block min-w-0">
           <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.name}</span>
@@ -57,11 +58,11 @@ export function JobsTable({ rows, backParam, labels, csrf, canEdit }: { rows: Jo
         </Link>
       ),
     },
-    { key: 'enquired', header: 'Enquired', width: '1.1fr', cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{formatSydneyDate(r.enquiredAt)}</span> },
+    { key: 'enquired', header: 'Enquired', width: COL.constrained, cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{formatSydneyDate(r.enquiredAt)}</span> },
     {
       key: 'task',
       header: 'Next task',
-      width: '2fr',
+      width: COL.flexMedium,
       cell: (r) =>
         r.nextTask ? (
           <div className="min-w-0">
@@ -72,8 +73,8 @@ export function JobsTable({ rows, backParam, labels, csrf, canEdit }: { rows: Jo
           <span className="text-ink-muted">No pending task</span>
         ),
     },
-    { key: 'status', header: 'Status', width: '1.3fr', cell: (r) => <StatusPicker projectId={r.id} current={r.label} labels={labels} csrf={csrf} canEdit={canEdit} /> },
-    { key: 'actions', header: '', width: '2.75em', align: 'right', cell: (r) => <JobRowMenu jobId={r.id} clientId={r.clientId} backParam={backParam} /> },
+    { key: 'status', header: 'Status', width: COL.content, cell: (r) => <StatusPicker projectId={r.id} current={r.label} labels={labels} csrf={csrf} canEdit={canEdit} /> },
+    { key: 'actions', header: '', width: COL.fixed, align: 'right', cell: (r) => <JobRowMenu jobId={r.id} clientId={r.clientId} backParam={backParam} /> },
   ]
 
   return (

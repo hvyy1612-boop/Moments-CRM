@@ -16,6 +16,7 @@ import { statusLabel } from '@/features/projects/lifecycle'
 import { listActivePackages } from '@/lib/domain/package'
 import { quoteDisplayNumber } from '@/lib/domain/quote'
 import { AppShell } from '../../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import {
   closeJobAction,
   createContractAction,
@@ -234,7 +235,7 @@ export async function CaseDetail({
 
   return (
     <AppShell user={user} csrf={csrf} active={section} bareHeader>
-      <div className="w-full">
+      <PageContainer variant="wide">
         <BackLink href={backHref} label={backLabel} />
         <div className="mt-3 flex flex-wrap items-baseline justify-between gap-3">
           <div>
@@ -535,7 +536,7 @@ export async function CaseDetail({
             </div>
           </div>
         ) : null}
-      </div>
+      </PageContainer>
     </AppShell>
   )
 }

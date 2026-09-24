@@ -14,6 +14,7 @@ import {
 import { getTodayCockpit } from '@/lib/domain/today'
 import { PageHeader } from '@/components/PageHeader'
 import { AppShell } from '../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { AddEventButton, CalendarClient, SyncButton } from './CalendarClient'
 import { AgendaView } from './AgendaView'
 
@@ -69,6 +70,7 @@ export default async function CalendarPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="calendar">
+      <PageContainer variant="full">
       <PageHeader
         eyebrow="Operations"
         title="Calendar"
@@ -117,6 +119,7 @@ export default async function CalendarPage({
       ) : (
         <CalendarClient data={data!} csrf={csrf} canManage={canManage} clients={clients} />
       )}
+      </PageContainer>
     </AppShell>
   )
 }

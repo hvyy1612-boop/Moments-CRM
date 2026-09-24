@@ -10,6 +10,7 @@ import { sydneyDateTimeParts } from '@/lib/time'
 import { PageHeader } from '@/components/PageHeader'
 import { BackLink } from '@/components/BackLink'
 import { AppShell } from '../../../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { QuoteBuilder } from '../../../jobs/[id]/QuoteBuilder'
 import { saveQuoteAction, sendQuoteAction } from '../../actions'
 
@@ -48,6 +49,7 @@ export default async function QuoteEditPage({ params }: { params: Promise<{ id: 
 
   return (
     <AppShell user={user} csrf={csrf} active="quotes">
+      <PageContainer variant="narrow">
       <BackLink href={`/quotes/${id}`} label="Quote" />
       <PageHeader eyebrow="Studio" title={`Edit ${quoteDisplayNumber(quote.reference, quote.seq)}`} description={`Quote for ${clientName}.`} />
       <section className="rounded-md border border-line bg-surface p-5">
@@ -77,6 +79,7 @@ export default async function QuoteEditPage({ params }: { params: Promise<{ id: 
           sendLabel="Send quote to client"
         />
       </section>
+    </PageContainer>
     </AppShell>
   )
 }

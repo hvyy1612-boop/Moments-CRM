@@ -5,6 +5,7 @@ import { requireRole } from '@/lib/auth/guard'
 import { listActivePackages } from '@/lib/domain/package'
 import { PageHeader } from '@/components/PageHeader'
 import { AppShell } from '../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { PricingCalculator, type CatalogPackage } from './PricingCalculator'
 
 export const runtime = 'nodejs'
@@ -25,12 +26,14 @@ export default async function PricingPage() {
 
   return (
     <AppShell user={user} csrf={csrf} active="pricing">
+      <PageContainer variant="narrow">
       <PageHeader
         eyebrow="Studio"
         title="Price calculator"
         description="Build a quote from the catalogue and see the total, GST and deposit update as you go. Package prices are fixed catalogue values; this screen only totals them."
       />
       <PricingCalculator packages={catalog} />
+      </PageContainer>
     </AppShell>
   )
 }
