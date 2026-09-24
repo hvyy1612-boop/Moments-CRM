@@ -11,6 +11,7 @@ import { PROJECT_STAGES } from '@/features/projects/workflow'
 import { getCompanyStatusLabels } from '@/lib/domain/status-labels'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
+import { PageHeader } from '@/components/PageHeader'
 import { JobsTable, type JobRow } from './JobsTable'
 import { JobSortSelect, JOB_DEFAULT_SORT, type JobSortValue } from './JobSortSelect'
 import { JobFilterMenu } from './JobFilterMenu'
@@ -131,17 +132,12 @@ export default async function JobsPage({
   return (
     <AppShell user={user} csrf={csrf} active="jobs" bareHeader>
       <PageContainer variant="standard">
-        <div className="text-xs font-semibold uppercase tracking-widest text-muted">Studio</div>
-        <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
-          <div className="max-w-md">
-            <h1 className="text-3xl font-semibold text-ink">Jobs</h1>
-            <p className="mt-1 text-sm text-ink-muted">Booked work from planning through the shoot, editing and delivery.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* Search moved into the table's own active-search field (client-side, live). */}
-            {canEdit ? <AddJobButton csrf={csrf} /> : null}
-          </div>
-        </div>
+        <PageHeader
+          eyebrow="Studio"
+          title="Jobs"
+          description="Booked work from planning through the shoot, editing and delivery."
+          actions={canEdit ? <AddJobButton csrf={csrf} /> : null}
+        />
 
         <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
           <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Job status">

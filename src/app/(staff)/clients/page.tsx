@@ -8,6 +8,7 @@ import { prisma } from '@/lib/db'
 import { titleCase } from '@/lib/text'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
+import { PageHeader } from '@/components/PageHeader'
 import { ClientsTable } from './ClientsTable'
 import { ImportedBanner } from './ImportedBanner'
 import { SortSelect, DEFAULT_SORT, type SortValue } from './SortSelect'
@@ -103,46 +104,43 @@ export default async function ClientsPage({
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
       <PageContainer variant="standard">
-        {/* Header (shared PageHeader pattern: uppercase section eyebrow, then title + description). */}
-        <div className="text-xs font-semibold uppercase tracking-widest text-muted">Studio</div>
-        <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-semibold text-ink">Clients</h1>
-            <p className="mt-1 text-sm text-ink-muted">Manage client profiles and contact information.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* Search moved into the table's own active-search field (client-side, live). */}
-            {/* Import / Export surfaced as primary buttons (were hidden in a "..." menu). Import opens the
-                bulk CSV page; Export is a plain anchor so the CSV route's attachment downloads in place. */}
-            <Link
-              href="/clients/import"
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 3v12" /><path d="m8 11 4 4 4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-              </svg>
-              Import
-            </Link>
-            <a
-              href={exportHref}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 15V3" /><path d="m8 7 4-4 4 4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-              </svg>
-              Export
-            </a>
-            <Link
-              href="/clients/new"
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              Add client
-            </Link>
-          </div>
-        </div>
+        <PageHeader
+          eyebrow="Studio"
+          title="Clients"
+          description="Manage client profiles and contact information."
+          actions={
+            <>
+              {/* Import opens the bulk CSV page; Export is a plain anchor so the CSV attachment downloads in place. */}
+              <Link
+                href="/clients/import"
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 3v12" /><path d="m8 11 4 4 4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                </svg>
+                Import
+              </Link>
+              <a
+                href={exportHref}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 15V3" /><path d="m8 7 4-4 4 4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                </svg>
+                Export
+              </a>
+              <Link
+                href="/clients/new"
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                Add client
+              </Link>
+            </>
+          }
+        />
 
         <ImportedBanner count={importedCount} />
 

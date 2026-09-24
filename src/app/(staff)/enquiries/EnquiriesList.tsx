@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { PageContainer } from '@/components/PageContainer'
+import { PageHeader } from '@/components/PageHeader'
 import { COL } from '@/components/ui/tableColumns'
 import { Popover } from './Popover'
 import { StageControl } from './StageControl'
@@ -88,18 +89,12 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
 
   return (
     <PageContainer variant="standard">
-      {/* Header */}
-      <div className="text-xs font-semibold uppercase tracking-widest text-muted">Studio</div>
-      <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
-        <div className="max-w-xl">
-          <h1 className="text-3xl font-semibold text-ink">Enquiries</h1>
-          <p className="mt-1 text-sm text-ink-muted">Your sales pipeline - from first enquiry to booking. Booked leads stay here as a record and also open as a Job.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Search moved into the table's own active-search field (client-side, live). */}
-          <AddEnquiryButton csrf={csrf} />
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Studio"
+        title="Enquiries"
+        description="Your sales pipeline - from first enquiry to booking. Booked leads stay here as a record and also open as a Job."
+        actions={<AddEnquiryButton csrf={csrf} />}
+      />
 
       {/* Stage tabs + toolbar */}
       <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">

@@ -9,6 +9,7 @@ import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-
 import { formatAud } from '@/lib/money'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
+import { PageHeader } from '@/components/PageHeader'
 import { PaymentsView } from './PaymentsView'
 import { type Row } from './InvoiceTable'
 
@@ -48,15 +49,11 @@ export default async function FinancePage() {
   return (
     <AppShell user={user} csrf={csrf} active="finance" bareHeader>
       <PageContainer variant="standard">
-        {/* Header (shared PageHeader pattern: uppercase section eyebrow, then title + description). */}
-        <div className="text-xs font-semibold uppercase tracking-widest text-muted">Operations</div>
-        <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-semibold text-ink">Payments</h1>
-            <p className="mt-1 text-sm text-ink-muted">Track invoices, balances and payment status.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* Search moved into PaymentsView's active-search field (client-side, live, across groups). */}
+        <PageHeader
+          eyebrow="Operations"
+          title="Payments"
+          description="Track invoices, balances and payment status."
+          actions={
             <Link
               href="/finance/new"
               className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
@@ -66,8 +63,8 @@ export default async function FinancePage() {
               </svg>
               New invoice
             </Link>
-          </div>
-        </div>
+          }
+        />
 
         {/* Active search + grouped tables (Outstanding / Paid / Draft & void). */}
         <div className="mt-7">
