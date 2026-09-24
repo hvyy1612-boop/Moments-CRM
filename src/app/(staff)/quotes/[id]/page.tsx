@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
@@ -110,21 +109,21 @@ export default async function QuoteDetailPage({
       <PageHeader
         eyebrow="Studio"
         title={`${quoteDisplayNumber(quote.reference, quote.seq)} · ${clientName}`}
-        actions={<StatusPill tone={STATUS_TONE[eff] ?? 'neutral'}>{label(eff)}</StatusPill>}
       />
 
-      {/* Header meta */}
-      <dl className="mb-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
-        <Meta term="Client" value={clientName} />
-        <Meta term={quote.project ? 'Job' : 'Enquiry'} value={
-          quote.project ? <Link href={`/jobs/${quote.project.id}`} className="text-accent hover:underline">{jobName}</Link>
-          : quote.enquiry ? <Link href={`/enquiries/${quote.enquiry.id}`} className="text-accent hover:underline">{jobName}</Link>
-          : jobName
-        } />
-        <Meta term="Shoot date" value={shootDate ? formatSydneyDate(shootDate) : '—'} />
-        <Meta term="Issued" value={v.issueDate ? formatSydneyDate(v.issueDate) : v.sentToClientAt ? formatSydneyDate(v.sentToClientAt) : '—'} />
-        <Meta term="Valid until" value={v.validUntil ? formatSydneyDate(v.validUntil) : '—'} />
-      </dl>
+      {/* Compact status + context line — status is a quiet chip, and only fields that are actually set are
+          shown (progressive disclosure, NN/g). Job/Enquiry is reached by its name, not a button. */}
+      <div className="-mt-1 mb-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-muted">
+        <StatusPill tone={STATUS_TONE[eff] ?? 'neutral'}>{label(eff)}</StatusPill>
+        {quote.project ? (
+          <Link href={`/jobs/${quote.project.id}`} className="text-ink hover:text-accent">{jobName}</Link>
+        ) : quote.enquiry ? (
+          <Link href={`/enquiries/${quote.enquiry.id}`} className="text-ink hover:text-accent">{jobName}</Link>
+        ) : <span className="text-ink">{jobName}</span>}
+        {shootDate ? <><span aria-hidden>·</span><span>Shoot {formatSydneyDate(shootDate)}</span></> : null}
+        {v.issueDate ? <><span aria-hidden>·</span><span>Issued {formatSydneyDate(v.issueDate)}</span></> : null}
+        {v.validUntil ? <><span aria-hidden>·</span><span>Valid until {formatSydneyDate(v.validUntil)}</span></> : null}
+      </div>
 
       {sp.acceptError ? <div className="mb-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.acceptError}</div> : null}
       {sp.shareError ? <div className="mb-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.shareError}</div> : null}
@@ -176,35 +175,39 @@ export default async function QuoteDetailPage({
             )}
           </section>
 
-          {/* Pricing */}
-          <section className="rounded-md border border-line bg-surface p-5">
-            <h2 className="mb-3 text-sm font-bold text-ink">Pricing</h2>
-            <div className="ml-auto flex w-full max-w-sm flex-col gap-1 text-sm">
-              <Row term="Subtotal (excl. GST)" value={formatAud(v.subtotal)} muted />
-              <Row term="GST" value={formatAud(v.taxTotal)} muted />
-              <div className="my-1 border-t border-line" />
-              <Row term="Total (incl. GST)" value={formatAud(v.total)} strong />
-            </div>
-          </section>
+          {/* Pricing — shown once the quote has line items (no empty $0 block on a blank draft). */}
+          {v.lines.length > 0 ? (
+            <section className="rounded-md border border-line bg-surface p-5">
+              <h2 className="mb-3 text-sm font-bold text-ink">Pricing</h2>
+              <div className="ml-auto flex w-full max-w-sm flex-col gap-1 text-sm">
+                <Row term="Subtotal (excl. GST)" value={formatAud(v.subtotal)} muted />
+                <Row term="GST" value={formatAud(v.taxTotal)} muted />
+                <div className="my-1 border-t border-line" />
+                <Row term="Total (incl. GST)" value={formatAud(v.total)} strong />
+              </div>
+            </section>
+          ) : null}
 
-          {/* Payment schedule */}
-          <section className="rounded-md border border-line bg-surface p-5">
-            <h2 className="mb-3 text-sm font-bold text-ink">Payment schedule</h2>
-            {dep ? (
-              <ul className="flex flex-col gap-2 text-sm">
-                <li className="flex items-center justify-between gap-3 border-b border-line pb-2">
-                  <div><div className="text-ink">Booking deposit</div><div className="text-xs text-muted">{v.depositPercent}% · due on acceptance</div></div>
-                  <span className="tabular-nums font-medium text-ink">{formatAud(dep.deposit)}</span>
-                </li>
-                <li className="flex items-center justify-between gap-3">
-                  <div><div className="text-ink">Remaining balance</div><div className="text-xs text-muted">{100 - (v.depositPercent ?? 0)}% · due before the shoot</div></div>
-                  <span className="tabular-nums font-medium text-ink">{formatAud(dep.balance)}</span>
-                </li>
-              </ul>
-            ) : (
-              <p className="text-sm text-ink-muted">Full payment of {formatAud(v.total)}. Set a deposit in the editor for a split schedule.</p>
-            )}
-          </section>
+          {/* Payment schedule — only once there's real pricing (no empty $0 section). */}
+          {v.total.greaterThan(0) ? (
+            <section className="rounded-md border border-line bg-surface p-5">
+              <h2 className="mb-3 text-sm font-bold text-ink">Payment schedule</h2>
+              {dep ? (
+                <ul className="flex flex-col gap-2 text-sm">
+                  <li className="flex items-center justify-between gap-3 border-b border-line pb-2">
+                    <div><div className="text-ink">Booking deposit</div><div className="text-xs text-muted">{v.depositPercent}% · due on acceptance</div></div>
+                    <span className="tabular-nums font-medium text-ink">{formatAud(dep.deposit)}</span>
+                  </li>
+                  <li className="flex items-center justify-between gap-3">
+                    <div><div className="text-ink">Remaining balance</div><div className="text-xs text-muted">{100 - (v.depositPercent ?? 0)}% · due before the shoot</div></div>
+                    <span className="tabular-nums font-medium text-ink">{formatAud(dep.balance)}</span>
+                  </li>
+                </ul>
+              ) : (
+                <p className="text-sm text-ink-muted">Full payment of {formatAud(v.total)} on acceptance. Set a deposit in the editor for a split schedule.</p>
+              )}
+            </section>
+          ) : null}
 
           {v.notes ? (
             <section className="rounded-md border border-line bg-surface p-5">
@@ -215,38 +218,39 @@ export default async function QuoteDetailPage({
         </div>
 
         <div className="flex flex-col gap-4">
-          {/* Related records — navigable rows (click the name to open), not primary quote actions. */}
-          <section className="rounded-md border border-line bg-surface p-5">
-            <h2 className="mb-3 text-sm font-bold text-ink">Related records</h2>
-            <div className="flex flex-col gap-3 text-sm">
-              <div>
-                <div className="text-xs uppercase tracking-wide text-muted">Contract</div>
+          {/* Related records — only appears once a contract or invoice actually exists (progressive
+              disclosure); navigable rows, not primary quote actions. */}
+          {(contract && quote.project) || invoices.length > 0 ? (
+            <section className="rounded-md border border-line bg-surface p-5">
+              <h2 className="mb-3 text-sm font-bold text-ink">Related records</h2>
+              <div className="flex flex-col gap-3 text-sm">
                 {contract && quote.project ? (
-                  <Link href={`/jobs/${quote.project.id}`} className="mt-1 flex items-center justify-between gap-2 text-ink hover:text-accent">
-                    <span>Booking agreement <span aria-hidden className="text-muted">↗</span></span>
-                    <StatusPill tone={contract.status === 'SIGNED' ? 'good' : 'info'}>{label(contract.status)}</StatusPill>
-                  </Link>
-                ) : <p className="mt-1 text-ink-muted">No contract yet.</p>}
+                  <div>
+                    <div className="text-xs uppercase tracking-wide text-muted">Contract</div>
+                    <Link href={`/jobs/${quote.project.id}`} className="mt-1 flex items-center justify-between gap-2 text-ink hover:text-accent">
+                      <span>Booking agreement <span aria-hidden className="text-muted">↗</span></span>
+                      <StatusPill tone={contract.status === 'SIGNED' ? 'good' : 'info'}>{label(contract.status)}</StatusPill>
+                    </Link>
+                  </div>
+                ) : null}
+                {invoices.length > 0 ? (
+                  <div className={contract && quote.project ? 'border-t border-line pt-3' : undefined}>
+                    <div className="text-xs uppercase tracking-wide text-muted">Invoices</div>
+                    <ul className="mt-1 flex flex-col gap-1.5">
+                      {invoices.map((inv) => (
+                        <li key={inv.id}>
+                          <Link href={`/finance/${inv.id}`} className="flex items-center justify-between gap-2 text-ink hover:text-accent">
+                            <span>{inv.invoiceNumber} · {label(inv.type)} <span aria-hidden className="text-muted">↗</span></span>
+                            <StatusPill tone={INVOICE_TONE[inv.status] ?? 'neutral'}>{inv.status.toLowerCase().replace(/_/g, ' ')}</StatusPill>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
-              <div className="border-t border-line pt-3">
-                <div className="text-xs uppercase tracking-wide text-muted">Invoices</div>
-                {invoices.length === 0 ? (
-                  <p className="mt-1 text-ink-muted">No invoice issued yet.</p>
-                ) : (
-                  <ul className="mt-1 flex flex-col gap-1.5">
-                    {invoices.map((inv) => (
-                      <li key={inv.id}>
-                        <Link href={`/finance/${inv.id}`} className="flex items-center justify-between gap-2 text-ink hover:text-accent">
-                          <span>{inv.invoiceNumber} · {label(inv.type)} <span aria-hidden className="text-muted">↗</span></span>
-                          <StatusPill tone={INVOICE_TONE[inv.status] ?? 'neutral'}>{inv.status.toLowerCase().replace(/_/g, ' ')}</StatusPill>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          </section>
+            </section>
+          ) : null}
 
           {/* Activity */}
           <section className="rounded-md border border-line bg-surface p-5">
@@ -268,15 +272,6 @@ export default async function QuoteDetailPage({
       </div>
     </PageContainer>
     </AppShell>
-  )
-}
-
-function Meta({ term, value }: { term: string; value: ReactNode }) {
-  return (
-    <div>
-      <dt className="text-xs uppercase tracking-wide text-muted">{term}</dt>
-      <dd className="mt-0.5 text-ink">{value}</dd>
-    </div>
   )
 }
 
