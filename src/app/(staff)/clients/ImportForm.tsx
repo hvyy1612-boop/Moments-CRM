@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState, useRef, type ChangeEvent } from 'react'
+import { useActionState, useState, type ChangeEvent } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { importClientsAction, type ImportState } from './actions'
@@ -10,27 +10,32 @@ const INITIAL: ImportState = { status: 'idle' }
 
 export function ImportForm({ csrf }: { csrf: string }) {
   const [state, action, pending] = useActionState(importClientsAction, INITIAL)
-  const taRef = useRef<HTMLTextAreaElement>(null)
+  // Controlled so an uploaded file's contents are definitely part of the submitted form.
+  const [csv, setCsv] = useState('')
 
   function onFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    file.text().then((text) => {
-      if (taRef.current) taRef.current.value = text
-    })
+    file.text().then((text) => setCsv(text))
   }
+
+  const done = state.status === 'done' ? state : null
+  const tone = !done ? 'info' : done.created > 0 ? 'info' : done.failed > 0 ? 'danger' : 'info'
 
   return (
     <form action={action} className="flex max-w-2xl flex-col gap-4">
       <input type="hidden" name="csrf" value={csrf} />
 
       {state.status === 'error' ? <Alert tone="danger" title={state.message} /> : null}
-      {state.status === 'done' ? (
-        <Alert tone={state.created > 0 ? 'info' : 'danger'} title="Import finished">
-          Created {state.created} · skipped {state.skipped} (already existed) · failed {state.failed}.{' '}
+      {done ? (
+        <Alert tone={tone} title="Import finished">
+          Created {done.created} · skipped {done.skipped} (already existed) · failed {done.failed}.{' '}
           <Link href="/clients" className="font-medium text-accent-ink hover:underline">View clients</Link>
-          {state.created === 0 && state.failed > 0 ? (
+          {done.created === 0 && done.failed > 0 ? (
             <span className="mt-1 block text-ink-muted">Nothing was created. Check each line reads <span className="tabular">name, email, phone</span> with a valid email - a row without a valid email is skipped.</span>
+          ) : null}
+          {done.created === 0 && done.failed === 0 && done.skipped > 0 ? (
+            <span className="mt-1 block text-ink-muted">Every row was already a client (matched by email), so nothing new was added - they are already in your list. To add someone, use a row with an email that is not in the system yet.</span>
           ) : null}
         </Alert>
       ) : null}
@@ -46,7 +51,8 @@ export function ImportForm({ csrf }: { csrf: string }) {
         <textarea
           id="csv"
           name="csv"
-          ref={taRef}
+          value={csv}
+          onChange={(e) => setCsv(e.target.value)}
           rows={10}
           placeholder="name, email, phone"
           className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent focus:ring-1 focus:ring-accent"
