@@ -113,7 +113,7 @@ export async function sendQuote(quoteId: string, actorUserId: string | null) {
     if (!quote || !quote.currentVersion) throw new Error('Quote not found.')
     const version = quote.currentVersion
     if (version.status !== 'DRAFT') throw new Error('This quote has already been sent.')
-    if (version.total.lessThanOrEqualTo(0)) throw new Error('Add at least one line before sending.')
+    if (version.total.lessThanOrEqualTo(0)) throw new Error('This quote has no items yet. Add a package or add-on to the quote before sending it.')
 
     await tx.quoteVersion.update({ where: { id: version.id }, data: { status: 'SENT', sentToClientAt: now } })
     await tx.quote.update({ where: { id: quoteId }, data: { status: 'SENT' } })
