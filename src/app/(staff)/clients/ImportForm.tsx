@@ -26,9 +26,12 @@ export function ImportForm({ csrf }: { csrf: string }) {
 
       {state.status === 'error' ? <Alert tone="danger" title={state.message} /> : null}
       {state.status === 'done' ? (
-        <Alert tone="info" title="Import finished">
+        <Alert tone={state.created > 0 ? 'info' : 'danger'} title="Import finished">
           Created {state.created} · skipped {state.skipped} (already existed) · failed {state.failed}.{' '}
           <Link href="/clients" className="font-medium text-accent-ink hover:underline">View clients</Link>
+          {state.created === 0 && state.failed > 0 ? (
+            <span className="mt-1 block text-ink-muted">Nothing was created. Check each line reads <span className="tabular">name, email, phone</span> with a valid email - a row without a valid email is skipped.</span>
+          ) : null}
         </Alert>
       ) : null}
 
@@ -39,7 +42,7 @@ export function ImportForm({ csrf }: { csrf: string }) {
 
       <div>
         <label htmlFor="csv" className="mb-1 block text-sm font-medium text-ink">Or paste rows</label>
-        <p className="mb-1.5 text-xs text-ink-muted">One client per line: <span className="tabular">name, email, phone</span>. A header row is optional. Rows whose email already exists are skipped.</p>
+        <p className="mb-1.5 text-xs text-ink-muted">One client per line: <span className="tabular">name, email, phone</span>. Separated by commas or tabs, so you can paste straight from a spreadsheet. A header row is optional. Rows whose email already exists are skipped.</p>
         <textarea
           id="csv"
           name="csv"

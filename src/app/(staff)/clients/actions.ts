@@ -134,7 +134,9 @@ export async function importClientsAction(_prev: ImportState, formData: FormData
   const seen = new Set<string>()
 
   for (const line of lines) {
-    const cols = line.split(',').map((c) => c.trim())
+    // Accept comma, tab or semicolon between columns - pasting from Excel/Google Sheets is tab-separated,
+    // so a comma-only split silently failed every spreadsheet row (name/email/phone collapsed into one).
+    const cols = line.split(/[\t;,]/).map((c) => c.trim())
     const [name = '', email = '', phone = ''] = cols
     const key = email.toLowerCase()
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
