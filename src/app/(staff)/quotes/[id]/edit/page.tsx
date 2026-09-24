@@ -31,8 +31,8 @@ export default async function QuoteEditPage({ params }: { params: Promise<{ id: 
     where: { id },
     include: {
       currentVersion: { include: { lines: { orderBy: { sortOrder: 'asc' } } } },
-      enquiry: { select: { name: true, client: { select: { displayName: true } } } },
-      project: { select: { client: { select: { displayName: true } } } },
+      enquiry: { select: { name: true, email: true, client: { select: { displayName: true, email: true } } } },
+      project: { select: { client: { select: { displayName: true, email: true } } } },
     },
   })
   if (!quote || !quote.currentVersion) notFound()
@@ -40,6 +40,7 @@ export default async function QuoteEditPage({ params }: { params: Promise<{ id: 
   if (version.status !== 'DRAFT') redirect(`/quotes/${id}`) // accepted/sent quotes are read-only
 
   const clientName = quote.enquiry?.client?.displayName ?? quote.enquiry?.name ?? quote.project?.client?.displayName ?? 'Unknown'
+  const clientEmail = quote.enquiry?.client?.email ?? quote.enquiry?.email ?? quote.project?.client?.email ?? ''
   const packages = (await listActivePackages()).map((p) => ({
     id: p.id,
     name: p.name,
@@ -74,6 +75,8 @@ export default async function QuoteEditPage({ params }: { params: Promise<{ id: 
           initialReference={quoteDisplayNumber(quote.reference, quote.seq)}
           initialIssueDate={(version.issueDate ? sydneyDateTimeParts(version.issueDate) : sydneyDateTimeParts(new Date())).date}
           packages={packages}
+          clientName={clientName}
+          clientEmail={clientEmail}
           saveAction={saveQuoteAction}
           sendAction={sendQuoteAction}
           sendLabel="Send quote to client"

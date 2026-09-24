@@ -7,6 +7,7 @@ import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
 import { createQuoteForEnquiry, saveQuoteDraft, sendQuote, acceptQuote, reviseQuote, duplicateQuote } from '@/lib/domain/quote'
 import { saveQuoteSchema } from '@/lib/validation/quote'
+import { sendComposedQuoteEmail } from '@/lib/email'
 
 /**
  * Server actions for the Enquiry-stage Quotes feature (docs/31). Thin wrappers over the quote domain:
@@ -86,7 +87,8 @@ export async function saveQuoteAction(_prev: QuoteActionState, formData: FormDat
   return { status: 'success' }
 }
 
-/** Mark the quote SENT. Matches QuoteBuilder's action signature. */
+/** Mark the quote SENT, then email the client the staff-composed message. Matches QuoteBuilder's action
+ *  signature. Emailing is graceful: with no provider configured it records intent only (never throws). */
 export async function sendQuoteAction(_prev: QuoteActionState, formData: FormData): Promise<QuoteActionState> {
   const cookieStore = await cookies()
   if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
@@ -95,10 +97,19 @@ export async function sendQuoteAction(_prev: QuoteActionState, formData: FormDat
   const user = await requireStaff()
   const quoteId = str(formData, 'quoteId')
   if (!quoteId) return { status: 'error', message: 'Missing quote.' }
+  const to = str(formData, 'to').trim()
+  const subject = str(formData, 'subject')
+  const message = str(formData, 'message')
+  let viewToken: string | null = null
   try {
-    await sendQuote(quoteId, user.id)
+    const result = await sendQuote(quoteId, user.id)
+    viewToken = result?.viewToken ?? null
   } catch (error) {
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not send.' }
+  }
+  if (to && viewToken) {
+    const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    await sendComposedQuoteEmail({ to, subject, body: message, quoteLink: `${base}/quote/${viewToken}` })
   }
   revalidatePath(`/quotes/${quoteId}`)
   return { status: 'success' }

@@ -109,14 +109,37 @@ function button(href: string, label: string): string {
   return `<a href="${href}" style="display:inline-block;background:#20201e;color:#ffffff;text-decoration:none;font-weight:700;padding:11px 18px;border-radius:7px">${label}</a>`
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
 export type QuoteEmail = { to: string; clientName: string; quoteLink: string }
 
 export async function sendQuoteEmail(email: QuoteEmail): Promise<void> {
   const html = shell(
     'Your quote is ready',
-    `<p>Hi ${email.clientName}, your photography quote is ready to review.</p><p>${button(email.quoteLink, 'View your quote')}</p>`,
+    `<p>Hi ${escapeHtml(email.clientName)}, your photography quote is ready to review.</p><p>${button(email.quoteLink, 'View your quote')}</p>`,
   )
   await deliver({ to: email.to, subject: 'Your Moments quote', html, event: 'email.quote_sent', devLink: email.quoteLink })
+}
+
+export type ComposedQuoteEmail = { to: string; subject: string; body: string; quoteLink: string }
+
+/**
+ * Send the quote email with a staff-composed subject + body (the message written in the Send-quote
+ * dialog). The plain-text body becomes paragraphs, then the "View your quote" button/link is appended
+ * inside the Moments email shell. Graceful: when no provider is configured it only records intent.
+ */
+export async function sendComposedQuoteEmail(email: ComposedQuoteEmail): Promise<void> {
+  const paragraphs = email.body
+    .trim()
+    .split(/\n{2,}/)
+    .filter(Boolean)
+    .map((p) => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
+    .join('')
+  const subject = email.subject.trim() || 'Your Moments quote'
+  const html = shell(subject, `${paragraphs}<p>${button(email.quoteLink, 'View your quote')}</p>`)
+  await deliver({ to: email.to, subject, html, event: 'email.quote_sent', devLink: email.quoteLink })
 }
 
 export type ContractEmail = { to: string; clientName: string; contractLink: string }

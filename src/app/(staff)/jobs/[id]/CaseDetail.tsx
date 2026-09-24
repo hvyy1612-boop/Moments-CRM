@@ -412,6 +412,8 @@ export async function CaseDetail({
               initialReference={quoteDisplayNumber(quote.reference, quote.seq)}
               initialIssueDate={(version.issueDate ? sydneyDateTimeParts(version.issueDate) : sydneyDateTimeParts(new Date())).date}
               packages={packageOptions}
+              clientName={project.client.displayName}
+              clientEmail={project.client.email ?? ''}
               saveAction={saveQuoteAction}
               sendAction={sendQuoteAction}
             />

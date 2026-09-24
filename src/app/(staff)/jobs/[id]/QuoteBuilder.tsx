@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Field, FieldGrid, FormSection, Select, TextInput, Textarea } from '@/components/ui/form'
@@ -36,6 +36,8 @@ export function QuoteBuilder({
   initialReference,
   initialIssueDate,
   packages,
+  clientName,
+  clientEmail,
   saveAction,
   sendAction,
   sendLabel = 'Send to client',
@@ -53,14 +55,22 @@ export function QuoteBuilder({
   initialReference: string
   initialIssueDate: string
   packages: QuotePackage[]
+  clientName: string
+  clientEmail: string
   saveAction: QuoteFormAction
   sendAction: QuoteFormAction
   sendLabel?: string
 }) {
   const [lines, setLines] = useState<Line[]>(initialLines)
   const [depositPercent, setDepositPercent] = useState(initialDepositPercent || '30')
+  const [sendOpen, setSendOpen] = useState(false)
   const [saveState, save, saving] = useActionState(saveAction, IDLE)
   const [sendState, send, sending] = useActionState(sendAction, IDLE)
+
+  // Close the Send dialog once the quote has gone out.
+  useEffect(() => {
+    if (sendState.status === 'success') setSendOpen(false)
+  }, [sendState.status])
 
   const est = estimateTotals(lines.map((l) => ({ unitPriceCents: toCents(l.unitPrice), quantity: l.quantity || 0 })))
   const pct = Math.min(100, Math.max(0, Number.parseInt(depositPercent || '0', 10) || 0))
@@ -83,7 +93,7 @@ export function QuoteBuilder({
     <div className="mt-4 flex flex-col gap-5">
       {saveState.status === 'error' ? <Alert tone="danger" title={saveState.message} /> : null}
       {saveState.status === 'success' ? <Alert tone="success" title="Draft saved" /> : null}
-      {sendState.status === 'error' ? <Alert tone="danger" title={sendState.message} /> : null}
+      {sendState.status === 'success' ? <Alert tone="success" title="Quote sent to the client." /> : null}
 
       <form action={save} className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20em] lg:items-start">
         <input type="hidden" name="csrf" value={csrf} />
@@ -193,13 +203,100 @@ export function QuoteBuilder({
         </aside>
       </form>
 
-      <form action={send} className="border-t border-line pt-4">
-        <input type="hidden" name="csrf" value={csrf} />
-        <input type="hidden" name="quoteId" value={quoteId} />
-        <input type="hidden" name="projectId" value={projectId} />
+      <div className="border-t border-line pt-4">
         <p className="text-sm text-ink-muted">Save the draft first, then send the quote to the client.</p>
-        <Button type="submit" loading={sending} className="mt-3">{sendLabel}</Button>
-      </form>
+        <Button type="button" className="mt-3" onClick={() => setSendOpen(true)}>{sendLabel}</Button>
+      </div>
+
+      {sendOpen ? (
+        <SendQuoteDialog
+          csrf={csrf}
+          quoteId={quoteId}
+          projectId={projectId}
+          clientName={clientName}
+          clientEmail={clientEmail}
+          sendLabel={sendLabel}
+          send={send}
+          sending={sending}
+          error={sendState.status === 'error' ? sendState.message : null}
+          onClose={() => setSendOpen(false)}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * Compose-and-send dialog. Pre-fills the recipient (client email) and a Moments-branded covering note
+ * with the client's name already filled in; both the subject and message stay fully editable. The
+ * server appends the "View your quote" button/link and sends it (when an email provider is configured).
+ */
+function SendQuoteDialog({
+  csrf,
+  quoteId,
+  projectId,
+  clientName,
+  clientEmail,
+  sendLabel,
+  send,
+  sending,
+  error,
+  onClose,
+}: {
+  csrf: string
+  quoteId: string
+  projectId: string
+  clientName: string
+  clientEmail: string
+  sendLabel: string
+  send: (payload: FormData) => void
+  sending: boolean
+  error: string | null
+  onClose: () => void
+}) {
+  const defaultSubject = 'Your quote from Moments Photography and Film'
+  const defaultMessage =
+    `Dear ${clientName},\n\n` +
+    `Thank you for considering Moments Photography and Film. I've prepared your quote - you can review it and accept online using the button below.\n\n` +
+    `If you have any questions at all, please don't hesitate to get in touch.\n\n` +
+    `Warm regards,\nMoments Photography and Film`
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/30 p-4 sm:items-center" role="dialog" aria-modal="true" aria-label="Send quote">
+      <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
+      <div className="relative z-10 w-full max-w-lg rounded-md border border-line bg-surface p-6 shadow-lg">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <h2 className="text-lg font-semibold text-ink">Send quote</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="flex h-8 w-8 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-sunk hover:text-ink">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+          </button>
+        </div>
+        {error ? <div className="mb-3"><Alert tone="danger" title={error} /></div> : null}
+        <form action={send} className="flex flex-col gap-4">
+          <input type="hidden" name="csrf" value={csrf} />
+          <input type="hidden" name="quoteId" value={quoteId} />
+          <input type="hidden" name="projectId" value={projectId} />
+          <Field label="To" htmlFor="sq-to" hint="The client's email address.">
+            <TextInput id="sq-to" name="to" type="email" defaultValue={clientEmail} required placeholder="client@example.com" />
+          </Field>
+          <Field label="Subject" htmlFor="sq-subject">
+            <TextInput id="sq-subject" name="subject" defaultValue={defaultSubject} />
+          </Field>
+          <Field label="Message" htmlFor="sq-message" hint="The client's name is filled in for you; a 'View your quote' button is added automatically.">
+            <Textarea id="sq-message" name="message" rows={9} defaultValue={defaultMessage} />
+          </Field>
+          <div className="flex items-center gap-2">
+            <Button type="submit" loading={sending}>{sendLabel}</Button>
+            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
