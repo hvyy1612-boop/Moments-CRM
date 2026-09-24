@@ -60,6 +60,8 @@ export async function saveQuoteAction(_prev: QuoteActionState, formData: FormDat
   }
   const parsed = saveQuoteSchema.safeParse({
     lines,
+    reference: formData.get('reference') ?? '',
+    issueDate: formData.get('issueDate') ?? '',
     validUntil: formData.get('validUntil') ?? '',
     introduction: formData.get('introduction') ?? '',
     poNumber: formData.get('poNumber') ?? '',
@@ -74,6 +76,8 @@ export async function saveQuoteAction(_prev: QuoteActionState, formData: FormDat
       poNumber: parsed.data.poNumber,
       notes: parsed.data.notes,
       depositPercent: parsed.data.depositPercent,
+      reference: parsed.data.reference,
+      issueDate: new Date(parsed.data.issueDate),
     })
   } catch (error) {
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not save.' }

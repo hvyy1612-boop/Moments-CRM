@@ -631,6 +631,7 @@ model Quote {
   enquiryId        String?     @map("enquiry_id") @db.VarChar(30)
   projectId        String?     @map("project_id") @db.VarChar(30)
   seq              Int?
+  reference        String?     @db.VarChar(60) // editable, required Quote ID shown to the client (defaults to Q-seq)
   viewToken        String      @unique @map("view_token") @db.VarChar(64) // client xem quote qua link
   status           QuoteStatus @default(DRAFT) // cache của current version
   currentVersionId String?     @unique @map("current_version_id") @db.VarChar(30)
@@ -664,6 +665,7 @@ model QuoteVersion {
   poNumber             String?        @map("po_number") @db.VarChar(60)
   notes                String?        @db.Text
   depositPercent       Int?           @map("deposit_percent") // docs/31: booking deposit %; balance = 100 - this
+  issueDate            DateTime?      @map("issue_date") @db.Timestamptz // required in the editor; the date the quote is issued
   validUntil           DateTime?      @map("valid_until") @db.Timestamptz
   createdByUserId      String?        @map("created_by_user_id") @db.VarChar(30)
   sentToClientAt       DateTime?      @map("sent_to_client_at") @db.Timestamptz

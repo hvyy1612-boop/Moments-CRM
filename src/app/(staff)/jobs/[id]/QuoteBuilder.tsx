@@ -33,6 +33,8 @@ export function QuoteBuilder({
   initialPoNumber,
   initialNotes,
   initialDepositPercent,
+  initialReference,
+  initialIssueDate,
   packages,
   saveAction,
   sendAction,
@@ -48,6 +50,8 @@ export function QuoteBuilder({
   initialPoNumber: string
   initialNotes: string
   initialDepositPercent: string
+  initialReference: string
+  initialIssueDate: string
   packages: QuotePackage[]
   saveAction: QuoteFormAction
   sendAction: QuoteFormAction
@@ -89,10 +93,18 @@ export function QuoteBuilder({
         <input type="hidden" name="depositPercent" value={depositPercent} />
         <input type="hidden" name="linesJson" value={JSON.stringify(lines)} />
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Field label="Quote ID *" htmlFor="reference" hint="Required. Shown to the client.">
+            <TextInput id="reference" name="reference" required defaultValue={initialReference} placeholder="e.g. Q-0005" />
+          </Field>
+          <Field label="Issue date *" htmlFor="issueDate" hint="Required. The date the quote is issued.">
+            <TextInput id="issueDate" name="issueDate" type="date" required defaultValue={initialIssueDate} />
+          </Field>
           <Field label="PO number (optional)" htmlFor="poNumber" hint="The client's reference, if they use one.">
             <TextInput id="poNumber" name="poNumber" defaultValue={initialPoNumber} placeholder="e.g. PO-2026-014" />
           </Field>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Valid until" htmlFor="validUntil" hint="Optional. The quote expires after this date.">
             <TextInput id="validUntil" name="validUntil" type="date" defaultValue={validUntil} />
           </Field>

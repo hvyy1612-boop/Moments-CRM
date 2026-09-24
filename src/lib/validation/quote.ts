@@ -21,6 +21,9 @@ export const quoteLineSchema = z.object({
 
 export const saveQuoteSchema = z.object({
   lines: z.array(quoteLineSchema).min(1, 'Add at least one line.').max(50),
+  // Required (Studio-Ninja parity): a Quote ID and an Issue Date must be entered before saving.
+  reference: z.string({ invalid_type_error: 'Enter a quote ID.' }).trim().min(1, 'Enter a quote ID.').max(60),
+  issueDate: z.string({ invalid_type_error: 'Enter the issue date.' }).trim().min(1, 'Enter the issue date.'),
   validUntil: z
     .string()
     .trim()

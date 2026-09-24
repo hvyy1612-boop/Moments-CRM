@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { Alert } from '@/components/ui/Alert'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { prisma } from '@/lib/db'
-import { markQuoteViewed, effectiveQuoteStatus, formatQuoteNumber } from '@/lib/domain/quote'
+import { markQuoteViewed, effectiveQuoteStatus, quoteDisplayNumber } from '@/lib/domain/quote'
 import { computeDeposit } from '@/lib/domain/pricing'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate } from '@/lib/time'
@@ -46,8 +46,12 @@ export default async function ClientQuotePage({ params }: { params: Promise<{ to
     <main className="mx-auto w-full max-w-2xl px-4 py-12">
       <p className="text-sm font-medium uppercase tracking-wide text-accent">Moments Photography and Film</p>
       <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-2xl text-ink">Quote {formatQuoteNumber(quote.seq)}</h1>
-        {v.validUntil ? <span className="text-sm text-ink-muted">Valid until {formatSydneyDate(v.validUntil)}</span> : null}
+        <h1 className="text-2xl text-ink">Quote {quoteDisplayNumber(quote.reference, quote.seq)}</h1>
+        <span className="text-sm text-ink-muted">
+          {v.issueDate ? `Issued ${formatSydneyDate(v.issueDate)}` : ''}
+          {v.issueDate && v.validUntil ? ' · ' : ''}
+          {v.validUntil ? `Valid until ${formatSydneyDate(v.validUntil)}` : ''}
+        </span>
       </div>
       <p className="mt-1 text-ink-muted">Prepared for {clientName}.</p>
 

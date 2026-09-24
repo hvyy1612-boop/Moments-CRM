@@ -4,8 +4,9 @@ import { notFound, redirect } from 'next/navigation'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { formatQuoteNumber } from '@/lib/domain/quote'
+import { quoteDisplayNumber } from '@/lib/domain/quote'
 import { listActivePackages } from '@/lib/domain/package'
+import { sydneyDateTimeParts } from '@/lib/time'
 import { PageHeader } from '@/components/PageHeader'
 import { BackLink } from '@/components/BackLink'
 import { AppShell } from '../../../AppShell'
@@ -48,7 +49,7 @@ export default async function QuoteEditPage({ params }: { params: Promise<{ id: 
   return (
     <AppShell user={user} csrf={csrf} active="quotes">
       <BackLink href={`/quotes/${id}`} label="Quote" />
-      <PageHeader eyebrow="Studio" title={`Edit ${formatQuoteNumber(quote.seq)}`} description={`Quote for ${clientName}.`} />
+      <PageHeader eyebrow="Studio" title={`Edit ${quoteDisplayNumber(quote.reference, quote.seq)}`} description={`Quote for ${clientName}.`} />
       <section className="rounded-md border border-line bg-surface p-5">
         <QuoteBuilder
           csrf={csrf}
@@ -68,6 +69,8 @@ export default async function QuoteEditPage({ params }: { params: Promise<{ id: 
           initialPoNumber={version.poNumber ?? ''}
           initialNotes={version.notes ?? ''}
           initialDepositPercent={version.depositPercent != null ? String(version.depositPercent) : ''}
+          initialReference={quoteDisplayNumber(quote.reference, quote.seq)}
+          initialIssueDate={(version.issueDate ? sydneyDateTimeParts(version.issueDate) : sydneyDateTimeParts(new Date())).date}
           packages={packages}
           saveAction={saveQuoteAction}
           sendAction={sendQuoteAction}

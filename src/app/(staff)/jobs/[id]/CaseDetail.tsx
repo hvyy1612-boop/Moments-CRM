@@ -14,6 +14,7 @@ import { getJobBalance } from '@/lib/domain/money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
 import { statusLabel } from '@/features/projects/lifecycle'
 import { listActivePackages } from '@/lib/domain/package'
+import { quoteDisplayNumber } from '@/lib/domain/quote'
 import { AppShell } from '../../AppShell'
 import {
   closeJobAction,
@@ -407,6 +408,8 @@ export async function CaseDetail({
               initialPoNumber={version.poNumber ?? ''}
               initialNotes={version.notes ?? ''}
               initialDepositPercent={version.depositPercent != null ? String(version.depositPercent) : ''}
+              initialReference={quoteDisplayNumber(quote.reference, quote.seq)}
+              initialIssueDate={(version.issueDate ? sydneyDateTimeParts(version.issueDate) : sydneyDateTimeParts(new Date())).date}
               packages={packageOptions}
               saveAction={saveQuoteAction}
               sendAction={sendQuoteAction}

@@ -7,7 +7,7 @@ import { Prisma } from '@prisma/client'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { effectiveQuoteStatus, formatQuoteNumber } from '@/lib/domain/quote'
+import { effectiveQuoteStatus, quoteDisplayNumber } from '@/lib/domain/quote'
 import { computeDeposit } from '@/lib/domain/pricing'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate } from '@/lib/time'
@@ -107,7 +107,7 @@ export default async function QuoteDetailPage({
       <BackLink href="/quotes" label="Quotes" />
       <PageHeader
         eyebrow="Studio"
-        title={`${formatQuoteNumber(quote.seq)} · ${clientName}`}
+        title={`${quoteDisplayNumber(quote.reference, quote.seq)} · ${clientName}`}
         actions={<StatusPill tone={STATUS_TONE[eff] ?? 'neutral'}>{label(eff)}</StatusPill>}
       />
 
@@ -120,7 +120,7 @@ export default async function QuoteDetailPage({
           : jobName
         } />
         <Meta term="Shoot date" value={shootDate ? formatSydneyDate(shootDate) : '—'} />
-        <Meta term="Issued" value={v.sentToClientAt ? formatSydneyDate(v.sentToClientAt) : '—'} />
+        <Meta term="Issued" value={v.issueDate ? formatSydneyDate(v.issueDate) : v.sentToClientAt ? formatSydneyDate(v.sentToClientAt) : '—'} />
         <Meta term="Valid until" value={v.validUntil ? formatSydneyDate(v.validUntil) : '—'} />
       </dl>
 

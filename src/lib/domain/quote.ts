@@ -61,6 +61,8 @@ export type QuotePresentation = {
   poNumber?: string | null
   notes?: string | null
   depositPercent?: number | null
+  issueDate?: Date | null
+  reference?: string | null
 }
 
 export async function saveQuoteDraft(
@@ -90,8 +92,12 @@ export async function saveQuoteDraft(
         poNumber: presentation.poNumber ?? null,
         notes: presentation.notes ?? null,
         depositPercent: presentation.depositPercent ?? null,
+        issueDate: presentation.issueDate ?? null,
       },
     })
+    if (presentation.reference !== undefined) {
+      await tx.quote.update({ where: { id: version.quoteId }, data: { reference: presentation.reference } })
+    }
     return { subtotal, taxTotal, total }
   })
 }
@@ -348,6 +354,11 @@ export function formatQuoteNumber(seq: number | null | undefined): string {
   return seq ? `Q-${String(seq).padStart(4, '0')}` : 'Q-draft'
 }
 
+/** The quote's shown ID: the staff-entered reference if set, else the auto Q-seq number. */
+export function quoteDisplayNumber(reference: string | null | undefined, seq: number | null | undefined): string {
+  return reference && reference.trim() ? reference.trim() : formatQuoteNumber(seq)
+}
+
 /**
  * Create a quote that belongs to an ENQUIRY (docs/31): the canonical path. No Project is created — the
  * quote lives on the lead until it is accepted. Assigns the next per-company sequential number and an
@@ -467,7 +478,7 @@ export async function listQuotes(): Promise<QuoteListRow[]> {
   })
   return quotes.map((q) => ({
     id: q.id,
-    number: formatQuoteNumber(q.seq),
+    number: quoteDisplayNumber(q.reference, q.seq),
     clientName: q.enquiry?.client?.displayName ?? q.enquiry?.name ?? q.project?.client?.displayName ?? 'Unknown',
     total: q.currentVersion?.total ?? new Prisma.Decimal(0),
     status: effectiveQuoteStatus(q.status, q.currentVersion?.validUntil ?? null, now),
