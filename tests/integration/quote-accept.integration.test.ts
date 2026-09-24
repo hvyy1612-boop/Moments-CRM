@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
 import { createEnquiry } from '@/lib/domain/enquiry'
-import { acceptQuote, createQuoteForEnquiry, duplicateQuote, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
+import { acceptQuote, createQuoteForEnquiry, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 
 const email = () => `it-${randomUUID()}@moments.test`
 
@@ -109,26 +109,5 @@ describe('acceptQuote — enquiry-stage quote → job (docs/31, integration)', (
     await saveQuoteDraft(q.versionId, [{ description: 'Pkg', quantity: 1, unitPrice: '3000' }], null, { depositPercent: 30 })
     const version = await prisma.quoteVersion.findUnique({ where: { id: q.versionId }, select: { depositPercent: true } })
     expect(version?.depositPercent).toBe(30)
-  })
-
-  it('duplicate makes a clean DRAFT copy: new number, copied lines, no lifecycle metadata', async () => {
-    const { quoteId } = await sentEnquiryQuote('4200')
-    await acceptQuote(quoteId, null) // source is now ACCEPTED with sent/accepted timestamps
-    const dup = await duplicateQuote(quoteId, null)
-
-    const copy = await prisma.quote.findUnique({
-      where: { id: dup.quoteId },
-      include: { currentVersion: { include: { lines: true } } },
-    })
-    const src = await prisma.quote.findUnique({ where: { id: quoteId }, select: { seq: true, enquiryId: true } })
-    expect(copy?.status).toBe('DRAFT')
-    expect(copy?.seq).toBeGreaterThan(src!.seq!)
-    expect(copy?.enquiryId).toBe(src!.enquiryId)
-    expect(copy?.currentVersion?.status).toBe('DRAFT')
-    expect(copy?.currentVersion?.lines.length).toBe(1)
-    expect(copy?.currentVersion?.total.toString()).toBe('4200')
-    // No lifecycle metadata copied.
-    expect(copy?.currentVersion?.sentToClientAt).toBeNull()
-    expect(copy?.currentVersion?.acceptedByClientAt).toBeNull()
   })
 })

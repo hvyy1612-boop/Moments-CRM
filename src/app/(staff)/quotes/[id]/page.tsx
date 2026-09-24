@@ -16,8 +16,7 @@ import { Button } from '@/components/ui/Button'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
-import { QuoteActionsMenu } from './QuoteActionsMenu'
-import { shareQuoteAction, acceptQuoteAction } from '../actions'
+import { shareQuoteAction, acceptQuoteAction, reviseQuoteAction } from '../actions'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Quote - Moments' }
@@ -98,7 +97,6 @@ export default async function QuoteDetailPage({
     select: { id: true, action: true, createdAt: true, actor: { select: { name: true } } },
   })
 
-  const clientLinkPath = `/quote/${quote.viewToken}`
   const isDraft = eff === 'DRAFT'
   const isSentOrViewed = eff === 'SENT' || eff === 'VIEWED'
 
@@ -128,34 +126,29 @@ export default async function QuoteDetailPage({
       {sp.acceptError ? <div className="mb-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.acceptError}</div> : null}
       {sp.shareError ? <div className="mb-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.shareError}</div> : null}
 
-      {/* Action bar — about the QUOTE itself, status-aware. Primary = the main thing to do in this state;
-          cross-record navigation (Job/Contract/Invoice) lives in the metadata + related records, and
-          utilities (duplicate/revision/copy link) live in the ••• overflow. */}
+      {/* Action bar — only the actions this state actually needs (no duplicate-purpose or utility clutter).
+          Cross-record navigation (Job) is via its name in the context line above. */}
       <div className="mb-5 flex flex-wrap items-center gap-2">
         {isDraft ? (
           <>
             <Link href={`/quotes/${id}/edit`}><Button>Edit</Button></Link>
-            <Link href={`/quotes/${id}/preview`}><Button variant="secondary">Preview quote</Button></Link>
             <FormButton action={shareQuoteAction} csrf={csrf} quoteId={id} label="Send quote" variant="secondary" />
+            <Link href={`/quotes/${id}/preview`}><Button variant="secondary">Preview</Button></Link>
+          </>
+        ) : isSentOrViewed ? (
+          <>
+            <FormButton action={acceptQuoteAction} csrf={csrf} quoteId={id} label="Mark as accepted" />
+            <FormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Revise" variant="secondary" />
+            <Link href={`/quotes/${id}/preview`}><Button variant="secondary">Preview</Button></Link>
+          </>
+        ) : eff === 'DECLINED' || eff === 'EXPIRED' ? (
+          <>
+            <FormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Revise" />
+            <Link href={`/quotes/${id}/preview`}><Button variant="secondary">Preview</Button></Link>
           </>
         ) : (
-          <>
-            <Link href={`/quotes/${id}/preview`}><Button>Preview quote</Button></Link>
-            {isSentOrViewed || eff === 'ACCEPTED' ? (
-              <Link href={clientLinkPath} target="_blank"><Button variant="secondary">Open client view</Button></Link>
-            ) : null}
-            {isSentOrViewed ? (
-              <FormButton action={acceptQuoteAction} csrf={csrf} quoteId={id} label="Mark as accepted" variant="secondary" />
-            ) : null}
-          </>
+          <Link href={`/quotes/${id}/preview`}><Button>Preview</Button></Link>
         )}
-        <QuoteActionsMenu
-          quoteId={id}
-          csrf={csrf}
-          clientLinkPath={clientLinkPath}
-          showCopyLink={isSentOrViewed || eff === 'ACCEPTED'}
-          showRevise={!isDraft}
-        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">

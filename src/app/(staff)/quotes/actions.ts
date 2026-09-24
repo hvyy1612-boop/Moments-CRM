@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
-import { createQuoteForEnquiry, saveQuoteDraft, sendQuote, acceptQuote, reviseQuote, duplicateQuote } from '@/lib/domain/quote'
+import { createQuoteForEnquiry, saveQuoteDraft, sendQuote, acceptQuote, reviseQuote } from '@/lib/domain/quote'
 import { saveQuoteSchema } from '@/lib/validation/quote'
 import { sendComposedQuoteEmail } from '@/lib/email'
 
@@ -148,23 +148,6 @@ export async function acceptQuoteAction(formData: FormData): Promise<void> {
   }
   revalidatePath(`/quotes/${quoteId}`)
   redirect(projectId ? `/jobs/${projectId}` : `/quotes/${quoteId}`)
-}
-
-/** Duplicate a quote as a fresh DRAFT, then open its editor. */
-export async function duplicateQuoteAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  const user = await requireStaff()
-  const quoteId = str(formData, 'quoteId')
-  if (!quoteId) return
-  let newId: string
-  try {
-    const res = await duplicateQuote(quoteId, user.id)
-    newId = res.quoteId
-  } catch {
-    redirect(`/quotes/${quoteId}`)
-  }
-  redirect(`/quotes/${newId}/edit`)
 }
 
 /** Revise a sent quote: a new DRAFT version supersedes the current one. */
