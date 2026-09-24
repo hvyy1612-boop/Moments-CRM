@@ -88,9 +88,10 @@ export const googleEnabled = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_S
 export const stripeEnabled = Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET)
 
 /**
- * Whether the email provider can actually deliver: both the Resend key and a verified sender must be
- * present (docs/25 Part 4). This is the delivery gate, DISTINCT from the per-company automation switch
- * (`clientEmailsEnabled`) — a company must turn automation on AND the provider must be configured before
- * any client reminder is sent. With no provider, a send records SKIPPED_NO_PROVIDER (never a fake sent).
+ * Whether the email provider can actually deliver: either Gmail/SMTP (SMTP_USER + SMTP_PASS) OR Resend
+ * (RESEND_API_KEY + EMAIL_FROM) must be configured (docs/25 Part 4). This is the delivery gate, DISTINCT
+ * from the per-company automation switch (`clientEmailsEnabled`) — a company must turn automation on AND
+ * a provider must be configured before any client reminder is sent. With no provider, a send records
+ * SKIPPED_NO_PROVIDER (never a fake sent).
  */
-export const emailProviderReady = Boolean(env.RESEND_API_KEY && env.EMAIL_FROM)
+export const emailProviderReady = Boolean((env.SMTP_USER && env.SMTP_PASS) || (env.RESEND_API_KEY && env.EMAIL_FROM))
