@@ -377,11 +377,18 @@ export async function maybeAutoCompleteJob(tx: Tx, projectId: string, actorUserI
   // = the accepted quote total, else the direct booking's package price snapshot, else null (unknown).
   const acceptedQuote = await tx.quoteVersion.findFirst({
     where: { quote: { projectId }, status: 'ACCEPTED' },
+    orderBy: { acceptedByClientAt: 'desc' },
     select: { total: true },
   })
   const agreed = acceptedQuote?.total ?? project.packagePriceSnapshot ?? null
-  const { isFullySettled } = getJobBalance(project.invoices.map(toInvoiceMoneyInput), agreed)
-  if (!isFullySettled) return // not fully invoiced + paid - stay active so nothing is forgotten
+  const bal = getJobBalance(project.invoices.map(toInvoiceMoneyInput), agreed)
+  // With a KNOWN agreed value use the canonical isFullySettled (catches deposit-only / under-invoiced,
+  // bug #3). Without one (a direct job with no quote/package) fall back to "nothing outstanding" so the
+  // no-quote flow still completes - never demand an agreed value the studio never set (regression guard).
+  const settled = bal.agreedValueKnown
+    ? bal.isFullySettled
+    : bal.outstanding.lessThanOrEqualTo(0) && bal.overpaymentToResolve.lessThanOrEqualTo(0)
+  if (!settled) return // still owed / under-invoiced - stay active so nothing is forgotten
 
   await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'COMPLETED' } })
   await tx.auditLog.create({

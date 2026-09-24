@@ -179,14 +179,20 @@ export async function closeJob(projectId: string, actorUserId: string | null = n
     // value = the accepted quote total, else the package price snapshot, else null.
     const acceptedQuote = await tx.quoteVersion.findFirst({
       where: { quote: { projectId }, status: 'ACCEPTED' },
+      orderBy: { acceptedByClientAt: 'desc' },
       select: { total: true },
     })
     const agreed = acceptedQuote?.total ?? project.packagePriceSnapshot ?? null
     const bal = getJobBalance(invoices.map(toInvoiceMoneyInput), agreed)
-    if (!bal.isFullySettled) {
+    // Known agreed value -> canonical isFullySettled (blocks deposit-only / under-invoiced, bug #3).
+    // No agreed value (no quote/package) -> fall back to "nothing outstanding" so a genuinely paid-off
+    // or zero-value job can still close (keeps the no-quote flow + its tests working, regression guard).
+    const settled = bal.agreedValueKnown
+      ? bal.isFullySettled
+      : bal.outstanding.lessThanOrEqualTo(0) && bal.overpaymentToResolve.lessThanOrEqualTo(0)
+    if (!settled) {
       if (bal.outstanding.greaterThan(0)) throw new Error(`This job still has ${bal.outstanding.toFixed(2)} outstanding.`)
       if (bal.overpaymentToResolve.greaterThan(0)) throw new Error(`This job has ${bal.overpaymentToResolve.toFixed(2)} overpaid to resolve first.`)
-      if (!bal.agreedValueKnown) throw new Error('This job has no agreed value yet. Accept a quote or set a package price before closing.')
       if (bal.uninvoicedRemainder && bal.uninvoicedRemainder.greaterThan(0)) throw new Error(`This job is not fully invoiced yet (${bal.uninvoicedRemainder.toFixed(2)} still to bill).`)
       throw new Error('This job is not fully settled yet.')
     }

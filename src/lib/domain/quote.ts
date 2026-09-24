@@ -149,57 +149,9 @@ export async function markQuoteViewed(viewToken: string) {
 }
 
 /** Client accepts the current version by token. Guards expiry and status; idempotent if re-accepted. */
-export async function acceptQuoteByToken(viewToken: string, acceptedName: string, ip: string) {
-  const now = systemClock.now()
-  return prisma.$transaction(async (tx) => {
-    const quote = await tx.quote.findUnique({
-      where: { viewToken },
-      include: { currentVersion: true },
-    })
-    if (!quote || !quote.currentVersion) throw new Error('Quote not found.')
-    const version = quote.currentVersion
-    if (version.status === 'ACCEPTED') return { alreadyAccepted: true }
-    if (version.status !== 'SENT' && version.status !== 'VIEWED') {
-      throw new Error('This quote cannot be accepted.')
-    }
-    if (version.validUntil && version.validUntil < now) throw new Error('This quote has expired.')
-
-    await tx.quoteVersion.update({
-      where: { id: version.id },
-      data: {
-        status: 'ACCEPTED',
-        acceptedByClientAt: now,
-        acceptedByClientName: acceptedName,
-        acceptedByClientIp: ip,
-      },
-    })
-    await tx.quote.update({ where: { id: quote.id }, data: { status: 'ACCEPTED' } })
-    if (quote.projectId) {
-      await tx.project.update({
-        where: { id: quote.projectId },
-        data: { commercialStatus: 'ACCEPTED' },
-      })
-    }
-    await tx.auditLog.create({
-      data: {
-        action: 'quote.accepted',
-        entityType: 'Quote',
-        entityId: quote.id,
-        source: 'client.quote',
-        afterData: { acceptedName },
-      },
-    })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'quote.accepted',
-        aggregateType: 'Quote',
-        aggregateId: quote.id,
-        payload: { quoteId: quote.id, projectId: quote.projectId },
-      },
-    })
-    return { alreadyAccepted: false }
-  })
-}
+// acceptQuoteByToken was RETIRED here (docs/31 section 7): the /quote/[token] page is view-only and
+// staff accept via acceptQuote(); the old client-token action + QuoteAccept form were removed, since
+// accepting an enquiry-stage quote by token created no Job and permanently deadlocked the enquiry.
 
 /**
  * Client (or staff) declines the current quote with a reason (F-QUOTE-03). The version → DECLINED,
