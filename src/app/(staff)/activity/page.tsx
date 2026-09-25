@@ -8,6 +8,7 @@ import { formatSydneyDateTime } from '@/lib/time'
 import { PageHeader } from '@/components/PageHeader'
 import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { STEPUP_COOKIE, hasStepUp } from '@/lib/auth/stepup'
+import { getActivityPinStatus } from '@/lib/auth/activity-pin'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { SignInTable, type SignInRow } from './SignInTable'
@@ -28,6 +29,7 @@ export default async function ActivityPage() {
   // Step-up (OWASP re-auth for sensitive pages): even a signed-in admin must re-enter their password to
   // open Activity, so an unattended session can't expose it. The confirmation lasts a few minutes.
   if (!hasStepUp(store.get(STEPUP_COOKIE)?.value, user.id)) {
+    const pin = await getActivityPinStatus(user.id)
     return (
       <AppShell user={user} csrf={csrf} active="activity">
         <PageContainer variant="narrow">
@@ -36,7 +38,7 @@ export default async function ActivityPage() {
             title="Activity"
             description="Security and account activity for this workspace. Read-only, admin-only."
           />
-          <ActivityGate csrf={csrf} />
+          <ActivityGate csrf={csrf} pinIsSet={pin.isSet} locked={pin.lockedUntil !== null} />
         </PageContainer>
       </AppShell>
     )

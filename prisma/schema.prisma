@@ -336,6 +336,12 @@ model User {
   failedAttempts     Int       @default(0) @map("failed_attempts")
   lockedUntil        DateTime? @map("locked_until") @db.Timestamptz
   passwordChangedAt  DateTime? @map("password_changed_at") @db.Timestamptz
+  // Step-up PIN for the Activity page: a 4-digit PIN (hashed, Argon2id) an admin sets to re-open the
+  // read-only security page, with its own lockout counter. Password stays as a fallback. All nullable.
+  activityPinHash           String?   @map("activity_pin_hash") @db.VarChar(255)
+  activityPinAlgo           String?   @map("activity_pin_algo") @db.VarChar(30)
+  activityPinFailedAttempts Int       @default(0) @map("activity_pin_failed_attempts")
+  activityPinLockedUntil    DateTime? @map("activity_pin_locked_until") @db.Timestamptz
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 

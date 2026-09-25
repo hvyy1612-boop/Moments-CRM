@@ -26,6 +26,9 @@ const DOMAIN: Record<string, Domain> = {
 
 // Hand-written labels for the security/business events worth reading clearly (fallback handles the rest).
 const SPECIAL: Record<string, string> = {
+  'auth.activity_pin_set': 'Activity PIN set',
+  'auth.activity_pin_reset': 'Activity PIN reset via password',
+  'auth.activity_password_unlock': 'Activity opened with password',
   'auth.staff_created': 'Staff member added',
   'auth.staff_removed': 'Staff member removed',
   'auth.user_registered': 'User account registered',
