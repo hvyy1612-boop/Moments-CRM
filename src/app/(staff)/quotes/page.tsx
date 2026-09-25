@@ -52,7 +52,7 @@ export default async function QuotesPage() {
           }
         />
 
-        <QuotesTable rows={rows} />
+        <QuotesTable rows={rows} csrf={csrf} />
       </PageContainer>
     </AppShell>
   )

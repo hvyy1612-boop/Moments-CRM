@@ -1,8 +1,46 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ActiveSearchField, NoSearchResults } from './ActiveSearch'
+
+/**
+ * Opt-in row selection (Carbon "selectable" data table). The parent owns the selected-id set; the table
+ * just renders the leading checkbox column and the select-all header box. Rows that fail `isSelectable`
+ * show a disabled checkbox (e.g. records that must not be batch-acted on).
+ */
+export type Selection<T> = {
+  isSelected: (id: string) => boolean
+  isSelectable?: (row: T) => boolean
+  onToggle: (id: string) => void
+  onToggleMany: (ids: string[], selected: boolean) => void
+}
+
+/** A checkbox that can show the tri-state "indeterminate" dash (native indeterminate is JS-only). */
+function Check({ checked, indeterminate, disabled, onChange, label }: {
+  checked: boolean
+  indeterminate?: boolean
+  disabled?: boolean
+  onChange: () => void
+  label: string
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = !disabled && !!indeterminate
+  }, [indeterminate, disabled])
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      disabled={disabled}
+      onChange={onChange}
+      aria-label={label}
+      className="h-4 w-4 shrink-0 rounded-sm border border-line-strong accent-accent focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
+    />
+  )
+}
+const SELECT_W = '2.75em'
 
 /**
  * One shared data-table framework for the whole app (Clients, Payments, Jobs, Enquiries, ...). It owns
@@ -38,12 +76,15 @@ export function DataTable<T>({
   search,
   searchPlaceholder = 'Search',
   rowClassName,
+  selection,
 }: {
   columns: DataColumn<T>[]
   rows: T[]
   rowKey: (row: T) => string
   emptyMessage?: ReactNode
   ariaLabel?: string
+  /** When set, a leading checkbox column + select-all header appear; the parent owns the selection state. */
+  selection?: Selection<T>
   /** When set, column keys listed in localStorage[storageKey] are hidden (per-viewer show/hide). The
    *  control writing that key must dispatch `datatable:<storageKey>` so the table re-reads. */
   storageKey?: string
@@ -77,11 +118,16 @@ export function DataTable<T>({
   }, [storageKey])
 
   const visible = hidden.length ? columns.filter((c) => !hidden.includes(c.key)) : columns
-  const template = visible.map((c) => c.width).join(' ')
+  const template = (selection ? `${SELECT_W} ` : '') + visible.map((c) => c.width).join(' ')
 
   // Active search: filter the loaded rows live (any-field substring, case-insensitive).
   const q = query.trim().toLowerCase()
   const filtered = search && q ? rows.filter((r) => search(r).toLowerCase().includes(q)) : rows
+
+  // Select-all reflects the whole filtered set (every selectable row across pages), matching Carbon.
+  const selectableIds = selection ? filtered.filter((r) => selection.isSelectable?.(r) ?? true).map(rowKey) : []
+  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selection!.isSelected(id))
+  const someSelected = !allSelected && selectableIds.some((id) => selection!.isSelected(id))
 
   // A changed result set (search or an upstream data change) returns the viewer to the first page.
   useEffect(() => {
@@ -117,6 +163,17 @@ export function DataTable<T>({
             className="grid min-h-12 items-center border-b border-line-strong uppercase tracking-wide text-ink-muted"
             style={{ gridTemplateColumns: template }}
           >
+            {selection ? (
+              <div role="columnheader" className="flex items-center justify-center px-2 py-2">
+                <Check
+                  checked={allSelected}
+                  indeterminate={someSelected}
+                  disabled={selectableIds.length === 0}
+                  onChange={() => selection.onToggleMany(selectableIds, !allSelected)}
+                  label={allSelected ? 'Deselect all' : 'Select all'}
+                />
+              </div>
+            ) : null}
             {visible.map((c) => (
               <div key={c.key} role="columnheader" className={`flex min-w-0 ${alignCls(c.align)} whitespace-nowrap px-4 py-2 text-xs font-medium`}>
                 {c.header}
@@ -131,20 +188,34 @@ export function DataTable<T>({
               <div className="py-16 text-center text-sm text-ink-muted">{emptyMessage}</div>
             )
           ) : (
-            pageRows.map((row) => (
-              <div
-                key={rowKey(row)}
-                role="row"
-                className={`group grid min-h-12 items-center border-b border-line transition-colors last:border-b-0 hover:bg-paper ${rowClassName?.(row) ?? ''}`}
-                style={{ gridTemplateColumns: template }}
-              >
-                {visible.map((c) => (
-                  <div key={c.key} role="cell" className={`flex min-w-0 ${alignCls(c.align)} px-4 py-2`}>
-                    {c.cell(row)}
-                  </div>
-                ))}
-              </div>
-            ))
+            pageRows.map((row) => {
+              const id = rowKey(row)
+              const selected = selection?.isSelected(id) ?? false
+              return (
+                <div
+                  key={id}
+                  role="row"
+                  className={`group grid min-h-12 items-center border-b border-line transition-colors last:border-b-0 ${selected ? 'bg-accent-tint/50' : 'hover:bg-paper'} ${rowClassName?.(row) ?? ''}`}
+                  style={{ gridTemplateColumns: template }}
+                >
+                  {selection ? (
+                    <div role="cell" className="flex items-center justify-center px-2 py-2">
+                      <Check
+                        checked={selected}
+                        disabled={!(selection.isSelectable?.(row) ?? true)}
+                        onChange={() => selection.onToggle(id)}
+                        label="Select row"
+                      />
+                    </div>
+                  ) : null}
+                  {visible.map((c) => (
+                    <div key={c.key} role="cell" className={`flex min-w-0 ${alignCls(c.align)} px-4 py-2`}>
+                      {c.cell(row)}
+                    </div>
+                  ))}
+                </div>
+              )
+            })
           )}
         </div>
       </div>

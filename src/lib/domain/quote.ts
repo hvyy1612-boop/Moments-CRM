@@ -438,3 +438,26 @@ export async function listQuotes(): Promise<QuoteListRow[]> {
   }))
 }
 
+/**
+ * Bulk-delete quotes from the list (batch action). Only quotes that are safe to remove are deleted: never
+ * an ACCEPTED quote or one already tied to a Project - accepting a quote converts its enquiry into a Job,
+ * so that quote is now part of a booking and must be kept. Deletion cascades to the quote's versions and
+ * their lines (FK onDelete: Cascade); change-request history survives (its version refs are set null).
+ * Returns how many were deleted vs skipped as protected, so the caller can tell the user.
+ */
+export async function deleteQuotes(ids: string[]): Promise<{ deleted: number; skipped: number }> {
+  const unique = [...new Set(ids.filter(Boolean))]
+  if (unique.length === 0) return { deleted: 0, skipped: 0 }
+  const quotes = await prisma.quote.findMany({
+    where: { id: { in: unique } },
+    select: { id: true, status: true, projectId: true, sourcedProject: { select: { id: true } } },
+  })
+  const deletable = quotes
+    .filter((q) => q.status !== 'ACCEPTED' && !q.projectId && !q.sourcedProject)
+    .map((q) => q.id)
+  if (deletable.length > 0) {
+    await prisma.quote.deleteMany({ where: { id: { in: deletable } } })
+  }
+  return { deleted: deletable.length, skipped: quotes.length - deletable.length }
+}
+

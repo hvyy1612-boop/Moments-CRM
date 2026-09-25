@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
-import { createQuoteForEnquiry, saveQuoteDraft, sendQuote, acceptQuote, reviseQuote } from '@/lib/domain/quote'
+import { createQuoteForEnquiry, saveQuoteDraft, sendQuote, acceptQuote, reviseQuote, deleteQuotes } from '@/lib/domain/quote'
 import { saveQuoteSchema } from '@/lib/validation/quote'
 import { sendComposedQuoteEmail } from '@/lib/email'
 
@@ -148,6 +148,22 @@ export async function acceptQuoteAction(formData: FormData): Promise<void> {
   }
   revalidatePath(`/quotes/${quoteId}`)
   redirect(projectId ? `/jobs/${projectId}` : `/quotes/${quoteId}`)
+}
+
+/** Batch-delete the selected quotes from the list (accepted quotes are protected in the domain). Void
+ *  form action: the confirm + the selection live in the client toolbar; here we just verify and refresh. */
+export async function deleteQuotesAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const ids = str(formData, 'ids').split(',').map((s) => s.trim()).filter(Boolean)
+  if (ids.length === 0) return
+  try {
+    await deleteQuotes(ids)
+  } catch {
+    // fall through to refresh
+  }
+  revalidatePath('/quotes')
 }
 
 /** Revise a sent quote: a new DRAFT version supersedes the current one. */
