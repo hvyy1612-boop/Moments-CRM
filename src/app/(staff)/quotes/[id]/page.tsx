@@ -6,7 +6,8 @@ import { Prisma } from '@prisma/client'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { effectiveQuoteStatus, quoteDisplayNumber } from '@/lib/domain/quote'
+import { quoteDisplayNumber } from '@/lib/domain/quote'
+import { quoteView } from '@/features/quotes/status'
 import { computeDeposit } from '@/lib/domain/pricing'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate } from '@/lib/time'
@@ -15,7 +16,7 @@ import { Button } from '@/components/ui/Button'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
-import { shareQuoteAction, acceptQuoteAction, reviseQuoteAction } from '../actions'
+import { shareQuoteAction, acceptQuoteAction, reviseQuoteAction, declineQuoteAction } from '../actions'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Quote - Moments' }
@@ -27,9 +28,6 @@ export const metadata: Metadata = { title: 'Quote - Moments' }
  * is protected (revise/duplicate to change it).
  */
 
-const STATUS_TONE: Record<string, Tone> = {
-  DRAFT: 'neutral', SENT: 'info', VIEWED: 'info', ACCEPTED: 'good', DECLINED: 'bad', EXPIRED: 'warn', SUPERSEDED: 'neutral',
-}
 const label = (s: string) => s.charAt(0) + s.slice(1).toLowerCase()
 
 const ACTIVITY_LABEL: Record<string, string> = {
@@ -49,7 +47,7 @@ export default async function QuoteDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams?: Promise<{ acceptError?: string; shareError?: string }>
+  searchParams?: Promise<{ acceptError?: string; shareError?: string; declineError?: string }>
 }) {
   const user = await requireRole('/quotes/[id]')
   const { id } = await params
@@ -75,7 +73,7 @@ export default async function QuoteDetailPage({
   })
   if (!quote || !quote.currentVersion) notFound()
   const v = quote.currentVersion
-  const eff = effectiveQuoteStatus(quote.status, v.validUntil)
+  const view = quoteView(quote.status)
   const clientName = quote.enquiry?.client?.displayName ?? quote.enquiry?.name ?? quote.project?.client?.displayName ?? 'Unknown'
   const jobName = quote.enquiry?.eventType ?? 'Photography'
   const shootDate = quote.project?.bookings[0]?.startsAt ?? null
@@ -96,8 +94,8 @@ export default async function QuoteDetailPage({
     select: { id: true, action: true, createdAt: true, actor: { select: { name: true } } },
   })
 
-  const isDraft = eff === 'DRAFT'
-  const isSentOrViewed = eff === 'SENT' || eff === 'VIEWED'
+  const isDraft = quote.status === 'DRAFT'
+  const isSentOrViewed = quote.status === 'SENT' || quote.status === 'VIEWED'
 
   return (
     <AppShell user={user} csrf={csrf} active="quotes">
@@ -108,7 +106,7 @@ export default async function QuoteDetailPage({
           the status inline, then a context subline. Same shape as the other detail pages. */}
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-semibold text-ink">{quoteDisplayNumber(quote.reference, quote.seq)} · {clientName}</h1>
-        <StatusPill tone={STATUS_TONE[eff] ?? 'neutral'}>{label(eff)}</StatusPill>
+        <StatusPill tone={view.tone}>{view.label}</StatusPill>
       </div>
 
       {/* Context subline — only fields that are actually set are shown (progressive disclosure, NN/g).
@@ -126,6 +124,7 @@ export default async function QuoteDetailPage({
 
       {sp.acceptError ? <div className="mt-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.acceptError}</div> : null}
       {sp.shareError ? <div className="mt-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.shareError}</div> : null}
+      {sp.declineError ? <div className="mt-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.declineError}</div> : null}
 
       {/* Action bar — only the actions this state actually needs (no duplicate-purpose or utility clutter).
           Cross-record navigation (Job) is via its name in the context line above. */}
@@ -139,12 +138,13 @@ export default async function QuoteDetailPage({
         ) : isSentOrViewed ? (
           <>
             <FormButton action={acceptQuoteAction} csrf={csrf} quoteId={id} label="Mark as accepted" />
-            {/* "Edit" a sent/viewed quote safely opens a NEW version (reviseQuoteAction) - the client is
-                still looking at the version they were sent, so we never edit that one in place. */}
+            {/* "Edit" a sent quote safely opens a NEW version (reviseQuoteAction) - the client is still
+                looking at the version they were sent, so we never edit that one in place. */}
             <FormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Edit" variant="secondary" />
+            <FormButton action={declineQuoteAction} csrf={csrf} quoteId={id} label="Declined" variant="danger" />
             <Link href={`/quotes/${id}/preview`}><Button variant="secondary">Preview</Button></Link>
           </>
-        ) : eff === 'DECLINED' || eff === 'EXPIRED' ? (
+        ) : quote.status === 'DECLINED' ? (
           <>
             <FormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Edit" />
             <Link href={`/quotes/${id}/preview`}><Button variant="secondary">Preview</Button></Link>
@@ -301,7 +301,7 @@ function LineGroup({ title, lines }: { title: string; lines: { id: string; descr
   )
 }
 
-function FormButton({ action, csrf, quoteId, label, variant }: { action: (fd: FormData) => Promise<void>; csrf: string; quoteId: string; label: string; variant?: 'primary' | 'secondary' | 'ghost' }) {
+function FormButton({ action, csrf, quoteId, label, variant }: { action: (fd: FormData) => Promise<void>; csrf: string; quoteId: string; label: string; variant?: 'primary' | 'secondary' | 'danger' | 'ghost' }) {
   return (
     <form action={action}>
       <input type="hidden" name="csrf" value={csrf} />

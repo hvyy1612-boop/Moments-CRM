@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
-import { createQuoteForEnquiry, saveQuoteDraft, sendQuote, acceptQuote, reviseQuote, deleteQuotes } from '@/lib/domain/quote'
+import { createQuoteForEnquiry, saveQuoteDraft, sendQuote, acceptQuote, reviseQuote, deleteQuotes, declineQuote } from '@/lib/domain/quote'
 import { saveQuoteSchema } from '@/lib/validation/quote'
 import { sendComposedQuoteEmail } from '@/lib/email'
 
@@ -127,6 +127,23 @@ export async function shareQuoteAction(formData: FormData): Promise<void> {
     await sendQuote(quoteId, user.id)
   } catch (error) {
     redirect(`/quotes/${quoteId}?shareError=${encodeURIComponent(error instanceof Error ? error.message : 'Could not share.')}`)
+  }
+  revalidatePath(`/quotes/${quoteId}`)
+  redirect(`/quotes/${quoteId}`)
+}
+
+/** Mark a sent quote as declined (the client said no). Reason is kept simple (OTHER) - no picker. Only a
+ *  SENT/VIEWED quote can be declined; the domain enforces that and refuses an accepted one. */
+export async function declineQuoteAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const quoteId = str(formData, 'quoteId')
+  if (!quoteId) return
+  try {
+    await declineQuote(quoteId, 'OTHER', user.id)
+  } catch (error) {
+    redirect(`/quotes/${quoteId}?declineError=${encodeURIComponent(error instanceof Error ? error.message : 'Could not decline the quote.')}`)
   }
   revalidatePath(`/quotes/${quoteId}`)
   redirect(`/quotes/${quoteId}`)

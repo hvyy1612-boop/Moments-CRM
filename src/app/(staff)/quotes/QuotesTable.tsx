@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { COL } from '@/components/ui/tableColumns'
-import { StatusPill, type Tone } from '@/components/ui/StatusPill'
-import { Popover } from '@/components/ui/Popover'
+import { StatusPill } from '@/components/ui/StatusPill'
+import { quoteView, type QuoteGroup } from '@/features/quotes/status'
 import { deleteQuotesAction } from './actions'
 
 export type QuoteRow = {
@@ -13,56 +13,30 @@ export type QuoteRow = {
   number: string
   client: string
   amount: string // preformatted AUD
-  status: string
+  status: string // raw DB status; folded to the simple view by quoteView()
   updated: string // preformatted Sydney date
 }
 
-const STATUS_TONE: Record<string, Tone> = {
-  DRAFT: 'neutral',
-  SENT: 'info',
-  VIEWED: 'info',
-  ACCEPTED: 'good',
-  DECLINED: 'bad',
-  EXPIRED: 'warn',
-  SUPERSEDED: 'neutral',
-}
-// Canonical lifecycle order so the filter menu reads Draft -> Superseded.
-const STATUS_ORDER = ['DRAFT', 'SENT', 'VIEWED', 'ACCEPTED', 'DECLINED', 'EXPIRED', 'SUPERSEDED']
-const label = (s: string) => s.charAt(0) + s.slice(1).toLowerCase()
-
-// Active = quotes still in play (need attention); Closed = resolved ones (accepted became a Job, or the
-// quote was declined / expired / replaced by a newer version), kept out of the working list.
-const TABS = [
-  { key: 'active', label: 'Active', statuses: new Set(['DRAFT', 'SENT', 'VIEWED']) },
-  { key: 'closed', label: 'Closed', statuses: new Set(['ACCEPTED', 'DECLINED', 'EXPIRED', 'SUPERSEDED']) },
-] as const
-type TabKey = (typeof TABS)[number]['key']
+const TABS: { key: QuoteGroup; label: string }[] = [
+  { key: 'active', label: 'Active' },
+  { key: 'closed', label: 'Closed' },
+]
 
 /**
- * Quotes list over the shared DataTable. An Active/Closed tab split keeps the working list (Draft/Sent/
- * Viewed) clear of resolved quotes; a status filter narrows within the current tab. Rows are selectable
- * (Carbon "selectable" table): tick quotes to reveal a batch-action bar that can delete them. ACCEPTED
- * quotes are locked from selection - accepting a quote booked it as a Job, so it can't be removed here.
+ * Quotes list over the shared DataTable. Simplified status flow (features/quotes/status.ts): Pending ->
+ * Sent -> Accepted, plus Declined. An Active/Closed tab split keeps the working list (Pending/Sent) clear
+ * of resolved quotes (Accepted/Declined). Rows are selectable (Carbon "selectable" table): tick quotes to
+ * reveal a batch-action bar that can delete them; ACCEPTED quotes are locked (they booked a Job).
  */
 export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) {
-  const [tab, setTab] = useState<TabKey>('active')
-  const [status, setStatus] = useState<string>('all')
+  const [tab, setTab] = useState<QuoteGroup>('active')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
-  const counts = useMemo(
-    () => ({
-      active: rows.filter((r) => TABS[0].statuses.has(r.status)).length,
-      closed: rows.filter((r) => TABS[1].statuses.has(r.status)).length,
-    }),
-    [rows],
-  )
-
-  const tabStatuses = TABS.find((t) => t.key === tab)!.statuses
-  const inTab = rows.filter((r) => tabStatuses.has(r.status))
-  // Filter options are only the statuses actually present in the current tab - no dead options.
-  const presentStatuses = STATUS_ORDER.filter((s) => tabStatuses.has(s) && inTab.some((r) => r.status === s))
-  const options = [{ key: 'all', text: 'All statuses' }, ...presentStatuses.map((s) => ({ key: s, text: label(s) }))]
-  const visible = status === 'all' ? inTab : inTab.filter((r) => r.status === status)
+  const counts = {
+    active: rows.filter((r) => quoteView(r.status).group === 'active').length,
+    closed: rows.filter((r) => quoteView(r.status).group === 'closed').length,
+  }
+  const visible = rows.filter((r) => quoteView(r.status).group === tab)
 
   // After a delete revalidates the page, drop any selected ids that no longer exist (clears the bar).
   useEffect(() => {
@@ -74,9 +48,8 @@ export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) 
     })
   }, [rows])
 
-  const switchTab = (key: TabKey) => {
+  const switchTab = (key: QuoteGroup) => {
     setTab(key)
-    setStatus('all')
     setSelectedIds(new Set())
   }
 
@@ -103,21 +76,17 @@ export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) 
   }
   const selectedCount = selectedIds.size
 
-  // Carbon data-table: columns FILL the table width, sized with the shared `COL` fr roles so they
-  // distribute evenly. Client is the widest text column; every column is LEFT-aligned (like Carbon's own
-  // numeric columns) so Amount reads directly after Client instead of being pushed to the far cell edge.
   const columns: DataColumn<QuoteRow>[] = [
     { key: 'quote', header: 'Quote', width: COL.constrained, cell: (r) => <Link href={`/quotes/${r.id}`} className="tabular block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.number}</Link> },
     { key: 'client', header: 'Client', width: COL.flexMedium, cell: (r) => <span className="block truncate text-ink">{r.client}</span> },
     { key: 'amount', header: 'Amount', width: COL.constrained, cell: (r) => <span className="tabular text-ink">{r.amount}</span> },
-    { key: 'status', header: 'Status', width: COL.content, cell: (r) => <StatusPill tone={STATUS_TONE[r.status] ?? 'neutral'}>{label(r.status)}</StatusPill> },
+    { key: 'status', header: 'Status', width: COL.content, cell: (r) => { const v = quoteView(r.status); return <StatusPill tone={v.tone}>{v.label}</StatusPill> } },
     { key: 'updated', header: 'Updated', width: COL.constrained, cell: (r) => <span className="tabular block truncate whitespace-nowrap text-ink-muted">{r.updated}</span> },
   ]
 
   return (
     <>
-      {/* Toolbar. Ticking rows swaps it for a Carbon batch-action bar; otherwise Active/Closed tabs on the
-          left (like Jobs) + a status filter on the right, same height so the table never jumps. */}
+      {/* Toolbar. Ticking rows swaps it for a Carbon batch-action bar; otherwise the Active/Closed tabs. */}
       {selectedCount > 0 ? (
         <div className="mt-7 flex flex-wrap items-center justify-between gap-3 rounded-md border border-line-strong bg-sunk px-3 py-2">
           <span className="text-sm font-medium text-ink">{selectedCount} selected</span>
@@ -141,58 +110,23 @@ export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) 
           </div>
         </div>
       ) : (
-        <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
-          <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Quote status">
-            {TABS.map((t) => {
-              const on = tab === t.key
-              return (
-                <button
-                  key={t.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={on}
-                  onClick={() => switchTab(t.key)}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${on ? 'bg-sunk font-medium text-ink' : 'text-ink-muted hover:bg-paper hover:text-ink'}`}
-                >
-                  {t.label}
-                  <span className={`tabular rounded-full px-1.5 py-0.5 text-xs leading-none ${on ? 'bg-line text-ink-muted' : 'bg-sunk text-ink-muted'}`}>{counts[t.key]}</span>
-                </button>
-              )
-            })}
-          </div>
-          <Popover
-            width={188}
-            align="right"
-            renderTrigger={({ ref, onClick }) => (
+        <div className="mt-7 flex flex-wrap items-center gap-1 border-b border-line pb-2" role="tablist" aria-label="Quote status">
+          {TABS.map((t) => {
+            const on = tab === t.key
+            return (
               <button
-                ref={ref}
+                key={t.key}
                 type="button"
-                onClick={onClick}
-                className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors hover:bg-sunk ${status !== 'all' ? 'text-ink' : 'text-ink-muted hover:text-ink'}`}
+                role="tab"
+                aria-selected={on}
+                onClick={() => switchTab(t.key)}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${on ? 'bg-sunk font-medium text-ink' : 'text-ink-muted hover:bg-paper hover:text-ink'}`}
               >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 5h18M6 12h12M10 19h4" /></svg>
-                Filter
-                {status !== 'all' ? <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true" /> : null}
+                {t.label}
+                <span className={`tabular rounded-full px-1.5 py-0.5 text-xs leading-none ${on ? 'bg-line text-ink-muted' : 'bg-sunk text-ink-muted'}`}>{counts[t.key]}</span>
               </button>
-            )}
-          >
-            {({ close }) => (
-              <div className="flex flex-col">
-                <div className="px-2 pb-1 pt-0.5 text-xs font-medium text-muted">Status</div>
-                {options.map((opt) => (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() => { setStatus(opt.key); close() }}
-                    className={`flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-ink transition-colors hover:bg-paper ${status === opt.key ? 'font-medium' : ''}`}
-                  >
-                    <span>{opt.text}</span>
-                    {status === opt.key ? <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true" /> : null}
-                  </button>
-                ))}
-              </div>
-            )}
-          </Popover>
+            )
+          })}
         </div>
       )}
 

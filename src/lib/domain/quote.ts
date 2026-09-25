@@ -419,11 +419,10 @@ export function effectiveQuoteStatus(status: string, validUntil: Date | null, no
 /** All quotes for the Quotes list, newest first. Dual-reads the client from the enquiry (new) or the
  *  project (legacy) during the migration window (docs/31). Status reflects derived expiry. */
 export async function listQuotes(): Promise<QuoteListRow[]> {
-  const now = systemClock.now()
   const quotes = await prisma.quote.findMany({
     orderBy: [{ seq: 'desc' }, { createdAt: 'desc' }],
     include: {
-      currentVersion: { select: { total: true, updatedAt: true, validUntil: true } },
+      currentVersion: { select: { total: true, updatedAt: true } },
       enquiry: { select: { name: true, client: { select: { displayName: true } } } },
       project: { select: { client: { select: { displayName: true } } } },
     },
@@ -433,7 +432,9 @@ export async function listQuotes(): Promise<QuoteListRow[]> {
     number: quoteDisplayNumber(q.reference, q.seq),
     clientName: q.enquiry?.client?.displayName ?? q.enquiry?.name ?? q.project?.client?.displayName ?? 'Unknown',
     total: q.currentVersion?.total ?? new Prisma.Decimal(0),
-    status: effectiveQuoteStatus(q.status, q.currentVersion?.validUntil ?? null, now),
+    // Raw stored status - the UI (features/quotes/status.ts) folds it into the simplified Pending/Sent/
+    // Accepted/Declined view. No auto-"expire" here.
+    status: q.status,
     updatedAt: q.currentVersion?.updatedAt ?? q.updatedAt,
   }))
 }
