@@ -13,17 +13,21 @@
 // Carbon column-balance rule (docs/26 / 2x-grid Phase 9): only the PRIMARY identity column absorbs the
 // horizontal slack. Metadata (dates, currency, status, counts) is CONTENT-SIZED and must NOT expand into
 // a blank region - so every table reads tight and balanced instead of pooling gaps between short values.
+// Carbon 2x-grid column balance: columns fill the table width PROPORTIONALLY (like Carbon's data table),
+// so the fill is even and gaps are small + uniform - never one giant gap after a short primary value, and
+// never metadata columns ballooning. The primary identity column is ~2x a metadata column; short numeric
+// counts and status pills stay narrow. Header and body share this one template so keylines always line up.
 export const COL = {
   /** Avatar / icon / overflow-action menu, or a selection control - fixed narrow, never flexes. */
   fixed: '2.75em',
-  /** A very small numeric count (e.g. Jobs: 0/1) - sized to its content, no growth. */
-  count: 'minmax(3.5em, max-content)',
-  /** Status / stage pill, or a short code - sized to its widest label, no growth. */
-  content: 'minmax(6em, max-content)',
-  /** Date / currency / phone / short metadata - sized to content, no growth (never expands into a gap). */
-  constrained: 'minmax(7.5em, max-content)',
-  /** Event / category / type / secondary text - a secondary identity column: absorbs a little slack. */
-  flexMedium: 'minmax(10em, 0.5fr)',
-  /** Client / name / title / description - the primary identity column: absorbs the remaining slack. */
-  flexHigh: 'minmax(14em, 1fr)',
+  /** A very small numeric count (e.g. Jobs: 0/1) - narrow, minimal flex. */
+  count: 'minmax(3.5em, 0.45fr)',
+  /** Status / stage pill, or a short code - content-ish, low flex. */
+  content: 'minmax(6.5em, 0.75fr)',
+  /** Date / currency / phone / short metadata - predictable, modest flex so it fills without gapping. */
+  constrained: 'minmax(7.5em, 0.9fr)',
+  /** Event / category / type / secondary text - a secondary identity column, medium flex. */
+  flexMedium: 'minmax(9em, 1.25fr)',
+  /** Client / name / title / description - the primary identity column, ~2x a metadata column. */
+  flexHigh: 'minmax(12em, 1.9fr)',
 } as const
