@@ -48,7 +48,7 @@ export function QuotesTable({ rows }: { rows: QuoteRow[] }) {
 
   const columns: DataColumn<QuoteRow>[] = [
     { key: 'quote', header: 'Quote', width: COL.constrained, cell: (r) => <Link href={`/quotes/${r.id}`} className="tabular block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.number}</Link> },
-    { key: 'client', header: 'Client', width: COL.flexHigh, cell: (r) => <span className="block truncate text-ink">{r.client}</span> },
+    { key: 'client', header: 'Client', width: COL.flexMedium, cell: (r) => <span className="block truncate text-ink">{r.client}</span> },
     { key: 'amount', header: 'Amount', width: COL.constrained, align: 'right', cell: (r) => <span className="tabular text-ink">{r.amount}</span> },
     { key: 'status', header: 'Status', width: COL.content, cell: (r) => <StatusPill tone={STATUS_TONE[r.status] ?? 'neutral'}>{label(r.status)}</StatusPill> },
     { key: 'updated', header: 'Updated', width: COL.constrained, cell: (r) => <span className="tabular block truncate whitespace-nowrap text-ink-muted">{r.updated}</span> },
