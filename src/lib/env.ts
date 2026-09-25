@@ -54,11 +54,13 @@ const envSchema = z
         message: 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together (§8.5)',
       })
     }
-    if (Boolean(val.RESEND_API_KEY) !== Boolean(val.EMAIL_FROM)) {
+    // Resend needs a verified sender, so RESEND_API_KEY requires EMAIL_FROM. But EMAIL_FROM may be set on
+    // its own (it is also the "from" for Gmail/SMTP), so only the Resend-key-without-a-sender case is invalid.
+    if (val.RESEND_API_KEY && !val.EMAIL_FROM) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['RESEND_API_KEY'],
-        message: 'RESEND_API_KEY and EMAIL_FROM must be set together to send email',
+        path: ['EMAIL_FROM'],
+        message: 'EMAIL_FROM must be set when RESEND_API_KEY is set (Resend needs a verified sender)',
       })
     }
     if (Boolean(val.SMTP_USER) !== Boolean(val.SMTP_PASS)) {
