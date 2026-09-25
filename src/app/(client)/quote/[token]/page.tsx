@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { PrintButton } from '@/components/PrintButton'
 import { prisma } from '@/lib/db'
 import { markQuoteViewed, quoteDisplayNumber } from '@/lib/domain/quote'
 import { QuoteDocument, type QuoteDocData } from '@/components/QuoteDocument'
@@ -9,10 +8,9 @@ export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Your quote - Moments' }
 
 /**
- * Client-facing quote view (docs/31). Renders the shared QuoteDocument — the very same document the staff
- * "Preview quote" route shows — with a Download PDF control and nothing else. View-only: no acceptance
- * box, no internal IDs or staff controls (acceptance is staff-run per docs/31 §7). Kept in sync with the
- * staff preview: same QuoteDocument, same max-w-[210mm] width.
+ * Client-facing quote view (docs/31). Opens straight to the shared QuoteDocument on a plain white
+ * background with no button chrome, so the link reads like an already-opened PDF. View-only; acceptance
+ * is staff-run per docs/31 §7. Same document and width as the staff "Preview quote" route.
  */
 export default async function ClientQuotePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
@@ -47,11 +45,8 @@ export default async function ClientQuotePage({ params }: { params: Promise<{ to
   }
 
   return (
-    <main className="min-h-screen bg-paper px-4 py-8 print:bg-surface print:p-0">
+    <main className="min-h-screen bg-surface px-4 py-8 print:p-0">
       <div className="mx-auto w-full max-w-[210mm]">
-        <div className="mb-4 flex items-center justify-end print:hidden">
-          <PrintButton label="Download PDF" />
-        </div>
         <QuoteDocument doc={doc} />
       </div>
     </main>
