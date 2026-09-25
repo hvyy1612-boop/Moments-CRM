@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 
 /**
- * Small anchored popover used across the Enquiries list (stage control, progress checklist, row menu,
- * toolbar dropdowns). Fixed positioning + getBoundingClientRect so the panel is never clipped by the
- * table's horizontal scroll container. Closes on outside click, Escape, scroll, or resize. Purely a
- * presentation primitive - it holds no business state.
+ * Small anchored popover shared across list toolbars (stage control, row menus, filter/sort dropdowns).
+ * Fixed positioning + getBoundingClientRect so the panel is never clipped by a table's horizontal scroll
+ * container. Closes on outside click, Escape, scroll, or resize. Purely a presentation primitive - it
+ * holds no business state.
  */
 export function Popover({
   renderTrigger,

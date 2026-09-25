@@ -1,21 +1,23 @@
 import type { ReactNode } from 'react'
 
-// Status is carried by the label text and a colour dot together (§10.3), so it never relies on
-// colour alone. The label stays in ink so it always reads clearly.
+// Carbon "read-only tag" (measured from carbondesignsystem.com: soft same-hue fill + dark same-hue text,
+// pill radius, NO border and NO dot - borders are reserved for interactive selectable/operational tags).
+// The TEXT label always names the status, so colour is redundant reinforcement, never the sole signal
+// (§10.3 / WCAG). Each tone reuses an existing soft tint + -ink token pair from globals.css - the same
+// palette the workflow StatusTag uses - so every status chip across the app reads as one system.
 export type Tone = 'neutral' | 'info' | 'good' | 'warn' | 'bad'
 
-const dot: Record<Tone, string> = {
-  neutral: 'bg-ink-muted',
-  info: 'bg-accent',
-  good: 'bg-ok',
-  warn: 'bg-warn',
-  bad: 'bg-danger',
+const TONE: Record<Tone, string> = {
+  neutral: 'bg-hold text-hold-ink',
+  info: 'bg-quote text-quote-ink',
+  good: 'bg-delivered text-delivered-ink',
+  warn: 'bg-enquiry text-enquiry-ink',
+  bad: 'bg-lost text-lost-ink',
 }
 
 export function StatusPill({ tone = 'neutral', children }: { tone?: Tone; children: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-0.5 text-xs font-medium text-ink">
-      <span className={`h-1.5 w-1.5 rounded-full ${dot[tone]}`} aria-hidden="true" />
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${TONE[tone]}`}>
       {children}
     </span>
   )

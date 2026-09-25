@@ -1,7 +1,7 @@
 'use client'
 
 import { ENQUIRY_STAGE_LABEL } from '@/features/enquiries/status'
-import { Popover } from './Popover'
+import { Popover } from '@/components/ui/Popover'
 import { setEnquiryStageAction } from './actions'
 
 // The stage dropdown is a pure list of the four phases, shown only while a lead is open. Booked and Lost

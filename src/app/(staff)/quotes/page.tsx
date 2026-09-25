@@ -51,9 +51,7 @@ export default async function QuotesPage() {
           }
         />
 
-        <div className="mt-4">
-          <QuotesTable rows={rows} />
-        </div>
+        <QuotesTable rows={rows} />
       </PageContainer>
     </AppShell>
   )

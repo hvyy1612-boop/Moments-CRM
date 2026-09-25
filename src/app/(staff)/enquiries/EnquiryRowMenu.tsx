@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRef } from 'react'
-import { Popover } from './Popover'
+import { Popover } from '@/components/ui/Popover'
 import { setEnquiryStageAction } from './actions'
 
 // View enquiry / Open job are navigation only. Edit details opens a preview sheet. The outcome
