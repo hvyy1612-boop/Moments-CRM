@@ -54,8 +54,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
       },
     })
   } catch (err) {
-    // TEMP DEBUG: surface the real serverless error so we can diagnose the 500. Remove after fixing.
-    const detail = err instanceof Error ? `${err.message}\n\n${err.stack ?? ''}` : String(err)
-    return new Response(`PDF_ERROR\n${detail}`, { status: 500, headers: { 'Content-Type': 'text/plain' } })
+    console.error('[quote-pdf] failed to render quote', doc.number, err)
+    return new Response('Sorry, this quote could not be generated right now. Please contact the studio.', {
+      status: 500,
+      headers: { 'Content-Type': 'text/plain' },
+    })
   }
 }
