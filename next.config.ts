@@ -13,11 +13,12 @@ const nextConfig: NextConfig = {
   // @react-pdf/renderer ships font/layout internals that must not be bundled by the server compiler;
   // load it from node_modules at runtime so the quote-PDF route builds cleanly.
   serverExternalPackages: ['@react-pdf/renderer'],
-  // ...but react-pdf reads its built-in font metrics (pdfkit's *.afm, e.g. Helvetica.afm) from disk at
-  // runtime. Those data files are not import-traced, so Vercel omits them from the serverless function
-  // and the PDF route 500s. Force them (and the react-pdf tree) into the /quote/[token] function.
+  // ...but react-pdf loads pdfkit's built-in standard fonts (js/standard-fonts/*.cjs) and metrics
+  // (js/data/*.afm) from disk via dynamic require at runtime. Those are not import-traced, so Vercel
+  // omits them from the serverless function and the PDF route 500s ("Cannot find module .../Helvetica.cjs").
+  // Force the whole pdfkit package (and the react-pdf tree) into the /quote/[token] function.
   outputFileTracingIncludes: {
-    '/quote/[token]': ['./node_modules/pdfkit/js/data/**/*', './node_modules/@react-pdf/**/*', './node_modules/fontkit/**/*'],
+    '/quote/[token]': ['./node_modules/pdfkit/**/*', './node_modules/@react-pdf/**/*', './node_modules/fontkit/**/*'],
   },
   // The e2e suite builds for production while `npm run dev` may be running. Sharing .next means
   // the build overwrites the chunks the dev server is serving and both break, so the suite gets
