@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
-import { COL } from '@/components/ui/tableColumns'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { Popover } from '@/components/ui/Popover'
 
@@ -46,12 +45,20 @@ export function QuotesTable({ rows }: { rows: QuoteRow[] }) {
   const visible = status === 'all' ? rows : rows.filter((r) => r.status === status)
   const options = [{ key: 'all', text: 'All statuses' }, ...presentStatuses.map((s) => ({ key: s, text: label(s) }))]
 
+  // Quotes is a CONTENT-CLUSTER table, not a full-width fill. Every value here is short and uniform
+  // (Q-0000 / a name / $x,xxx.xx / a status tag / a date), so stretching 5 columns across a wide page just
+  // opens a dead zone between Client and Amount. Instead the columns are FIXED `em` widths (measured to fit
+  // the widest header/body content plus the cell padding, at the shared text-sm font size so `1em` resolves
+  // to the same length in the header and body grids and they stay aligned to the pixel), sized so Client is
+  // the widest text column but capped so it can't push Amount away. A trailing `1fr` spacer soaks up all
+  // remaining width, so the spare space sits AFTER the cluster on the right, never between columns.
   const columns: DataColumn<QuoteRow>[] = [
-    { key: 'quote', header: 'Quote', width: COL.constrained, cell: (r) => <Link href={`/quotes/${r.id}`} className="tabular block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.number}</Link> },
-    { key: 'client', header: 'Client', width: COL.flexMedium, cell: (r) => <span className="block truncate text-ink">{r.client}</span> },
-    { key: 'amount', header: 'Amount', width: COL.constrained, align: 'right', cell: (r) => <span className="tabular text-ink">{r.amount}</span> },
-    { key: 'status', header: 'Status', width: COL.content, cell: (r) => <StatusPill tone={STATUS_TONE[r.status] ?? 'neutral'}>{label(r.status)}</StatusPill> },
-    { key: 'updated', header: 'Updated', width: COL.constrained, cell: (r) => <span className="tabular block truncate whitespace-nowrap text-ink-muted">{r.updated}</span> },
+    { key: 'quote', header: 'Quote', width: '6.5em', cell: (r) => <Link href={`/quotes/${r.id}`} className="tabular block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.number}</Link> },
+    { key: 'client', header: 'Client', width: '14em', cell: (r) => <span className="block truncate text-ink">{r.client}</span> },
+    { key: 'amount', header: 'Amount', width: '8.5em', align: 'right', cell: (r) => <span className="tabular text-ink">{r.amount}</span> },
+    { key: 'status', header: 'Status', width: '10em', cell: (r) => <StatusPill tone={STATUS_TONE[r.status] ?? 'neutral'}>{label(r.status)}</StatusPill> },
+    { key: 'updated', header: 'Updated', width: '9.5em', cell: (r) => <span className="tabular block truncate whitespace-nowrap text-ink-muted">{r.updated}</span> },
+    { key: 'spacer', header: '', width: '1fr', cell: () => null },
   ]
 
   return (
