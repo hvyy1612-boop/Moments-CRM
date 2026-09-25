@@ -370,10 +370,11 @@ export async function acceptQuote(quoteId: string, actorUserId: string | null = 
         // Accept + freeze this quote/version.
         await tx.quoteVersion.update({ where: { id: version.id }, data: { status: 'ACCEPTED', acceptedByClientAt: now } })
         await tx.quote.update({ where: { id: quote.id }, data: { status: 'ACCEPTED' } })
-        // Supersede the enquiry's other open quotes (never edited in place).
-        await tx.quote.updateMany({
+        // Once one quote is accepted, the enquiry's other OPEN quotes (draft/sent/viewed) are redundant
+        // alternatives, so delete them (cascade to their versions/lines) rather than leaving them as
+        // "superseded" clutter. Accepted/declined siblings are records and stay untouched.
+        await tx.quote.deleteMany({
           where: { enquiryId: quote.enquiryId, NOT: { id: quote.id }, status: { in: ['DRAFT', 'SENT', 'VIEWED'] } },
-          data: { status: 'SUPERSEDED' },
         })
 
         // Convert the enquiry into a Job (idempotent) and link both ways.
