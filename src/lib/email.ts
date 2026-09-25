@@ -150,6 +150,11 @@ function button(href: string, label: string): string {
   return `<a href="${href}" style="display:inline-block;background:#20201e;color:#ffffff;text-decoration:none;font-weight:700;padding:11px 18px;border-radius:7px">${label}</a>`
 }
 
+/** An inline text hyperlink — blue and underlined, the way a plain email link reads (no button box). */
+function link(href: string, label: string): string {
+  return `<a href="${href}" style="color:#1a73e8;text-decoration:underline;font-weight:600">${label}</a>`
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
@@ -159,7 +164,7 @@ export type QuoteEmail = { to: string; clientName: string; quoteLink: string }
 export async function sendQuoteEmail(email: QuoteEmail): Promise<void> {
   const html = shell(
     'Your quote is ready',
-    `<p>Hi ${escapeHtml(email.clientName)}, your photography quote is ready to review.</p><p>${button(email.quoteLink, 'View your quote')}</p>`,
+    `<p>Hi ${escapeHtml(email.clientName)}, your photography quote is ready to review.</p><p>${link(email.quoteLink, 'View your quote')}</p>`,
   )
   await deliver({ to: email.to, subject: 'Your Moments quote', html, event: 'email.quote_sent', devLink: email.quoteLink })
 }
@@ -179,7 +184,7 @@ export async function sendComposedQuoteEmail(email: ComposedQuoteEmail): Promise
     .map((p) => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
     .join('')
   const subject = email.subject.trim() || 'Your Moments quote'
-  const html = shell(subject, `${paragraphs}<p>${button(email.quoteLink, 'View your quote')}</p>`)
+  const html = shell(subject, `${paragraphs}<p>${link(email.quoteLink, 'View your quote')}</p>`)
   await deliver({ to: email.to, subject, html, event: 'email.quote_sent', devLink: email.quoteLink })
 }
 
