@@ -71,14 +71,16 @@ export function QuoteDocument({ doc }: { doc: QuoteDocData }) {
         </div>
       </div>
 
-      {/* Customer meta grid */}
-      <div className="mt-6 max-w-[104mm] overflow-hidden rounded-sm border border-line-strong">
-        {customerRows.map((r, i) => (
-          <div key={r.label} className={`grid grid-cols-[40mm_1fr] text-sm${i > 0 ? ' border-t border-line' : ''}`}>
-            <div className="border-r border-line bg-sunk px-4 py-3 font-medium text-ink-muted">{r.label}</div>
-            <div className="break-words px-4 py-3 font-medium text-ink">{r.value}</div>
-          </div>
-        ))}
+      {/* Customer meta grid — full width, 2x2 label/value pairs, flush to the table edges */}
+      <div className="mt-6 grid grid-cols-[44mm_1fr_44mm_1fr] overflow-hidden rounded-sm border border-line-strong text-sm">
+        {customerRows.flatMap((r, p) => {
+          const topRow = p < 2
+          const leftPair = p % 2 === 0
+          return [
+            <div key={`${r.label}-l`} className={`border-r border-line bg-sunk px-4 py-3 font-medium text-ink-muted${topRow ? ' border-b' : ''}`}>{r.label}</div>,
+            <div key={`${r.label}-v`} className={`break-words px-4 py-3 font-medium text-ink${leftPair ? ' border-r border-line' : ''}${topRow ? ' border-b border-line' : ''}`}>{r.value}</div>,
+          ]
+        })}
       </div>
 
       {/* Summary of requirements */}
@@ -120,31 +122,32 @@ export function QuoteDocument({ doc }: { doc: QuoteDocData }) {
         </tbody>
       </table>
 
-      {/* Totals */}
-      <div className="mt-4 flex justify-end">
-        <div className="w-full max-w-[92mm] overflow-hidden rounded-sm border border-line-strong text-sm">
-          <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3"><span className="text-ink-muted">Subtotal (ex GST)</span><span className="tabular text-ink">{formatAud(doc.subtotal)}</span></div>
-          <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3"><span className="text-ink-muted">GST 10%</span><span className="tabular text-ink">{formatAud(doc.taxTotal)}</span></div>
-          <div className="flex items-center justify-between gap-4 bg-sunk px-4 py-3 text-base font-semibold"><span className="uppercase tracking-wide text-ink">Total</span><span className="tabular text-ink">{formatAud(doc.total)}</span></div>
-        </div>
-      </div>
-
-      {/* Payment schedule */}
-      {dep ? (
-        <section className="mt-6">
-          <div className={EYEBROW}>Payment schedule</div>
+      {/* Payment schedule (left) + Totals (right) — two aligned columns, flush to the table edges */}
+      <div className={`mt-6 grid gap-6 sm:items-start${dep ? ' sm:grid-cols-2' : ''}`}>
+        {dep ? (
+          <section>
+            <div className={EYEBROW}>Payment schedule</div>
+            <div className="mt-2 overflow-hidden rounded-sm border border-line-strong text-sm">
+              <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3">
+                <div><div className="text-ink">Booking deposit</div><div className="mt-1 text-xs text-ink-muted">{doc.depositPercent}% - due on acceptance</div></div>
+                <span className="tabular font-semibold text-ink">{formatAud(dep.deposit)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4 px-4 py-3">
+                <div><div className="text-ink">Remaining balance</div><div className="mt-1 text-xs text-ink-muted">{100 - (doc.depositPercent ?? 0)}% - due before the shoot</div></div>
+                <span className="tabular font-semibold text-ink">{formatAud(dep.balance)}</span>
+              </div>
+            </div>
+          </section>
+        ) : null}
+        <section>
+          <div className={EYEBROW}>Totals</div>
           <div className="mt-2 overflow-hidden rounded-sm border border-line-strong text-sm">
-            <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3">
-              <div><div className="text-ink">Booking deposit</div><div className="mt-1 text-xs text-ink-muted">{doc.depositPercent}% - due on acceptance</div></div>
-              <span className="tabular font-semibold text-ink">{formatAud(dep.deposit)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-4 px-4 py-3">
-              <div><div className="text-ink">Remaining balance</div><div className="mt-1 text-xs text-ink-muted">{100 - (doc.depositPercent ?? 0)}% - due before the shoot</div></div>
-              <span className="tabular font-semibold text-ink">{formatAud(dep.balance)}</span>
-            </div>
+            <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3"><span className="text-ink-muted">Subtotal (ex GST)</span><span className="tabular text-ink">{formatAud(doc.subtotal)}</span></div>
+            <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3"><span className="text-ink-muted">GST 10%</span><span className="tabular text-ink">{formatAud(doc.taxTotal)}</span></div>
+            <div className="flex items-center justify-between gap-4 bg-sunk px-4 py-3 text-base font-semibold"><span className="uppercase tracking-wide text-ink">Total</span><span className="tabular text-ink">{formatAud(doc.total)}</span></div>
           </div>
         </section>
-      ) : null}
+      </div>
 
       {/* Terms & conditions */}
       {doc.notes ? (
