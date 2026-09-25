@@ -11,6 +11,7 @@
     "set-password": "tsx scripts/set-password.ts",
     "create-admin": "tsx scripts/create-admin.ts",
     "seed:demo": "tsx prisma/seed-demo.ts",
+    "seed:demo:quotes": "tsx prisma/seed-demo-quotes.ts",
     "show-logs": "tsx scripts/show-logs.ts",
     "start": "next start",
     "typecheck": "tsc --noEmit",
