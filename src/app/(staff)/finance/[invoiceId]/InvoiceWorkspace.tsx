@@ -387,39 +387,51 @@ export function InvoiceWorkspace(props: {
           />
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
+              {/* Description column absorbs the slack (width 100%) so every other column stays content-width
+                  and the numeric columns cluster tidily on the right; the drag handle and row actions each
+                  get their own gutter column, so the Item header lines up with the item name exactly. */}
+              <colgroup>
+                {editable ? <col /> : null}
+                <col />
+                <col style={{ width: '100%' }} />
+                <col />
+                <col />
+                <col />
+                <col />
+                {editable ? <col /> : null}
+              </colgroup>
               <thead>
                 <tr className="border-b border-line-strong text-left text-sm text-ink-muted">
+                  {editable ? <th className="py-2.5" /> : null}
                   <th className="px-4 py-2.5 font-medium">Item</th>
                   <th className="px-4 py-2.5 font-medium">Description</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Unit price</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Qty</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Discount</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Amount</th>
-                  {editable ? <th className="px-4 py-2.5"></th> : null}
+                  <th className="whitespace-nowrap px-4 py-2.5 text-right font-medium">Unit price</th>
+                  <th className="whitespace-nowrap px-4 py-2.5 text-right font-medium">Qty</th>
+                  <th className="whitespace-nowrap px-4 py-2.5 text-right font-medium">Discount</th>
+                  <th className="whitespace-nowrap px-4 py-2.5 text-right font-medium">Amount</th>
+                  {editable ? <th className="py-2.5" /> : null}
                 </tr>
               </thead>
               <tbody>
                 {lines.length === 0 ? (
-                  <tr><td colSpan={editable ? 7 : 6} className="px-4 py-6 text-center text-sm text-ink-muted">No items yet.</td></tr>
+                  <tr><td colSpan={editable ? 8 : 6} className="px-4 py-6 text-center text-sm text-ink-muted">No items yet.</td></tr>
                 ) : lines.map((l, index) => (
                   <tr key={l.id} onDragOver={(e) => e.preventDefault()} onDrop={() => reorder(index)} className="group border-b border-line align-top last:border-b-0">
-                    <td className="px-4 py-3">
-                      <div className="flex items-start gap-1.5">
-                        {editable ? (
-                          <span draggable onDragStart={() => { dragIndex.current = index }} aria-label="Drag to reorder" className="mt-0.5 shrink-0 cursor-grab text-muted opacity-0 transition-opacity hover:text-ink focus-within:opacity-100 group-hover:opacity-100">
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" /><circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" /><circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" /></svg>
-                          </span>
-                        ) : null}
-                        <span className="font-medium text-ink">{l.name || <span className="text-ink-muted">Untitled</span>}</span>
-                      </div>
-                    </td>
-                    <td className="max-w-sm whitespace-pre-line px-4 py-3 text-ink-muted">{l.description || '-'}</td>
-                    <td className="tabular px-4 py-3 text-right text-ink-muted">{money(Number(l.unitPrice) || 0)}</td>
-                    <td className="tabular px-4 py-3 text-right text-ink-muted">{l.quantity}</td>
-                    <td className="tabular px-4 py-3 text-right text-ink-muted">{Number(l.discount) > 0 ? `-${money(Number(l.discount))}` : '-'}</td>
-                    <td className="tabular px-4 py-3 text-right font-medium text-ink">{money(amountOf(l))}</td>
                     {editable ? (
-                      <td className="px-4 py-3">
+                      <td className="py-3 pl-3 align-top">
+                        <span draggable onDragStart={() => { dragIndex.current = index }} aria-label="Drag to reorder" className="flex cursor-grab justify-center pt-0.5 text-muted opacity-0 transition-opacity hover:text-ink focus-within:opacity-100 group-hover:opacity-100">
+                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" /><circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" /><circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" /></svg>
+                        </span>
+                      </td>
+                    ) : null}
+                    <td className="px-4 py-3 font-medium text-ink">{l.name || <span className="text-ink-muted">Untitled</span>}</td>
+                    <td className="whitespace-pre-line px-4 py-3 text-ink-muted">{l.description || '-'}</td>
+                    <td className="tabular whitespace-nowrap px-4 py-3 text-right text-ink-muted">{money(Number(l.unitPrice) || 0)}</td>
+                    <td className="tabular whitespace-nowrap px-4 py-3 text-right text-ink-muted">{l.quantity}</td>
+                    <td className="tabular whitespace-nowrap px-4 py-3 text-right text-ink-muted">{Number(l.discount) > 0 ? `-${money(Number(l.discount))}` : '-'}</td>
+                    <td className="tabular whitespace-nowrap px-4 py-3 text-right font-medium text-ink">{money(amountOf(l))}</td>
+                    {editable ? (
+                      <td className="py-3 pr-3 align-top">
                         <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
                           <button type="button" onClick={() => openEdit(l)} aria-label="Edit item" className="rounded p-1 text-ink-muted hover:bg-paper hover:text-ink"><svg {...svg}><path d="M4 20h4l10-10-4-4L4 16v4z" /><path d="m13.5 6.5 4 4" /></svg></button>
                           <button type="button" onClick={() => duplicate(l.id)} aria-label="Duplicate item" className="rounded p-1 text-ink-muted hover:bg-paper hover:text-ink"><svg {...svg}><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg></button>
