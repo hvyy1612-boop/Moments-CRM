@@ -111,7 +111,7 @@ export function DataTable<T>({
         <div role="table" aria-label={ariaLabel} className="min-w-[56em] text-sm">
           <div
             role="row"
-            className="grid min-h-12 items-center rounded-t-md border-b border-line bg-sunk text-xs uppercase tracking-wide text-ink-muted"
+            className="grid min-h-12 items-center border-b border-line-strong text-xs uppercase tracking-wide text-ink-muted"
             style={{ gridTemplateColumns: template }}
           >
             {visible.map((c) => (

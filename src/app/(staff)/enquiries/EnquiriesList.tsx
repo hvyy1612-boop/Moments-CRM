@@ -9,7 +9,7 @@ import { COL } from '@/components/ui/tableColumns'
 import { Popover } from './Popover'
 import { StageControl } from './StageControl'
 import { AddEnquiryButton } from './AddEnquiryButton'
-import { EnquiryActionsCell, initials, waitingLabel, type EnquiryRowData } from './EnquiryRow'
+import { EnquiryActionsCell, waitingLabel, type EnquiryRowData } from './EnquiryRow'
 
 // UI REDESIGN PHASE ONLY. Tabs / search / sort / filter operate on the already-loaded page data
 // (visual filtering). None of them change enquiry stage, tasks, or any backend record.
@@ -74,8 +74,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
       header: 'Client',
       width: COL.flexHigh,
       cell: (r) => (
-        <Link href={`/enquiries/${r.id}`} className="flex min-w-0 items-center gap-3">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">{initials(r.name)}</span>
+        <Link href={`/enquiries/${r.id}`} className="block min-w-0">
           <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.name}</span>
         </Link>
       ),

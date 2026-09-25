@@ -25,14 +25,6 @@ export type JobRow = {
 
 type Labels = ComponentProps<typeof StatusPicker>['labels']
 
-/** Avatar initials, e.g. "Olivia & Ben" -> "OB". Mirrors the Clients list. */
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter((p) => p !== '&')
-  if (parts.length === 0) return '?'
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
-  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
-}
-
 /** Jobs column schema over the shared DataTable. */
 export function JobsTable({ rows, backParam, labels, csrf, canEdit }: { rows: JobRow[]; backParam: string; labels: Labels; csrf: string; canEdit: boolean }) {
   const columns: DataColumn<JobRow>[] = [
@@ -41,8 +33,7 @@ export function JobsTable({ rows, backParam, labels, csrf, canEdit }: { rows: Jo
       header: 'Client',
       width: COL.flexHigh,
       cell: (r) => (
-        <Link href={`/jobs/${r.id}${backParam}`} className="flex min-w-0 items-center gap-3">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">{initials(r.client)}</span>
+        <Link href={`/jobs/${r.id}${backParam}`} className="block min-w-0">
           <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.client}</span>
         </Link>
       ),

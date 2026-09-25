@@ -16,14 +16,6 @@ export type ClientRow = {
   since: Date
 }
 
-/** Initials for the avatar chip, e.g. "Ha Vy Tran" -> "HT". */
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '?'
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
-  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
-}
-
 // A client created within this window is flagged "New" (tinted row + tag) so staff spot freshly-added or
 // just-imported profiles at a glance; it fades on its own once the window passes.
 const RECENT_ADD_MS = 10 * 60 * 1000
@@ -44,19 +36,14 @@ export function ClientsTable({ rows, csrf, canDelete, backParam }: { rows: Clien
       header: 'Client',
       width: COL.flexHigh,
       cell: (r) => (
-        <Link href={`/clients/${r.id}${backParam}`} className="flex min-w-0 items-center gap-3">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">
-            {initials(r.name)}
+        <Link href={`/clients/${r.id}${backParam}`} className="block min-w-0">
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.name}</span>
+            {isRecentlyAdded(r.since) ? (
+              <span className="shrink-0 rounded bg-accent-tint px-1.5 py-0.5 text-xs font-semibold uppercase leading-none tracking-wide text-accent-ink">New</span>
+            ) : null}
           </span>
-          <span className="min-w-0">
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.name}</span>
-              {isRecentlyAdded(r.since) ? (
-                <span className="shrink-0 rounded bg-accent-tint px-1.5 py-0.5 text-xs font-semibold uppercase leading-none tracking-wide text-accent-ink">New</span>
-              ) : null}
-            </span>
-            <span className="block truncate text-xs text-ink-muted">{r.email}</span>
-          </span>
+          <span className="block truncate text-xs text-ink-muted">{r.email}</span>
         </Link>
       ),
     },
