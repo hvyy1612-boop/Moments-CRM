@@ -6,15 +6,15 @@ import type { QuoteDocData } from '@/components/QuoteDocument'
 
 /**
  * The quotation as a real, downloadable A4 PDF (react-pdf) — the client link serves this inline so the
- * browser opens its own PDF viewer (with native download/print). It mirrors the on-screen QuoteDocument
- * template 1:1, only on a white page. Sizes are the HTML form's px values converted to PDF points
- * (1px = 0.75pt at 96dpi) so the proportions match the HTML exactly: text-2xl(24)->18, text-sm(14)->10.5,
- * text-xs(12)->9, text-5xl(48)->36; spacing 4/8/12/16/24/32px -> 3/6/9/12/18/24pt; 12mm->34pt, 76mm->215,
- * 28mm->79, 34mm->96, 80mm->227. Keep this in visual sync with QuoteDocument.tsx.
+ * browser opens its own PDF viewer (with native download/print). Mirrors the on-screen QuoteDocument
+ * template 1:1 on a white page. Sizes are the HTML form's px values at 1px = 0.75pt (text-2xl 24->18,
+ * text-sm 14->10.5, text-xs 12->9, text-5xl 48->36; 4/8/12/16/24px -> 3/6/9/12/18pt; 12mm->34, 76mm->215,
+ * 28mm->79, 34mm->96). The page is a flex column: content flows from the top and a flexible spacer pushes
+ * the signature + footer to the bottom so the quote uses the whole A4. Notes and Totals are equal height.
  *
- * Colours are literal here (react-pdf has no access to the CSS design tokens) but mirror globals.css:
- * ink #20201e, ink-muted #6f6f69, muted #9c948b, accent #a06a67, line #e7e2da / #ded7cc, sunk #f1ede7,
- * paper #faf9f6. Built-in Helvetica keeps it dependency-free and reliable on serverless.
+ * Colours are literal here (react-pdf has no CSS tokens) but mirror globals.css: ink #20201e,
+ * ink-muted #6f6f69, muted #9c948b, accent #a06a67, line #e7e2da / #ded7cc, sunk #f1ede7, paper #faf9f6.
+ * Built-in Helvetica keeps it dependency-free and reliable on serverless.
  */
 
 const C = {
@@ -30,15 +30,15 @@ const C = {
 }
 
 const s = StyleSheet.create({
-  page: { backgroundColor: C.white, color: C.ink, paddingHorizontal: 34, paddingVertical: 34, fontFamily: 'Helvetica', fontSize: 10.5, lineHeight: 1.5 },
+  page: { backgroundColor: C.white, color: C.ink, paddingHorizontal: 34, paddingVertical: 34, fontFamily: 'Helvetica', fontSize: 10.5, lineHeight: 1.5, flexDirection: 'column' },
 
-  // Header: MOMENTS + subtitle (left) | Quotation (right)
+  // Header
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   brand: { fontFamily: 'Helvetica-Bold', fontSize: 18, textTransform: 'uppercase', color: C.ink, lineHeight: 1 },
   brandSub: { fontFamily: 'Helvetica-Bold', fontSize: 9, letterSpacing: 0.8, textTransform: 'uppercase', color: C.accent, marginTop: 4 },
   title: { fontSize: 36, color: C.accent, lineHeight: 1 },
 
-  // Company block | boxed meta fields
+  // Company + meta
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 18 },
   companyName: { fontFamily: 'Helvetica-Bold', color: C.ink, marginBottom: 2 },
   companyLine: { color: C.inkMuted },
@@ -47,11 +47,12 @@ const s = StyleSheet.create({
   metaLabel: { width: 79, fontFamily: 'Helvetica-Bold', color: C.ink },
   metaValue: { flexGrow: 1, borderWidth: 1, borderColor: C.lineStrong, borderRadius: 2, backgroundColor: C.paper, paddingHorizontal: 9, paddingVertical: 4, color: C.ink },
 
-  // Accent bands (Customer / Notes / table header) — one shared height
-  band: { backgroundColor: C.accent, borderRadius: 2, paddingHorizontal: 9, paddingVertical: 5, marginTop: 18 },
+  // Accent bands
+  band: { backgroundColor: C.accent, borderRadius: 2, paddingHorizontal: 9, paddingVertical: 5 },
   bandText: { color: C.white, fontFamily: 'Helvetica-Bold', fontSize: 9, letterSpacing: 0.6, textTransform: 'uppercase' },
-  customerName: { marginTop: 6, paddingHorizontal: 3 },
   bold: { fontFamily: 'Helvetica-Bold' },
+  custBody: { marginTop: 6, paddingHorizontal: 3 },
+  custLine: { marginBottom: 2, color: C.ink },
 
   // Line-item table
   table: { marginTop: 18, borderWidth: 1, borderColor: C.lineStrong, borderRadius: 2 },
@@ -68,28 +69,29 @@ const s = StyleSheet.create({
   lineName: { fontFamily: 'Helvetica-Bold', color: C.ink },
   lineDetail: { fontSize: 9, color: C.inkMuted, marginTop: 3, lineHeight: 1.4 },
 
-  // Bottom band (notes + totals)
-  bottomRow: { flexDirection: 'row', marginTop: 18 },
-  notesCol: { width: '50%', paddingRight: 9 },
-  totalsCol: { width: '50%', paddingLeft: 9 },
-  notesBox: { marginTop: 6, borderWidth: 1, borderColor: C.lineStrong, borderRadius: 2, backgroundColor: C.paper, padding: 9, minHeight: 96, color: C.inkMuted },
-  totalsBox: { marginTop: 6, borderWidth: 1, borderColor: C.lineStrong, borderRadius: 2 },
-  totalsRow: { flexDirection: 'row', alignItems: 'center' },
-  totalsRowB: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderColor: C.line },
+  // Notes + Totals — equal height (both columns stretch; each box flexGrows to fill)
+  bottomRow: { flexDirection: 'row', marginTop: 18, alignItems: 'stretch' },
+  notesCol: { width: '50%', paddingRight: 9, flexDirection: 'column' },
+  totalsCol: { width: '50%', paddingLeft: 9, flexDirection: 'column' },
+  notesBox: { marginTop: 6, flexGrow: 1, minHeight: 90, borderWidth: 1, borderColor: C.lineStrong, borderRadius: 2, backgroundColor: C.paper, padding: 9, color: C.inkMuted },
+  totalsBox: { flexGrow: 1, borderWidth: 1, borderColor: C.lineStrong, borderRadius: 2, flexDirection: 'column' },
+  totalsRow: { flexGrow: 1, flexDirection: 'row', alignItems: 'center' },
+  totalsRowB: { flexGrow: 1, flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderColor: C.line },
   totalsLabel: { flexGrow: 1, paddingHorizontal: 9, paddingVertical: 4.5, color: C.inkMuted },
   totalsLabelStrong: { flexGrow: 1, paddingHorizontal: 9, paddingVertical: 6, fontFamily: 'Helvetica-Bold', color: C.ink, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 12 },
   totalsVal: { width: 96, paddingHorizontal: 9, paddingVertical: 4.5, textAlign: 'right', color: C.ink, borderLeftWidth: 1, borderColor: C.line },
   totalsValStrong: { width: 96, paddingHorizontal: 9, paddingVertical: 6, textAlign: 'right', fontFamily: 'Helvetica-Bold', color: C.ink, borderLeftWidth: 1, borderColor: C.line, fontSize: 12 },
   strongBg: { backgroundColor: C.sunk },
 
-  // Closing / signature / footer
+  // Closing / spacer / signature / footer
   closing: { marginTop: 18, fontFamily: 'Helvetica-Oblique', color: C.inkMuted },
-  sigWrap: { marginTop: 24, borderTopWidth: 1, borderColor: C.lineStrong, paddingTop: 15, alignItems: 'flex-end' },
+  spacer: { flexGrow: 1, minHeight: 18 },
+  sigWrap: { borderTopWidth: 1, borderColor: C.lineStrong, paddingTop: 15, alignItems: 'flex-end' },
   sigBlock: { width: 227 },
   sigLine: { flexDirection: 'row', alignItems: 'flex-end' },
   sigLabel: { fontFamily: 'Helvetica-Bold', color: C.ink, width: 60 },
   sigRule: { flexGrow: 1, borderBottomWidth: 1, borderColor: C.lineStrong, height: 12 },
-  footer: { marginTop: 24, textAlign: 'center', color: C.muted },
+  footer: { marginTop: 18, textAlign: 'center', color: C.muted },
 })
 
 export function QuotePdf({ doc }: { doc: QuoteDocData }) {
@@ -132,10 +134,15 @@ export function QuotePdf({ doc }: { doc: QuoteDocData }) {
           </View>
         </View>
 
-        {/* Customer band */}
-        <View style={{ width: '52%' }}>
+        {/* Customer band + details */}
+        <View style={{ width: '52%', marginTop: 18 }}>
           <View style={s.band}><Text style={s.bandText}>Customer</Text></View>
-          <Text style={s.customerName}><Text style={s.bold}>Name: </Text>{doc.clientName}</Text>
+          <View style={s.custBody}>
+            <Text style={s.custLine}><Text style={s.bold}>Name: </Text>{doc.clientName}</Text>
+            {doc.clientEmail ? <Text style={s.custLine}><Text style={s.bold}>Email: </Text>{doc.clientEmail}</Text> : null}
+            {doc.clientPhone ? <Text style={s.custLine}><Text style={s.bold}>Phone: </Text>{doc.clientPhone}</Text> : null}
+            {doc.clientLocation ? <Text style={s.custLine}><Text style={s.bold}>Location: </Text>{doc.clientLocation}</Text> : null}
+          </View>
         </View>
 
         {/* Line items */}
@@ -161,7 +168,7 @@ export function QuotePdf({ doc }: { doc: QuoteDocData }) {
           ))}
         </View>
 
-        {/* Notes + Totals */}
+        {/* Notes + Totals (equal height) */}
         <View style={s.bottomRow}>
           <View style={s.notesCol}>
             <View style={s.band}><Text style={s.bandText}>Notes or special comments</Text></View>
@@ -181,6 +188,9 @@ export function QuotePdf({ doc }: { doc: QuoteDocData }) {
 
         {/* Courtesy */}
         <Text style={s.closing}>We would be glad to answer any questions about this quotation, and we look forward to capturing your special moments.</Text>
+
+        {/* Spacer pushes the signature + footer to the bottom of the A4 page */}
+        <View style={s.spacer} />
 
         {/* Signature */}
         <View style={s.sigWrap}>

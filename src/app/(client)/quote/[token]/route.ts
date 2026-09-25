@@ -15,23 +15,29 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
   const { token } = await params
   await markQuoteViewed(token)
 
+  const clientSelect = { displayName: true, email: true, phone: true, state: true, postcode: true } as const
   const quote = await prisma.quote.findUnique({
     where: { viewToken: token },
     include: {
       currentVersion: { include: { lines: { orderBy: { sortOrder: 'asc' } } } },
-      project: { include: { client: { select: { displayName: true } } } },
-      enquiry: { include: { client: { select: { displayName: true } } } },
+      project: { include: { client: { select: clientSelect } } },
+      enquiry: { include: { client: { select: clientSelect } } },
     },
   })
   if (!quote || !quote.currentVersion || quote.currentVersion.status === 'DRAFT') {
     return new Response('This quote is not available.', { status: 404 })
   }
   const v = quote.currentVersion
-  const clientName = quote.enquiry?.client?.displayName ?? quote.enquiry?.name ?? quote.project?.client?.displayName ?? 'you'
+  const client = quote.enquiry?.client ?? quote.project?.client ?? null
+  const clientName = client?.displayName ?? quote.enquiry?.name ?? 'you'
+  const clientLocation = [client?.state, client?.postcode].filter(Boolean).join(' ') || null
 
   const doc: QuoteDocData = {
     number: quoteDisplayNumber(quote.reference, quote.seq),
     clientName,
+    clientEmail: client?.email ?? null,
+    clientPhone: client?.phone ?? null,
+    clientLocation,
     issueDate: v.issueDate,
     validUntil: v.validUntil,
     introduction: v.introduction,

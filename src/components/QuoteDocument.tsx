@@ -19,6 +19,9 @@ import { formatSydneyDate } from '@/lib/time'
 export type QuoteDocData = {
   number: string
   clientName: string
+  clientEmail?: string | null
+  clientPhone?: string | null
+  clientLocation?: string | null
   issueDate: Date | null
   validUntil: Date | null
   introduction: string | null
