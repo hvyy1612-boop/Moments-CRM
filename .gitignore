@@ -22,5 +22,8 @@ next-env.d.ts
 # e2e production build output (playwright.config.ts NEXT_DIST_DIR)
 .next-e2e/
 
+# preview/verification dev-server build output (.claude/launch.json NEXT_DIST_DIR)
+.next-preview/
+
 # Playwright output
 test-results/
