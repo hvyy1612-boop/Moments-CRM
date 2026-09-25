@@ -2,6 +2,7 @@ import { Prisma, type EnquirySource } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
 import { nextProjectCode, requireCompany } from './project'
+import { nextRecordNumber, isUniqueViolation } from './numbering'
 import {
   clientSourceFromEnquiry,
   normalizePhone,
@@ -46,13 +47,27 @@ export type CreateEnquiryInput = {
   heardAbout?: string | null
 }
 
-/** Capture an enquiry (public form or staff). actorUserId is set when a staff member logs it. */
+/** Capture an enquiry (public form or staff). actorUserId is set when a staff member logs it.
+ *  Assigns the next E<YYYY><4d> enquiry number; a P2002 retries so no two enquiries share a number. */
 export async function createEnquiry(input: CreateEnquiryInput, actorUserId: string | null = null) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await runCreateEnquiry(input, actorUserId)
+    } catch (error) {
+      if (attempt < 4 && isUniqueViolation(error)) continue
+      throw error
+    }
+  }
+}
+
+async function runCreateEnquiry(input: CreateEnquiryInput, actorUserId: string | null) {
   return prisma.$transaction(async (tx) => {
     const company = await requireCompany(tx)
+    const enquiryNumber = await nextRecordNumber(tx, company.id, 'ENQUIRY')
     const enquiry = await tx.enquiry.create({
       data: {
         companyId: company.id,
+        enquiryNumber,
         ownerUserId: input.ownerUserId ?? null,
         clientId: input.clientId ?? null,
         name: input.name,

@@ -3,6 +3,7 @@ import { systemClock } from '@/lib/time'
 import type { ClientInput } from '@/lib/validation/client'
 import { requireCompany } from './project'
 import { INVOICE_MONEY_SELECT } from './invoice-money'
+import { nextRecordNumber, isUniqueViolation } from './numbering'
 
 /** Build the display name a client is listed under, from whatever was entered. */
 function deriveDisplayName(input: ClientInput): string {
@@ -13,15 +14,30 @@ function deriveDisplayName(input: ClientInput): string {
   return input.email
 }
 
-/** Create a client by hand (staff, not from an enquiry). Email is unique - a duplicate is rejected. */
+/** Create a client by hand (staff, not from an enquiry). Email is unique - a duplicate is rejected.
+ *  Assigns the next C<YYYY><4d> client number; a P2002 (number or email race) retries a few times so
+ *  concurrency never surfaces as an error and no two clients ever share a number. */
 export async function createClient(input: ClientInput, actorUserId: string) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await runCreateClient(input, actorUserId)
+    } catch (error) {
+      if (attempt < 4 && isUniqueViolation(error)) continue
+      throw error
+    }
+  }
+}
+
+async function runCreateClient(input: ClientInput, actorUserId: string) {
   return prisma.$transaction(async (tx) => {
     const company = await requireCompany(tx)
     const existing = await tx.client.findUnique({ where: { email: input.email } })
     if (existing) throw new Error('A client with this email already exists.')
+    const clientNumber = await nextRecordNumber(tx, company.id, 'CLIENT')
     const client = await tx.client.create({
       data: {
         companyId: company.id,
+        clientNumber,
         type: input.isCompany ? 'BUSINESS' : 'INDIVIDUAL',
         status: 'ACTIVE',
         source: 'MANUAL',

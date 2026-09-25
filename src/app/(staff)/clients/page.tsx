@@ -70,6 +70,7 @@ export default async function ClientsPage({
     orderBy: orderFor(sort),
     select: {
       id: true,
+      clientNumber: true,
       displayName: true,
       email: true,
       phone: true,
@@ -81,6 +82,7 @@ export default async function ClientsPage({
 
   const allRows = clients.map((c) => ({
     id: c.id,
+    number: c.clientNumber,
     name: c.displayName,
     email: c.email,
     phone: c.phone,

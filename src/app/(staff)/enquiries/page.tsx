@@ -24,6 +24,7 @@ export default async function EnquiriesPage() {
     orderBy: { updatedAt: 'asc' }, // oldest-waiting first (the default sort)
     select: {
       id: true,
+      enquiryNumber: true,
       name: true,
       email: true,
       phone: true,
@@ -39,6 +40,7 @@ export default async function EnquiriesPage() {
 
   const rows: EnquiryRowData[] = enquiries.map((e) => ({
     id: e.id,
+    number: e.enquiryNumber,
     name: e.name,
     event: e.eventType ? titleCase(e.eventType) : 'Not specified',
     status: e.status,

@@ -6,6 +6,7 @@ import { EditEnquiryPreview } from './EditEnquiryPreview'
 
 export type EnquiryRowData = {
   id: string
+  number: string | null
   name: string
   event: string
   status: string

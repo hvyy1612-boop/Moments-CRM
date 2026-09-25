@@ -139,6 +139,7 @@ export default async function ClientDetailPage({
     where: { id },
     select: {
       id: true,
+      clientNumber: true,
       displayName: true,
       legalName: true,
       type: true,
@@ -286,6 +287,7 @@ export default async function ClientDetailPage({
             <div className="min-w-0">
               <h1 className="truncate text-xl font-semibold leading-tight text-ink">{client.displayName}</h1>
               <p className="mt-0.5 truncate text-sm text-ink-muted">
+                {client.clientNumber ? <span className="tabular text-ink-muted">{client.clientNumber} · </span> : null}
                 <a href={`mailto:${client.email}`} className="hover:text-ink">{client.email}</a>
                 {client.phone ? ` · ${client.phone}` : ''}
               </p>

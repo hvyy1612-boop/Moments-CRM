@@ -57,6 +57,7 @@ export default async function EnquiryDetailPage({
     where: { id },
     select: {
       id: true,
+      enquiryNumber: true,
       name: true,
       email: true,
       phone: true,
@@ -107,6 +108,7 @@ export default async function EnquiryDetailPage({
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <h1 className="text-xl font-semibold text-ink">{enquiry.name}</h1>
+          {enquiry.enquiryNumber ? <span className="tabular text-sm text-ink-muted">{enquiry.enquiryNumber}</span> : null}
           <StatusTag kind={ENQUIRY_STAGE_KIND[enquiry.status] ?? 'hold'}>
             {ENQUIRY_STAGE_LABEL[enquiry.status] ?? titleCase(enquiry.status)}
           </StatusTag>

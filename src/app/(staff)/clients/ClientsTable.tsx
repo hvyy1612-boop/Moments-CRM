@@ -8,6 +8,7 @@ import { ClientRowMenu } from './ClientRowMenu'
 
 export type ClientRow = {
   id: string
+  number: string | null
   name: string
   email: string
   phone: string | null
@@ -43,7 +44,11 @@ export function ClientsTable({ rows, csrf, canDelete, backParam }: { rows: Clien
               <span className="shrink-0 rounded bg-accent-tint px-1.5 py-0.5 text-xs font-semibold uppercase leading-none tracking-wide text-accent-ink">New</span>
             ) : null}
           </span>
-          <span className="block truncate text-xs text-ink-muted">{r.email}</span>
+          <span className="block truncate text-xs text-ink-muted">
+            {r.number ? <span className="tabular">{r.number}</span> : null}
+            {r.number ? ' · ' : ''}
+            {r.email}
+          </span>
         </Link>
       ),
     },
@@ -68,7 +73,7 @@ export function ClientsTable({ rows, csrf, canDelete, backParam }: { rows: Clien
       rowKey={(r) => r.id}
       storageKey="clients.hiddenCols"
       pageSize={30}
-      search={(r) => `${r.name} ${r.email} ${r.phone ?? ''}`}
+      search={(r) => `${r.number ?? ''} ${r.name} ${r.email} ${r.phone ?? ''}`}
       searchPlaceholder="Search clients"
       rowClassName={(r) => (isRecentlyAdded(r.since) ? 'bg-accent-tint/40' : undefined)}
     />

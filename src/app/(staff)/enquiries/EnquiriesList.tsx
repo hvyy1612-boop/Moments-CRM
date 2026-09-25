@@ -77,6 +77,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
       cell: (r) => (
         <Link href={`/enquiries/${r.id}`} className="block min-w-0">
           <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.name}</span>
+          {r.number ? <span className="tabular block truncate text-xs text-ink-muted">{r.number}</span> : null}
         </Link>
       ),
     },
@@ -172,7 +173,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
           rows={visible}
           rowKey={(r) => r.id}
           pageSize={30}
-          search={(r) => `${r.name} ${r.event}`}
+          search={(r) => `${r.number ?? ''} ${r.name} ${r.event}`}
           searchPlaceholder="Search enquiries"
           emptyMessage="No enquiries in this view yet."
         />

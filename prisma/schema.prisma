@@ -314,8 +314,32 @@ model Company {
   workItems WorkItem[]
   calendarEvents CalendarEvent[]
   invoiceTemplates InvoiceTemplate[]
+  numberCounters NumberCounter[]
 
   @@map("companies")
+}
+
+/// Per-(company × record type × year) running counter for human record numbers (C/E/Q/J/INV + YYYY +
+/// 4 digits). Incremented atomically inside a transaction by src/lib/domain/numbering.ts — never COUNT+1.
+enum RecordNumberType {
+  CLIENT
+  ENQUIRY
+  QUOTE
+  JOB
+  INVOICE
+}
+
+model NumberCounter {
+  companyId String           @map("company_id") @db.VarChar(30)
+  type      RecordNumberType
+  year      Int
+  value     Int              @default(0)
+  updatedAt DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, type, year])
+  @@map("number_counter")
 }
 
 // ---------- Identity / auth (giữ nguyên hình dạng để code auth tái dùng) ----------
@@ -431,6 +455,7 @@ model SignInLog {
 model Client {
   id                 String       @id @default(cuid()) @db.VarChar(30)
   companyId          String       @map("company_id") @db.VarChar(30)
+  clientNumber       String?      @map("client_number") @db.VarChar(20) // human id C<YYYY><4d>, unique per company
   type               ClientType   @default(INDIVIDUAL)
   status             ClientStatus @default(PROSPECT)
   source             ClientSource @default(MANUAL) // B2: khách đến từ đâu (dashboard)
@@ -466,6 +491,7 @@ model Client {
   calendarEvents         CalendarEvent[]
   noteEntries            ClientNote[]
 
+  @@unique([companyId, clientNumber])
   @@index([companyId])
   @@index([status])
   @@map("clients")
@@ -578,6 +604,7 @@ model Package {
 model Enquiry {
   id                 String        @id @default(cuid()) @db.VarChar(30)
   companyId          String        @map("company_id") @db.VarChar(30)
+  enquiryNumber      String?       @map("enquiry_number") @db.VarChar(20) // human id E<YYYY><4d>, unique per company
   ownerUserId        String?       @map("owner_user_id") @db.VarChar(30)
   name               String        @db.VarChar(150)
   firstName          String?       @map("first_name") @db.VarChar(80)
@@ -621,6 +648,7 @@ model Enquiry {
   communications   Communication[]
   workItems        WorkItem[]
 
+  @@unique([companyId, enquiryNumber])
   @@index([companyId])
   @@index([status])
   @@index([email])
