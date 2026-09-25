@@ -22,7 +22,9 @@ export function quoteView(dbStatus: string): QuoteView {
     case 'DECLINED':
       return { label: 'Declined', group: 'closed', tone: 'bad' }
     case 'SUPERSEDED':
-      return { label: 'Superseded', group: 'closed', tone: 'neutral' }
+      // Staff-friendly: this quote lost to another accepted quote for the same client (or was replaced by
+      // a newer version). "Replaced" reads plainer than the "Superseded" jargon.
+      return { label: 'Replaced', group: 'closed', tone: 'neutral' }
     default:
       return { label: 'Closed', group: 'closed', tone: 'neutral' }
   }
