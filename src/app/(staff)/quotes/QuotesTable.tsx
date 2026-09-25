@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { COL } from '@/components/ui/tableColumns'
 import { StatusPill } from '@/components/ui/StatusPill'
-import { quoteView, type QuoteGroup } from '@/features/quotes/status'
+import { quoteView } from '@/features/quotes/status'
 import { deleteQuotesAction } from './actions'
 
 export type QuoteRow = {
@@ -17,9 +17,13 @@ export type QuoteRow = {
   updated: string // preformatted Sydney date
 }
 
-const TABS: { key: QuoteGroup; label: string }[] = [
+// Three clean buckets so counts never mix a won quote with a lost one. Superseded/other quotes are
+// `hidden` in quoteView() and fall into no tab.
+type TabKey = 'active' | 'accepted' | 'declined'
+const TABS: { key: TabKey; label: string }[] = [
   { key: 'active', label: 'Active' },
-  { key: 'closed', label: 'Closed' },
+  { key: 'accepted', label: 'Accepted' },
+  { key: 'declined', label: 'Declined' },
 ]
 
 /**
@@ -29,12 +33,13 @@ const TABS: { key: QuoteGroup; label: string }[] = [
  * reveal a batch-action bar that can delete them; ACCEPTED quotes are locked (they booked a Job).
  */
 export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) {
-  const [tab, setTab] = useState<QuoteGroup>('active')
+  const [tab, setTab] = useState<TabKey>('active')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const counts = {
     active: rows.filter((r) => quoteView(r.status).group === 'active').length,
-    closed: rows.filter((r) => quoteView(r.status).group === 'closed').length,
+    accepted: rows.filter((r) => quoteView(r.status).group === 'accepted').length,
+    declined: rows.filter((r) => quoteView(r.status).group === 'declined').length,
   }
   const visible = rows.filter((r) => quoteView(r.status).group === tab)
 
@@ -48,7 +53,7 @@ export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) 
     })
   }, [rows])
 
-  const switchTab = (key: QuoteGroup) => {
+  const switchTab = (key: TabKey) => {
     setTab(key)
     setSelectedIds(new Set())
   }
@@ -141,7 +146,7 @@ export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) 
           selection={selection}
           search={(r) => `${r.number} ${r.client}`}
           searchPlaceholder="Search quotes"
-          emptyMessage={tab === 'active' ? 'No active quotes. Create one from an enquiry to get started.' : 'No closed quotes yet.'}
+          emptyMessage={tab === 'active' ? 'No active quotes. Create one from an enquiry to get started.' : tab === 'accepted' ? 'No accepted quotes yet.' : 'No declined quotes.'}
         />
       </div>
     </>
