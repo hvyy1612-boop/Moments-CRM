@@ -142,7 +142,7 @@ function shell(title: string, body: string): string {
     <div style="font-family:Georgia,serif;font-size:20px;letter-spacing:2px;text-transform:uppercase">Moments</div>
     <h1 style="font-family:Georgia,serif;font-size:22px;font-weight:600;margin:20px 0 12px">${title}</h1>
     ${body}
-    <p style="color:#9c948b;font-size:13px;margin-top:28px">Moments Photography and Film, Sydney.</p>
+    <p style="color:#9c948b;font-size:13px;margin-top:28px;line-height:1.6">Moments Photography &amp; Film<br>Sydney, Australia</p>
   </div>`
 }
 
@@ -164,7 +164,7 @@ export type QuoteEmail = { to: string; clientName: string; quoteLink: string }
 export async function sendQuoteEmail(email: QuoteEmail): Promise<void> {
   const html = shell(
     'Your quote is ready',
-    `<p>Hi ${escapeHtml(email.clientName)}, your photography quote is ready to review.</p><p>${link(email.quoteLink, 'View your quote')}</p>`,
+    `<p>Hi ${escapeHtml(email.clientName)}, your photography quote is ready to review.</p><p>${link(email.quoteLink, 'View Quotation')}</p>`,
   )
   await deliver({ to: email.to, subject: 'Your Moments quote', html, event: 'email.quote_sent', devLink: email.quoteLink })
 }
@@ -184,7 +184,7 @@ export async function sendComposedQuoteEmail(email: ComposedQuoteEmail): Promise
     .map((p) => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
     .join('')
   const subject = email.subject.trim() || 'Your Moments quote'
-  const html = shell(subject, `${paragraphs}<p>${link(email.quoteLink, 'View your quote')}</p>`)
+  const html = shell('Your Quotation', `${paragraphs}<p>${link(email.quoteLink, 'View Quotation')}</p>`)
   await deliver({ to: email.to, subject, html, event: 'email.quote_sent', devLink: email.quoteLink })
 }
 

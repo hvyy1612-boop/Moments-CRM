@@ -250,7 +250,7 @@ export function QuoteBuilder({
 /**
  * Compose-and-send dialog. Pre-fills the recipient (client email) and a Moments-branded covering note
  * with the client's name already filled in; both the subject and message stay fully editable. The
- * server appends the "View your quote" button/link and sends it (when an email provider is configured).
+ * server appends the "View Quotation" link and sends it (when an email provider is configured).
  */
 function SendQuoteDialog({
   csrf,
@@ -275,14 +275,15 @@ function SendQuoteDialog({
   error: string | null
   onClose: () => void
 }) {
-  const defaultSubject = 'Your quotation from Moments Photography and Film'
+  const defaultSubject = 'Your Quotation from Moments Photography & Film'
   const defaultMessage =
     `Dear ${clientName},\n\n` +
-    `Thank you for considering Moments Photography and Film.\n\n` +
-    `Please find your quotation enclosed. You are welcome to review the full details and confirm your booking online using the link below.\n\n` +
-    `Should you have any questions or wish to discuss anything further, please do not hesitate to contact us.\n\n` +
-    `We look forward to the opportunity of working with you.\n\n` +
-    `Kind regards,\nMoments Photography and Film`
+    `Thank you for considering Moments Photography & Film.\n\n` +
+    `We are pleased to provide you with your quotation for the requested photography and film services. Please use the link below to review the quotation, including the selected services, pricing and relevant details.\n\n` +
+    `Should you wish to proceed, you may confirm your quotation directly from the quotation page.\n\n` +
+    `If you have any questions or would like to discuss any aspect of the quotation, please do not hesitate to contact us.\n\n` +
+    `We look forward to the opportunity to work with you.\n\n` +
+    `Kind regards,\n\nMoments Photography & Film`
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -311,7 +312,7 @@ function SendQuoteDialog({
           <Field label="Subject" htmlFor="sq-subject">
             <TextInput id="sq-subject" name="subject" defaultValue={defaultSubject} />
           </Field>
-          <Field label="Message" htmlFor="sq-message" hint="The client's name is filled in for you; a 'View your quote' button is added automatically.">
+          <Field label="Message" htmlFor="sq-message" hint="The client's name is filled in for you; a 'View Quotation' link is added automatically.">
             <Textarea id="sq-message" name="message" rows={9} defaultValue={defaultMessage} />
           </Field>
           <div className="flex items-center gap-2">
