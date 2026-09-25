@@ -288,7 +288,7 @@ export async function convertEnquiryCore(
       data: {
         companyId: company.id,
         clientId: client.id,
-        code: await nextProjectCode(tx, now.getFullYear()),
+        code: await nextProjectCode(tx, company.id, now),
         name: enquiry.eventType ?? 'Project',
         // A WON enquiry converts to a Job. The Project starts at BOOKING_REQUESTED (a booked job pending
         // final confirmation); production commands advance it from there (docs/24 FIX 5).

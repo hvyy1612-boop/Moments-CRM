@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
 import type { QuoteLineInput } from '@/lib/validation/quote'
 import { convertEnquiryCore } from './enquiry'
+import { nextRecordNumber } from './numbering'
 
 const GST_DIVISOR = new Prisma.Decimal(11)
 const ROUND_HALF_UP = 4 // Decimal.js rounding mode; money rounds half up (BR-X03)
@@ -33,9 +34,12 @@ function computeTotals(lines: QuoteLineInput[]) {
 /** Create a quote for a project with an empty draft version 1; sets commercial status QUOTED. */
 export async function createQuote(projectId: string, createdByUserId: string | null) {
   return prisma.$transaction(async (tx) => {
+    const project = await tx.project.findUnique({ where: { id: projectId }, select: { companyId: true } })
+    if (!project) throw new Error('Project not found.')
     const quote = await tx.quote.create({
       data: {
         projectId,
+        reference: await nextRecordNumber(tx, project.companyId, 'QUOTE'),
         viewToken: randomBytes(24).toString('base64url'),
         status: 'DRAFT',
         versions: { create: { versionNumber: 1, status: 'DRAFT', createdByUserId } },
@@ -318,7 +322,7 @@ export function quoteDisplayNumber(reference: string | null | undefined, seq: nu
  */
 export async function createQuoteForEnquiry(enquiryId: string, createdByUserId: string | null) {
   return prisma.$transaction(async (tx) => {
-    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId }, select: { id: true, status: true } })
+    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId }, select: { id: true, status: true, companyId: true } })
     if (!enquiry) throw new Error('Enquiry not found.')
     if (enquiry.status === 'LOST' || enquiry.status === 'ARCHIVED') throw new Error('Reopen the enquiry before quoting it.')
     const agg = await tx.quote.aggregate({ _max: { seq: true } })
@@ -327,6 +331,7 @@ export async function createQuoteForEnquiry(enquiryId: string, createdByUserId: 
       data: {
         enquiryId: enquiry.id,
         seq,
+        reference: await nextRecordNumber(tx, enquiry.companyId, 'QUOTE'),
         viewToken: randomBytes(24).toString('base64url'),
         status: 'DRAFT',
         versions: { create: { versionNumber: 1, status: 'DRAFT', createdByUserId } },

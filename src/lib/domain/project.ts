@@ -1,6 +1,7 @@
 import { Prisma, type ProjectLifecycle } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
+import { nextRecordNumber } from './numbering'
 import { getJobBalance } from './money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
 import type { EnquiryInput } from '@/lib/validation/enquiry'
@@ -14,16 +15,9 @@ export async function requireCompany(tx: Tx) {
   return company
 }
 
-/** Human-readable, per-year sequential project code, e.g. MPF-2026-0001. */
-export async function nextProjectCode(tx: Tx, year: number): Promise<string> {
-  const prefix = `MPF-${year}-`
-  const last = await tx.project.findFirst({
-    where: { code: { startsWith: prefix } },
-    orderBy: { code: 'desc' },
-    select: { code: true },
-  })
-  const next = last ? Number(last.code.slice(prefix.length)) + 1 : 1
-  return `${prefix}${String(next).padStart(4, '0')}`
+/** The Job's human code, J<YYYY><4d> (e.g. J20260001), from the shared per-company/year counter. */
+export async function nextProjectCode(tx: Tx, companyId: string, at: Date = systemClock.now()): Promise<string> {
+  return nextRecordNumber(tx, companyId, 'JOB', at)
 }
 
 /**
@@ -76,7 +70,7 @@ async function runCreateProjectFromEnquiry(input: EnquiryInput, now: Date) {
       data: {
         companyId: company.id,
         clientId: client.id,
-        code: await nextProjectCode(tx, now.getFullYear()),
+        code: await nextProjectCode(tx, company.id, now),
         name: input.eventType ?? 'Job',
         lifecycleStatus: 'BOOKING_REQUESTED',
         commercialStatus: 'UNQUOTED',
