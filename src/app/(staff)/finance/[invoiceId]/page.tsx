@@ -11,7 +11,6 @@ import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { listActivePackages } from '@/lib/domain/package'
-import { getInvoiceBalanceById } from '@/lib/domain/invoice-money'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyTime, sydneyYmd } from '@/lib/time'
 import { titleCase } from '@/lib/text'
@@ -39,8 +38,7 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
-  const [inv, money] = await Promise.all([
-    prisma.invoice.findUnique({
+  const inv = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     select: {
       id: true, invoiceNumber: true, type: true, status: true, subtotal: true, taxTotal: true, total: true,
@@ -66,14 +64,9 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
         },
       },
     },
-    }),
-    getInvoiceBalanceById(invoiceId), // ledger-derived, credit-aware (docs/25 Part 1)
-  ])
+  })
   if (!inv) notFound()
 
-  // Balance due comes from the Money foundation (subtracts credit notes, clamps overpayment to 0).
-  // amountPaid is the ledger cache; money.paidNet equals it, so "Paid" can keep using amountPaid.
-  const balance = money ? money.owed : inv.total.sub(inv.amountPaid)
   // Credit-aware credits total for the printable so its balance matches the ledger (bug #5).
   const docCredits = inv.creditNotes.reduce((s, cn) => s.add(cn.amount), new Prisma.Decimal(0))
   const isDraft = inv.status === 'DRAFT'
@@ -168,26 +161,6 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
             ) : null}
             <InvoiceMoreMenu csrf={csrf} invoiceId={inv.id} projectId={inv.project.id} isDraft={isDraft} canVoid={canVoid} canDelete={unpaid} />
           </div>
-        </div>
-
-        {/* Financial summary strip */}
-        <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-line bg-line sm:grid-cols-4">
-          {[
-            { label: 'Total', value: formatAud(inv.total), tone: 'text-ink', icon: <path d="M6 3h9l3 3v15l-3-2-3 2-3-2-3 2V3z" /> },
-            { label: 'Paid', value: formatAud(inv.amountPaid), tone: 'text-delivered-ink', icon: <path d="M20 6 9 17l-5-5" /> },
-            { label: 'Balance due', value: formatAud(balance), tone: balance.greaterThan(0) ? 'text-accent-ink' : 'text-ink', icon: <path d="M3 6h18M3 12h18M3 18h12" /> },
-            { label: 'Issue date', value: inv.invoiceDate ? formatSydneyDate(inv.invoiceDate) : '-', tone: 'text-ink', icon: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /></> },
-          ].map((m) => (
-            <div key={m.label} className="flex items-center gap-3 bg-surface p-4">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent-tint text-accent">
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">{m.icon}</svg>
-              </span>
-              <div className="min-w-0">
-                <div className="text-xs uppercase tracking-wide text-muted">{m.label}</div>
-                <div className={`tabular text-lg font-semibold ${m.tone}`}>{m.value}</div>
-              </div>
-            </div>
-          ))}
         </div>
 
         <div className="mt-5">
