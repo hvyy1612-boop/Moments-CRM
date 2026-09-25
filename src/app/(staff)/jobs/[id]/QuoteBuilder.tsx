@@ -279,7 +279,7 @@ function SendQuoteDialog({
   const defaultMessage =
     `Dear ${clientName},\n\n` +
     `Thank you for considering Moments Photography and Film.\n\n` +
-    `Please find your quotation enclosed. You are welcome to review the full details and confirm your booking online using the button below.\n\n` +
+    `Please find your quotation enclosed. You are welcome to review the full details and confirm your booking online using the link below.\n\n` +
     `Should you have any questions or wish to discuss anything further, please do not hesitate to contact us.\n\n` +
     `We look forward to the opportunity of working with you.\n\n` +
     `Kind regards,\nMoments Photography and Film`
