@@ -4,17 +4,19 @@ import { formatAud } from '@/lib/money'
 import { formatSydneyDate } from '@/lib/time'
 
 /**
- * The quotation document — the polished, client-facing view of a quote. A clear, ruled A4 business
- * document (the classic boxed "QUOTE" template the studio picked) whose SPECS follow Carbon Design System
- * discipline: the 2x-grid spacing scale (only the 8/12/16/24/32 tokens, nothing off-grid), Carbon type
- * tokens (label-01 = text-xs, body-01 = text-sm, SemiBold 600 for labels, Light 300 for the display
- * title), Carbon label letter-spacing (~tracking-wide), and Carbon data-table rules (px-4 cell padding,
- * secondary-coloured column headers, right-aligned tabular numerals). Shared by the staff "Preview quote"
- * route and the client token page, and printable to PDF (browser print). Read-only.
+ * The quotation document — the polished, client-facing view of a quote. Built to a classic ruled
+ * "Quotation" business template (accent title top-right, company block + boxed meta fields, an accent
+ * "Customer" band, a full-width line-item table with an accent header + zebra rows + even column rules,
+ * a Notes box beside a boxed totals grid, a courtesy line, a signature block, and a full-bleed footer
+ * band). Moments palette: the template's maroon becomes the brand accent token; the top/bottom
+ * bars are neutral grey. Shared by the staff "Preview quote" route and the client token page, and
+ * printable to PDF (browser print). Read-only.
  *
  * Print geometry mirrors the tax invoice: `@page margin:0` (the document supplies its own 10mm inset via
- * print:p-[10mm]) so Chrome never prints its own URL/date header in a page margin, and print-color-adjust
- * keeps the ruled fills/zebra when saved to PDF. mm/%/em/fr only, so the design-token check stays green.
+ * print:p-[10mm]) so Chrome never prints its own URL/date header in a page margin; print-color-adjust
+ * keeps the ruled fills/zebra when saved to PDF; the wrapper is overflow-hidden on screen (so the full
+ * bleed bars honour the rounded corners) but overflow-visible in print (so nothing clips across pages).
+ * mm/%/em/fr only, so the design-token check stays green.
  */
 export type QuoteDocData = {
   number: string
@@ -33,136 +35,145 @@ export type QuoteDocData = {
 const BRAND = 'Moments Photography and Film'
 const WEBSITE = 'momentsphotography.com.au'
 const SERVICE_AREA = 'Sydney, NSW, Australia'
+const CLOSING =
+  'We would be glad to answer any questions about this quotation, and we look forward to capturing your special moments.'
 const PAGE_CSS =
   '.quote-doc,.quote-doc *{-webkit-print-color-adjust:exact;print-color-adjust:exact}@media print{@page{size:A4;margin:0}.quote-doc{box-shadow:none!important}}'
 
-// Carbon label-01: text-xs, SemiBold, uppercase, ~tracking-wide. One shared eyebrow style.
-const EYEBROW = 'text-xs font-semibold uppercase tracking-wide text-ink'
+// Accent band (brand-maroon fill, white text): the Customer / Notes headers and the table header.
+const BAND = 'bg-accent text-white'
 
 export function QuoteDocument({ doc }: { doc: QuoteDocData }) {
   const dep = doc.depositPercent != null ? computeDeposit(doc.total, doc.depositPercent) : null
 
-  const customerRows: { label: string; value: string }[] = [
-    { label: 'Customer name', value: doc.clientName },
-    { label: 'Quote number', value: doc.number },
+  const meta: { label: string; value: string }[] = [
     { label: 'Date', value: doc.issueDate ? formatSydneyDate(doc.issueDate) : '-' },
-    { label: 'Quote valid until', value: doc.validUntil ? formatSydneyDate(doc.validUntil) : '-' },
+    { label: 'Quote #', value: doc.number },
+    { label: 'Valid until', value: doc.validUntil ? formatSydneyDate(doc.validUntil) : '-' },
   ]
-  const businessRows: { label: string; value: string }[] = [
-    { label: 'Web', value: WEBSITE },
-    { label: 'Location', value: SERVICE_AREA },
+
+  const totals: { label: string; value: string; strong?: boolean }[] = [
+    { label: 'Subtotal (ex GST)', value: formatAud(doc.subtotal) },
+    { label: 'GST 10%', value: formatAud(doc.taxTotal) },
+    { label: 'Total (inc GST)', value: formatAud(doc.total), strong: true },
+    ...(dep
+      ? [
+          { label: `Deposit (${doc.depositPercent}%)`, value: formatAud(dep.deposit) },
+          { label: 'Balance due', value: formatAud(dep.balance) },
+        ]
+      : []),
   ]
 
   return (
-    <div className="quote-doc mx-auto w-full max-w-[210mm] rounded-md border border-line bg-surface p-[12mm] text-ink shadow-sm print:max-w-none print:rounded-none print:border-0 print:p-[10mm] print:shadow-none">
-      {/* Header: QUOTE display title | business block */}
-      <div className="flex flex-wrap items-start justify-between gap-8">
-        <h1 className="text-5xl font-light uppercase leading-none tracking-tight text-ink">Quote</h1>
-        <div className="min-w-[76mm]">
-          <div className="text-sm font-semibold uppercase tracking-wide text-ink">{BRAND}</div>
-          <div className="mt-2 overflow-hidden rounded-sm border border-line-strong">
-            {businessRows.map((r, i) => (
-              <div key={r.label} className={`grid grid-cols-[26mm_1fr] text-xs${i > 0 ? ' border-t border-line' : ''}`}>
-                <div className="border-r border-line bg-sunk px-4 py-2 font-medium text-ink-muted">{r.label}</div>
-                <div className="break-words px-4 py-2 text-ink">{r.value}</div>
+    <div className="quote-doc mx-auto w-full max-w-[210mm] overflow-hidden rounded-md border border-line bg-surface text-ink shadow-sm print:max-w-none print:rounded-none print:border-0 print:overflow-visible print:shadow-none">
+      {/* Top bar (full bleed) */}
+      <div className="h-2 bg-ink-muted" />
+
+      <div className="p-[12mm] print:p-[10mm]">
+        {/* Header: brand mark | Quotation title */}
+        <div className="flex items-start justify-between gap-8">
+          <div>
+            <div className="text-2xl font-semibold uppercase leading-none tracking-tight text-ink">Moments</div>
+            <div className="mt-1 text-xs font-medium uppercase tracking-wide text-accent">Photography and Film</div>
+          </div>
+          <h1 className="text-5xl font-light tracking-tight text-accent">Quotation</h1>
+        </div>
+
+        {/* Company block | boxed meta fields */}
+        <div className="mt-6 flex items-start justify-between gap-8">
+          <div className="text-sm leading-relaxed">
+            <div className="font-semibold text-ink">{BRAND}</div>
+            <div className="text-ink-muted">{SERVICE_AREA}</div>
+            <div className="text-ink-muted">{WEBSITE}</div>
+          </div>
+          <div className="w-[76mm] text-sm">
+            {meta.map((m, i) => (
+              <div key={m.label} className={`flex items-center${i > 0 ? ' mt-2' : ''}`}>
+                <div className="w-[28mm] font-semibold text-ink">{m.label}</div>
+                <div className="flex-1 rounded-sm border border-line-strong bg-paper px-3 py-2 text-ink">{m.value}</div>
               </div>
             ))}
           </div>
         </div>
-      </div>
 
-      {/* Customer meta grid — full width, 2x2 label/value pairs, flush to the table edges */}
-      <div className="mt-6 grid grid-cols-[44mm_1fr_44mm_1fr] overflow-hidden rounded-sm border border-line-strong text-sm">
-        {customerRows.flatMap((r, p) => {
-          const topRow = p < 2
-          const leftPair = p % 2 === 0
-          return [
-            <div key={`${r.label}-l`} className={`border-r border-line bg-sunk px-4 py-3 font-medium text-ink-muted${topRow ? ' border-b' : ''}`}>{r.label}</div>,
-            <div key={`${r.label}-v`} className={`break-words px-4 py-3 font-medium text-ink${leftPair ? ' border-r border-line' : ''}${topRow ? ' border-b border-line' : ''}`}>{r.value}</div>,
-          ]
-        })}
-      </div>
+        {/* Customer band */}
+        <div className="mt-6 w-[104mm] max-w-full">
+          <div className={`${BAND} rounded-sm px-3 py-2 text-sm font-semibold`}>Customer</div>
+          <div className="mt-2 px-1 text-sm">
+            <span className="font-semibold text-ink">Name: </span>
+            <span className="break-words text-ink">{doc.clientName}</span>
+          </div>
+        </div>
 
-      {/* Summary of requirements */}
-      {doc.introduction ? (
-        <section className="mt-6">
-          <div className={EYEBROW}>Summary</div>
-          <div className="mt-2 whitespace-pre-line rounded-sm border border-line-strong bg-paper p-4 text-sm leading-normal text-ink">{doc.introduction}</div>
-        </section>
-      ) : null}
+        {/* Optional greeting */}
+        {doc.introduction ? <p className="mt-4 whitespace-pre-line text-sm leading-normal text-ink">{doc.introduction}</p> : null}
 
-      {/* Line items — Carbon data table: px-4 cell padding, secondary header, right-aligned tabular numerals */}
-      <table className="mt-6 w-full table-fixed border-collapse text-sm">
-        <colgroup>
-          <col style={{ width: '52%' }} />
-          <col style={{ width: '16%' }} />
-          <col style={{ width: '12%' }} />
-          <col style={{ width: '20%' }} />
-        </colgroup>
-        <thead>
-          <tr className="bg-sunk text-xs font-semibold uppercase tracking-wide text-ink-muted">
-            <th className="border border-line-strong px-4 py-3 text-left">Description</th>
-            <th className="border border-line-strong px-4 py-3 text-right">Unit price</th>
-            <th className="border border-line-strong px-4 py-3 text-center">Qty</th>
-            <th className="border border-line-strong px-4 py-3 text-right">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {doc.lines.map((line, i) => (
-            <tr key={line.id} className={i % 2 === 1 ? 'bg-paper' : 'bg-surface'}>
-              <td className="border border-line px-4 py-3 align-top">
-                <div className="break-words font-semibold text-ink">{line.description}</div>
-                {line.details ? <p className="mt-1 whitespace-pre-line break-words text-xs leading-normal text-ink-muted">{line.details}</p> : null}
-              </td>
-              <td className="tabular border border-line px-4 py-3 text-right align-top text-ink">{formatAud(line.unitPrice)}</td>
-              <td className="tabular border border-line px-4 py-3 text-center align-top text-ink">{line.quantity}</td>
-              <td className="tabular border border-line px-4 py-3 text-right align-top font-semibold text-ink">{formatAud(line.lineTotal)}</td>
+        {/* Line items — accent header, even column rules, zebra rows */}
+        <table className="mt-6 w-full table-fixed border-collapse border border-line-strong text-sm">
+          <colgroup>
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '46%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '17%' }} />
+            <col style={{ width: '17%' }} />
+          </colgroup>
+          <thead>
+            <tr className={`${BAND} text-xs font-semibold uppercase tracking-wide`}>
+              <th className="px-3 py-3 text-center">Item</th>
+              <th className="px-3 py-3 text-left">Description</th>
+              <th className="px-3 py-3 text-center">Qty</th>
+              <th className="px-3 py-3 text-right">Unit price</th>
+              <th className="px-3 py-3 text-right">Amount</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {doc.lines.map((line, i) => (
+              <tr key={line.id} className={i % 2 === 1 ? 'bg-paper' : 'bg-surface'}>
+                <td className="tabular border border-line px-3 py-3 text-center align-top text-ink-muted">{i + 1}</td>
+                <td className="border border-line px-3 py-3 align-top">
+                  <div className="break-words font-semibold text-ink">{line.description}</div>
+                  {line.details ? <p className="mt-1 whitespace-pre-line break-words text-xs leading-normal text-ink-muted">{line.details}</p> : null}
+                </td>
+                <td className="tabular border border-line px-3 py-3 text-center align-top text-ink">{line.quantity}</td>
+                <td className="tabular border border-line px-3 py-3 text-right align-top text-ink">{formatAud(line.unitPrice)}</td>
+                <td className="tabular border border-line px-3 py-3 text-right align-top font-semibold text-ink">{formatAud(line.lineTotal)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
 
-      {/* Payment schedule (left) + Totals (right) — two equal-height columns, flush to the table edges.
-          items-stretch makes both columns the same height; flex-1 rows share that height so the boxes
-          line up top AND bottom even though one has fewer rows. */}
-      <div className={`mt-6 grid gap-6 sm:items-stretch${dep ? ' sm:grid-cols-2' : ''}`}>
-        {dep ? (
+        {/* Notes (left) + Totals (right) — equal height, flush to the table edges */}
+        <div className="mt-6 grid gap-6 sm:grid-cols-2 sm:items-stretch">
           <section className="flex flex-col">
-            <div className={EYEBROW}>Payment schedule</div>
-            <div className="mt-2 flex flex-1 flex-col overflow-hidden rounded-sm border border-line-strong text-sm">
-              <div className="flex flex-1 items-center justify-between gap-4 border-b border-line px-4 py-3">
-                <div><div className="text-ink">Booking deposit</div><div className="mt-1 text-xs text-ink-muted">{doc.depositPercent}% - due on acceptance</div></div>
-                <span className="tabular font-semibold text-ink">{formatAud(dep.deposit)}</span>
-              </div>
-              <div className="flex flex-1 items-center justify-between gap-4 px-4 py-3">
-                <div><div className="text-ink">Remaining balance</div><div className="mt-1 text-xs text-ink-muted">{100 - (doc.depositPercent ?? 0)}% - due before the shoot</div></div>
-                <span className="tabular font-semibold text-ink">{formatAud(dep.balance)}</span>
-              </div>
+            <div className={`${BAND} rounded-sm px-3 py-2 text-sm font-semibold`}>Notes or special comments</div>
+            <div className="mt-2 flex-1 whitespace-pre-line rounded-sm border border-line-strong bg-paper p-3 text-sm leading-normal text-ink-muted">{doc.notes ?? ''}</div>
+          </section>
+          <section className="flex flex-col">
+            <div className="flex flex-1 flex-col overflow-hidden rounded-sm border border-line-strong text-sm">
+              {totals.map((t, i) => (
+                <div key={t.label} className={`flex flex-1 items-center${i > 0 ? ' border-t border-line' : ''}${t.strong ? ' bg-sunk' : ''}`}>
+                  <div className={`flex-1 px-3 py-2${t.strong ? ' font-semibold uppercase tracking-wide text-ink' : ' text-ink-muted'}`}>{t.label}</div>
+                  <div className={`tabular w-[34mm] border-l border-line px-3 py-2 text-right text-ink${t.strong ? ' font-semibold' : ''}`}>{t.value}</div>
+                </div>
+              ))}
             </div>
           </section>
-        ) : null}
-        <section className="flex flex-col">
-          <div className={EYEBROW}>Totals</div>
-          <div className="mt-2 flex flex-1 flex-col overflow-hidden rounded-sm border border-line-strong text-sm">
-            <div className="flex flex-1 items-center justify-between gap-4 border-b border-line px-4 py-3"><span className="text-ink-muted">Subtotal (ex GST)</span><span className="tabular text-ink">{formatAud(doc.subtotal)}</span></div>
-            <div className="flex flex-1 items-center justify-between gap-4 border-b border-line px-4 py-3"><span className="text-ink-muted">GST 10%</span><span className="tabular text-ink">{formatAud(doc.taxTotal)}</span></div>
-            <div className="flex flex-1 items-center justify-between gap-4 bg-sunk px-4 py-3 text-base font-semibold"><span className="uppercase tracking-wide text-ink">Total</span><span className="tabular text-ink">{formatAud(doc.total)}</span></div>
+        </div>
+
+        {/* Courtesy line */}
+        <p className="mt-6 text-sm italic leading-normal text-ink-muted">{CLOSING}</p>
+
+        {/* Signature */}
+        <div className="mt-8 border-t border-line-strong pt-5">
+          <div className="ml-auto w-[80mm] text-sm">
+            <div className="flex items-end gap-3"><span className="font-semibold text-ink">Signature</span><span className="flex-1 border-b border-line-strong">&nbsp;</span></div>
+            <div className="mt-5 flex items-end gap-3"><span className="font-semibold text-ink">Date</span><span className="flex-1 border-b border-line-strong">&nbsp;</span></div>
           </div>
-        </section>
+        </div>
       </div>
 
-      {/* Terms & conditions */}
-      {doc.notes ? (
-        <section className="mt-6">
-          <div className={EYEBROW}>Terms &amp; conditions</div>
-          <div className="mt-2 whitespace-pre-line rounded-sm border border-line-strong bg-paper p-4 text-sm leading-normal text-ink-muted">{doc.notes}</div>
-        </section>
-      ) : null}
-
-      {/* Footer */}
-      <div className="mt-8 border-t border-line pt-3 text-center text-xs leading-normal text-muted">
-        {BRAND} - {WEBSITE} - This quotation is valid until the date shown above. Thank you for your business.
-      </div>
+      {/* Footer band (full bleed) */}
+      <div className="bg-ink-muted px-[12mm] py-3 text-center text-sm font-medium text-white print:px-[10mm]">Thank you for your business!</div>
 
       <style>{PAGE_CSS}</style>
     </div>
