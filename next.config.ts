@@ -10,6 +10,9 @@ import type { NextConfig } from 'next'
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // @react-pdf/renderer ships font/layout internals (fontkit, yoga wasm) that must not be bundled by
+  // the server compiler; load it from node_modules at runtime so the quote-PDF route builds cleanly.
+  serverExternalPackages: ['@react-pdf/renderer'],
   // The e2e suite builds for production while `npm run dev` may be running. Sharing .next means
   // the build overwrites the chunks the dev server is serving and both break, so the suite gets
   // its own output directory via NEXT_DIST_DIR (playwright.config.ts sets it).
