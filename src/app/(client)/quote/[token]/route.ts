@@ -43,13 +43,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     notes: v.notes,
   }
 
-  const buffer = await renderToBuffer(QuotePdf({ doc }))
-  const filename = `Quotation-${doc.number}.pdf`.replace(/[^A-Za-z0-9._-]/g, '-')
-  return new Response(new Uint8Array(buffer), {
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="${filename}"`,
-      'Cache-Control': 'no-store',
-    },
-  })
+  try {
+    const buffer = await renderToBuffer(QuotePdf({ doc }))
+    const filename = `Quotation-${doc.number}.pdf`.replace(/[^A-Za-z0-9._-]/g, '-')
+    return new Response(new Uint8Array(buffer), {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="${filename}"`,
+        'Cache-Control': 'no-store',
+      },
+    })
+  } catch (err) {
+    // TEMP DEBUG: surface the real serverless error so we can diagnose the 500. Remove after fixing.
+    const detail = err instanceof Error ? `${err.message}\n\n${err.stack ?? ''}` : String(err)
+    return new Response(`PDF_ERROR\n${detail}`, { status: 500, headers: { 'Content-Type': 'text/plain' } })
+  }
 }
