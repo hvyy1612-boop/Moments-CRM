@@ -10,7 +10,6 @@ import { effectiveQuoteStatus, quoteDisplayNumber } from '@/lib/domain/quote'
 import { computeDeposit } from '@/lib/domain/pricing'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate } from '@/lib/time'
-import { PageHeader } from '@/components/PageHeader'
 import { BackLink } from '@/components/BackLink'
 import { Button } from '@/components/ui/Button'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
@@ -104,15 +103,17 @@ export default async function QuoteDetailPage({
     <AppShell user={user} csrf={csrf} active="quotes">
       <PageContainer variant="standard">
       <BackLink href="/quotes" label="Quotes" />
-      <PageHeader
-        eyebrow="Studio"
-        title={`${quoteDisplayNumber(quote.reference, quote.seq)} · ${clientName}`}
-      />
 
-      {/* Compact status + context line — status is a quiet chip, and only fields that are actually set are
-          shown (progressive disclosure, NN/g). Job/Enquiry is reached by its name, not a button. */}
-      <div className="-mt-1 mb-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-muted">
+      {/* Header — same shape as the other detail pages (BackLink -> title row -> context subline): no
+          eyebrow, mt-3 breathing room under the back link, status shown inline with the title. */}
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <h1 className="text-3xl font-semibold text-ink">{quoteDisplayNumber(quote.reference, quote.seq)} · {clientName}</h1>
         <StatusPill tone={STATUS_TONE[eff] ?? 'neutral'}>{label(eff)}</StatusPill>
+      </div>
+
+      {/* Context subline — only fields that are actually set are shown (progressive disclosure, NN/g).
+          Job/Enquiry is reached by its name, not a button. */}
+      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-muted">
         {quote.project ? (
           <Link href={`/jobs/${quote.project.id}`} className="text-ink hover:text-accent">{jobName}</Link>
         ) : quote.enquiry ? (
@@ -123,12 +124,12 @@ export default async function QuoteDetailPage({
         {v.validUntil ? <><span aria-hidden>·</span><span>Valid until {formatSydneyDate(v.validUntil)}</span></> : null}
       </div>
 
-      {sp.acceptError ? <div className="mb-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.acceptError}</div> : null}
-      {sp.shareError ? <div className="mb-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.shareError}</div> : null}
+      {sp.acceptError ? <div className="mt-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.acceptError}</div> : null}
+      {sp.shareError ? <div className="mt-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.shareError}</div> : null}
 
       {/* Action bar — only the actions this state actually needs (no duplicate-purpose or utility clutter).
           Cross-record navigation (Job) is via its name in the context line above. */}
-      <div className="mb-5 flex flex-wrap items-center gap-2">
+      <div className="mt-5 flex flex-wrap items-center gap-2">
         {isDraft ? (
           <>
             <Link href={`/quotes/${id}/edit`}><Button>Edit</Button></Link>
@@ -151,7 +152,7 @@ export default async function QuoteDetailPage({
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="flex flex-col gap-4 lg:col-span-2">
           {/* Contents */}
           <section className="rounded-md border border-line bg-surface p-5">
