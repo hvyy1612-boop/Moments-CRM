@@ -10,9 +10,15 @@ import type { NextConfig } from 'next'
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  // @react-pdf/renderer ships font/layout internals (fontkit, yoga wasm) that must not be bundled by
-  // the server compiler; load it from node_modules at runtime so the quote-PDF route builds cleanly.
+  // @react-pdf/renderer ships font/layout internals that must not be bundled by the server compiler;
+  // load it from node_modules at runtime so the quote-PDF route builds cleanly.
   serverExternalPackages: ['@react-pdf/renderer'],
+  // ...but react-pdf reads its built-in font metrics (pdfkit's *.afm, e.g. Helvetica.afm) from disk at
+  // runtime. Those data files are not import-traced, so Vercel omits them from the serverless function
+  // and the PDF route 500s. Force them (and the react-pdf tree) into the /quote/[token] function.
+  outputFileTracingIncludes: {
+    '/quote/[token]': ['./node_modules/pdfkit/js/data/**/*', './node_modules/@react-pdf/**/*', './node_modules/fontkit/**/*'],
+  },
   // The e2e suite builds for production while `npm run dev` may be running. Sharing .next means
   // the build overwrites the chunks the dev server is serving and both break, so the suite gets
   // its own output directory via NEXT_DIST_DIR (playwright.config.ts sets it).
