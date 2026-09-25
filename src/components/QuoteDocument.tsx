@@ -7,16 +7,14 @@ import { formatSydneyDate } from '@/lib/time'
  * The quotation document — the polished, client-facing view of a quote. Built to a classic ruled
  * "Quotation" business template (accent title top-right, company block + boxed meta fields, an accent
  * "Customer" band, a full-width line-item table with an accent header + zebra rows + even column rules,
- * a Notes box beside a boxed totals grid, a courtesy line, a signature block, and a full-bleed footer
- * band). Moments palette: the template's maroon becomes the brand accent token; the top/bottom
- * bars are neutral grey. Shared by the staff "Preview quote" route and the client token page, and
- * printable to PDF (browser print). Read-only.
+ * a Notes box beside a boxed totals grid, a courtesy line, a signature block, and a plain centred
+ * "Thank you" line). Moments palette: the template's maroon becomes the brand accent token. The three
+ * accent bands (Customer / Notes / table header) share one height (all px-3 py-2 text-xs). Shared by the
+ * staff "Preview quote" route and the client token page, and printable to PDF (browser print). Read-only.
  *
  * Print geometry mirrors the tax invoice: `@page margin:0` (the document supplies its own 10mm inset via
  * print:p-[10mm]) so Chrome never prints its own URL/date header in a page margin; print-color-adjust
- * keeps the ruled fills/zebra when saved to PDF; the wrapper is overflow-hidden on screen (so the full
- * bleed bars honour the rounded corners) but overflow-visible in print (so nothing clips across pages).
- * mm/%/em/fr only, so the design-token check stays green.
+ * keeps the ruled fills/zebra when saved to PDF. mm/%/em/fr only, so the design-token check stays green.
  */
 export type QuoteDocData = {
   number: string
@@ -65,10 +63,7 @@ export function QuoteDocument({ doc }: { doc: QuoteDocData }) {
   ]
 
   return (
-    <div className="quote-doc mx-auto w-full max-w-[210mm] overflow-hidden rounded-md border border-line bg-surface text-ink shadow-sm print:max-w-none print:rounded-none print:border-0 print:overflow-visible print:shadow-none">
-      {/* Top bar (full bleed) */}
-      <div className="h-2 bg-ink-muted" />
-
+    <div className="quote-doc mx-auto w-full max-w-[210mm] rounded-md border border-line bg-surface text-ink shadow-sm print:max-w-none print:rounded-none print:border-0 print:shadow-none">
       <div className="p-[12mm] print:p-[10mm]">
         {/* Header: brand mark | Quotation title */}
         <div className="flex items-start justify-between gap-8">
@@ -98,7 +93,7 @@ export function QuoteDocument({ doc }: { doc: QuoteDocData }) {
 
         {/* Customer band */}
         <div className="mt-6 w-[104mm] max-w-full">
-          <div className={`${BAND} rounded-sm px-3 py-1 text-xs font-semibold uppercase tracking-wide`}>Customer</div>
+          <div className={`${BAND} rounded-sm px-3 py-2 text-xs font-semibold uppercase tracking-wide`}>Customer</div>
           <div className="mt-2 px-1 text-sm">
             <span className="font-semibold text-ink">Name: </span>
             <span className="break-words text-ink">{doc.clientName}</span>
@@ -145,7 +140,7 @@ export function QuoteDocument({ doc }: { doc: QuoteDocData }) {
         {/* Notes (left) + Totals (right) — equal height, flush to the table edges */}
         <div className="mt-6 grid gap-6 sm:grid-cols-2 sm:items-stretch">
           <section className="flex flex-col">
-            <div className={`${BAND} rounded-sm px-3 py-1 text-xs font-semibold uppercase tracking-wide`}>Notes or special comments</div>
+            <div className={`${BAND} rounded-sm px-3 py-2 text-xs font-semibold uppercase tracking-wide`}>Notes or special comments</div>
             <div className="mt-2 flex-1 whitespace-pre-line rounded-sm border border-line-strong bg-paper p-3 text-sm leading-normal text-ink-muted">{doc.notes ?? ''}</div>
           </section>
           <section className="flex flex-col">
@@ -170,10 +165,10 @@ export function QuoteDocument({ doc }: { doc: QuoteDocData }) {
             <div className="mt-5 flex items-end gap-3"><span className="font-semibold text-ink">Date</span><span className="flex-1 border-b border-line-strong">&nbsp;</span></div>
           </div>
         </div>
-      </div>
 
-      {/* Footer band (full bleed) */}
-      <div className="bg-ink-muted px-[12mm] py-3 text-center text-sm font-medium text-white print:px-[10mm]">Thank you for your business!</div>
+        {/* Closing line (no band) */}
+        <div className="mt-8 text-center text-sm font-medium text-ink-muted">Thank you for your business!</div>
+      </div>
 
       <style>{PAGE_CSS}</style>
     </div>
