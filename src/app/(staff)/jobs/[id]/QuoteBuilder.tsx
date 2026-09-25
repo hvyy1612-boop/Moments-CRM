@@ -162,7 +162,7 @@ export function QuoteBuilder({
             }
           >
             {packageRows.length === 0 ? <EmptyLines /> : (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col">
                 {packageRows.map(({ l, i }) => (
                   <LineRow key={i} line={l} onChange={(patch) => update(i, patch)} onRemove={() => removeRow(i)} nameLabel="Package" />
                 ))}
@@ -176,7 +176,7 @@ export function QuoteBuilder({
             control={<Button type="button" variant="secondary" size="sm" onClick={() => addRow('addon')}>+ Add add-on</Button>}
           >
             {addonRows.length === 0 ? <EmptyLines /> : (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col">
                 {addonRows.map(({ l, i }) => (
                   <LineRow key={i} line={l} onChange={(patch) => update(i, patch)} onRemove={() => removeRow(i)} nameLabel="Add-on" />
                 ))}
@@ -186,7 +186,7 @@ export function QuoteBuilder({
 
           {customRows.length > 0 ? (
             <FormSection title="Other lines" description="Free-typed lines.">
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col">
                 {customRows.map(({ l, i }) => (
                   <LineRow key={i} line={l} onChange={(patch) => update(i, patch)} onRemove={() => removeRow(i)} nameLabel="Item" />
                 ))}
@@ -328,31 +328,36 @@ function EmptyLines() {
   return <p className="rounded-md border border-dashed border-line bg-paper px-4 py-5 text-center text-sm text-ink-muted">Nothing added yet.</p>
 }
 
+/**
+ * One quote line as a structured line item (not a bordered card). Every row shares ONE content-aware
+ * grid: name flexes to the widest track, quantity is compact, price is constrained, the remove action is
+ * fixed - so package/add-on rows always line up. Rows are separated by a hairline, not nested cards.
+ */
 function LineRow({ line, onChange, onRemove, nameLabel }: { line: Line; onChange: (patch: Partial<Line>) => void; onRemove: () => void; nameLabel: string }) {
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-line p-3">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-12">
-        <div className="sm:col-span-7">
-          <TextInput aria-label={nameLabel} placeholder={nameLabel} value={line.description} onChange={(e) => onChange({ description: e.target.value })} />
-        </div>
-        <div className="sm:col-span-2">
-          <TextInput aria-label="Quantity" inputMode="numeric" value={String(line.quantity)} onChange={(e) => onChange({ quantity: Number(e.target.value) || 0 })} />
-        </div>
-        <div className="sm:col-span-2">
-          <TextInput aria-label="Unit price" inputMode="decimal" placeholder="0.00" value={line.unitPrice} onChange={(e) => onChange({ unitPrice: e.target.value })} />
-        </div>
-        <div className="sm:col-span-1">
-          <Button type="button" variant="secondary" size="sm" onClick={onRemove} aria-label="Remove line">Remove</Button>
-        </div>
+    <div className="border-t border-line py-3 first:border-t-0 first:pt-0">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_5em_7em_2.5em] sm:items-center">
+        <TextInput aria-label={nameLabel} placeholder={nameLabel} value={line.description} onChange={(e) => onChange({ description: e.target.value })} />
+        <TextInput aria-label="Quantity" inputMode="numeric" className="sm:text-right" value={String(line.quantity)} onChange={(e) => onChange({ quantity: Number(e.target.value) || 0 })} />
+        <TextInput aria-label="Unit price" inputMode="decimal" placeholder="0.00" className="sm:text-right" value={line.unitPrice} onChange={(e) => onChange({ unitPrice: e.target.value })} />
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label="Remove line"
+          className="flex h-10 w-10 items-center justify-center justify-self-end rounded text-ink-muted transition-colors hover:bg-sunk hover:text-danger"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M7 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" /></svg>
+        </button>
       </div>
-      {/* What's included — prefilled from the package's inclusions when added; shown on the client quote. */}
+      {/* What's included - editable (prefilled from the package), shown on the client quote. Kept compact
+          and secondary so a package reads as a line of structured content, not a stack of tall boxes. */}
       <Textarea
         aria-label="What's included"
-        placeholder="What's included (one item per line) - shown on the client's quote"
-        rows={line.details ? 4 : 2}
+        placeholder="What's included (one per line) - shown on the client's quote"
+        rows={2}
         value={line.details ?? ''}
         onChange={(e) => onChange({ details: e.target.value })}
-        className="text-sm"
+        className="mt-2 text-sm"
       />
     </div>
   )
