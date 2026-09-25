@@ -9,6 +9,7 @@ import { titleCase } from '@/lib/text'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { PageHeader } from '@/components/PageHeader'
+import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { ClientsTable } from './ClientsTable'
 import { ImportedBanner } from './ImportedBanner'
 import { SortSelect, DEFAULT_SORT, type SortValue } from './SortSelect'
@@ -105,7 +106,7 @@ export default async function ClientsPage({
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
       <PageContainer variant="standard">
         <PageHeader
-          eyebrow="Studio"
+          breadcrumb={[DASHBOARD_CRUMB, { label: 'Clients' }]}
           title="Clients"
           description="Manage client profiles and contact information."
           actions={

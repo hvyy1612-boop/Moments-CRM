@@ -8,7 +8,7 @@ import { quoteDisplayNumber } from '@/lib/domain/quote'
 import { listActivePackages } from '@/lib/domain/package'
 import { sydneyDateTimeParts } from '@/lib/time'
 import { PageHeader } from '@/components/PageHeader'
-import { BackLink } from '@/components/BackLink'
+import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { AppShell } from '../../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { QuoteBuilder } from '../../../jobs/[id]/QuoteBuilder'
@@ -51,8 +51,11 @@ export default async function QuoteEditPage({ params }: { params: Promise<{ id: 
   return (
     <AppShell user={user} csrf={csrf} active="quotes">
       <PageContainer variant="standard">
-      <BackLink href={`/quotes/${id}`} label="Quote" />
-      <PageHeader eyebrow="Studio" title={`Edit ${quoteDisplayNumber(quote.reference, quote.seq)}`} description={`Quote for ${clientName}.`} />
+      <PageHeader
+        breadcrumb={[DASHBOARD_CRUMB, { label: 'Quotes', href: '/quotes' }, { label: quoteDisplayNumber(quote.reference, quote.seq), href: `/quotes/${id}` }, { label: 'Edit' }]}
+        title={`Edit ${quoteDisplayNumber(quote.reference, quote.seq)}`}
+        description={`Quote for ${clientName}.`}
+      />
       <section className="rounded-md border border-line bg-surface p-5">
         <QuoteBuilder
           csrf={csrf}

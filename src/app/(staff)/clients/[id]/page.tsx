@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { BackLink } from '@/components/BackLink'
+import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { Prisma, type EnquiryStatus } from '@prisma/client'
@@ -275,7 +275,7 @@ export default async function ClientDetailPage({
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
       <PageContainer variant="standard">
-        <BackLink href={backHref} label="Clients" />
+        <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Clients', href: backHref }, { label: client.displayName }]} />
 
         {/* Header: identity + quiet actions. */}
         <div className="mt-3 flex flex-wrap items-start justify-between gap-4 border-b border-line pb-5">
@@ -284,7 +284,7 @@ export default async function ClientDetailPage({
               {initials(client.displayName)}
             </span>
             <div className="min-w-0">
-              <h1 className="truncate text-2xl font-semibold leading-tight text-ink">{client.displayName}</h1>
+              <h1 className="truncate text-xl font-semibold leading-tight text-ink">{client.displayName}</h1>
               <p className="mt-0.5 truncate text-sm text-ink-muted">
                 <a href={`mailto:${client.email}`} className="hover:text-ink">{client.email}</a>
                 {client.phone ? ` · ${client.phone}` : ''}

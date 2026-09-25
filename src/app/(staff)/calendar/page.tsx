@@ -13,6 +13,7 @@ import {
 } from '@/lib/domain/calendar'
 import { getTodayCockpit } from '@/lib/domain/today'
 import { PageHeader } from '@/components/PageHeader'
+import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { AddEventButton, CalendarClient, SyncButton } from './CalendarClient'
@@ -72,7 +73,7 @@ export default async function CalendarPage({
     <AppShell user={user} csrf={csrf} active="calendar">
       <PageContainer variant="full">
       <PageHeader
-        eyebrow="Operations"
+        breadcrumb={[DASHBOARD_CRUMB, { label: 'Calendar' }]}
         title="Calendar"
         description="Manage bookings, shoots and studio activity."
         actions={

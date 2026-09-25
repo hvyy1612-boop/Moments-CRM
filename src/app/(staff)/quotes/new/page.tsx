@@ -5,7 +5,7 @@ import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
 import { PageHeader } from '@/components/PageHeader'
-import { BackLink } from '@/components/BackLink'
+import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { Button } from '@/components/ui/Button'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
@@ -30,8 +30,7 @@ export default async function CreateQuotePage() {
   return (
     <AppShell user={user} csrf={csrf} active="quotes">
       <PageContainer variant="narrow">
-      <BackLink href="/quotes" label="Quotes" />
-      <PageHeader eyebrow="Studio" title="Create quote" description="Choose the enquiry this quote is for." />
+      <PageHeader breadcrumb={[DASHBOARD_CRUMB, { label: 'Quotes', href: '/quotes' }, { label: 'New quote' }]} title="Create quote" description="Choose the enquiry this quote is for." />
 
       {enquiries.length === 0 ? (
         <p className="rounded-md border border-dashed border-line bg-paper px-4 py-10 text-center text-sm text-ink-muted">

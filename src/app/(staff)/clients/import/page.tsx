@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { BackLink } from '@/components/BackLink'
+import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
@@ -18,8 +18,8 @@ export default async function ImportClientsPage() {
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
       <PageContainer variant="narrow">
-        <BackLink href="/clients" label="Clients" />
-        <h1 className="mt-3 text-3xl font-semibold text-ink">Import clients</h1>
+        <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Clients', href: '/clients' }, { label: 'Import' }]} />
+        <h1 className="mt-3 text-xl font-semibold text-ink">Import clients</h1>
         <p className="mt-1 text-sm text-ink-muted">Bulk-add client profiles from a CSV. This creates profiles only. It does not open enquiries.</p>
         <div className="mt-6">
           <ImportForm csrf={csrf} />

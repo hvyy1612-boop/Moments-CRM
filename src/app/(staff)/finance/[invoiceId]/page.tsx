@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Prisma } from '@prisma/client'
 import Link from 'next/link'
-import { BackLink } from '@/components/BackLink'
+import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { InvoiceDocument } from '@/components/InvoiceDocument'
@@ -145,10 +145,10 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
       <PageContainer variant="standard">
       <div>
         {/* Header (matches the Clients detail page: chevron back-link, ruled title, quiet actions). */}
-        <BackLink href="/finance" label="Payments" />
+        <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Payments', href: '/finance' }, { label: `Invoice #${inv.invoiceNumber}` }]} />
         <div className="mt-3 flex flex-wrap items-start justify-between gap-4 border-b border-line pb-5">
           <div className="min-w-0">
-            <h1 className="truncate text-2xl font-semibold leading-tight text-ink">Invoice #{inv.invoiceNumber}</h1>
+            <h1 className="truncate text-xl font-semibold leading-tight text-ink">Invoice #{inv.invoiceNumber}</h1>
             <p className="mt-0.5 text-sm text-ink-muted">
               Status: <span className="font-semibold capitalize text-ink">{inv.status.toLowerCase().replace(/_/g, ' ')}</span>
               {' · '}{c.displayName} · <Link href={`/jobs/${inv.project.id}`} className="text-accent-ink hover:underline">{inv.project.name}</Link>

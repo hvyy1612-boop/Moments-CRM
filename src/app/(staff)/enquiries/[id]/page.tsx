@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { BackLink } from '@/components/BackLink'
+import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { StatusTag } from '@/components/ui/StatusTag'
@@ -103,10 +103,10 @@ export default async function EnquiryDetailPage({
   return (
     <AppShell user={user} csrf={csrf} active="enquiries" bareHeader>
       <PageContainer variant="standard">
-        <BackLink href={backHref} label="Enquiries" />
+        <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Enquiries', href: backHref }, { label: enquiry.name }]} />
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-semibold text-ink">{enquiry.name}</h1>
+          <h1 className="text-xl font-semibold text-ink">{enquiry.name}</h1>
           <StatusTag kind={ENQUIRY_STAGE_KIND[enquiry.status] ?? 'hold'}>
             {ENQUIRY_STAGE_LABEL[enquiry.status] ?? titleCase(enquiry.status)}
           </StatusTag>

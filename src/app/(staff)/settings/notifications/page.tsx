@@ -8,7 +8,7 @@ import { sydneyDateTimeParts } from '@/lib/time'
 import { getAutomationSettings } from '@/lib/domain/automation'
 import { scanPaymentReminders, type ReminderImpactItem } from '@/lib/domain/notifications'
 import { PageHeader } from '@/components/PageHeader'
-import { BackLink } from '@/components/BackLink'
+import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { Button } from '@/components/ui/Button'
 import { Checkbox, TextInput } from '@/components/ui/form'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
@@ -72,9 +72,8 @@ export default async function NotificationsSettingsPage({
   return (
     <AppShell user={user} csrf={csrf} active="settings">
       <PageContainer variant="narrow">
-      <BackLink href="/settings" label="Settings" />
       <PageHeader
-        eyebrow="System"
+        breadcrumb={[DASHBOARD_CRUMB, { label: 'Settings', href: '/settings' }, { label: 'Notifications' }]}
         title="Notifications"
         description="Automatic client reminders and internal follow-ups. Both gates below must be on before any client email is sent; everything starts off, so nothing sends until you deliberately turn it on."
       />

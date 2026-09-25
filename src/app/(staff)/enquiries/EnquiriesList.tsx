@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { PageContainer } from '@/components/PageContainer'
 import { PageHeader } from '@/components/PageHeader'
+import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { COL } from '@/components/ui/tableColumns'
 import { Popover } from '@/components/ui/Popover'
 import { StageControl } from './StageControl'
@@ -89,7 +90,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
   return (
     <PageContainer variant="standard">
       <PageHeader
-        eyebrow="Studio"
+        breadcrumb={[DASHBOARD_CRUMB, { label: 'Enquiries' }]}
         title="Enquiries"
         description="Your sales pipeline - from first enquiry to booking. Booked leads stay here as a record and also open as a Job."
         actions={<AddEnquiryButton csrf={csrf} />}

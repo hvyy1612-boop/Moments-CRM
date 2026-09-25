@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { Prisma } from '@prisma/client'
-import { BackLink } from '@/components/BackLink'
+import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
@@ -45,7 +45,7 @@ export default async function InvoicePrintPage({
   return (
     <div className="min-h-screen bg-paper px-4 py-8">
       <div className="mx-auto mb-4 flex max-w-3xl items-center justify-between print:hidden">
-        <BackLink href={`/jobs/${id}`} label="Back to job" />
+        <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Jobs', href: '/jobs' }, { label: 'Job', href: `/jobs/${id}` }, { label: 'Invoice' }]} />
         <PrintButton />
       </div>
       <InvoiceFit />

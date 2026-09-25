@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { ProjectLifecycle } from '@prisma/client'
 import Link from 'next/link'
-import { BackLink } from '@/components/BackLink'
+import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { cookies } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
@@ -47,8 +47,8 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
     return (
       <AppShell user={user} csrf={csrf} active="finance">
       <PageContainer variant="narrow">
-        <BackLink href="/finance" label="Payments" />
-        <h1 className="mt-2 font-serif text-2xl font-semibold text-ink">New invoice</h1>
+        <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Payments', href: '/finance' }, { label: 'New invoice' }]} />
+        <h1 className="mt-2 font-serif text-xl font-semibold text-ink">New invoice</h1>
         <p className="mt-1 text-sm text-ink-muted">{project.client.displayName} · {project.name} ({project.code})</p>
         {isClosed ? (
           <p className="mt-4 rounded-md border border-dashed border-line bg-surface px-4 py-6 text-sm text-ink-muted">
@@ -79,8 +79,8 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
   return (
     <AppShell user={user} csrf={csrf} active="finance">
       <PageContainer variant="narrow">
-      <BackLink href="/finance" label="Payments" />
-      <h1 className="mt-2 font-serif text-2xl font-semibold text-ink">New invoice</h1>
+      <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Payments', href: '/finance' }, { label: 'New invoice' }]} />
+      <h1 className="mt-2 font-serif text-xl font-semibold text-ink">New invoice</h1>
       <p className="mt-1 text-sm text-ink-muted">{clientName ? `Choose a job for ${clientName} to invoice.` : 'Choose a job to invoice.'}</p>
       {jobs.length === 0 ? (
         <p className="mt-4 rounded-md border border-dashed border-line bg-surface px-4 py-6 text-center text-sm text-ink-muted">

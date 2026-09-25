@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { BackLink } from '@/components/BackLink'
+import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
@@ -43,8 +43,8 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
       <PageContainer variant="narrow">
-        <BackLink href={`/clients/${client.id}`} label="Back" />
-        <h1 className="mt-3 text-2xl font-semibold text-ink">Edit {client.displayName}</h1>
+        <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Clients', href: '/clients' }, { label: client.displayName, href: `/clients/${client.id}` }, { label: 'Edit' }]} />
+        <h1 className="mt-3 text-xl font-semibold text-ink">Edit {client.displayName}</h1>
         <ClientForm
           action={updateClientAction}
           csrf={csrf}

@@ -10,6 +10,7 @@ import { formatAud } from '@/lib/money'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { PageHeader } from '@/components/PageHeader'
+import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { PaymentsView } from './PaymentsView'
 import { type Row } from './InvoiceTable'
 
@@ -50,7 +51,7 @@ export default async function FinancePage() {
     <AppShell user={user} csrf={csrf} active="finance" bareHeader>
       <PageContainer variant="standard">
         <PageHeader
-          eyebrow="Operations"
+          breadcrumb={[DASHBOARD_CRUMB, { label: 'Payments' }]}
           title="Payments"
           description="Track invoices, balances and payment status."
           actions={

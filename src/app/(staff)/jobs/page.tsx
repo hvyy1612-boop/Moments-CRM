@@ -12,6 +12,7 @@ import { getCompanyStatusLabels } from '@/lib/domain/status-labels'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { PageHeader } from '@/components/PageHeader'
+import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { JobsTable, type JobRow } from './JobsTable'
 import { JobSortSelect, JOB_DEFAULT_SORT, type JobSortValue } from './JobSortSelect'
 import { JobFilterMenu } from './JobFilterMenu'
@@ -133,7 +134,7 @@ export default async function JobsPage({
     <AppShell user={user} csrf={csrf} active="jobs" bareHeader>
       <PageContainer variant="standard">
         <PageHeader
-          eyebrow="Studio"
+          breadcrumb={[DASHBOARD_CRUMB, { label: 'Jobs' }]}
           title="Jobs"
           description="Booked work from planning through the shoot, editing and delivery."
           actions={canEdit ? <AddJobButton csrf={csrf} /> : null}

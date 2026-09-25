@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { BackLink } from '@/components/BackLink'
+import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
@@ -61,9 +61,9 @@ export default async function StaffRosterPage({ params }: { params: Promise<{ te
       <div className="print:hidden">
         <AppShell user={user} csrf={csrf} active="users">
           <PageContainer variant="narrow">
-            <BackLink href="/users" label="Users" />
+            <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Users', href: '/users' }, { label: `${teamDef.label} roster` }]} />
             <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-              <h1 className="font-serif text-2xl font-semibold text-ink">{teamDef.label} roster</h1>
+              <h1 className="font-serif text-xl font-semibold text-ink">{teamDef.label} roster</h1>
               <PrintButton label="Download PDF" />
             </div>
             <p className="mt-1 text-sm text-ink-muted">

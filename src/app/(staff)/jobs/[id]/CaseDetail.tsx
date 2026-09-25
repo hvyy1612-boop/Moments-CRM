@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { BackLink } from '@/components/BackLink'
+import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { CopyLinkField } from '@/components/ui/CopyLinkField'
@@ -236,7 +236,7 @@ export async function CaseDetail({
   return (
     <AppShell user={user} csrf={csrf} active={section} bareHeader>
       <PageContainer variant="wide">
-        <BackLink href={backHref} label={backLabel} />
+        <Breadcrumb items={[DASHBOARD_CRUMB, { label: backLabel, href: backHref }, { label: project.client.displayName }]} />
         <div className="mt-3 flex flex-wrap items-baseline justify-between gap-3">
           <div>
             <h1 className="text-xl">{project.client.displayName}</h1>

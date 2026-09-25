@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { quoteDisplayNumber } from '@/lib/domain/quote'
-import { BackLink } from '@/components/BackLink'
+import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { PrintButton } from '@/components/PrintButton'
 import { QuoteDocument, type QuoteDocData } from '@/components/QuoteDocument'
 
@@ -48,7 +48,7 @@ export default async function QuotePreviewPage({ params }: { params: Promise<{ i
   return (
     <main className="mx-auto w-full max-w-[210mm] px-4 py-8">
       <div className="mb-6 flex items-center justify-between gap-3 print:hidden">
-        <BackLink href={`/quotes/${id}`} label="Quote" />
+        <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Quotes', href: '/quotes' }, { label: quoteDisplayNumber(quote.reference, quote.seq), href: `/quotes/${id}` }, { label: 'Preview' }]} />
         <PrintButton label="Save as PDF" className="rounded-md border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper" />
       </div>
       <QuoteDocument doc={doc} />

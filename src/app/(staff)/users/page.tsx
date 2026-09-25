@@ -6,6 +6,7 @@ import { TEAMS } from '@/lib/auth/teams'
 import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
 import { PageHeader } from '@/components/PageHeader'
+import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { AddStaffForm } from './AddStaffForm'
@@ -54,7 +55,7 @@ export default async function UsersPage() {
     <AppShell user={user} csrf={csrf} active="users">
       <PageContainer variant="standard">
         <PageHeader
-          eyebrow="System"
+          breadcrumb={[DASHBOARD_CRUMB, { label: 'Users' }]}
           title="Users"
           description="Create staff accounts here. Each staff member gets a Staff ID and a one-time password, then sets their own password on first sign-in. There is no public sign-up."
         />

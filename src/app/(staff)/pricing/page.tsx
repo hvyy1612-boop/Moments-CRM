@@ -4,6 +4,7 @@ import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { listActivePackages } from '@/lib/domain/package'
 import { PageHeader } from '@/components/PageHeader'
+import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { PricingCalculator, type CatalogPackage } from './PricingCalculator'
@@ -28,7 +29,7 @@ export default async function PricingPage() {
     <AppShell user={user} csrf={csrf} active="pricing">
       <PageContainer variant="narrow">
       <PageHeader
-        eyebrow="Studio"
+        breadcrumb={[DASHBOARD_CRUMB, { label: 'Price calculator' }]}
         title="Price calculator"
         description="Build a quote from the catalogue and see the total, GST and deposit update as you go. Package prices are fixed catalogue values; this screen only totals them."
       />

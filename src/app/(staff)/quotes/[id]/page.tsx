@@ -10,7 +10,7 @@ import { effectiveQuoteStatus, quoteDisplayNumber } from '@/lib/domain/quote'
 import { computeDeposit } from '@/lib/domain/pricing'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate } from '@/lib/time'
-import { BackLink } from '@/components/BackLink'
+import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { Button } from '@/components/ui/Button'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { AppShell } from '../../AppShell'
@@ -102,12 +102,12 @@ export default async function QuoteDetailPage({
   return (
     <AppShell user={user} csrf={csrf} active="quotes">
       <PageContainer variant="standard">
-      <BackLink href="/quotes" label="Quotes" />
+      <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Quotes', href: '/quotes' }, { label: quoteDisplayNumber(quote.reference, quote.seq) }]} />
 
-      {/* Header — same shape as the other detail pages (BackLink -> title row -> context subline): no
-          eyebrow, mt-3 breathing room under the back link, status shown inline with the title. */}
+      {/* Header — breadcrumb (location) sits above; the title row shows the full quote number + client with
+          the status inline, then a context subline. Same shape as the other detail pages. */}
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <h1 className="text-3xl font-semibold text-ink">{quoteDisplayNumber(quote.reference, quote.seq)} · {clientName}</h1>
+        <h1 className="text-xl font-semibold text-ink">{quoteDisplayNumber(quote.reference, quote.seq)} · {clientName}</h1>
         <StatusPill tone={STATUS_TONE[eff] ?? 'neutral'}>{label(eff)}</StatusPill>
       </div>
 

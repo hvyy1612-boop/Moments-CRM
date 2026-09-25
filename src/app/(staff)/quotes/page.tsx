@@ -7,6 +7,7 @@ import { listQuotes } from '@/lib/domain/quote'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate } from '@/lib/time'
 import { PageHeader } from '@/components/PageHeader'
+import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { Button } from '@/components/ui/Button'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
@@ -40,7 +41,7 @@ export default async function QuotesPage() {
       {/* Content measure so the table fills a normal wide screen without sprawling (shared with the other lists). */}
       <PageContainer variant="standard">
         <PageHeader
-          eyebrow="Studio"
+          breadcrumb={[DASHBOARD_CRUMB, { label: 'Quotes' }]}
           title="Quotes"
           description="Quotations you have prepared. Create a quote from an enquiry; when the client accepts, it becomes a job."
           actions={
