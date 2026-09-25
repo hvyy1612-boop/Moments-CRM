@@ -7,10 +7,12 @@ import { maskEmail } from '@/lib/text'
 import { formatSydneyDateTime } from '@/lib/time'
 import { PageHeader } from '@/components/PageHeader'
 import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
+import { STEPUP_COOKIE, hasStepUp } from '@/lib/auth/stepup'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { SignInTable, type SignInRow } from './SignInTable'
 import { AuditTable, type AuditRow } from './AuditTable'
+import { ActivityGate } from './ActivityGate'
 import { auditCategory, auditLabel, signInLabel } from './audit'
 
 export const runtime = 'nodejs'
@@ -19,8 +21,26 @@ export const metadata: Metadata = { title: 'Activity - Moments' }
 export default async function ActivityPage() {
   // ADMIN only (SEC-A01): this page exposes sign-in history and IP addresses for security review.
   const user = await requireRole('/activity')
-  const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
+  const store = await cookies()
+  const cookieValue = store.get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
+
+  // Step-up (OWASP re-auth for sensitive pages): even a signed-in admin must re-enter their password to
+  // open Activity, so an unattended session can't expose it. The confirmation lasts a few minutes.
+  if (!hasStepUp(store.get(STEPUP_COOKIE)?.value, user.id)) {
+    return (
+      <AppShell user={user} csrf={csrf} active="activity">
+        <PageContainer variant="narrow">
+          <PageHeader
+            breadcrumb={[DASHBOARD_CRUMB, { label: 'Activity' }]}
+            title="Activity"
+            description="Security and account activity for this workspace. Read-only, admin-only."
+          />
+          <ActivityGate csrf={csrf} />
+        </PageContainer>
+      </AppShell>
+    )
+  }
 
   // Read-only. Both tables are append-only at the database level (the app never updates or deletes these
   // records), so the trail cannot be edited or erased. We never select the password hash or session token.
