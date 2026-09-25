@@ -1,18 +1,18 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { Alert } from '@/components/ui/Alert'
 import { PrintButton } from '@/components/PrintButton'
 import { prisma } from '@/lib/db'
-import { markQuoteViewed, effectiveQuoteStatus, quoteDisplayNumber } from '@/lib/domain/quote'
-import { formatSydneyDate } from '@/lib/time'
+import { markQuoteViewed, quoteDisplayNumber } from '@/lib/domain/quote'
 import { QuoteDocument, type QuoteDocData } from '@/components/QuoteDocument'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Your quote - Moments' }
 
 /**
- * Client-facing quote view (docs/31). Renders the shared QuoteDocument (same as the staff preview) plus
- * the acceptance control when the quote is still open. No internal IDs or staff controls.
+ * Client-facing quote view (docs/31). Renders the shared QuoteDocument — the very same document the staff
+ * "Preview quote" route shows — with a Download PDF control and nothing else. View-only: no acceptance
+ * box, no internal IDs or staff controls (acceptance is staff-run per docs/31 §7). Kept in sync with the
+ * staff preview: same QuoteDocument, same max-w-[210mm] width.
  */
 export default async function ClientQuotePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
@@ -31,9 +31,6 @@ export default async function ClientQuotePage({ params }: { params: Promise<{ to
   if (v.status === 'DRAFT') notFound() // not sent yet
 
   const clientName = quote.enquiry?.client?.displayName ?? quote.enquiry?.name ?? quote.project?.client?.displayName ?? 'you'
-  const eff = effectiveQuoteStatus(v.status, v.validUntil)
-  // docs/31 section 7: this page is view-only. The client does NOT accept in-app; staff run acceptQuote.
-  const stillOpen = eff === 'SENT' || eff === 'VIEWED'
 
   const doc: QuoteDocData = {
     number: quoteDisplayNumber(quote.reference, quote.seq),
@@ -56,22 +53,6 @@ export default async function ClientQuotePage({ params }: { params: Promise<{ to
           <PrintButton label="Download PDF" />
         </div>
         <QuoteDocument doc={doc} />
-        <div className="mt-8 print:hidden">
-          {eff === 'ACCEPTED' ? (
-            <Alert tone="success" title="This quote has been accepted">
-              {v.acceptedByClientName ? `Accepted by ${v.acceptedByClientName}` : 'Accepted'}
-              {v.acceptedByClientAt ? ` on ${formatSydneyDate(v.acceptedByClientAt)}` : ''}.
-            </Alert>
-          ) : eff === 'EXPIRED' ? (
-            <Alert tone="warning" title="This quote has expired">Please contact us for an updated quote.</Alert>
-          ) : stillOpen ? (
-            <Alert tone="info" title="Ready to go ahead?">
-              To accept this quote, reply to the email it came with or contact the studio and we will confirm your booking.
-            </Alert>
-          ) : (
-            <Alert tone="info" title="This quote is no longer available" />
-          )}
-        </div>
       </div>
     </main>
   )

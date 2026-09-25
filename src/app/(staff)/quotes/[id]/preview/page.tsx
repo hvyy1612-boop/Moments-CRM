@@ -46,7 +46,7 @@ export default async function QuotePreviewPage({ params }: { params: Promise<{ i
   }
 
   return (
-    <main className="mx-auto w-full max-w-2xl px-4 py-8">
+    <main className="mx-auto w-full max-w-[210mm] px-4 py-8">
       <div className="mb-6 flex items-center justify-between gap-3 print:hidden">
         <BackLink href={`/quotes/${id}`} label="Quote" />
         <PrintButton label="Save as PDF" className="rounded-md border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper" />
