@@ -111,7 +111,7 @@ export function DataTable<T>({
         <div role="table" aria-label={ariaLabel} className="min-w-[56em] text-sm">
           <div
             role="row"
-            className="grid items-center rounded-t-md border-b border-line bg-sunk text-xs uppercase tracking-wide text-ink-muted"
+            className="grid min-h-12 items-center rounded-t-md border-b border-line bg-sunk text-xs uppercase tracking-wide text-ink-muted"
             style={{ gridTemplateColumns: template }}
           >
             {visible.map((c) => (
@@ -132,11 +132,11 @@ export function DataTable<T>({
               <div
                 key={rowKey(row)}
                 role="row"
-                className={`group grid items-center border-b border-line transition-colors last:border-b-0 hover:bg-paper ${rowClassName?.(row) ?? ''}`}
+                className={`group grid min-h-12 items-center border-b border-line transition-colors last:border-b-0 hover:bg-paper ${rowClassName?.(row) ?? ''}`}
                 style={{ gridTemplateColumns: template }}
               >
                 {visible.map((c) => (
-                  <div key={c.key} role="cell" className={`flex min-w-0 ${alignCls(c.align)} px-4 py-3`}>
+                  <div key={c.key} role="cell" className={`flex min-w-0 ${alignCls(c.align)} px-4 py-2`}>
                     {c.cell(row)}
                   </div>
                 ))}

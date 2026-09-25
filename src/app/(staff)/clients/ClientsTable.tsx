@@ -45,7 +45,7 @@ export function ClientsTable({ rows, csrf, canDelete, backParam }: { rows: Clien
       width: COL.flexHigh,
       cell: (r) => (
         <Link href={`/clients/${r.id}${backParam}`} className="flex min-w-0 items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">
             {initials(r.name)}
           </span>
           <span className="min-w-0">

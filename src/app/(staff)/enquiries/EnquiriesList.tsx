@@ -75,7 +75,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
       width: COL.flexHigh,
       cell: (r) => (
         <Link href={`/enquiries/${r.id}`} className="flex min-w-0 items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">{initials(r.name)}</span>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">{initials(r.name)}</span>
           <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.name}</span>
         </Link>
       ),

@@ -42,7 +42,7 @@ export function JobsTable({ rows, backParam, labels, csrf, canEdit }: { rows: Jo
       width: COL.flexHigh,
       cell: (r) => (
         <Link href={`/jobs/${r.id}${backParam}`} className="flex min-w-0 items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">{initials(r.client)}</span>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">{initials(r.client)}</span>
           <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.client}</span>
         </Link>
       ),
