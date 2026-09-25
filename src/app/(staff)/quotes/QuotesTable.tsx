@@ -30,21 +30,39 @@ const STATUS_TONE: Record<string, Tone> = {
 const STATUS_ORDER = ['DRAFT', 'SENT', 'VIEWED', 'ACCEPTED', 'DECLINED', 'EXPIRED', 'SUPERSEDED']
 const label = (s: string) => s.charAt(0) + s.slice(1).toLowerCase()
 
+// Active = quotes still in play (need attention); Closed = resolved ones (accepted became a Job, or the
+// quote was declined / expired / replaced by a newer version), kept out of the working list.
+const TABS = [
+  { key: 'active', label: 'Active', statuses: new Set(['DRAFT', 'SENT', 'VIEWED']) },
+  { key: 'closed', label: 'Closed', statuses: new Set(['ACCEPTED', 'DECLINED', 'EXPIRED', 'SUPERSEDED']) },
+] as const
+type TabKey = (typeof TABS)[number]['key']
+
 /**
- * Quotes list over the shared DataTable + a toolbar (count + status filter) that mirrors Clients/Jobs.
- * Rows are selectable (Carbon "selectable" table): tick quotes to reveal a batch-action bar that can
- * delete them. ACCEPTED quotes are locked from selection - accepting a quote booked it as a Job, so it
- * can't be removed here. The status filter is a client-side view over the already-loaded rows.
+ * Quotes list over the shared DataTable. An Active/Closed tab split keeps the working list (Draft/Sent/
+ * Viewed) clear of resolved quotes; a status filter narrows within the current tab. Rows are selectable
+ * (Carbon "selectable" table): tick quotes to reveal a batch-action bar that can delete them. ACCEPTED
+ * quotes are locked from selection - accepting a quote booked it as a Job, so it can't be removed here.
  */
 export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) {
+  const [tab, setTab] = useState<TabKey>('active')
   const [status, setStatus] = useState<string>('all')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
-  // Only offer statuses that actually appear, in canonical order - no dead filter options.
-  const presentStatuses = useMemo(() => {
-    const set = new Set(rows.map((r) => r.status))
-    return STATUS_ORDER.filter((s) => set.has(s))
-  }, [rows])
+  const counts = useMemo(
+    () => ({
+      active: rows.filter((r) => TABS[0].statuses.has(r.status)).length,
+      closed: rows.filter((r) => TABS[1].statuses.has(r.status)).length,
+    }),
+    [rows],
+  )
+
+  const tabStatuses = TABS.find((t) => t.key === tab)!.statuses
+  const inTab = rows.filter((r) => tabStatuses.has(r.status))
+  // Filter options are only the statuses actually present in the current tab - no dead options.
+  const presentStatuses = STATUS_ORDER.filter((s) => tabStatuses.has(s) && inTab.some((r) => r.status === s))
+  const options = [{ key: 'all', text: 'All statuses' }, ...presentStatuses.map((s) => ({ key: s, text: label(s) }))]
+  const visible = status === 'all' ? inTab : inTab.filter((r) => r.status === status)
 
   // After a delete revalidates the page, drop any selected ids that no longer exist (clears the bar).
   useEffect(() => {
@@ -56,8 +74,11 @@ export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) 
     })
   }, [rows])
 
-  const visible = status === 'all' ? rows : rows.filter((r) => r.status === status)
-  const options = [{ key: 'all', text: 'All statuses' }, ...presentStatuses.map((s) => ({ key: s, text: label(s) }))]
+  const switchTab = (key: TabKey) => {
+    setTab(key)
+    setStatus('all')
+    setSelectedIds(new Set())
+  }
 
   const canDelete = (r: QuoteRow) => r.status !== 'ACCEPTED'
   const selection = {
@@ -82,10 +103,9 @@ export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) 
   }
   const selectedCount = selectedIds.size
 
-  // Carbon data-table: columns FILL the table width (no trailing dead zone), sized with the shared `COL`
-  // fr roles so they distribute evenly. Client is the widest text column; Quote/Amount/Updated share the
-  // metadata weight; Status is a compact tag. Every column is LEFT-aligned - like Carbon's own numeric
-  // columns - so Amount reads directly after Client instead of being pushed to the far edge of its cell.
+  // Carbon data-table: columns FILL the table width, sized with the shared `COL` fr roles so they
+  // distribute evenly. Client is the widest text column; every column is LEFT-aligned (like Carbon's own
+  // numeric columns) so Amount reads directly after Client instead of being pushed to the far cell edge.
   const columns: DataColumn<QuoteRow>[] = [
     { key: 'quote', header: 'Quote', width: COL.constrained, cell: (r) => <Link href={`/quotes/${r.id}`} className="tabular block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.number}</Link> },
     { key: 'client', header: 'Client', width: COL.flexMedium, cell: (r) => <span className="block truncate text-ink">{r.client}</span> },
@@ -96,8 +116,8 @@ export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) 
 
   return (
     <>
-      {/* Toolbar. When rows are selected it becomes a Carbon-style batch-action bar; otherwise the normal
-          count + status filter, keeping the same height/position so the table never jumps. */}
+      {/* Toolbar. Ticking rows swaps it for a Carbon batch-action bar; otherwise Active/Closed tabs on the
+          left (like Jobs) + a status filter on the right, same height so the table never jumps. */}
       {selectedCount > 0 ? (
         <div className="mt-7 flex flex-wrap items-center justify-between gap-3 rounded-md border border-line-strong bg-sunk px-3 py-2">
           <span className="text-sm font-medium text-ink">{selectedCount} selected</span>
@@ -122,8 +142,23 @@ export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) 
         </div>
       ) : (
         <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
-          <div className="text-sm text-ink">
-            All quotes <span className="text-ink-muted">· {visible.length}</span>
+          <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Quote status">
+            {TABS.map((t) => {
+              const on = tab === t.key
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={on}
+                  onClick={() => switchTab(t.key)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${on ? 'bg-sunk font-medium text-ink' : 'text-ink-muted hover:bg-paper hover:text-ink'}`}
+                >
+                  {t.label}
+                  <span className={`tabular rounded-full px-1.5 py-0.5 text-xs leading-none ${on ? 'bg-line text-ink-muted' : 'bg-sunk text-ink-muted'}`}>{counts[t.key]}</span>
+                </button>
+              )
+            })}
           </div>
           <Popover
             width={188}
@@ -172,7 +207,7 @@ export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) 
           selection={selection}
           search={(r) => `${r.number} ${r.client}`}
           searchPlaceholder="Search quotes"
-          emptyMessage="No quotes yet. Create one from an enquiry to get started."
+          emptyMessage={tab === 'active' ? 'No active quotes. Create one from an enquiry to get started.' : 'No closed quotes yet.'}
         />
       </div>
     </>

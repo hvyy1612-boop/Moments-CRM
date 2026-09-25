@@ -139,12 +139,14 @@ export default async function QuoteDetailPage({
         ) : isSentOrViewed ? (
           <>
             <FormButton action={acceptQuoteAction} csrf={csrf} quoteId={id} label="Mark as accepted" />
-            <FormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Revise" variant="secondary" />
+            {/* "Edit" a sent/viewed quote safely opens a NEW version (reviseQuoteAction) - the client is
+                still looking at the version they were sent, so we never edit that one in place. */}
+            <FormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Edit" variant="secondary" />
             <Link href={`/quotes/${id}/preview`}><Button variant="secondary">Preview</Button></Link>
           </>
         ) : eff === 'DECLINED' || eff === 'EXPIRED' ? (
           <>
-            <FormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Revise" />
+            <FormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Edit" />
             <Link href={`/quotes/${id}/preview`}><Button variant="secondary">Preview</Button></Link>
           </>
         ) : (
