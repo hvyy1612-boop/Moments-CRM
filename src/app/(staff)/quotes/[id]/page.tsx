@@ -137,7 +137,10 @@ export default async function QuoteDetailPage({
           </>
         ) : isSentOrViewed ? (
           <>
-            <FormButton action={acceptQuoteAction} csrf={csrf} quoteId={id} label="Mark as accepted" />
+            {/* "Mark as accepted" is the Enquiry -> Job conversion, so it only applies to a quote that is
+                linked to an enquiry. Quotes tied straight to a job (e.g. seeded/imported) have no enquiry
+                to convert, so hide it rather than let the click dead-end into an error. */}
+            {quote.enquiry ? <FormButton action={acceptQuoteAction} csrf={csrf} quoteId={id} label="Mark as accepted" /> : null}
             {/* "Edit" a sent quote safely opens a NEW version (reviseQuoteAction) - the client is still
                 looking at the version they were sent, so we never edit that one in place. */}
             <FormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Edit" variant="secondary" />
