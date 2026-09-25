@@ -10,17 +10,20 @@
  * A column with genuinely special needs can still pass a raw width string - this is a shared default
  * vocabulary, not a hard rule.
  */
+// Carbon column-balance rule (docs/26 / 2x-grid Phase 9): only the PRIMARY identity column absorbs the
+// horizontal slack. Metadata (dates, currency, status, counts) is CONTENT-SIZED and must NOT expand into
+// a blank region - so every table reads tight and balanced instead of pooling gaps between short values.
 export const COL = {
   /** Avatar / icon / overflow-action menu, or a selection control - fixed narrow, never flexes. */
   fixed: '2.75em',
-  /** A very small numeric count (e.g. Jobs: 0/1) - narrow, minimal flex. */
-  count: 'minmax(5em, 0.5fr)',
-  /** Status / stage pill, or a short code - content-sized, minimal flex. */
-  content: 'minmax(8em, 0.9fr)',
-  /** Date / currency / phone / short metadata - predictable, low flex. */
-  constrained: 'minmax(9em, 1fr)',
-  /** Event / category / type / secondary text - medium flexible. */
-  flexMedium: 'minmax(11em, 1.2fr)',
-  /** Client / name / title / description - highest flexible priority (the primary identity column). */
-  flexHigh: 'minmax(16em, 1.6fr)',
+  /** A very small numeric count (e.g. Jobs: 0/1) - sized to its content, no growth. */
+  count: 'minmax(3.5em, max-content)',
+  /** Status / stage pill, or a short code - sized to its widest label, no growth. */
+  content: 'minmax(6em, max-content)',
+  /** Date / currency / phone / short metadata - sized to content, no growth (never expands into a gap). */
+  constrained: 'minmax(7.5em, max-content)',
+  /** Event / category / type / secondary text - a secondary identity column: absorbs a little slack. */
+  flexMedium: 'minmax(10em, 0.5fr)',
+  /** Client / name / title / description - the primary identity column: absorbs the remaining slack. */
+  flexHigh: 'minmax(14em, 1fr)',
 } as const
