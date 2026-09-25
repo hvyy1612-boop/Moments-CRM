@@ -109,13 +109,16 @@ export function DataTable<T>({
 
       <div className="overflow-x-auto">
         <div role="table" aria-label={ariaLabel} className="min-w-[56em] text-sm">
+          {/* Header keeps the body's `text-sm` font basis so the `em` floors in the column template
+              resolve to the SAME px as the body rows (a smaller `text-xs` basis here shrinks every `em`
+              floor and drifts the header columns off their data). The label text is shrunk on the cell. */}
           <div
             role="row"
-            className="grid min-h-12 items-center border-b border-line-strong text-xs uppercase tracking-wide text-ink-muted"
+            className="grid min-h-12 items-center border-b border-line-strong uppercase tracking-wide text-ink-muted"
             style={{ gridTemplateColumns: template }}
           >
             {visible.map((c) => (
-              <div key={c.key} role="columnheader" className={`flex ${alignCls(c.align)} whitespace-nowrap px-4 py-2 font-medium`}>
+              <div key={c.key} role="columnheader" className={`flex min-w-0 ${alignCls(c.align)} whitespace-nowrap px-4 py-2 text-xs font-medium`}>
                 {c.header}
               </div>
             ))}
