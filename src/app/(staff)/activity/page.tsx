@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
@@ -19,7 +20,7 @@ import { auditCategory, auditLabel, signInLabel } from './audit'
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Activity - Moments' }
 
-export default async function ActivityPage() {
+export default async function ActivityPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   // ADMIN only (SEC-A01): this page exposes sign-in history and IP addresses for security review.
   const user = await requireRole('/activity')
   const store = await cookies()
@@ -77,6 +78,20 @@ export default async function ActivityPage() {
     by: a.actor?.name ?? 'System',
   }))
 
+  // One list at a time (the two tables stacked made the page a long scroll): a tab picker chooses which
+  // to show. URL-driven so a refresh or shared link keeps the view. Defaults to sign-in activity.
+  const sp = await searchParams
+  const view: 'signins' | 'activity' = sp?.view === 'activity' ? 'activity' : 'signins'
+  const tabHref = (v: 'signins' | 'activity') => (v === 'activity' ? '/activity?view=activity' : '/activity')
+  const TABS = [
+    ['signins', 'Sign-in activity', signInRows.length],
+    ['activity', 'Account & workspace activity', auditRows.length],
+  ] as const
+  const blurb =
+    view === 'signins'
+      ? 'Successful and failed sign-ins, with the IP address for spotting unusual access.'
+      : 'Who changed what - user administration and key business actions, grouped by area.'
+
   return (
     <AppShell user={user} csrf={csrf} active="activity">
       <PageContainer variant="standard">
@@ -86,19 +101,30 @@ export default async function ActivityPage() {
           description="Security and account activity for this workspace - sign-ins and important actions. Times are Sydney local, emails are masked, and IP addresses are shown for security review. Read-only: records cannot be edited or deleted."
         />
 
-        <section className="mt-8">
-          <h2 className="text-sm font-semibold text-ink">Sign-in activity</h2>
-          <p className="mt-0.5 text-xs text-muted">Successful and failed sign-ins, with the IP address for spotting unusual access.</p>
-          <div className="mt-3">
-            <SignInTable rows={signInRows} />
+        <div className="mt-7 border-b border-line pb-2">
+          <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Activity view">
+            {TABS.map(([key, label, count]) => {
+              const on = view === key
+              return (
+                <Link
+                  key={key}
+                  href={tabHref(key)}
+                  role="tab"
+                  aria-selected={on}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${on ? 'bg-sunk font-medium text-ink' : 'text-ink-muted hover:bg-paper hover:text-ink'}`}
+                >
+                  {label}
+                  <span className={`tabular rounded-full px-1.5 py-0.5 text-xs leading-none ${on ? 'bg-line text-ink-muted' : 'bg-sunk text-ink-muted'}`}>{count}</span>
+                </Link>
+              )
+            })}
           </div>
-        </section>
+        </div>
 
-        <section className="mt-10">
-          <h2 className="text-sm font-semibold text-ink">Account &amp; workspace activity</h2>
-          <p className="mt-0.5 text-xs text-muted">Who changed what - user administration and key business actions, grouped by area.</p>
+        <section className="mt-5">
+          <p className="text-xs text-muted">{blurb}</p>
           <div className="mt-3">
-            <AuditTable rows={auditRows} />
+            {view === 'signins' ? <SignInTable rows={signInRows} /> : <AuditTable rows={auditRows} />}
           </div>
         </section>
       </PageContainer>
