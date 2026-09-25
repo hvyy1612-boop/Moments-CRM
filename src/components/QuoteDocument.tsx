@@ -122,29 +122,31 @@ export function QuoteDocument({ doc }: { doc: QuoteDocData }) {
         </tbody>
       </table>
 
-      {/* Payment schedule (left) + Totals (right) — two aligned columns, flush to the table edges */}
-      <div className={`mt-6 grid gap-6 sm:items-start${dep ? ' sm:grid-cols-2' : ''}`}>
+      {/* Payment schedule (left) + Totals (right) — two equal-height columns, flush to the table edges.
+          items-stretch makes both columns the same height; flex-1 rows share that height so the boxes
+          line up top AND bottom even though one has fewer rows. */}
+      <div className={`mt-6 grid gap-6 sm:items-stretch${dep ? ' sm:grid-cols-2' : ''}`}>
         {dep ? (
-          <section>
+          <section className="flex flex-col">
             <div className={EYEBROW}>Payment schedule</div>
-            <div className="mt-2 overflow-hidden rounded-sm border border-line-strong text-sm">
-              <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3">
+            <div className="mt-2 flex flex-1 flex-col overflow-hidden rounded-sm border border-line-strong text-sm">
+              <div className="flex flex-1 items-center justify-between gap-4 border-b border-line px-4 py-3">
                 <div><div className="text-ink">Booking deposit</div><div className="mt-1 text-xs text-ink-muted">{doc.depositPercent}% - due on acceptance</div></div>
                 <span className="tabular font-semibold text-ink">{formatAud(dep.deposit)}</span>
               </div>
-              <div className="flex items-center justify-between gap-4 px-4 py-3">
+              <div className="flex flex-1 items-center justify-between gap-4 px-4 py-3">
                 <div><div className="text-ink">Remaining balance</div><div className="mt-1 text-xs text-ink-muted">{100 - (doc.depositPercent ?? 0)}% - due before the shoot</div></div>
                 <span className="tabular font-semibold text-ink">{formatAud(dep.balance)}</span>
               </div>
             </div>
           </section>
         ) : null}
-        <section>
+        <section className="flex flex-col">
           <div className={EYEBROW}>Totals</div>
-          <div className="mt-2 overflow-hidden rounded-sm border border-line-strong text-sm">
-            <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3"><span className="text-ink-muted">Subtotal (ex GST)</span><span className="tabular text-ink">{formatAud(doc.subtotal)}</span></div>
-            <div className="flex items-center justify-between gap-4 border-b border-line px-4 py-3"><span className="text-ink-muted">GST 10%</span><span className="tabular text-ink">{formatAud(doc.taxTotal)}</span></div>
-            <div className="flex items-center justify-between gap-4 bg-sunk px-4 py-3 text-base font-semibold"><span className="uppercase tracking-wide text-ink">Total</span><span className="tabular text-ink">{formatAud(doc.total)}</span></div>
+          <div className="mt-2 flex flex-1 flex-col overflow-hidden rounded-sm border border-line-strong text-sm">
+            <div className="flex flex-1 items-center justify-between gap-4 border-b border-line px-4 py-3"><span className="text-ink-muted">Subtotal (ex GST)</span><span className="tabular text-ink">{formatAud(doc.subtotal)}</span></div>
+            <div className="flex flex-1 items-center justify-between gap-4 border-b border-line px-4 py-3"><span className="text-ink-muted">GST 10%</span><span className="tabular text-ink">{formatAud(doc.taxTotal)}</span></div>
+            <div className="flex flex-1 items-center justify-between gap-4 bg-sunk px-4 py-3 text-base font-semibold"><span className="uppercase tracking-wide text-ink">Total</span><span className="tabular text-ink">{formatAud(doc.total)}</span></div>
           </div>
         </section>
       </div>
