@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { Alert } from '@/components/ui/Alert'
+import { PrintButton } from '@/components/PrintButton'
 import { prisma } from '@/lib/db'
 import { markQuoteViewed, effectiveQuoteStatus, quoteDisplayNumber } from '@/lib/domain/quote'
 import { formatSydneyDate } from '@/lib/time'
@@ -49,23 +50,28 @@ export default async function ClientQuotePage({ params }: { params: Promise<{ to
   }
 
   return (
-    <main className="mx-auto w-full max-w-2xl px-4 py-12">
-      <QuoteDocument doc={doc} />
-      <div className="mt-8">
-        {eff === 'ACCEPTED' ? (
-          <Alert tone="success" title="This quote has been accepted">
-            {v.acceptedByClientName ? `Accepted by ${v.acceptedByClientName}` : 'Accepted'}
-            {v.acceptedByClientAt ? ` on ${formatSydneyDate(v.acceptedByClientAt)}` : ''}.
-          </Alert>
-        ) : eff === 'EXPIRED' ? (
-          <Alert tone="warning" title="This quote has expired">Please contact us for an updated quote.</Alert>
-        ) : stillOpen ? (
-          <Alert tone="info" title="Ready to go ahead?">
-            To accept this quote, reply to the email it came with or contact the studio and we will confirm your booking.
-          </Alert>
-        ) : (
-          <Alert tone="info" title="This quote is no longer available" />
-        )}
+    <main className="min-h-screen bg-paper px-4 py-8 print:bg-surface print:p-0">
+      <div className="mx-auto w-full max-w-[210mm]">
+        <div className="mb-4 flex items-center justify-end print:hidden">
+          <PrintButton label="Download PDF" />
+        </div>
+        <QuoteDocument doc={doc} />
+        <div className="mt-8 print:hidden">
+          {eff === 'ACCEPTED' ? (
+            <Alert tone="success" title="This quote has been accepted">
+              {v.acceptedByClientName ? `Accepted by ${v.acceptedByClientName}` : 'Accepted'}
+              {v.acceptedByClientAt ? ` on ${formatSydneyDate(v.acceptedByClientAt)}` : ''}.
+            </Alert>
+          ) : eff === 'EXPIRED' ? (
+            <Alert tone="warning" title="This quote has expired">Please contact us for an updated quote.</Alert>
+          ) : stillOpen ? (
+            <Alert tone="info" title="Ready to go ahead?">
+              To accept this quote, reply to the email it came with or contact the studio and we will confirm your booking.
+            </Alert>
+          ) : (
+            <Alert tone="info" title="This quote is no longer available" />
+          )}
+        </div>
       </div>
     </main>
   )
