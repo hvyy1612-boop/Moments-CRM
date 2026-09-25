@@ -353,9 +353,11 @@ export function InvoiceWorkspace(props: {
         </div>
       </div>
 
-      {/* Products & Packages + totals */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-        <div className="min-w-0 flex-1 rounded-lg border border-line bg-surface">
+      {/* Products & Packages + totals - one 3-column grid shared with the rows above and below, so every
+          vertical edge lines up: the table spans 2 columns (its right edge matches Job details / Payments
+          history) and the totals sit in column 3 (aligned with Client / Record a payment). */}
+      <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
+        <div className="min-w-0 rounded-lg border border-line bg-surface lg:col-span-2">
           <CardHeader
             title="Products & packages"
             action={editable ? (
@@ -446,7 +448,7 @@ export function InvoiceWorkspace(props: {
           </div>
         </div>
 
-        <div className="w-full rounded-lg border border-line bg-surface p-4 text-sm lg:w-72 lg:shrink-0">
+        <div className="rounded-lg border border-line bg-surface p-4 text-sm">
           <div className="flex justify-between py-0.5 text-ink-muted"><span>Subtotal (excl. GST)</span><span className="tabular">{money(subtotal)}</span></div>
           <div className="flex justify-between py-0.5 text-ink-muted"><span>GST (10%)</span><span className="tabular">{money(gst)}</span></div>
           {disc > 0 ? (
