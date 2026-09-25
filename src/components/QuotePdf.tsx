@@ -6,10 +6,11 @@ import type { QuoteDocData } from '@/components/QuoteDocument'
 
 /**
  * The quotation as a real, downloadable A4 PDF (react-pdf) — the client link serves this inline so the
- * browser opens its own PDF viewer (with native download/print). Rebuilds the same "Quotation" template
- * as the on-screen QuoteDocument: MOMENTS mark + accent Quotation title, company block beside boxed meta
- * fields, an accent Customer band, a ruled line-item table with accent header + zebra rows, a Notes box
- * beside a boxed totals grid, a courtesy line, a signature block and a "Thank you" line. White page.
+ * browser opens its own PDF viewer (with native download/print). It mirrors the on-screen QuoteDocument
+ * template 1:1, only on a white page. Sizes are the HTML form's px values converted to PDF points
+ * (1px = 0.75pt at 96dpi) so the proportions match the HTML exactly: text-2xl(24)->18, text-sm(14)->10.5,
+ * text-xs(12)->9, text-5xl(48)->36; spacing 4/8/12/16/24/32px -> 3/6/9/12/18/24pt; 12mm->34pt, 76mm->215,
+ * 28mm->79, 34mm->96, 80mm->227. Keep this in visual sync with QuoteDocument.tsx.
  *
  * Colours are literal here (react-pdf has no access to the CSS design tokens) but mirror globals.css:
  * ink #20201e, ink-muted #6f6f69, muted #9c948b, accent #a06a67, line #e7e2da / #ded7cc, sunk #f1ede7,
@@ -29,66 +30,66 @@ const C = {
 }
 
 const s = StyleSheet.create({
-  page: { backgroundColor: C.white, color: C.ink, paddingHorizontal: 34, paddingVertical: 34, fontFamily: 'Helvetica', fontSize: 9.5, lineHeight: 1.45 },
+  page: { backgroundColor: C.white, color: C.ink, paddingHorizontal: 34, paddingVertical: 34, fontFamily: 'Helvetica', fontSize: 10.5, lineHeight: 1.5 },
 
-  // Header
+  // Header: MOMENTS + subtitle (left) | Quotation (right)
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  brand: { fontFamily: 'Helvetica-Bold', fontSize: 19, textTransform: 'uppercase', color: C.ink },
-  brandSub: { fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 1.4, textTransform: 'uppercase', color: C.accent, marginTop: 3 },
-  title: { fontSize: 30, color: C.accent },
+  brand: { fontFamily: 'Helvetica-Bold', fontSize: 18, textTransform: 'uppercase', color: C.ink, lineHeight: 1 },
+  brandSub: { fontFamily: 'Helvetica-Bold', fontSize: 9, letterSpacing: 0.8, textTransform: 'uppercase', color: C.accent, marginTop: 4 },
+  title: { fontSize: 36, color: C.accent, lineHeight: 1 },
 
-  // Company + meta
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 },
+  // Company block | boxed meta fields
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 18 },
   companyName: { fontFamily: 'Helvetica-Bold', color: C.ink, marginBottom: 2 },
   companyLine: { color: C.inkMuted },
-  metaWrap: { width: 210 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  metaLabel: { width: 78, fontFamily: 'Helvetica-Bold', color: C.ink },
-  metaValue: { flexGrow: 1, borderWidth: 1, borderColor: C.lineStrong, borderRadius: 2, backgroundColor: C.paper, paddingHorizontal: 7, paddingVertical: 4, color: C.ink },
+  metaWrap: { width: 215 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4.5 },
+  metaLabel: { width: 79, fontFamily: 'Helvetica-Bold', color: C.ink },
+  metaValue: { flexGrow: 1, borderWidth: 1, borderColor: C.lineStrong, borderRadius: 2, backgroundColor: C.paper, paddingHorizontal: 9, paddingVertical: 4, color: C.ink },
 
-  // Bands
-  band: { backgroundColor: C.accent, borderRadius: 2, paddingHorizontal: 7, paddingVertical: 4, marginTop: 18 },
-  bandText: { color: C.white, fontFamily: 'Helvetica-Bold', fontSize: 8, letterSpacing: 0.6, textTransform: 'uppercase' },
-  customerName: { marginTop: 6, paddingHorizontal: 2 },
+  // Accent bands (Customer / Notes / table header) — one shared height
+  band: { backgroundColor: C.accent, borderRadius: 2, paddingHorizontal: 9, paddingVertical: 5, marginTop: 18 },
+  bandText: { color: C.white, fontFamily: 'Helvetica-Bold', fontSize: 9, letterSpacing: 0.6, textTransform: 'uppercase' },
+  customerName: { marginTop: 6, paddingHorizontal: 3 },
   bold: { fontFamily: 'Helvetica-Bold' },
 
-  // Table
-  table: { marginTop: 16, borderWidth: 1, borderColor: C.lineStrong, borderRadius: 2 },
+  // Line-item table
+  table: { marginTop: 18, borderWidth: 1, borderColor: C.lineStrong, borderRadius: 2 },
   thead: { flexDirection: 'row', backgroundColor: C.accent },
-  th: { color: C.white, fontFamily: 'Helvetica-Bold', fontSize: 8, letterSpacing: 0.5, textTransform: 'uppercase', paddingHorizontal: 7, paddingVertical: 6 },
+  th: { color: C.white, fontFamily: 'Helvetica-Bold', fontSize: 9, letterSpacing: 0.5, textTransform: 'uppercase', paddingHorizontal: 9, paddingVertical: 6 },
   tr: { flexDirection: 'row', borderTopWidth: 1, borderColor: C.line },
-  td: { paddingHorizontal: 7, paddingVertical: 6, borderRightWidth: 1, borderColor: C.line },
-  tdLast: { paddingHorizontal: 7, paddingVertical: 6 },
+  td: { paddingHorizontal: 9, paddingVertical: 6, borderRightWidth: 1, borderColor: C.line },
+  tdLast: { paddingHorizontal: 9, paddingVertical: 6 },
   cItem: { width: '8%' },
   cDesc: { width: '46%' },
   cQty: { width: '12%' },
   cUnit: { width: '17%' },
   cAmt: { width: '17%' },
   lineName: { fontFamily: 'Helvetica-Bold', color: C.ink },
-  lineDetail: { fontSize: 8, color: C.inkMuted, marginTop: 2, lineHeight: 1.4 },
+  lineDetail: { fontSize: 9, color: C.inkMuted, marginTop: 3, lineHeight: 1.4 },
 
   // Bottom band (notes + totals)
-  bottomRow: { flexDirection: 'row', marginTop: 16 },
-  notesCol: { width: '50%', paddingRight: 10 },
-  totalsCol: { width: '50%', paddingLeft: 10 },
-  notesBox: { marginTop: 6, borderWidth: 1, borderColor: C.lineStrong, borderRadius: 2, backgroundColor: C.paper, padding: 8, minHeight: 96, color: C.inkMuted },
+  bottomRow: { flexDirection: 'row', marginTop: 18 },
+  notesCol: { width: '50%', paddingRight: 9 },
+  totalsCol: { width: '50%', paddingLeft: 9 },
+  notesBox: { marginTop: 6, borderWidth: 1, borderColor: C.lineStrong, borderRadius: 2, backgroundColor: C.paper, padding: 9, minHeight: 96, color: C.inkMuted },
   totalsBox: { marginTop: 6, borderWidth: 1, borderColor: C.lineStrong, borderRadius: 2 },
   totalsRow: { flexDirection: 'row', alignItems: 'center' },
   totalsRowB: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderColor: C.line },
-  totalsLabel: { flexGrow: 1, paddingHorizontal: 8, paddingVertical: 5, color: C.inkMuted },
-  totalsLabelStrong: { flexGrow: 1, paddingHorizontal: 8, paddingVertical: 6, fontFamily: 'Helvetica-Bold', color: C.ink, textTransform: 'uppercase', letterSpacing: 0.5 },
-  totalsVal: { width: 96, paddingHorizontal: 8, paddingVertical: 5, textAlign: 'right', color: C.ink, borderLeftWidth: 1, borderColor: C.line },
-  totalsValStrong: { width: 96, paddingHorizontal: 8, paddingVertical: 6, textAlign: 'right', fontFamily: 'Helvetica-Bold', color: C.ink, borderLeftWidth: 1, borderColor: C.line },
+  totalsLabel: { flexGrow: 1, paddingHorizontal: 9, paddingVertical: 4.5, color: C.inkMuted },
+  totalsLabelStrong: { flexGrow: 1, paddingHorizontal: 9, paddingVertical: 6, fontFamily: 'Helvetica-Bold', color: C.ink, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 12 },
+  totalsVal: { width: 96, paddingHorizontal: 9, paddingVertical: 4.5, textAlign: 'right', color: C.ink, borderLeftWidth: 1, borderColor: C.line },
+  totalsValStrong: { width: 96, paddingHorizontal: 9, paddingVertical: 6, textAlign: 'right', fontFamily: 'Helvetica-Bold', color: C.ink, borderLeftWidth: 1, borderColor: C.line, fontSize: 12 },
   strongBg: { backgroundColor: C.sunk },
 
   // Closing / signature / footer
-  closing: { marginTop: 16, fontFamily: 'Helvetica-Oblique', color: C.inkMuted },
-  sigWrap: { marginTop: 26, borderTopWidth: 1, borderColor: C.lineStrong, paddingTop: 16, alignItems: 'flex-end' },
-  sigBlock: { width: 230 },
+  closing: { marginTop: 18, fontFamily: 'Helvetica-Oblique', color: C.inkMuted },
+  sigWrap: { marginTop: 24, borderTopWidth: 1, borderColor: C.lineStrong, paddingTop: 15, alignItems: 'flex-end' },
+  sigBlock: { width: 227 },
   sigLine: { flexDirection: 'row', alignItems: 'flex-end' },
-  sigLabel: { fontFamily: 'Helvetica-Bold', color: C.ink, width: 62 },
+  sigLabel: { fontFamily: 'Helvetica-Bold', color: C.ink, width: 60 },
   sigRule: { flexGrow: 1, borderBottomWidth: 1, borderColor: C.lineStrong, height: 12 },
-  footer: { marginTop: 26, textAlign: 'center', fontSize: 9, color: C.muted },
+  footer: { marginTop: 24, textAlign: 'center', color: C.muted },
 })
 
 export function QuotePdf({ doc }: { doc: QuoteDocData }) {
@@ -185,7 +186,7 @@ export function QuotePdf({ doc }: { doc: QuoteDocData }) {
         <View style={s.sigWrap}>
           <View style={s.sigBlock}>
             <View style={s.sigLine}><Text style={s.sigLabel}>Signature</Text><Text style={s.sigRule}> </Text></View>
-            <View style={[s.sigLine, { marginTop: 16 }]}><Text style={s.sigLabel}>Date</Text><Text style={s.sigRule}> </Text></View>
+            <View style={[s.sigLine, { marginTop: 15 }]}><Text style={s.sigLabel}>Date</Text><Text style={s.sigRule}> </Text></View>
           </View>
         </View>
 
