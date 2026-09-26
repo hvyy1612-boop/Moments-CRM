@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { CopyLinkField } from '@/components/ui/CopyLinkField'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
+import { SentToast } from '@/components/ui/SentToast'
 import { Textarea } from '@/components/ui/form'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
@@ -81,12 +82,14 @@ export async function CaseDetail({
   csrf,
   section,
   back,
+  sent,
 }: {
   id: string
   user: Awaited<ReturnType<typeof requireRole>>
   csrf: string
   section: 'enquiries' | 'jobs'
   back?: string
+  sent?: string
 }) {
   // The list passes its query string as ?back so this page returns to the exact filtered list.
   const backHref = back ? `/${section}?${back}` : `/${section}`
@@ -235,6 +238,7 @@ export async function CaseDetail({
 
   return (
     <AppShell user={user} csrf={csrf} active={section} bareHeader>
+      {sent !== undefined ? <SentToast email={sent} /> : null}
       <PageContainer variant="wide">
         <Breadcrumb items={[DASHBOARD_CRUMB, { label: backLabel, href: backHref }, { label: project.client.displayName }]} />
         <div className="mt-3 flex flex-wrap items-baseline justify-between gap-3">

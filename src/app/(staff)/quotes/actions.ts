@@ -112,7 +112,9 @@ export async function sendQuoteAction(_prev: QuoteActionState, formData: FormDat
     await sendComposedQuoteEmail({ to, subject, body: message, quoteLink: `${base}/quote/${viewToken}` })
   }
   revalidatePath(`/quotes/${quoteId}`)
-  return { status: 'success' }
+  // Redirect (not a success state) so the "Quote sent" toast is owned by the stable detail page: after a
+  // send the quote leaves DRAFT and the editor unmounts, which would destroy any toast it rendered.
+  redirect(`/quotes/${quoteId}?sent=${encodeURIComponent(to)}`)
 }
 
 /** Share/send the quote from the detail page (void form action): mark it SENT, then refresh the detail.

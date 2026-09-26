@@ -64,9 +64,6 @@ export function QuoteBuilder({
   const [lines, setLines] = useState<Line[]>(initialLines)
   const [depositPercent, setDepositPercent] = useState(initialDepositPercent || '30')
   const [sendOpen, setSendOpen] = useState(false)
-  // "Quote sent" toast, auto-dismisses. The effect depends on the whole sendState OBJECT (a fresh one per
-  // submit), not just its status string, so re-sending the same quote fires the toast again.
-  const [toast, setToast] = useState(false)
   const [saveState, save, saving] = useActionState(saveAction, IDLE)
   const [sendState, send, sending] = useActionState(sendAction, IDLE)
   const saveFormRef = useRef<HTMLFormElement>(null)
@@ -74,14 +71,10 @@ export function QuoteBuilder({
   // opens the compose dialog — so a user who just added items no longer sees "this quote has no items".
   const pendingSendRef = useRef(false)
 
-  // On every successful send: close the compose dialog and pop the "Quote sent" toast (auto-dismiss).
-  useEffect(() => {
-    if (sendState.status !== 'success') return
-    setSendOpen(false)
-    setToast(true)
-    const timer = setTimeout(() => setToast(false), 4000)
-    return () => clearTimeout(timer)
-  }, [sendState])
+  // On success the send action REDIRECTS to the destination page with a `?sent=` param, which shows the
+  // "Quote sent" toast there (SentToast). The toast can't live here: a successful send flips the quote out
+  // of DRAFT, and the parent only renders this builder while it IS a draft, so this whole component
+  // unmounts on the post-send re-render. Only a send ERROR returns here (shown inline in the dialog).
 
   // After the auto-save triggered by "Send" resolves: open the dialog on success, or drop the intent on
   // error (the save error — e.g. no lines — is shown inline). saveState is a fresh object per submit.
@@ -121,26 +114,6 @@ export function QuoteBuilder({
     <div className="mt-4 flex flex-col gap-5">
       {saveState.status === 'error' ? <Alert tone="danger" title={saveState.message} /> : null}
       {saveState.status === 'success' ? <Alert tone="success" title="Draft saved" /> : null}
-
-      {/* "Quote sent" toast: fixed, non-blocking, auto-dismisses. Fires on every successful send. */}
-      {toast ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed bottom-4 right-4 z-50 flex w-full max-w-xs items-start gap-3 rounded-md border border-line bg-surface px-4 py-3 shadow-lg"
-        >
-          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-delivered text-delivered-ink">
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m8.4 12 2.4 2.4 4.8-5.2" /></svg>
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-ink">Quote sent</p>
-            <p className="truncate text-xs text-ink-muted">{clientEmail}</p>
-          </div>
-          <button type="button" onClick={() => setToast(false)} aria-label="Dismiss" className="-mr-1 -mt-1 flex h-6 w-6 items-center justify-center rounded text-ink-muted transition-colors hover:bg-sunk hover:text-ink">
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
-          </button>
-        </div>
-      ) : null}
 
       <form ref={saveFormRef} action={save} className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20em] lg:items-start">
         <input type="hidden" name="csrf" value={csrf} />

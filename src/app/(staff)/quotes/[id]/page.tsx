@@ -14,6 +14,7 @@ import { formatSydneyDate } from '@/lib/time'
 import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { Button } from '@/components/ui/Button'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
+import { SentToast } from '@/components/ui/SentToast'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { shareQuoteAction, acceptQuoteAction, reviseQuoteAction, declineQuoteAction } from '../actions'
@@ -47,7 +48,7 @@ export default async function QuoteDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams?: Promise<{ acceptError?: string; shareError?: string; declineError?: string }>
+  searchParams?: Promise<{ acceptError?: string; shareError?: string; declineError?: string; sent?: string }>
 }) {
   const user = await requireRole('/quotes/[id]')
   const { id } = await params
@@ -99,6 +100,7 @@ export default async function QuoteDetailPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="quotes">
+      {sp.sent !== undefined ? <SentToast email={sp.sent} /> : null}
       <PageContainer variant="standard">
       <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Quotes', href: '/quotes' }, { label: quoteDisplayNumber(quote.reference, quote.seq) }]} />
 

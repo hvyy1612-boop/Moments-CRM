@@ -153,7 +153,9 @@ export async function sendQuoteAction(
     where: { id: quoteId },
     include: { project: { include: { client: { select: { email: true, displayName: true } } } } },
   })
+  let recipient = ''
   if (quote?.project) {
+    recipient = quote.project.client.email ?? ''
     const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
     await sendQuoteEmail({
       to: quote.project.client.email,
@@ -162,7 +164,9 @@ export async function sendQuoteAction(
     })
   }
   revalidatePath(`/jobs/${projectId}`)
-  return { status: 'success' }
+  // Redirect (not a success state) so the "Quote sent" toast is owned by the job page: a successful send
+  // flips the quote out of DRAFT and unmounts the builder, which would destroy any toast it rendered.
+  redirect(`/jobs/${projectId}?sent=${encodeURIComponent(recipient)}`)
 }
 
 /** Generate a draft contract from the project's accepted quote. Plain form action. */
