@@ -177,7 +177,7 @@ export default async function JobsPage({
                     : 'No jobs yet. Use Add job to create one.'}
             </p>
           ) : (
-            <JobsTable rows={rows} backParam={backParam} labels={labels} csrf={csrf} canEdit={canEdit} />
+            <JobsTable rows={rows} backParam={backParam} />
           )}
         </div>
       </PageContainer>

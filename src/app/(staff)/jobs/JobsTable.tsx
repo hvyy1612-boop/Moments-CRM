@@ -1,12 +1,10 @@
 'use client'
 
-import type { ComponentProps } from 'react'
 import Link from 'next/link'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { COL } from '@/components/ui/tableColumns'
 import { formatSydneyDate } from '@/lib/time'
 import { stageLabel } from '@/features/projects/workflow'
-import { StatusPicker } from '@/features/projects/components/StatusPicker'
 import type { StatusLabel } from '@/features/projects/labels'
 import { JobRowMenu } from './JobRowMenu'
 
@@ -23,15 +21,18 @@ export type JobRow = {
   nextStage: string | null
 }
 
-type Labels = ComponentProps<typeof StatusPicker>['labels']
-
-/** Jobs column schema over the shared DataTable. */
-export function JobsTable({ rows, backParam, labels, csrf, canEdit }: { rows: JobRow[]; backParam: string; labels: Labels; csrf: string; canEdit: boolean }) {
+/**
+ * Jobs column schema over the shared DataTable. Status is READ-ONLY here: it follows the job's lifecycle
+ * automatically (the workflow inside the job advances it), so the list shows a uniform read-only pill
+ * rather than an inline editor - staff don't hand-set status from the list. Column widths are tuned so
+ * the spacing reads even (Client narrower, Next task widest, the fixed-content columns hug their content).
+ */
+export function JobsTable({ rows, backParam }: { rows: JobRow[]; backParam: string }) {
   const columns: DataColumn<JobRow>[] = [
     {
       key: 'client',
       header: 'Client',
-      width: COL.flexHigh,
+      width: 'minmax(11em, 1.4fr)',
       cell: (r) => (
         <Link href={`/jobs/${r.id}${backParam}`} className="block min-w-0">
           <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.client}</span>
@@ -41,7 +42,7 @@ export function JobsTable({ rows, backParam, labels, csrf, canEdit }: { rows: Jo
     {
       key: 'job',
       header: 'Job',
-      width: COL.flexMedium,
+      width: 'minmax(9em, 1.1fr)',
       cell: (r) => (
         <Link href={`/jobs/${r.id}${backParam}`} className="block min-w-0">
           <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.name}</span>
@@ -49,11 +50,11 @@ export function JobsTable({ rows, backParam, labels, csrf, canEdit }: { rows: Jo
         </Link>
       ),
     },
-    { key: 'enquired', header: 'Enquired', width: COL.constrained, cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{formatSydneyDate(r.enquiredAt)}</span> },
+    { key: 'enquired', header: 'Enquired', width: 'minmax(9em, 1fr)', cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{formatSydneyDate(r.enquiredAt)}</span> },
     {
       key: 'task',
       header: 'Next task',
-      width: COL.flexMedium,
+      width: 'minmax(12em, 1.6fr)',
       cell: (r) =>
         r.nextTask ? (
           <div className="min-w-0">
@@ -64,7 +65,16 @@ export function JobsTable({ rows, backParam, labels, csrf, canEdit }: { rows: Jo
           <span className="text-ink-muted">No pending task</span>
         ),
     },
-    { key: 'status', header: 'Status', width: COL.constrained, cell: (r) => <StatusPicker projectId={r.id} current={r.label} labels={labels} csrf={csrf} canEdit={canEdit} /> },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 'minmax(11em, 1fr)',
+      cell: (r) => (
+        <span className="inline-flex h-8 min-w-40 items-center justify-center whitespace-nowrap rounded-md bg-sunk px-3 text-sm text-ink">
+          {r.label.name}
+        </span>
+      ),
+    },
     { key: 'actions', header: '', width: COL.fixed, align: 'right', cell: (r) => <JobRowMenu jobId={r.id} clientId={r.clientId} backParam={backParam} /> },
   ]
 
