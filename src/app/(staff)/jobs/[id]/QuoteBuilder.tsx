@@ -64,6 +64,10 @@ export function QuoteBuilder({
   const [lines, setLines] = useState<Line[]>(initialLines)
   const [depositPercent, setDepositPercent] = useState(initialDepositPercent || '30')
   const [sendOpen, setSendOpen] = useState(false)
+  // `sent` flips the dialog to its "Quote sent" confirmation screen. It's a one-way transition set only
+  // when the send action FRESHLY succeeds (a status change), so re-opening the compose form later never
+  // shows a stale success; startSend + closing reset it back to the form.
+  const [sent, setSent] = useState(false)
   const [saveState, save, saving] = useActionState(saveAction, IDLE)
   const [sendState, send, sending] = useActionState(sendAction, IDLE)
   const saveFormRef = useRef<HTMLFormElement>(null)
@@ -71,10 +75,15 @@ export function QuoteBuilder({
   // opens the compose dialog — so a user who just added items no longer sees "this quote has no items".
   const pendingSendRef = useRef(false)
 
-  // Close the Send dialog once the quote has gone out.
+  // Once the quote has gone out, show the confirmation screen inside the dialog (kept open for a Done).
   useEffect(() => {
-    if (sendState.status === 'success') setSendOpen(false)
+    if (sendState.status === 'success') setSent(true)
   }, [sendState.status])
+
+  const closeSend = () => {
+    setSendOpen(false)
+    setSent(false)
+  }
 
   // After the auto-save triggered by "Send" resolves: open the dialog on success, or drop the intent on
   // error (the save error — e.g. no lines — is shown inline). saveState is a fresh object per submit.
@@ -89,6 +98,7 @@ export function QuoteBuilder({
   }, [saveState])
 
   const startSend = () => {
+    setSent(false)
     pendingSendRef.current = true
     saveFormRef.current?.requestSubmit()
   }
@@ -239,8 +249,9 @@ export function QuoteBuilder({
           sendLabel={sendLabel}
           send={send}
           sending={sending}
+          sent={sent}
           error={sendState.status === 'error' ? sendState.message : null}
-          onClose={() => setSendOpen(false)}
+          onClose={closeSend}
         />
       ) : null}
     </div>
@@ -261,6 +272,7 @@ function SendQuoteDialog({
   sendLabel,
   send,
   sending,
+  sent,
   error,
   onClose,
 }: {
@@ -272,6 +284,7 @@ function SendQuoteDialog({
   sendLabel: string
   send: (payload: FormData) => void
   sending: boolean
+  sent: boolean
   error: string | null
   onClose: () => void
 }) {
@@ -295,6 +308,17 @@ function SendQuoteDialog({
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/30 p-4 sm:items-center" role="dialog" aria-modal="true" aria-label="Send quote">
       <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
       <div className="relative z-10 w-full max-w-lg rounded-md border border-line bg-surface p-6 shadow-lg">
+        {sent ? (
+          <div className="flex flex-col items-center py-6 text-center">
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-delivered text-delivered-ink">
+              <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="m8.4 12 2.4 2.4 4.8-5.2" /></svg>
+            </div>
+            <h2 className="text-lg font-semibold text-ink">Quote sent</h2>
+            <p className="mt-1.5 max-w-xs text-sm text-ink-muted">The quotation link is on its way to <span className="text-ink">{clientEmail}</span>.</p>
+            <Button type="button" className="mt-5" onClick={onClose}>Done</Button>
+          </div>
+        ) : (
+          <>
         <div className="mb-4 flex items-center justify-between gap-4">
           <h2 className="text-lg font-semibold text-ink">Send quote</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="flex h-8 w-8 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-sunk hover:text-ink">
@@ -320,6 +344,8 @@ function SendQuoteDialog({
             <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
           </div>
         </form>
+          </>
+        )}
       </div>
     </div>
   )
