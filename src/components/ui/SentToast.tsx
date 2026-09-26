@@ -27,8 +27,9 @@ export function SentToast({ email, label = 'Quote sent' }: { email: string; labe
       // history/URL unavailable (very old browser) - the toast still shows; refresh may repeat it.
     }
     const raf = requestAnimationFrame(() => setEntered(true))
-    // Long enough that a busy staffer reliably notices it before it clears.
-    const timer = setTimeout(() => setShow(false), 8000)
+    // Stays ~5 minutes (like Gmail's "message sent" bar): the staffer dismisses it with the close button,
+    // or it clears on its own so it never lingers forever if they walk away.
+    const timer = setTimeout(() => setShow(false), 5 * 60 * 1000)
     return () => {
       cancelAnimationFrame(raf)
       clearTimeout(timer)
