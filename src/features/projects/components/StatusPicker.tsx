@@ -118,7 +118,7 @@ export function StatusPicker({
   }
 
   if (!canEdit) {
-    return <span className="text-sm text-ink">{current.name}</span>
+    return <span className="inline-flex h-8 items-center whitespace-nowrap rounded-md bg-sunk px-2.5 text-sm text-ink-muted">{current.name}</span>
   }
 
   return (
@@ -129,7 +129,7 @@ export function StatusPicker({
         onClick={toggle}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="flex cursor-pointer items-center gap-1 rounded px-1 py-0.5 text-sm text-ink transition-colors hover:bg-sunk"
+        className="inline-flex h-8 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md bg-sunk px-2.5 text-sm text-ink transition-colors hover:bg-line"
         title="Change status"
       >
         {current.name}

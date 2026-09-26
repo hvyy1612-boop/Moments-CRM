@@ -64,7 +64,7 @@ export function JobsTable({ rows, backParam, labels, csrf, canEdit }: { rows: Jo
           <span className="text-ink-muted">No pending task</span>
         ),
     },
-    { key: 'status', header: 'Status', width: COL.content, cell: (r) => <StatusPicker projectId={r.id} current={r.label} labels={labels} csrf={csrf} canEdit={canEdit} /> },
+    { key: 'status', header: 'Status', width: COL.constrained, cell: (r) => <StatusPicker projectId={r.id} current={r.label} labels={labels} csrf={csrf} canEdit={canEdit} /> },
     { key: 'actions', header: '', width: COL.fixed, align: 'right', cell: (r) => <JobRowMenu jobId={r.id} clientId={r.clientId} backParam={backParam} /> },
   ]
 
