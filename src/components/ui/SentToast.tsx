@@ -11,6 +11,9 @@ import { useEffect, useState } from 'react'
  */
 export function SentToast({ email, label = 'Quote sent' }: { email: string; label?: string }) {
   const [show, setShow] = useState(true)
+  // `entered` drives a short slide-up + fade-in so the toast catches the eye right after the page
+  // navigation that lands here — a corner toast that just pops is easy to miss.
+  const [entered, setEntered] = useState(false)
 
   useEffect(() => {
     try {
@@ -20,8 +23,13 @@ export function SentToast({ email, label = 'Quote sent' }: { email: string; labe
     } catch {
       // history/URL unavailable (very old browser) - the toast still shows; refresh may repeat it.
     }
-    const timer = setTimeout(() => setShow(false), 4000)
-    return () => clearTimeout(timer)
+    const raf = requestAnimationFrame(() => setEntered(true))
+    // Generous, so it is not missed while the destination page is still settling after the redirect.
+    const timer = setTimeout(() => setShow(false), 6000)
+    return () => {
+      cancelAnimationFrame(raf)
+      clearTimeout(timer)
+    }
   }, [])
 
   if (!show) return null
@@ -30,7 +38,7 @@ export function SentToast({ email, label = 'Quote sent' }: { email: string; labe
     <div
       role="status"
       aria-live="polite"
-      className="fixed bottom-4 right-4 z-50 flex w-full max-w-xs items-start gap-3 rounded-md border border-line bg-surface px-4 py-3 shadow-lg"
+      className={`fixed bottom-4 right-4 z-50 flex w-full max-w-xs items-start gap-3 rounded-md border border-line bg-surface px-4 py-3 shadow-lg transition-all duration-300 ease-out motion-reduce:transition-none ${entered ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'}`}
     >
       <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-delivered text-delivered-ink">
         <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m8.4 12 2.4 2.4 4.8-5.2" /></svg>
