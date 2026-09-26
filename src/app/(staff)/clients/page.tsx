@@ -5,7 +5,6 @@ import { Prisma, type ClientSource, type ClientType } from '@prisma/client'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { titleCase } from '@/lib/text'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { PageHeader } from '@/components/PageHeader'
@@ -72,9 +71,10 @@ export default async function ClientsPage({
       id: true,
       clientNumber: true,
       displayName: true,
+      firstName: true,
+      lastName: true,
       email: true,
       phone: true,
-      source: true,
       createdAt: true,
       _count: { select: { projects: true } },
     },
@@ -84,9 +84,10 @@ export default async function ClientsPage({
     id: c.id,
     number: c.clientNumber,
     name: c.displayName,
+    firstName: c.firstName ?? c.displayName, // fall back to the display name so the name is never blank
+    lastName: c.lastName ?? '',
     email: c.email,
     phone: c.phone,
-    source: titleCase(c.source),
     projects: c._count.projects,
     since: c.createdAt,
   }))
