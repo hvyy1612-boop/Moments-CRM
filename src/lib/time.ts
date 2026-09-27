@@ -89,6 +89,15 @@ export function sydneyYmd(date: Date): { year: number; month: number; day: numbe
   return { year: Number(at.year), month: Number(at.month), day: Number(at.day) }
 }
 
+/** Whole-day difference (due - now) on the studio's Sydney calendar. Negative = the due date has passed.
+ *  Timezone-safe: both dates are compared as Sydney calendar dates, so the result is the same on every
+ *  device regardless of the viewer's local timezone. */
+export function daysUntilSydney(due: Date, now: Date = new Date()): number {
+  const a = sydneyYmd(due)
+  const b = sydneyYmd(now)
+  return Math.round((Date.UTC(a.year, a.month - 1, a.day) - Date.UTC(b.year, b.month - 1, b.day)) / 86400000)
+}
+
 /** The Sydney-zone calendar date ("YYYY-MM-DD") and 24h wall-clock time ("HH:mm:ss") of an instant,
  *  for pre-filling separate date and time (with seconds) form inputs. */
 export function sydneyDateTimeParts(date: Date): { date: string; time: string } {

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import { formatSydneyDate } from '@/lib/time'
+import { formatSydneyDate, daysUntilSydney } from '@/lib/time'
 import { getJobBalance } from './money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
 import { makeShootDateOf, resolveTaskDueDate, type DeadlineContext } from './deadline'
@@ -31,7 +31,7 @@ async function seedIfNeeded(tx: Tx, projectId: string, companyId: string) {
     data: DEFAULT_PROJECT_TASKS.map((t, i) => ({
       companyId,
       projectId,
-      kind: 'TASK',
+      kind: t.key, // stable core-task key (custom tasks use 'CUSTOM')
       stage: t.stage,
       type: t.type,
       title: t.title,
@@ -62,6 +62,7 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     select: {
       companyId: true,
       confirmedByClientAt: true,
+      owner: { select: { name: true } },
       invoices: { select: INVOICE_MONEY_SELECT },
       galleries: { select: { status: true } },
       bookings: { select: { id: true, startsAt: true, status: true, rescheduledFromId: true } },
@@ -79,6 +80,7 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
       status: true,
       stage: true,
       type: true,
+      kind: true,
       dueAnchor: true,
       dueOffsetDays: true,
       dueDateFixed: true,
@@ -117,6 +119,7 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     status: w.status,
     stage: w.stage,
     type: w.type,
+    kind: w.kind,
     resolvedDueAt: resolveTaskDueDate(w, ctx),
     dueAnchor: w.dueAnchor,
     order: w.order,
@@ -124,7 +127,9 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     completedAt: w.completedAt ?? null,
   }))
 
-  return buildProjectBoard(facts, tasks, formatSydneyDate, new Date())
+  const now = new Date()
+  const daysUntil = (d: Date) => daysUntilSydney(d, now)
+  return buildProjectBoard(facts, tasks, formatSydneyDate, now, daysUntil, project.owner?.name ?? null)
 }
 
 async function loadTask(taskId: string) {

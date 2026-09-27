@@ -42,30 +42,37 @@ export function stageLabel(key: string): string {
  * done-state is derived from real records via ProjectFacts, so staff can see them but can never tick them
  * and they never drift out of sync. buildProjectBoard injects these virtual rows into their stage.
  */
-export const AUTO_MILESTONES: { stage: string; title: string; fact: keyof ProjectFacts; note: string }[] = [
-  { stage: 'shoot', title: 'Shoot scheduled', fact: 'shootScheduled', note: 'Confirmed automatically once a shoot date is booked.' },
-  { stage: 'delivery', title: 'Final payment received', fact: 'finalPaid', note: 'Confirmed automatically when the balance is paid in full.' },
-  { stage: 'delivery', title: 'Delivery complete', fact: 'deliveryComplete', note: 'Confirmed automatically once the gallery is delivered and paid.' },
+export const AUTO_MILESTONES: { stage: string; key: string; title: string; fact: keyof ProjectFacts; note: string }[] = [
+  { stage: 'shoot', key: 'shoot_scheduled', title: 'Shoot scheduled', fact: 'shootScheduled', note: 'Confirmed automatically once a shoot date is booked.' },
+  { stage: 'delivery', key: 'final_payment_received', title: 'Final payment received', fact: 'finalPaid', note: 'Confirmed automatically when the balance is paid in full.' },
+  { stage: 'delivery', key: 'delivery_complete', title: 'Delivery complete', fact: 'deliveryComplete', note: 'Confirmed automatically once the gallery is delivered and paid.' },
 ]
 
 /** The production workflow seeded for a new Job: staff (manual) tasks only, action-oriented names
  *  (Verb + Object). System milestones (Shoot scheduled / Final payment received / Delivery complete) are
  *  NOT seeded here - they are read-only rows derived from real records (see AUTO_MILESTONES). Optional
  *  add-on stages (video/film/album) start empty and are added per package. */
-export const DEFAULT_PROJECT_TASKS: { stage: string; title: string; type: TaskType }[] = [
-  { stage: 'preshoot', title: 'Confirm shoot details', type: 'TODO' },
-  { stage: 'preshoot', title: 'Send pre-shoot reminder', type: 'TODO' },
+export const DEFAULT_PROJECT_TASKS: { stage: string; key: string; title: string; type: TaskType }[] = [
+  { stage: 'preshoot', key: 'confirm_shoot_details', title: 'Confirm shoot details', type: 'TODO' },
+  { stage: 'preshoot', key: 'send_pre_shoot_reminder', title: 'Send pre-shoot reminder', type: 'TODO' },
 
-  { stage: 'shoot', title: 'Mark shoot completed', type: 'SHOOT' },
+  { stage: 'shoot', key: 'mark_shoot_completed', title: 'Mark shoot completed', type: 'SHOOT' },
 
-  { stage: 'editing', title: 'Send files to editor', type: 'TODO' },
-  { stage: 'editing', title: 'Confirm editing completed', type: 'TODO' },
-  { stage: 'editing', title: 'Review final edits', type: 'TODO' },
+  { stage: 'editing', key: 'send_files_to_editor', title: 'Send files to editor', type: 'TODO' },
+  { stage: 'editing', key: 'confirm_editing_completed', title: 'Confirm editing completed', type: 'TODO' },
+  { stage: 'editing', key: 'review_final_edits', title: 'Review final edits', type: 'TODO' },
 
-  { stage: 'delivery', title: 'Prepare client gallery', type: 'TODO' },
-  { stage: 'delivery', title: 'Send client gallery', type: 'TODO' },
-  { stage: 'delivery', title: 'Issue final invoice', type: 'TODO' },
+  { stage: 'delivery', key: 'prepare_client_gallery', title: 'Prepare client gallery', type: 'TODO' },
+  { stage: 'delivery', key: 'send_client_gallery', title: 'Send client gallery', type: 'TODO' },
+  { stage: 'delivery', key: 'issue_final_invoice', title: 'Issue final invoice', type: 'TODO' },
 ]
+
+/** Stable key <- canonical title, for core production tasks (backfill + read-time key resolution). A
+ *  task's stored `kind` holds its key for core tasks and 'CUSTOM' for staff-added ones. */
+export const CORE_TASK_KEY_BY_TITLE: Record<string, string> = Object.fromEntries(
+  DEFAULT_PROJECT_TASKS.map((t) => [t.title, t.key]),
+)
+export const CUSTOM_TASK_KIND = 'CUSTOM'
 
 /** Tasks inserted when staff adds an optional stage block (per package). */
 export const OPTIONAL_STAGE_TASKS: Record<string, { title: string; type: TaskType }[]> = {
@@ -227,6 +234,7 @@ export type TaskInput = {
   status: string
   stage: string | null
   type: string
+  kind: string
   /** Effective due date, already resolved by resolveTaskDueDate (docs/25 Part 2, Rule D0). */
   resolvedDueAt: Date | null
   /** The task's anchor, so the board can tell "awaiting a shoot" apart from "no date". */
@@ -238,12 +246,16 @@ export type TaskInput = {
 
 export type BoardTaskRow = {
   id: string
+  key: string | null
   title: string
   type: TaskType
   typeLabel: string
   note: string | null
   editable: boolean
+  isSystem: boolean
   done: boolean
+  needsAttention: boolean
+  owner: string | null
   dueLabel: string | null
   dueValue: string | null
   noDate: boolean
@@ -252,6 +264,9 @@ export type BoardTaskRow = {
   blockedBy: string | null
   completedByName: string | null
   completedAt: Date | null
+  canComplete: boolean
+  canEdit: boolean
+  canDelete: boolean
 }
 export type BoardStage = {
   key: string
@@ -263,7 +278,23 @@ export type BoardStage = {
   total: number
   tasks: BoardTaskRow[]
 }
-export type ProjectBoard = { stages: BoardStage[]; allDone: boolean }
+export type NextAction =
+  | { kind: 'task'; taskId: string; title: string; dueLabel: string | null; owner: string | null; needsAttention: boolean }
+  | { kind: 'waiting'; label: string }
+  | null
+export type ProjectBoard = {
+  stages: BoardStage[]
+  allDone: boolean
+  currentPhaseKey: string | null
+  currentPhaseLabel: string | null
+  progressPercent: number
+  attentionCount: number
+  nextAction: NextAction
+}
+
+/** A pending manual task "needs attention" when its due date is within this many calendar days (or has
+ *  passed). ONE policy, ONE threshold - change here to adjust everywhere. Attention is never a status. */
+export const ATTENTION_DAYS = 3
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10)
@@ -274,9 +305,15 @@ export function buildProjectBoard(
   tasks: TaskInput[],
   formatDate: (d: Date) => string,
   now: Date | null = null,
+  daysUntil: (d: Date) => number = () => Number.POSITIVE_INFINITY,
+  ownerName: string | null = null,
 ): ProjectBoard {
   const doneTitles = new Set(tasks.filter((t) => t.status === 'COMPLETED').map((t) => t.title))
   let activeKey: string | null = null
+  let attentionCount = 0
+  let manualDone = 0
+  let manualTotal = 0
+
   const stages: BoardStage[] = PROJECT_STAGES.map((stage) => {
     // Manual staff tasks for this stage (every seeded/added WorkItem is a manual task).
     const manualRows: BoardTaskRow[] = tasks
@@ -290,14 +327,25 @@ export function buildProjectBoard(
         const dueDate: Date | null = t.resolvedDueAt
         const noDate = dueDate === null && t.dueAnchor === 'SHOOT'
         const blockedBy = PROJECT_TASK_BLOCKED_BY[t.title] ?? null
+        // Stable key: stored in `kind` for core tasks; a custom (staff-added) task carries no key.
+        const key = t.kind && t.kind !== CUSTOM_TASK_KIND && t.kind !== 'TASK' ? t.kind : (CORE_TASK_KEY_BY_TITLE[t.title] ?? null)
+        const isCustom = key === null
+        // needsAttention is a DERIVED urgency flag, NEVER a status: a pending manual task due within
+        // ATTENTION_DAYS calendar days (or already past). Status stays Done/Pending.
+        const needsAttention = !done && dueDate !== null && daysUntil(dueDate) <= ATTENTION_DAYS
+        if (needsAttention) attentionCount++
         return {
           id: t.id,
+          key,
           title: t.title,
           type,
           typeLabel: TASK_TYPE_LABEL[type] ?? '',
           note: PROJECT_TASK_NOTE[t.title] ?? null,
           editable: true,
+          isSystem: false,
           done,
+          needsAttention,
+          owner: ownerName,
           dueLabel: dueDate ? formatDate(dueDate) : null,
           dueValue: dueDate ? isoDate(dueDate) : null,
           noDate,
@@ -306,17 +354,24 @@ export function buildProjectBoard(
           blockedBy,
           completedByName: t.completedByName,
           completedAt: t.completedAt,
+          canComplete: true,
+          canEdit: true,
+          canDelete: isCustom, // core tasks are protected from deletion; only custom tasks can be removed
         }
       })
     // Read-only SYSTEM milestones for this stage (virtual - not WorkItems); done-state from real facts.
     const autoRows: BoardTaskRow[] = AUTO_MILESTONES.filter((m) => m.stage === stage.key).map((m) => ({
-      id: `auto:${stage.key}:${m.title}`,
+      id: `auto:${stage.key}:${m.key}`,
+      key: m.key,
       title: m.title,
       type: 'AUTO' as TaskType,
       typeLabel: TASK_TYPE_LABEL.AUTO ?? 'Auto',
       note: m.note,
       editable: false,
+      isSystem: true,
       done: facts[m.fact],
+      needsAttention: false,
+      owner: 'System',
       dueLabel: null,
       dueValue: null,
       noDate: false,
@@ -325,11 +380,16 @@ export function buildProjectBoard(
       blockedBy: null,
       completedByName: facts[m.fact] ? 'System' : null,
       completedAt: null,
+      canComplete: false,
+      canEdit: false,
+      canDelete: false,
     }))
     // Count + active phase use MANUAL tasks only: an auto milestone must not move the phase forward or
     // inflate the staff-work count (a shoot may be scheduled while pre-shoot work is still pending).
     const done = manualRows.filter((t) => t.done).length
     const total = manualRows.length
+    manualDone += done
+    manualTotal += total
     if (total > 0 && done < total && activeKey === null) activeKey = stage.key
     return {
       key: stage.key,
@@ -343,5 +403,31 @@ export function buildProjectBoard(
     }
   })
   for (const s of stages) s.active = s.key === activeKey
-  return { stages, allDone: activeKey === null }
+
+  const activeStage = stages.find((s) => s.key === activeKey) ?? null
+  const progressPercent = manualTotal > 0 ? Math.round((manualDone / manualTotal) * 100) : 0
+
+  // Next action: within the active phase, the first pending MANUAL task (needs-attention first, then
+  // order). If the phase is only waiting on a system milestone, surface that as a "waiting" state.
+  let nextAction: NextAction = null
+  if (activeStage) {
+    const pendingManual = activeStage.tasks.filter((t) => t.editable && !t.done)
+    const pick = pendingManual.find((t) => t.needsAttention) ?? pendingManual[0] ?? null
+    if (pick) {
+      nextAction = { kind: 'task', taskId: pick.id, title: pick.title, dueLabel: pick.dueLabel, owner: pick.owner, needsAttention: pick.needsAttention }
+    } else {
+      const pendingAuto = activeStage.tasks.find((t) => t.isSystem && !t.done)
+      if (pendingAuto) nextAction = { kind: 'waiting', label: pendingAuto.title }
+    }
+  }
+
+  return {
+    stages,
+    allDone: activeKey === null,
+    currentPhaseKey: activeKey,
+    currentPhaseLabel: activeStage?.label ?? null,
+    progressPercent,
+    attentionCount,
+    nextAction,
+  }
 }
