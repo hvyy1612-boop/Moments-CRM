@@ -71,6 +71,13 @@ export default async function JobsPage({
           take: 1,
           select: { startsAt: true },
         },
+        // Fallback shoot/event date: the originating enquiry's event date (a job has no date field of its
+        // own, so before a formal booking exists the enquiry's date is the shoot date staff set).
+        convertedFromEnquiries: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { eventDate: true },
+        },
       },
     }),
     getCompanyStatusLabels(),
@@ -94,14 +101,35 @@ export default async function JobsPage({
     // stage. Current stage = the stage of the next pending task; null total => unknown (rendered gracefully).
     const pct = total > 0 ? Math.round((doneCount / total) * 100) : null
 
-    // Deadline alert from the next pending task's due date, at Sydney day granularity vs the server now.
+    // Shoot date = the first scheduled booking, else the originating enquiry's event date.
+    const shootAt = p.bookings[0]?.startsAt ?? p.convertedFromEnquiries[0]?.eventDate ?? null
+
+    // Deadline alert (server now, Sydney day granularity): next pending task overdue/due-soon, OR an
+    // imminent shoot. Overdue task = red; task due <=2d or shoot in <=2d = amber. The most urgent wins.
     let alert: JobRow['alert'] = null
     let alertLabel: string | null = null
-    const nextDue = next?.dueOverrideAt ?? next?.dueAt ?? null
-    if (!cancelled && !checklistDone && nextDue) {
-      const d = daysUntilSydney(nextDue, now)
-      if (d < 0) { alert = 'red'; alertLabel = `Task overdue by ${-d} day${-d === 1 ? '' : 's'}` }
-      else if (d <= 2) { alert = 'amber'; alertLabel = d === 0 ? 'Task due today' : `Task due in ${d} day${d === 1 ? '' : 's'}` }
+    if (!cancelled && !checklistDone) {
+      const nextDue = next?.dueOverrideAt ?? next?.dueAt ?? null
+      let taskKind: 'red' | 'amber' | null = null
+      let taskLabel: string | null = null
+      let taskDays = Infinity
+      if (nextDue) {
+        const d = daysUntilSydney(nextDue, now)
+        taskDays = d
+        if (d < 0) { taskKind = 'red'; taskLabel = `Task overdue by ${-d} day${-d === 1 ? '' : 's'}` }
+        else if (d <= 2) { taskKind = 'amber'; taskLabel = d === 0 ? 'Task due today' : `Task due in ${d} day${d === 1 ? '' : 's'}` }
+      }
+      let shootDays = Infinity
+      let shootLabel: string | null = null
+      if (shootAt) {
+        const s = daysUntilSydney(shootAt, now)
+        if (s >= 0 && s <= 2) { shootDays = s; shootLabel = s === 0 ? 'Shoot today' : `Shoot in ${s} day${s === 1 ? '' : 's'}` }
+      }
+      if (taskKind === 'red') { alert = 'red'; alertLabel = taskLabel }
+      else if (taskKind === 'amber' || shootLabel) {
+        alert = 'amber'
+        alertLabel = shootLabel && shootDays <= taskDays ? shootLabel : (taskLabel ?? shootLabel)
+      }
     }
 
     return {
@@ -118,7 +146,7 @@ export default async function JobsPage({
       completed: checklistDone,
       stageKey: next?.stage ?? null,
       pct,
-      shootAt: p.bookings[0]?.startsAt ?? null,
+      shootAt,
       enquiredAt: p.enquiryReceivedAt,
       alert,
       alertLabel,
