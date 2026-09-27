@@ -101,9 +101,14 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
   // "Paid in full" via the Money foundation (docs/25): there is a real obligation (excludes DRAFT/VOID
   // and credit notes) and nothing is owed on it. Agreed value is irrelevant here, so pass null.
   const jobMoney = getJobBalance(project.invoices.map(toInvoiceMoneyInput), null)
+  const gallerySent = project.galleries.some((g) => g.status === 'PUBLISHED')
+  const finalPaid = jobMoney.invoicedObligation.greaterThan(0) && jobMoney.outstanding.lessThanOrEqualTo(0)
   const facts: ProjectFacts = {
-    gallerySent: project.galleries.some((g) => g.status === 'PUBLISHED'),
-    finalPaid: jobMoney.invoicedObligation.greaterThan(0) && jobMoney.outstanding.lessThanOrEqualTo(0),
+    // Read-only system milestones (derived from real records, never staff-ticked):
+    shootScheduled: project.bookings.some((b) => b.status !== 'CANCELLED' && b.startsAt != null),
+    gallerySent,
+    finalPaid,
+    deliveryComplete: gallerySent && finalPaid,
   }
 
   const tasks: TaskInput[] = items.map((w) => ({

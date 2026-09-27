@@ -11,23 +11,24 @@ import type { DueAnchor } from '@/lib/domain/deadline'
 export { ADDABLE_TASK_TYPES } from '@/features/enquiries/workflow'
 export type { TaskType } from '@/features/enquiries/workflow'
 
-export type ProjectFacts = { gallerySent: boolean; finalPaid: boolean }
+export type ProjectFacts = { shootScheduled: boolean; gallerySent: boolean; finalPaid: boolean; deliveryComplete: boolean }
 
 type StageDef = { key: string; label: string; color: string; optional?: boolean }
 
 // Stage labels use full, medium-neutral industry terms (they cover photo AND video - this is a photo &
 // film studio, not photo-only) with no abbreviations, so any staff member reads the phase at a glance.
 // Keys never change - renaming a label needs no data migration.
+// A Job exists only AFTER booking, so the Job workflow is the PRODUCTION lifecycle only. Sales/booking
+// (planning, quote, contract, deposit) live in the Enquiry phase and are never repeated here.
+// Flow: Pre-shoot -> Shoot -> Editing -> Delivery -> Complete. Optional add-on stages stay available.
 export const PROJECT_STAGES: StageDef[] = [
-  { key: 'planning', label: 'Planning', color: 'enquiry' },
-  { key: 'preshoot', label: 'Pre-wedding shoot', color: 'booked', optional: true },
-  { key: 'finalprep', label: 'Pre-wedding preparation', color: 'quote' },
-  { key: 'shootday', label: 'Wedding day', color: 'booked' },
-  { key: 'editing', label: 'Editing and post-production', color: 'editing' },
+  { key: 'preshoot', label: 'Pre-shoot', color: 'quote' },
+  { key: 'shoot', label: 'Shoot', color: 'booked' },
+  { key: 'editing', label: 'Editing', color: 'editing' },
+  { key: 'delivery', label: 'Delivery', color: 'delivered' },
   { key: 'video', label: 'Video editing', color: 'editing', optional: true },
   { key: 'film', label: 'Film processing', color: 'editing', optional: true },
   { key: 'album', label: 'Album and prints', color: 'editing', optional: true },
-  { key: 'delivery', label: 'Delivery and close', color: 'delivered' },
 ]
 
 export const PROJECT_STAGE_KEYS: ReadonlySet<string> = new Set(PROJECT_STAGES.map((s) => s.key))
@@ -36,47 +37,38 @@ export function stageLabel(key: string): string {
   return PROJECT_STAGES.find((s) => s.key === key)?.label ?? key
 }
 
-/** Which fact an AUTO task's done-state is read from (matched by title). */
-export const AUTO_FACT_BY_TITLE: Record<string, keyof ProjectFacts> = {
-  'Gallery delivered': 'gallerySent',
-  'Confirm final payment received': 'finalPaid',
-}
+/**
+ * Read-only SYSTEM milestones shown inside the workflow (not staff tasks, not WorkItems in the DB): their
+ * done-state is derived from real records via ProjectFacts, so staff can see them but can never tick them
+ * and they never drift out of sync. buildProjectBoard injects these virtual rows into their stage.
+ */
+export const AUTO_MILESTONES: { stage: string; title: string; fact: keyof ProjectFacts; note: string }[] = [
+  { stage: 'shoot', title: 'Shoot scheduled', fact: 'shootScheduled', note: 'Confirmed automatically once a shoot date is booked.' },
+  { stage: 'delivery', title: 'Final payment received', fact: 'finalPaid', note: 'Confirmed automatically when the balance is paid in full.' },
+  { stage: 'delivery', title: 'Delivery complete', fact: 'deliveryComplete', note: 'Confirmed automatically once the gallery is delivered and paid.' },
+]
 
-/** The default flow seeded for a new project: the 3 key must-do (staff) tasks per core stage. Kept
- *  deliberately short - automatic rows (welcome email, reminders, "Gallery delivered", "Confirm final
- *  payment received", thank-you email) and minor sub-steps are omitted; the lifecycle/invoice facts they
- *  reflected are derived from real records (galleries, invoices), not from these task rows. Optional
- *  stages start empty. Staff can still add any of the removed steps back via "+ Add task". */
+/** The production workflow seeded for a new Job: staff (manual) tasks only, action-oriented names
+ *  (Verb + Object). System milestones (Shoot scheduled / Final payment received / Delivery complete) are
+ *  NOT seeded here - they are read-only rows derived from real records (see AUTO_MILESTONES). Optional
+ *  add-on stages (video/film/album) start empty and are added per package. */
 export const DEFAULT_PROJECT_TASKS: { stage: string; title: string; type: TaskType }[] = [
-  { stage: 'planning', title: 'Collect wedding and shoot details', type: 'TODO' },
-  { stage: 'planning', title: 'Confirm timeline and venue details', type: 'TODO' },
-  { stage: 'planning', title: 'Confirm photography and video coverage', type: 'TODO' },
+  { stage: 'preshoot', title: 'Confirm shoot details', type: 'TODO' },
+  { stage: 'preshoot', title: 'Send pre-shoot reminder', type: 'TODO' },
 
-  { stage: 'finalprep', title: 'Review final shoot information', type: 'TODO' },
-  { stage: 'finalprep', title: 'Schedule final planning call', type: 'APPOINTMENT' },
-  { stage: 'finalprep', title: 'Confirm final timeline and shoot details', type: 'TODO' },
+  { stage: 'shoot', title: 'Mark shoot completed', type: 'SHOOT' },
 
-  { stage: 'shootday', title: 'Photograph and film the wedding day', type: 'SHOOT' },
-  { stage: 'shootday', title: 'Back up all captured files', type: 'TODO' },
+  { stage: 'editing', title: 'Send files to editor', type: 'TODO' },
+  { stage: 'editing', title: 'Confirm editing completed', type: 'TODO' },
+  { stage: 'editing', title: 'Review final edits', type: 'TODO' },
 
-  { stage: 'editing', title: 'Cull wedding images', type: 'TODO' },
-  { stage: 'editing', title: 'Edit wedding images', type: 'TODO' },
-  { stage: 'editing', title: 'Finalise wedding gallery', type: 'TODO' },
-
-  { stage: 'delivery', title: 'Send final gallery to client', type: 'TODO' },
-  { stage: 'delivery', title: 'Confirm client received deliverables', type: 'TODO' },
-  { stage: 'delivery', title: 'Close project', type: 'TODO' },
+  { stage: 'delivery', title: 'Prepare client gallery', type: 'TODO' },
+  { stage: 'delivery', title: 'Send client gallery', type: 'TODO' },
+  { stage: 'delivery', title: 'Issue final invoice', type: 'TODO' },
 ]
 
 /** Tasks inserted when staff adds an optional stage block (per package). */
 export const OPTIONAL_STAGE_TASKS: Record<string, { title: string; type: TaskType }[]> = {
-  preshoot: [
-    { title: 'Schedule pre-wedding shoot', type: 'APPOINTMENT' },
-    { title: 'Confirm pre-wedding shoot details', type: 'TODO' },
-    { title: 'Conduct pre-wedding shoot', type: 'SHOOT' },
-    { title: 'Back up pre-wedding images', type: 'TODO' },
-    { title: 'Edit and send pre-wedding photos', type: 'TODO' },
-  ],
   video: [
     { title: 'Prepare video footage for editing', type: 'TODO' },
     { title: 'Edit wedding film', type: 'TODO' },
@@ -102,6 +94,15 @@ export const OPTIONAL_STAGE_TASKS: Record<string, { title: string; type: TaskTyp
 
 /** A short, formal note under each default and optional task - what it is and when it is done. */
 export const PROJECT_TASK_NOTE: Record<string, string> = {
+  'Confirm shoot details': 'Lock the date, timeline, locations, and key people with the client.',
+  'Send pre-shoot reminder': 'Remind the client of the details shortly before the shoot.',
+  'Mark shoot completed': 'Tick once the shoot has been photographed and filmed.',
+  'Send files to editor': 'Hand the selected files to the editor.',
+  'Confirm editing completed': 'Tick once the editor has returned the edited images.',
+  'Review final edits': 'Quality-check the full gallery before delivery.',
+  'Prepare client gallery': 'Assemble the gallery and any files for delivery.',
+  'Send client gallery': 'Deliver the gallery to the client.',
+  'Issue final invoice': 'Raise the final invoice for the remaining balance.',
   'Send client welcome email': 'Sent automatically once the booking is confirmed.',
   'Collect wedding and shoot details': 'Gather the timeline, venues, and key people.',
   'Confirm timeline and venue details': 'Confirm the run sheet and locations.',
@@ -153,6 +154,16 @@ export const PROJECT_TASK_NOTE: Record<string, string> = {
 
 /** Relative due date for each project task: days from the shoot date (negative = before the shoot). */
 export const PROJECT_TASK_SCHEDULE: Record<string, number> = {
+  // Production workflow (shoot-anchored: negative = days before the shoot).
+  'Confirm shoot details': -14,
+  'Send pre-shoot reminder': -7,
+  'Mark shoot completed': 0,
+  'Send files to editor': 2,
+  'Confirm editing completed': 21,
+  'Review final edits': 28,
+  'Prepare client gallery': 35,
+  'Send client gallery': 42,
+  'Issue final invoice': 42,
   'Send client welcome email': -60,
   'Collect wedding and shoot details': -45,
   'Confirm timeline and venue details': -30,
@@ -264,21 +275,16 @@ export function buildProjectBoard(
   formatDate: (d: Date) => string,
   now: Date | null = null,
 ): ProjectBoard {
-  const isDone = (t: TaskInput): boolean => {
-    const isAuto = t.type === 'AUTO'
-    const fact = isAuto ? AUTO_FACT_BY_TITLE[t.title] : undefined
-    return isAuto ? (fact ? facts[fact] : false) : t.status === 'COMPLETED'
-  }
-  const doneTitles = new Set(tasks.filter(isDone).map((t) => t.title))
+  const doneTitles = new Set(tasks.filter((t) => t.status === 'COMPLETED').map((t) => t.title))
   let activeKey: string | null = null
   const stages: BoardStage[] = PROJECT_STAGES.map((stage) => {
-    const stageTasks: BoardTaskRow[] = tasks
+    // Manual staff tasks for this stage (every seeded/added WorkItem is a manual task).
+    const manualRows: BoardTaskRow[] = tasks
       .filter((t) => t.stage === stage.key)
       .sort((a, b) => a.order - b.order)
       .map((t) => {
         const type = (t.type as TaskType) ?? 'TODO'
-        const isAuto = type === 'AUTO'
-        const done = isDone(t)
+        const done = t.status === 'COMPLETED'
         // Due date is resolved upstream by resolveTaskDueDate (Rule D0). A shoot-anchored task with no
         // shoot yet resolves to null → show "no date yet" rather than treating it as overdue.
         const dueDate: Date | null = t.resolvedDueAt
@@ -290,28 +296,50 @@ export function buildProjectBoard(
           type,
           typeLabel: TASK_TYPE_LABEL[type] ?? '',
           note: PROJECT_TASK_NOTE[t.title] ?? null,
-          editable: !isAuto,
+          editable: true,
           done,
           dueLabel: dueDate ? formatDate(dueDate) : null,
           dueValue: dueDate ? isoDate(dueDate) : null,
           noDate,
           dueTone: dueToneFor(dueDate, done, now),
-          blocked: !done && !isAuto && blockedBy ? !doneTitles.has(blockedBy) : false,
+          blocked: !done && blockedBy ? !doneTitles.has(blockedBy) : false,
           blockedBy,
           completedByName: t.completedByName,
           completedAt: t.completedAt,
         }
       })
-    if (stageTasks.some((t) => !t.done) && activeKey === null) activeKey = stage.key
+    // Read-only SYSTEM milestones for this stage (virtual - not WorkItems); done-state from real facts.
+    const autoRows: BoardTaskRow[] = AUTO_MILESTONES.filter((m) => m.stage === stage.key).map((m) => ({
+      id: `auto:${stage.key}:${m.title}`,
+      title: m.title,
+      type: 'AUTO' as TaskType,
+      typeLabel: TASK_TYPE_LABEL.AUTO ?? 'Auto',
+      note: m.note,
+      editable: false,
+      done: facts[m.fact],
+      dueLabel: null,
+      dueValue: null,
+      noDate: false,
+      dueTone: dueToneFor(null, facts[m.fact], now),
+      blocked: false,
+      blockedBy: null,
+      completedByName: facts[m.fact] ? 'System' : null,
+      completedAt: null,
+    }))
+    // Count + active phase use MANUAL tasks only: an auto milestone must not move the phase forward or
+    // inflate the staff-work count (a shoot may be scheduled while pre-shoot work is still pending).
+    const done = manualRows.filter((t) => t.done).length
+    const total = manualRows.length
+    if (total > 0 && done < total && activeKey === null) activeKey = stage.key
     return {
       key: stage.key,
       label: stage.label,
       color: stage.color,
       optional: stage.optional ?? false,
       active: false,
-      done: stageTasks.filter((t) => t.done).length,
-      total: stageTasks.length,
-      tasks: stageTasks,
+      done,
+      total,
+      tasks: [...manualRows, ...autoRows],
     }
   })
   for (const s of stages) s.active = s.key === activeKey

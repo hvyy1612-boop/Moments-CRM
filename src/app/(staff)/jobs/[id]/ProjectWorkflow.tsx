@@ -65,8 +65,10 @@ export function ProjectWorkflow({
     setAddErrors((p) => (p[field] ? { ...p, [field]: undefined } : p))
 
   const allTasks = stages.flatMap((s) => s.tasks)
+  // Overall progress + "next" reflect MANUAL staff work only; read-only system milestones don't count.
+  const manualTasks = allTasks.filter((t) => t.editable)
   const nowStage = stages.find((s) => s.active) ?? null
-  const nextTask = nowStage?.tasks.find((t) => !t.done) ?? allTasks.find((t) => !t.done) ?? null
+  const nextTask = nowStage?.tasks.find((t) => t.editable && !t.done) ?? manualTasks.find((t) => !t.done) ?? null
   // Optional stages with no tasks stay hidden so the board only shows groups that hold real work;
   // they can be switched on from the "Add a stage" control below.
   const visibleStages = stages.filter((s) => !(s.optional && s.total === 0))
@@ -75,8 +77,8 @@ export function ProjectWorkflow({
   return (
     <div className="flex flex-col gap-5">
       <WorkflowProgress
-        done={allTasks.filter((t) => t.done).length}
-        total={allTasks.length}
+        done={manualTasks.filter((t) => t.done).length}
+        total={manualTasks.length}
         nowLabel={allDone ? null : (nowStage?.label ?? null)}
         nextTitle={allDone ? null : (nextTask?.title ?? null)}
       />
@@ -127,6 +129,7 @@ export function ProjectWorkflow({
                           <div className="flex flex-wrap items-center gap-2">
                             <span className={`text-base ${t.done ? 'text-ink-muted' : 'text-ink'}`}>{t.title}</span>
                             <TypeTag label={t.typeLabel} type={t.type} />
+                            <span className="text-xs text-muted">System</span>
                             {t.dueLabel ? (
                               <span className="rounded bg-paper px-1.5 py-0.5 text-xs text-ink-muted">{t.dueLabel}</span>
                             ) : null}
