@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { COL } from '@/components/ui/tableColumns'
 import { formatSydneyDate } from '@/lib/time'
-import { stageLabel } from '@/features/projects/workflow'
 import type { StatusLabel } from '@/features/projects/labels'
 import { JobRowMenu } from './JobRowMenu'
 
@@ -16,65 +15,96 @@ export type JobRow = {
   clientId: string
   label: StatusLabel
   closed: boolean
+  cancelled: boolean
+  completed: boolean
+  stageKey: string | null
+  pct: number | null
+  shootAt: Date | null
   enquiredAt: Date
-  nextTask: string | null
-  nextStage: string | null
+  alert: 'red' | 'amber' | null
+  alertLabel: string | null
+}
+
+// Short, list-friendly stage names for the Progress cell (the workflow's own labels are too long here).
+const SHORT_STAGE: Record<string, string> = {
+  planning: 'Planning',
+  preshoot: 'Pre-shoot',
+  finalprep: 'Prep',
+  shootday: 'Shoot day',
+  editing: 'Editing',
+  video: 'Video',
+  film: 'Film',
+  album: 'Album',
+  delivery: 'Delivery',
+}
+
+/** Deadline warning beside the client name: overdue = danger, due soon = warn. Semantic, not a stage colour. */
+function AlertIcon({ alert, label }: { alert: 'red' | 'amber'; label: string | null }) {
+  return (
+    <span
+      title={label ?? undefined}
+      aria-label={label ?? 'Deadline warning'}
+      className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-xs font-bold leading-none text-white ${alert === 'red' ? 'bg-danger' : 'bg-warn'}`}
+    >
+      !
+    </span>
+  )
 }
 
 /**
- * Jobs column schema over the shared DataTable. Status is READ-ONLY here: it follows the job's lifecycle
- * automatically (the workflow inside the job advances it), so the list shows a uniform read-only pill
- * rather than an inline editor - staff don't hand-set status from the list. Column widths are tuned so
- * the spacing reads even (Client narrower, Next task widest, the fixed-content columns hug their content).
+ * Progress cell (Carbon small determinate progress): "Stage · XX%" over a thin h-1 bar. Read-only - the %
+ * is derived upstream from real task completion, never editable here and never hard-coded per stage. A
+ * cancelled job shows a neutral state (never 100%); a job with no workflow data fails gracefully.
+ */
+function Progress({ r }: { r: JobRow }) {
+  if (r.cancelled) return <span className="text-ink-muted">Cancelled</span>
+  if (r.pct == null) return <span className="text-muted">No workflow</span>
+  const complete = r.completed || r.pct >= 100
+  const stage = complete ? 'Complete' : r.stageKey ? SHORT_STAGE[r.stageKey] ?? r.stageKey : '-'
+  return (
+    <div className="w-full">
+      <div className="mb-1.5 truncate text-ink">
+        {stage} <span className="tabular text-ink-muted">· {r.pct}%</span>
+      </div>
+      <div className="h-1 w-full overflow-hidden rounded-full bg-sunk">
+        <div className="h-full rounded-full bg-ink" style={{ width: `${r.pct}%` }} />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Jobs list (Carbon-aligned data table). Columns: Client | Job name | Shoot date | Progress | Actions.
+ * Progress is read-only and derived from the job's workflow; deadline-critical jobs (next task overdue or
+ * due within 2 days) carry a warning icon and are floated to the top by the page so staff never miss them.
  */
 export function JobsTable({ rows, backParam }: { rows: JobRow[]; backParam: string }) {
   const columns: DataColumn<JobRow>[] = [
     {
       key: 'client',
       header: 'Client',
-      width: 'minmax(11em, 1.4fr)',
+      width: 'minmax(11em, 1.5fr)',
       cell: (r) => (
         <Link href={`/jobs/${r.id}${backParam}`} className="block min-w-0">
-          <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.client}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.client}</span>
+            {r.alert ? <AlertIcon alert={r.alert} label={r.alertLabel} /> : null}
+          </span>
         </Link>
       ),
     },
     {
-      key: 'job',
-      header: 'Job',
-      width: 'minmax(9em, 1.1fr)',
+      key: 'name',
+      header: 'Job name',
+      width: 'minmax(9em, 1.2fr)',
       cell: (r) => (
         <Link href={`/jobs/${r.id}${backParam}`} className="block min-w-0">
-          <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{r.name}</span>
-          <span className="tabular block truncate text-xs text-ink-muted">{r.code}</span>
+          <span className="block truncate text-ink transition-colors group-hover:text-accent-ink">{r.name}</span>
         </Link>
       ),
     },
-    { key: 'enquired', header: 'Enquired', width: 'minmax(9em, 1fr)', cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{formatSydneyDate(r.enquiredAt)}</span> },
-    {
-      key: 'task',
-      header: 'Next task',
-      width: 'minmax(12em, 1.6fr)',
-      cell: (r) =>
-        r.nextTask ? (
-          <div className="min-w-0">
-            <span className="block truncate text-ink">{r.nextTask}</span>
-            {r.nextStage ? <span className="block truncate text-xs text-ink-muted">{stageLabel(r.nextStage)}</span> : null}
-          </div>
-        ) : (
-          <span className="text-ink-muted">No pending task</span>
-        ),
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      width: 'minmax(11em, 1fr)',
-      cell: (r) => (
-        <span className="inline-flex h-8 min-w-40 items-center justify-center whitespace-nowrap rounded-md bg-sunk px-3 text-sm text-ink">
-          {r.label.name}
-        </span>
-      ),
-    },
+    { key: 'shoot', header: 'Shoot date', width: 'minmax(8em, 1fr)', cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{r.shootAt ? formatSydneyDate(r.shootAt) : '-'}</span> },
+    { key: 'progress', header: 'Progress', width: 'minmax(12em, 1.4fr)', cell: (r) => <Progress r={r} /> },
     { key: 'actions', header: '', width: COL.fixed, align: 'right', cell: (r) => <JobRowMenu jobId={r.id} clientId={r.clientId} backParam={backParam} /> },
   ]
 

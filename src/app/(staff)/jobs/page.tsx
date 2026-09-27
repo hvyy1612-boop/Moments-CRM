@@ -9,6 +9,7 @@ import { resolveLabel } from '@/features/projects/labels'
 import { CLOSED_STATUSES } from '@/features/projects/lifecycle'
 import { PROJECT_STAGES } from '@/features/projects/workflow'
 import { getCompanyStatusLabels } from '@/lib/domain/status-labels'
+import { sydneyYmd } from '@/lib/time'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { PageHeader } from '@/components/PageHeader'
@@ -26,6 +27,13 @@ const SORTS: JobSortValue[] = ['newest', 'oldest', 'stage', 'client-asc']
 // Reading order of the workflow stages, so "Sort by stage" clusters the pipeline Planning -> Delivery.
 const STAGE_RANK = new Map(PROJECT_STAGES.map((s, i) => [s.key, i]))
 const stageRank = (key: string | null) => (key && STAGE_RANK.has(key) ? STAGE_RANK.get(key)! : PROJECT_STAGES.length)
+
+/** Whole-day difference (due - now) in the studio's Sydney calendar, for the deadline alert. */
+function daysUntilSydney(due: Date, now: Date): number {
+  const a = sydneyYmd(due)
+  const b = sydneyYmd(now)
+  return Math.round((Date.UTC(a.year, a.month - 1, a.day) - Date.UTC(b.year, b.month - 1, b.day)) / 86400000)
+}
 
 export default async function JobsPage({
   searchParams,
@@ -55,7 +63,13 @@ export default async function JobsPage({
         workItems: {
           where: { type: { not: 'AUTO' }, status: { not: 'CANCELLED' } },
           orderBy: { order: 'asc' },
-          select: { title: true, stage: true, status: true },
+          select: { stage: true, status: true, dueAt: true, dueOverrideAt: true },
+        },
+        bookings: {
+          where: { status: { not: 'CANCELLED' } },
+          orderBy: { startsAt: 'asc' },
+          take: 1,
+          select: { startsAt: true },
         },
       },
     }),
@@ -63,16 +77,33 @@ export default async function JobsPage({
   ])
   const canEdit = can(user, 'PROJECT_EDIT')
 
+  const now = new Date()
   let rows: JobRow[] = projects.map((p) => {
     const next = p.workItems.find((t) => t.status !== 'COMPLETED') // first pending staff task
-    const checklistDone = p.workItems.length > 0 && !next
-    // The tag shows "Complete" as soon as the checklist is finished (no manual override). A job only
-    // truly leaves Active once it is ALSO paid - that is the lifecycle auto-complete, handled elsewhere;
-    // so a delivered-but-unpaid job reads "Complete" yet stays in the list until the balance is settled.
+    const total = p.workItems.length
+    const doneCount = p.workItems.filter((t) => t.status === 'COMPLETED').length
+    const checklistDone = total > 0 && !next
+    const cancelled = p.lifecycleStatus === 'CANCELLED' || p.lifecycleStatus === 'LOST'
+    // Kept for the (URL) status filter + the Active/Completed split; the label is no longer shown in the list.
     const label =
       !p.statusLabelId && checklistDone
         ? (labels.find((l) => l.stage === 'COMPLETED') ?? resolveLabel(p, labels))
         : resolveLabel(p, labels)
+
+    // Progress % is DERIVED from real task completion (done / total staff tasks) - never hard-coded per
+    // stage. Current stage = the stage of the next pending task; null total => unknown (rendered gracefully).
+    const pct = total > 0 ? Math.round((doneCount / total) * 100) : null
+
+    // Deadline alert from the next pending task's due date, at Sydney day granularity vs the server now.
+    let alert: JobRow['alert'] = null
+    let alertLabel: string | null = null
+    const nextDue = next?.dueOverrideAt ?? next?.dueAt ?? null
+    if (!cancelled && !checklistDone && nextDue) {
+      const d = daysUntilSydney(nextDue, now)
+      if (d < 0) { alert = 'red'; alertLabel = `Task overdue by ${-d} day${-d === 1 ? '' : 's'}` }
+      else if (d <= 2) { alert = 'amber'; alertLabel = d === 0 ? 'Task due today' : `Task due in ${d} day${d === 1 ? '' : 's'}` }
+    }
+
     return {
       id: p.id,
       code: p.code,
@@ -83,9 +114,14 @@ export default async function JobsPage({
       // Closed grouping is decided by the true operational lifecycle, never by a display label - a
       // custom status label can't make a cancelled/closed job reappear in Active (docs/24 Increment 1).
       closed: CLOSED_STATUSES.has(p.lifecycleStatus),
+      cancelled,
+      completed: checklistDone,
+      stageKey: next?.stage ?? null,
+      pct,
+      shootAt: p.bookings[0]?.startsAt ?? null,
       enquiredAt: p.enquiryReceivedAt,
-      nextTask: next?.title ?? null,
-      nextStage: next?.stage ?? null,
+      alert,
+      alertLabel,
     }
   })
 
@@ -94,8 +130,8 @@ export default async function JobsPage({
     const needle = q.toLowerCase()
     rows = rows.filter((r) => [r.client, r.name, r.code].some((f) => f.toLowerCase().includes(needle)))
   }
-  if (task === 'has') rows = rows.filter((r) => r.nextTask != null)
-  if (task === 'none') rows = rows.filter((r) => r.nextTask == null)
+  if (task === 'has') rows = rows.filter((r) => r.pct != null && !r.completed)
+  if (task === 'none') rows = rows.filter((r) => r.pct == null || r.completed)
 
   // Active = still being worked on; Completed = the job has finished (or otherwise left the pipeline).
   // Nothing is deleted - a finished job just moves to the Completed tab, always reachable on the UI.
@@ -106,7 +142,12 @@ export default async function JobsPage({
 
   if (sort === 'oldest') rows = [...rows].sort((a, b) => a.enquiredAt.getTime() - b.enquiredAt.getTime())
   else if (sort === 'client-asc') rows = [...rows].sort((a, b) => a.client.localeCompare(b.client))
-  else if (sort === 'stage') rows = [...rows].sort((a, b) => stageRank(a.nextStage) - stageRank(b.nextStage) || b.enquiredAt.getTime() - a.enquiredAt.getTime())
+  else if (sort === 'stage') rows = [...rows].sort((a, b) => stageRank(a.stageKey) - stageRank(b.stageKey) || b.enquiredAt.getTime() - a.enquiredAt.getTime())
+
+  // Deadline-critical jobs float to the top so staff never miss them. Stable sort keeps the chosen order
+  // (newest / stage / ...) within each urgency level; overdue above due-soon above the rest.
+  const alertRank = (a: JobRow['alert']) => (a === 'red' ? 0 : a === 'amber' ? 1 : 2)
+  rows = [...rows].sort((a, b) => alertRank(a.alert) - alertRank(b.alert))
 
   // Carried to the job detail as ?back so its in-app "Jobs" link returns to this exact filtered list.
   const listQs = new URLSearchParams()
