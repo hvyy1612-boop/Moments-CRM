@@ -63,7 +63,7 @@ export default async function JobsPage({
         workItems: {
           where: { type: { not: 'AUTO' }, status: { not: 'CANCELLED' } },
           orderBy: { order: 'asc' },
-          select: { stage: true, status: true, dueAt: true, dueOverrideAt: true },
+          select: { type: true, stage: true, status: true, dueAt: true, dueOverrideAt: true },
         },
         bookings: {
           where: { status: { not: 'CANCELLED' } },
@@ -101,8 +101,10 @@ export default async function JobsPage({
     // stage. Current stage = the stage of the next pending task; null total => unknown (rendered gracefully).
     const pct = total > 0 ? Math.round((doneCount / total) * 100) : null
 
-    // Shoot date = the first scheduled booking, else the originating enquiry's event date.
-    const shootAt = p.bookings[0]?.startsAt ?? p.convertedFromEnquiries[0]?.eventDate ?? null
+    // Shoot date = the date staff set on the shoot step (the "Wedding day" SHOOT task) in the workflow,
+    // else a formal booking, else the originating enquiry's event date. So editing the shoot step shows here.
+    const shootTask = p.workItems.find((t) => t.type === 'SHOOT' && (t.dueOverrideAt ?? t.dueAt))
+    const shootAt = (shootTask?.dueOverrideAt ?? shootTask?.dueAt) ?? p.bookings[0]?.startsAt ?? p.convertedFromEnquiries[0]?.eventDate ?? null
 
     // Deadline alert (server now, Sydney day granularity): next pending task overdue/due-soon, OR an
     // imminent shoot. Overdue task = red; task due <=2d or shoot in <=2d = amber. The most urgent wins.
