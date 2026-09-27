@@ -6,11 +6,11 @@ import { systemClock, type Clock } from '@/lib/time'
  * Server-side sessions (SEC-S01 to SEC-S03, SEC-S07).
  *
  * The token is 32 random bytes from a CSPRNG. Only its SHA-256 hash is stored; the plaintext is
- * returned once for the httpOnly, secure, sameSite=strict cookie set by the caller. Idle timeout is
- * 30 minutes and the absolute timeout is 8 hours (SEC-S02). "Stay signed in for 7 days" extends
- * ONLY the absolute lifetime to 7 days; the idle timeout never widens (BR-G10). The session id
- * rotates on login by creating a new row and revoking the old one (SEC-S03), handled at the call
- * site.
+ * returned once for the httpOnly, secure, sameSite=strict cookie set by the caller. A normal sign-in
+ * idles at 30 minutes with an 8-hour absolute cap (SEC-S02). "Stay signed in" (Remember me) is there
+ * to survive a break, so it widens BOTH windows to 7 days - it keeps you signed in through short gaps
+ * and overnight, not only while you keep clicking. The session id rotates on login by creating a new
+ * row and revoking the old one (SEC-S03), handled at the call site.
  */
 export const IDLE_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes
 export const ABSOLUTE_TIMEOUT_MS = 8 * 60 * 60 * 1000 // 8 hours
@@ -31,14 +31,19 @@ export type SessionWindow = { expiresAt: Date; absoluteExpiresAt: Date }
 
 /**
  * Pure computation of a session's idle and absolute expiry from the current time (SEC-S02). The idle
- * expiry is never later than the absolute expiry. "Stay signed in" affects only the absolute
- * lifetime (BR-G10: it does not extend the idle timeout). Kept separate from the database so it can
- * be tested directly with an injected time.
+ * expiry is never later than the absolute expiry. Kept separate from the database so it can be tested
+ * directly with an injected time.
+ *
+ * "Stay signed in" (Remember me) is meant to keep you signed in when you step away, so it widens BOTH
+ * windows to 7 days: the point of the box is to not be logged out for a short break or an overnight
+ * gap. A normal sign-in stays tight - 30-minute idle, 8-hour absolute - so an unticked, shared or
+ * public machine still locks out quickly.
  */
 export function sessionWindow(now: Date, remember: boolean): SessionWindow {
   const absoluteMs = remember ? REMEMBER_TIMEOUT_MS : ABSOLUTE_TIMEOUT_MS
+  const idleMs = remember ? REMEMBER_TIMEOUT_MS : IDLE_TIMEOUT_MS
   const absoluteExpiresAt = new Date(now.getTime() + absoluteMs)
-  const expiresAt = new Date(Math.min(now.getTime() + IDLE_TIMEOUT_MS, absoluteExpiresAt.getTime()))
+  const expiresAt = new Date(Math.min(now.getTime() + idleMs, absoluteExpiresAt.getTime()))
   return { expiresAt, absoluteExpiresAt }
 }
 
@@ -84,7 +89,12 @@ export async function validateSession(
   if (!session || session.revokedAt) return null
   if (session.absoluteExpiresAt.getTime() <= now.getTime()) return null
   if (session.expiresAt.getTime() <= now.getTime()) return null
-  const nextIdle = new Date(Math.min(now.getTime() + IDLE_TIMEOUT_MS, session.absoluteExpiresAt.getTime()))
+  // Slide the idle window forward on activity, but never PULL it in: a Remember-me session was opened
+  // with a 7-day idle window, so keep whichever is later (its existing expiry, or a fresh 30-minute
+  // slide), capped at the absolute expiry. A normal session's expiry is always within 30 minutes of
+  // its last activity, so for it this is just the usual 30-minute slide.
+  const slid = Math.max(session.expiresAt.getTime(), now.getTime() + IDLE_TIMEOUT_MS)
+  const nextIdle = new Date(Math.min(slid, session.absoluteExpiresAt.getTime()))
   await prisma.session.update({ where: { id: session.id }, data: { expiresAt: nextIdle, lastActiveAt: now } })
   return { userId: session.userId, sessionId: session.id }
 }
