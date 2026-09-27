@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
+import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { Prisma, type EnquiryStatus } from '@prisma/client'
@@ -21,6 +22,7 @@ import { statusKind, statusLabel } from '@/features/projects/lifecycle'
 import { ENQUIRY_STAGE_LABEL, ENQUIRY_STAGE_KIND, OPEN_STATUSES, waitingLabel } from '@/features/enquiries/status'
 import { currentActionText } from '@/features/enquiries/workflow'
 import { AppShell } from '../../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { setClientConsentAction } from '../actions'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { DeleteClientButton } from './DeleteClientButton'
@@ -135,6 +137,7 @@ export default async function ClientDetailPage({
     where: { id },
     select: {
       id: true,
+      clientNumber: true,
       displayName: true,
       legalName: true,
       type: true,
@@ -267,11 +270,8 @@ export default async function ClientDetailPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
-      <div className="w-full">
-        <Link href={backHref} className="inline-flex items-center gap-0.5 text-sm text-ink-muted transition-colors hover:text-ink">
-          <svg className="h-4 w-4" {...svg}><path d="M15 6l-6 6 6 6" /></svg>
-          Clients
-        </Link>
+      <PageContainer variant="standard">
+        <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Clients', href: backHref }, { label: client.displayName }]} />
 
         {/* Header: identity + quiet actions. */}
         <div className="mt-3 flex flex-wrap items-start justify-between gap-4 border-b border-line pb-5">
@@ -280,8 +280,9 @@ export default async function ClientDetailPage({
               {initials(client.displayName)}
             </span>
             <div className="min-w-0">
-              <h1 className="truncate text-2xl font-semibold leading-tight text-ink">{client.displayName}</h1>
+              <h1 className="truncate text-xl font-semibold leading-tight text-ink">{client.displayName}</h1>
               <p className="mt-0.5 truncate text-sm text-ink-muted">
+                {client.clientNumber ? <span className="tabular text-ink-muted">{client.clientNumber} · </span> : null}
                 <a href={`mailto:${client.email}`} className="hover:text-ink">{client.email}</a>
                 {client.phone ? ` · ${client.phone}` : ''}
               </p>
@@ -516,7 +517,7 @@ export default async function ClientDetailPage({
             </SectionCard>
           </div>
         </div>
-      </div>
+      </PageContainer>
     </AppShell>
   )
 }

@@ -78,6 +78,10 @@
   --radius-md: 8px;
   --radius-lg: 10px;
 
+  --container-page-narrow: 42rem;
+  --container-page-standard: 80rem;
+  --container-page-wide: 96rem;
+
   --text-xs: 13px;
   --text-sm: 15px;
   --text-base: 16px;

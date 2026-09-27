@@ -7,16 +7,33 @@ export const quoteLineSchema = z.object({
     .string()
     .trim()
     .regex(/^\d+(\.\d{1,2})?$/, 'Enter an amount like 3500 or 3500.00.'),
+
+  lineType: z.enum(['custom', 'package', 'addon']).optional(),
+  referenceId: z.string().trim().max(30).optional().nullable(),
+
+  details: z.string().trim().max(4000).optional().nullable(),
 })
 
 export const saveQuoteSchema = z.object({
   lines: z.array(quoteLineSchema).min(1, 'Add at least one line.').max(50),
+
+  reference: z.string({ invalid_type_error: 'Enter a quote ID.' }).trim().min(1, 'Enter a quote ID.').max(60),
+  issueDate: z.string({ invalid_type_error: 'Enter the issue date.' }).trim().min(1, 'Enter the issue date.'),
   validUntil: z
     .string()
     .trim()
     .optional()
     .or(z.literal(''))
     .transform((v) => (v ? v : undefined)),
+  introduction: z.string().trim().max(2000).optional().or(z.literal('')).transform((v) => (v ? v : null)),
+  poNumber: z.string().trim().max(60).optional().or(z.literal('')).transform((v) => (v ? v : null)),
+  notes: z.string().trim().max(2000).optional().or(z.literal('')).transform((v) => (v ? v : null)),
+  depositPercent: z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => (v ? Math.min(100, Math.max(0, Math.round(Number(v)) || 0)) : null)),
 })
 
 export const acceptQuoteSchema = z.object({

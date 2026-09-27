@@ -3,6 +3,7 @@ import { systemClock } from '@/lib/time'
 import type { ClientInput } from '@/lib/validation/client'
 import { requireCompany } from './project'
 import { INVOICE_MONEY_SELECT } from './invoice-money'
+import { nextRecordNumber, isUniqueViolation } from './numbering'
 
 function deriveDisplayName(input: ClientInput): string {
   const person = [input.firstName, input.lastName].filter(Boolean).join(' ').trim()
@@ -13,13 +14,26 @@ function deriveDisplayName(input: ClientInput): string {
 }
 
 export async function createClient(input: ClientInput, actorUserId: string) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await runCreateClient(input, actorUserId)
+    } catch (error) {
+      if (attempt < 4 && isUniqueViolation(error)) continue
+      throw error
+    }
+  }
+}
+
+async function runCreateClient(input: ClientInput, actorUserId: string) {
   return prisma.$transaction(async (tx) => {
     const company = await requireCompany(tx)
     const existing = await tx.client.findUnique({ where: { email: input.email } })
     if (existing) throw new Error('A client with this email already exists.')
+    const clientNumber = await nextRecordNumber(tx, company.id, 'CLIENT')
     const client = await tx.client.create({
       data: {
         companyId: company.id,
+        clientNumber,
         type: input.isCompany ? 'BUSINESS' : 'INDIVIDUAL',
         status: 'ACTIVE',
         source: 'MANUAL',

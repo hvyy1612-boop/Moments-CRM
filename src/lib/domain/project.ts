@@ -1,6 +1,7 @@
 import { Prisma, type ProjectLifecycle } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
+import { nextRecordNumber } from './numbering'
 import { getJobBalance } from './money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
 import type { EnquiryInput } from '@/lib/validation/enquiry'
@@ -13,15 +14,8 @@ export async function requireCompany(tx: Tx) {
   return company
 }
 
-export async function nextProjectCode(tx: Tx, year: number): Promise<string> {
-  const prefix = `MPF-${year}-`
-  const last = await tx.project.findFirst({
-    where: { code: { startsWith: prefix } },
-    orderBy: { code: 'desc' },
-    select: { code: true },
-  })
-  const next = last ? Number(last.code.slice(prefix.length)) + 1 : 1
-  return `${prefix}${String(next).padStart(4, '0')}`
+export async function nextProjectCode(tx: Tx, companyId: string, at: Date = systemClock.now()): Promise<string> {
+  return nextRecordNumber(tx, companyId, 'JOB', at)
 }
 
 export async function createProjectFromEnquiry(input: EnquiryInput) {
@@ -68,7 +62,7 @@ async function runCreateProjectFromEnquiry(input: EnquiryInput, now: Date) {
       data: {
         companyId: company.id,
         clientId: client.id,
-        code: await nextProjectCode(tx, now.getFullYear()),
+        code: await nextProjectCode(tx, company.id, now),
         name: input.eventType ?? 'Job',
         lifecycleStatus: 'BOOKING_REQUESTED',
         commercialStatus: 'UNQUOTED',
@@ -139,7 +133,7 @@ export async function closeJob(projectId: string, actorUserId: string | null = n
   return prisma.$transaction(async (tx) => {
     const project = await tx.project.findUnique({
       where: { id: projectId },
-      select: { id: true, companyId: true, lifecycleStatus: true },
+      select: { id: true, companyId: true, lifecycleStatus: true, packagePriceSnapshot: true },
     })
     if (!project) throw new Error('Job not found.')
     if (project.lifecycleStatus === 'CLOSED') return { alreadyClosed: true }
@@ -151,9 +145,23 @@ export async function closeJob(projectId: string, actorUserId: string | null = n
       where: { projectId, status: { not: 'VOID' } },
       select: INVOICE_MONEY_SELECT,
     })
-    const { outstanding } = getJobBalance(invoices.map(toInvoiceMoneyInput), null)
-    if (outstanding.greaterThan(0)) {
-      throw new Error(`This job still has ${outstanding.toFixed(2)} outstanding.`)
+
+    const acceptedQuote = await tx.quoteVersion.findFirst({
+      where: { quote: { projectId }, status: 'ACCEPTED' },
+      orderBy: { acceptedByClientAt: 'desc' },
+      select: { total: true },
+    })
+    const agreed = acceptedQuote?.total ?? project.packagePriceSnapshot ?? null
+    const bal = getJobBalance(invoices.map(toInvoiceMoneyInput), agreed)
+
+    const settled = bal.agreedValueKnown
+      ? bal.isFullySettled
+      : bal.outstanding.lessThanOrEqualTo(0) && bal.overpaymentToResolve.lessThanOrEqualTo(0)
+    if (!settled) {
+      if (bal.outstanding.greaterThan(0)) throw new Error(`This job still has ${bal.outstanding.toFixed(2)} outstanding.`)
+      if (bal.overpaymentToResolve.greaterThan(0)) throw new Error(`This job has ${bal.overpaymentToResolve.toFixed(2)} overpaid to resolve first.`)
+      if (bal.uninvoicedRemainder && bal.uninvoicedRemainder.greaterThan(0)) throw new Error(`This job is not fully invoiced yet (${bal.uninvoicedRemainder.toFixed(2)} still to bill).`)
+      throw new Error('This job is not fully settled yet.')
     }
 
     const blocking = await tx.workItem.count({

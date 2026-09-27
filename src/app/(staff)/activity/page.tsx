@@ -1,142 +1,127 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { cookies } from 'next/headers'
-import { StatusPill } from '@/components/ui/StatusPill'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { maskEmail } from '@/lib/text'
 import { formatSydneyDateTime } from '@/lib/time'
 import { PageHeader } from '@/components/PageHeader'
+import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
+import { STEPUP_COOKIE, hasStepUp } from '@/lib/auth/stepup'
+import { getActivityPinStatus } from '@/lib/auth/activity-pin'
 import { AppShell } from '../AppShell'
+import { PageContainer } from '@/components/PageContainer'
+import { SignInTable, type SignInRow } from './SignInTable'
+import { AuditTable, type AuditRow } from './AuditTable'
+import { ActivityGate } from './ActivityGate'
+import { auditCategory, auditLabel, signInLabel } from './audit'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Activity - Moments' }
 
-function humanEvent(eventType: string): string {
-  return eventType.toLowerCase().replace(/_/g, ' ')
-}
-
-export default async function ActivityPage() {
+export default async function ActivityPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
 
   const user = await requireRole('/activity')
-  const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
+  const store = await cookies()
+  const cookieValue = store.get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
+
+  if (!hasStepUp(store.get(STEPUP_COOKIE)?.value, user.id)) {
+    const pin = await getActivityPinStatus(user.id)
+    return (
+      <AppShell user={user} csrf={csrf} active="activity">
+        <PageContainer variant="narrow">
+          <PageHeader
+            breadcrumb={[DASHBOARD_CRUMB, { label: 'Activity' }]}
+            title="Activity"
+            description="Security and account activity for this workspace. Read-only, admin-only."
+          />
+          <ActivityGate csrf={csrf} pinIsSet={pin.isSet} locked={pin.lockedUntil !== null} />
+        </PageContainer>
+      </AppShell>
+    )
+  }
 
   const [logins, actions] = await Promise.all([
     prisma.signInLog.findMany({
       orderBy: { createdAt: 'desc' },
-      take: 50,
-      select: {
-        id: true,
-        eventType: true,
-        outcome: true,
-        emailAttempted: true,
-        ipAddress: true,
-        createdAt: true,
-      },
+      take: 60,
+      select: { id: true, eventType: true, outcome: true, emailAttempted: true, ipAddress: true, createdAt: true },
     }),
     prisma.auditLog.findMany({
       orderBy: { createdAt: 'desc' },
-      take: 50,
-      select: {
-        id: true,
-        action: true,
-        entityType: true,
-        createdAt: true,
-        actor: { select: { name: true } },
-      },
+      take: 100,
+      select: { id: true, action: true, createdAt: true, actor: { select: { name: true } } },
     }),
   ])
 
+  const signInRows: SignInRow[] = logins.map((e) => ({
+    id: e.id,
+    when: formatSydneyDateTime(e.createdAt),
+    event: signInLabel(e.eventType),
+    account: e.emailAttempted ? maskEmail(e.emailAttempted) : '-',
+    ip: e.ipAddress ?? '-',
+    success: e.outcome === 'SUCCESS',
+    outcome: e.outcome.toLowerCase(),
+  }))
+
+  const auditRows: AuditRow[] = actions.map((a) => ({
+    id: a.id,
+    when: formatSydneyDateTime(a.createdAt),
+    category: auditCategory(a.action),
+    label: auditLabel(a.action),
+    by: a.actor?.name ?? 'System',
+  }))
+
+  const sp = await searchParams
+  const view: 'signins' | 'activity' = sp?.view === 'activity' ? 'activity' : 'signins'
+  const tabHref = (v: 'signins' | 'activity') => (v === 'activity' ? '/activity?view=activity' : '/activity')
+  const TABS = [
+    ['signins', 'Sign-in activity', signInRows.length],
+    ['activity', 'Account & workspace activity', auditRows.length],
+  ] as const
+  const blurb =
+    view === 'signins'
+      ? 'Successful and failed sign-ins, with the IP address for spotting unusual access.'
+      : 'Who changed what - user administration and key business actions, grouped by area.'
+
   return (
     <AppShell user={user} csrf={csrf} active="activity">
-      <div>
+      <PageContainer variant="standard">
         <PageHeader
-          eyebrow="System"
+          breadcrumb={[DASHBOARD_CRUMB, { label: 'Activity' }]}
           title="Activity"
-          description="Sign-in history and a record of what happened. Times are Sydney local and email addresses are masked. Read-only: nothing here can be changed."
+          description="Security and account activity for this workspace - sign-ins and important actions. Times are Sydney local, emails are masked, and IP addresses are shown for security review. Read-only: records cannot be edited or deleted."
         />
 
-        <section className="mt-8">
-          <h2 className="text-lg">Sign-in activity</h2>
-          <div className="mt-3 overflow-x-auto rounded border border-line bg-surface">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-line text-ink-muted">
-                <tr>
-                  <th className="px-4 py-2 font-medium">When (Sydney)</th>
-                  <th className="px-4 py-2 font-medium">Event</th>
-                  <th className="px-4 py-2 font-medium">Account</th>
-                  <th className="px-4 py-2 font-medium">IP address</th>
-                  <th className="px-4 py-2 font-medium">Result</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logins.length === 0 ? (
-                  <tr>
-                    <td className="px-4 py-3 text-ink-muted" colSpan={5}>
-                      No sign-in events yet.
-                    </td>
-                  </tr>
-                ) : (
-                  logins.map((event) => (
-                    <tr key={event.id} className="border-b border-line last:border-b-0">
-                      <td className="whitespace-nowrap px-4 py-2 text-ink-muted">
-                        {formatSydneyDateTime(event.createdAt)}
-                      </td>
-                      <td className="px-4 py-2 text-ink">{humanEvent(event.eventType)}</td>
-                      <td className="px-4 py-2 text-ink">
-                        {event.emailAttempted ? maskEmail(event.emailAttempted) : '-'}
-                      </td>
-                      <td className="px-4 py-2 text-ink-muted">{event.ipAddress}</td>
-                      <td className="px-4 py-2">
-                        <StatusPill tone={event.outcome === 'SUCCESS' ? 'good' : 'bad'}>
-                          {event.outcome.toLowerCase()}
-                        </StatusPill>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+        <div className="mt-7 border-b border-line pb-2">
+          <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Activity view">
+            {TABS.map(([key, label, count]) => {
+              const on = view === key
+              return (
+                <Link
+                  key={key}
+                  href={tabHref(key)}
+                  role="tab"
+                  aria-selected={on}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${on ? 'bg-sunk font-medium text-ink' : 'text-ink-muted hover:bg-paper hover:text-ink'}`}
+                >
+                  {label}
+                  <span className={`tabular rounded-full px-1.5 py-0.5 text-xs leading-none ${on ? 'bg-line text-ink-muted' : 'bg-sunk text-ink-muted'}`}>{count}</span>
+                </Link>
+              )
+            })}
           </div>
-        </section>
+        </div>
 
-        <section className="mt-10">
-          <h2 className="text-lg">Activity log</h2>
-          <div className="mt-3 overflow-x-auto rounded border border-line bg-surface">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-line text-ink-muted">
-                <tr>
-                  <th className="px-4 py-2 font-medium">When (Sydney)</th>
-                  <th className="px-4 py-2 font-medium">Action</th>
-                  <th className="px-4 py-2 font-medium">On</th>
-                  <th className="px-4 py-2 font-medium">By</th>
-                </tr>
-              </thead>
-              <tbody>
-                {actions.length === 0 ? (
-                  <tr>
-                    <td className="px-4 py-3 text-ink-muted" colSpan={4}>
-                      No activity recorded yet.
-                    </td>
-                  </tr>
-                ) : (
-                  actions.map((entry) => (
-                    <tr key={entry.id} className="border-b border-line last:border-b-0">
-                      <td className="whitespace-nowrap px-4 py-2 text-ink-muted">
-                        {formatSydneyDateTime(entry.createdAt)}
-                      </td>
-                      <td className="px-4 py-2 text-ink">{humanEvent(entry.action)}</td>
-                      <td className="px-4 py-2 text-ink-muted">{entry.entityType}</td>
-                      <td className="px-4 py-2 text-ink-muted">{entry.actor?.name ?? 'System'}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+        <section className="mt-5">
+          <p className="text-xs text-muted">{blurb}</p>
+          <div className="mt-3">
+            {view === 'signins' ? <SignInTable rows={signInRows} /> : <AuditTable rows={auditRows} />}
           </div>
         </section>
-      </div>
+      </PageContainer>
     </AppShell>
   )
 }

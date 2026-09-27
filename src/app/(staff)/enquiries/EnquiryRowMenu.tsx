@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRef } from 'react'
-import { Popover } from './Popover'
+import { Popover } from '@/components/ui/Popover'
 import { setEnquiryStageAction } from './actions'
 
 const itemClass = 'flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-paper'

@@ -4,6 +4,12 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
 
+  serverExternalPackages: ['@react-pdf/renderer'],
+
+  outputFileTracingIncludes: {
+    '/quote/[token]': ['./node_modules/pdfkit/**/*', './node_modules/@react-pdf/**/*', './node_modules/fontkit/**/*'],
+  },
+
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
   eslint: {
     // The verify pipeline runs ESLint as its own dedicated step (§12.2), so `next build` does not

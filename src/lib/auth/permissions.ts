@@ -14,6 +14,8 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/api/health': { public: true },
 
   '/api/cron/daily': { secret: true },
+
+  '/api/webhooks/resend': { secret: true },
   '/api/calendar/feed': { token: true },
 
   '/api/auth/google': { public: true },
@@ -30,6 +32,12 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/enquiries/[id]': { roles: ['ADMIN', 'STUDIO'] },
   '/jobs': { roles: ['ADMIN', 'STUDIO'] },
   '/jobs/[id]': { roles: ['ADMIN', 'STUDIO'] },
+
+  '/quotes': { roles: ['ADMIN', 'STUDIO'] },
+  '/quotes/new': { roles: ['ADMIN', 'STUDIO'] },
+  '/quotes/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  '/quotes/[id]/edit': { roles: ['ADMIN', 'STUDIO'] },
+  '/quotes/[id]/preview': { roles: ['ADMIN', 'STUDIO'] },
   '/jobs/[id]/invoice/[invoiceId]': { roles: ['ADMIN', 'STUDIO'] },
   '/finance/new': { roles: ['ADMIN', 'STUDIO'] },
   '/finance/[invoiceId]': { roles: ['ADMIN', 'STUDIO'] },
@@ -42,7 +50,11 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/calendar': { roles: ['ADMIN', 'STUDIO'] },
   '/finance': { roles: ['ADMIN', 'STUDIO'] },
 
+  '/pricing': { roles: ['ADMIN', 'STUDIO'] },
+
   '/settings': { roles: ['ADMIN'] },
+
+  '/settings/notifications': { roles: ['ADMIN'] },
   '/users': { roles: ['ADMIN'] },
 
   '/users/roster/[team]': { roles: ['ADMIN'] },

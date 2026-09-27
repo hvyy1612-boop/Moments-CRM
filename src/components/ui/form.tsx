@@ -52,6 +52,25 @@ export function Field({
   )
 }
 
+export function FieldGrid({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4${className ? ` ${className}` : ''}`}>{children}</div>
+}
+
+export function FormSection({ title, description, control, children }: { title: string; description?: string; control?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold text-ink">{title}</h2>
+          {description ? <p className="mt-0.5 text-xs text-muted">{description}</p> : null}
+        </div>
+        {control}
+      </div>
+      {children}
+    </section>
+  )
+}
+
 type InputProps = InputHTMLAttributes<HTMLInputElement> & { hasError?: boolean }
 export function TextInput({ hasError = false, className, ...rest }: InputProps) {
   return <input className={`${controlBase} h-10 ${borderFor(hasError)} ${className ?? ''}`} {...rest} />

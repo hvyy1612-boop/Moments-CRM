@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { StatusTag } from '@/components/ui/StatusTag'
@@ -17,12 +18,14 @@ import {
 } from '@/features/enquiries/status'
 import { getEnquiryBoard } from '@/lib/domain/enquiry-workflow'
 import { AppShell } from '../../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import {
   convertEnquiryAction,
   logClientReplyAction,
   sendReplyAction,
   updateEnquiryAction,
 } from '../actions'
+import { createQuoteForEnquiryAction } from '../../quotes/actions'
 import { EnquiryWorkflow } from './EnquiryWorkflow'
 
 export const runtime = 'nodejs'
@@ -54,6 +57,7 @@ export default async function EnquiryDetailPage({
     where: { id },
     select: {
       id: true,
+      enquiryNumber: true,
       name: true,
       email: true,
       phone: true,
@@ -98,14 +102,12 @@ export default async function EnquiryDetailPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="enquiries" bareHeader>
-      <div className="w-full">
-        <Link href={backHref} className="inline-flex items-center gap-0.5 text-sm text-ink-muted transition-colors hover:text-ink">
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
-          Enquiries
-        </Link>
+      <PageContainer variant="standard">
+        <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Enquiries', href: backHref }, { label: enquiry.name }]} />
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-semibold text-ink">{enquiry.name}</h1>
+          <h1 className="text-xl font-semibold text-ink">{enquiry.name}</h1>
+          {enquiry.enquiryNumber ? <span className="tabular text-sm text-ink-muted">{enquiry.enquiryNumber}</span> : null}
           <StatusTag kind={ENQUIRY_STAGE_KIND[enquiry.status] ?? 'hold'}>
             {ENQUIRY_STAGE_LABEL[enquiry.status] ?? titleCase(enquiry.status)}
           </StatusTag>
@@ -152,6 +154,11 @@ export default async function EnquiryDetailPage({
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
               {open ? (
                 <>
+                  <form action={createQuoteForEnquiryAction}>
+                    <input type="hidden" name="csrf" value={csrf} />
+                    <input type="hidden" name="enquiryId" value={enquiry.id} />
+                    <Button type="submit" size="sm">Create quote</Button>
+                  </form>
                   <form action={convertEnquiryAction}>
                     <input type="hidden" name="csrf" value={csrf} />
                     <input type="hidden" name="enquiryId" value={enquiry.id} />
@@ -333,7 +340,7 @@ export default async function EnquiryDetailPage({
             )}
           </div>
         </div>
-      </div>
+      </PageContainer>
     </AppShell>
   )
 }

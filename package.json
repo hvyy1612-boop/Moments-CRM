@@ -11,6 +11,7 @@
     "set-password": "tsx scripts/set-password.ts",
     "create-admin": "tsx scripts/create-admin.ts",
     "seed:demo": "tsx prisma/seed-demo.ts",
+    "seed:demo:quotes": "tsx prisma/seed-demo-quotes.ts",
     "show-logs": "tsx scripts/show-logs.ts",
     "start": "next start",
     "typecheck": "tsc --noEmit",
@@ -31,8 +32,10 @@
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
     "@prisma/client": "~6.12.0",
+    "@react-pdf/renderer": "^4.9.0",
     "google-auth-library": "^11.0.2",
     "next": "^15.1.0",
+    "nodemailer": "^6.10.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^3.24.0"
@@ -42,6 +45,7 @@
     "@playwright/test": "^1.49.0",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.10.0",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "eslint": "^9.17.0",

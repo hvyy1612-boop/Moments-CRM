@@ -84,7 +84,10 @@ export function AppChrome({
 
       <div className="flex">
         <Sidebar items={items} groups={groups} active={active} collapsed={collapsed} />
-        <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 sm:py-8">{children}</main>
+        {/* Workspace only: `main` provides the remaining width + vertical padding. The horizontal page
+            gutter and the content measure are owned by PageContainer, so every page shares one gutter and
+            no content can end up flush against the sidebar. */}
+        <main className="min-w-0 flex-1 pb-6 pt-1.5 sm:pb-8">{children}</main>
       </div>
     </div>
   )

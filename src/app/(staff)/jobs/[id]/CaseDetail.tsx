@@ -1,8 +1,10 @@
 import Link from 'next/link'
+import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { CopyLinkField } from '@/components/ui/CopyLinkField'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
+import { SentToast } from '@/components/ui/SentToast'
 import { Textarea } from '@/components/ui/form'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
@@ -13,13 +15,17 @@ import { getJobBalance } from '@/lib/domain/money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
 import { statusLabel } from '@/features/projects/lifecycle'
 import { listActivePackages } from '@/lib/domain/package'
+import { quoteDisplayNumber } from '@/lib/domain/quote'
 import { AppShell } from '../../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import {
   closeJobAction,
   createContractAction,
   createQuoteAction,
   logProjectClientReplyAction,
+  saveQuoteAction,
   sendProjectReplyAction,
+  sendQuoteAction,
 } from '../actions'
 import { ContractSend } from './ContractSend'
 import { HistoryLogModal, type HistoryEntry } from './HistoryLogModal'
@@ -27,6 +33,7 @@ import { ProjectWorkflow } from './ProjectWorkflow'
 import { Delivery } from './Delivery'
 import { QuoteBuilder } from './QuoteBuilder'
 import { Scheduling } from './Scheduling'
+import { ChangeRequestsSection } from './ChangeRequestsSection'
 
 const QUOTE_TONE: Record<string, Tone> = {
   DRAFT: 'neutral',
@@ -68,12 +75,14 @@ export async function CaseDetail({
   csrf,
   section,
   back,
+  sent,
 }: {
   id: string
   user: Awaited<ReturnType<typeof requireRole>>
   csrf: string
   section: 'enquiries' | 'jobs'
   back?: string
+  sent?: string
 }) {
 
   const backHref = back ? `/${section}?${back}` : `/${section}`
@@ -193,6 +202,7 @@ export async function CaseDetail({
     price: p.basePriceInclGst.toString(),
     description: p.description,
     inclusions: p.inclusions,
+    details: p.inclusions ?? p.description, // snapshot source for the quote line
     isAddOn: p.isAddOn,
   }))
 
@@ -214,11 +224,9 @@ export async function CaseDetail({
 
   return (
     <AppShell user={user} csrf={csrf} active={section} bareHeader>
-      <div className="w-full">
-        <Link href={backHref} className="inline-flex items-center gap-0.5 text-sm text-ink-muted transition-colors hover:text-ink">
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
-          {backLabel}
-        </Link>
+      {sent !== undefined ? <SentToast email={sent} /> : null}
+      <PageContainer variant="wide">
+        <Breadcrumb items={[DASHBOARD_CRUMB, { label: backLabel, href: backHref }, { label: project.client.displayName }]} />
         <div className="mt-3 flex flex-wrap items-baseline justify-between gap-3">
           <div>
             <h1 className="text-xl">{project.client.displayName}</h1>
@@ -263,9 +271,9 @@ export async function CaseDetail({
         ) : null}
 
         {board && board.stages.length > 0 ? (
-          <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {/* Workflow board: Studio-Ninja phased checklist over the business records (Hybrid, docs/23). */}
-            <section className="rounded border border-line bg-surface p-5">
+          <div className="mt-6 grid grid-cols-1 items-start gap-4 lg:grid-cols-5">
+            {/* LEFT: the workflow board - the dominant operational column (Hybrid, docs/23). */}
+            <section className="rounded border border-line bg-surface p-5 lg:col-span-3">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h2 className="text-xs font-bold uppercase tracking-wide text-muted">Workflow</h2>
                 <HistoryLogModal entries={history} />
@@ -279,6 +287,8 @@ export async function CaseDetail({
               />
             </section>
 
+            {/* RIGHT: Conversation + the job-support sections, stacked as a sidebar. */}
+            <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
             {/* Conversation: reuses the Communication model, kept separate from the workflow. */}
             <section className="rounded border border-line bg-surface p-5">
               <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Conversation</h2>
@@ -335,10 +345,8 @@ export async function CaseDetail({
                 </form>
               </div>
             </section>
-          </div>
-        ) : null}
 
-        <section className="mt-6 rounded border border-line bg-surface p-5">
+            <section className="rounded border border-line bg-surface p-5">
           <h2 className="text-lg">Client</h2>
           <dl className="mt-2 grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
             <div>
@@ -355,7 +363,7 @@ export async function CaseDetail({
           ) : null}
         </section>
 
-        <section className="mt-6 rounded border border-line bg-surface p-5">
+        <section className="rounded border border-line bg-surface p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <h2 className="text-lg">Quote</h2>
             {version ? (
@@ -383,8 +391,21 @@ export async function CaseDetail({
                 description: line.description,
                 quantity: line.quantity,
                 unitPrice: line.unitPrice.toString(),
+                lineType: (line.lineType === 'package' || line.lineType === 'addon' ? line.lineType : 'custom') as 'custom' | 'package' | 'addon',
+                referenceId: line.referenceId,
+                details: line.details,
               }))}
+              initialIntroduction={version.introduction ?? ''}
+              initialPoNumber={version.poNumber ?? ''}
+              initialNotes={version.notes ?? ''}
+              initialDepositPercent={version.depositPercent != null ? String(version.depositPercent) : ''}
+              initialReference={quoteDisplayNumber(quote.reference, quote.seq)}
+              initialIssueDate={(version.issueDate ? sydneyDateTimeParts(version.issueDate) : sydneyDateTimeParts(new Date())).date}
               packages={packageOptions}
+              clientName={project.client.displayName}
+              clientEmail={project.client.email ?? ''}
+              saveAction={saveQuoteAction}
+              sendAction={sendQuoteAction}
             />
           ) : (
             <div className="mt-4">
@@ -424,7 +445,7 @@ export async function CaseDetail({
         </section>
 
         {quoteAccepted ? (
-          <section className="mt-6 rounded border border-line bg-surface p-5">
+          <section className="rounded border border-line bg-surface p-5">
             <div className="flex flex-wrap items-baseline justify-between gap-3">
               <h2 className="text-lg">Contract</h2>
               {contractVersion ? (
@@ -468,7 +489,7 @@ export async function CaseDetail({
         ) : null}
 
         {isConfirmed ? (
-          <section className="mt-6 rounded border border-line bg-surface p-5">
+          <section className="rounded border border-line bg-surface p-5">
             <h2 className="text-lg">Scheduling</h2>
             <Scheduling
               csrf={csrf}
@@ -480,7 +501,7 @@ export async function CaseDetail({
         ) : null}
 
         {canInvoice ? (
-          <section className="mt-6 rounded border border-line bg-surface p-5">
+          <section className="rounded border border-line bg-surface p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg">Invoices &amp; payments</h2>
@@ -496,13 +517,18 @@ export async function CaseDetail({
           </section>
         ) : null}
 
+        {isConfirmed ? <ChangeRequestsSection projectId={project.id} csrf={csrf} /> : null}
+
         {isConfirmed ? (
-          <section className="mt-6 rounded border border-line bg-surface p-5">
+          <section className="rounded border border-line bg-surface p-5">
             <h2 className="text-lg">Delivery</h2>
             <Delivery csrf={csrf} projectId={project.id} gallery={galleryView} />
           </section>
         ) : null}
-      </div>
+            </div>
+          </div>
+        ) : null}
+      </PageContainer>
     </AppShell>
   )
 }

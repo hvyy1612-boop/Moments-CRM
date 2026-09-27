@@ -13,9 +13,15 @@ import { convertEnquiry, createEnquiry, markEnquiryLost } from '../src/lib/domai
 import { createInvoice, issueInvoice, recordPayment } from '../src/lib/domain/finance'
 import { createPackage } from '../src/lib/domain/package'
 import { createProjectFromEnquiry } from '../src/lib/domain/project'
-import { acceptQuoteByToken, createQuote, saveQuoteDraft, sendQuote } from '../src/lib/domain/quote'
+import { createQuote, saveQuoteDraft, sendQuote } from '../src/lib/domain/quote'
 
 const IP = '203.0.113.10'
+
+async function acceptDemoQuote(quoteId: string, versionId: string, projectId: string, name: string) {
+  await prisma.quoteVersion.update({ where: { id: versionId }, data: { status: 'ACCEPTED', acceptedByClientName: name, acceptedByClientAt: new Date() } })
+  await prisma.quote.update({ where: { id: quoteId }, data: { status: 'ACCEPTED' } })
+  await prisma.project.update({ where: { id: projectId }, data: { commercialStatus: 'ACCEPTED' } })
+}
 
 async function main() {
   const admin = await prisma.user.findFirst({ where: { role: 'ADMIN' } })
@@ -56,8 +62,8 @@ async function main() {
     })
     const { quoteId, versionId } = await createQuote(project.id, adminId)
     await saveQuoteDraft(versionId, [{ description: 'Wedding photography and film', quantity: 1, unitPrice: '6800' }], null)
-    const { viewToken } = await sendQuote(quoteId, adminId)
-    await acceptQuoteByToken(viewToken, 'Priya', IP)
+    await sendQuote(quoteId, adminId)
+    await acceptDemoQuote(quoteId, versionId, project.id, 'Priya')
     const contract = await createContractFromAcceptedQuote(project.id, adminId)
     await sendContract(contract.contractId, adminId)
   }
@@ -71,8 +77,8 @@ async function main() {
     })
     const { quoteId, versionId } = await createQuote(project.id, adminId)
     await saveQuoteDraft(versionId, [{ description: 'Wedding photography', quantity: 1, unitPrice: '5200' }], null)
-    const { viewToken } = await sendQuote(quoteId, adminId)
-    await acceptQuoteByToken(viewToken, 'Grace', IP)
+    await sendQuote(quoteId, adminId)
+    await acceptDemoQuote(quoteId, versionId, project.id, 'Grace')
     const contract = await createContractFromAcceptedQuote(project.id, adminId)
     const { signToken } = await sendContract(contract.contractId, adminId)
     await signContractByToken(signToken, 'Grace', IP)
@@ -95,8 +101,8 @@ async function main() {
     })
     const { quoteId, versionId } = await createQuote(project.id, adminId)
     await saveQuoteDraft(versionId, [{ description: 'Wedding photography and album', quantity: 1, unitPrice: '5800' }], null)
-    const { viewToken } = await sendQuote(quoteId, adminId)
-    await acceptQuoteByToken(viewToken, 'Hannah', IP)
+    await sendQuote(quoteId, adminId)
+    await acceptDemoQuote(quoteId, versionId, project.id, 'Hannah')
     const contract = await createContractFromAcceptedQuote(project.id, adminId)
     const { signToken } = await sendContract(contract.contractId, adminId)
     await signContractByToken(signToken, 'Hannah', IP)

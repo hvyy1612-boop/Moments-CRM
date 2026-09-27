@@ -2,6 +2,7 @@ import { Prisma, type EnquirySource } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
 import { nextProjectCode, requireCompany } from './project'
+import { nextRecordNumber, isUniqueViolation } from './numbering'
 import {
   clientSourceFromEnquiry,
   normalizePhone,
@@ -39,11 +40,24 @@ export type CreateEnquiryInput = {
 }
 
 export async function createEnquiry(input: CreateEnquiryInput, actorUserId: string | null = null) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await runCreateEnquiry(input, actorUserId)
+    } catch (error) {
+      if (attempt < 4 && isUniqueViolation(error)) continue
+      throw error
+    }
+  }
+}
+
+async function runCreateEnquiry(input: CreateEnquiryInput, actorUserId: string | null) {
   return prisma.$transaction(async (tx) => {
     const company = await requireCompany(tx)
+    const enquiryNumber = await nextRecordNumber(tx, company.id, 'ENQUIRY')
     const enquiry = await tx.enquiry.create({
       data: {
         companyId: company.id,
+        enquiryNumber,
         ownerUserId: input.ownerUserId ?? null,
         clientId: input.clientId ?? null,
         name: input.name,
@@ -197,7 +211,15 @@ export async function convertEnquiry(enquiryId: string, actorUserId: string | nu
 }
 
 async function runConvertEnquiry(enquiryId: string, actorUserId: string | null, now: Date) {
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction((tx) => convertEnquiryCore(tx, enquiryId, actorUserId, now))
+}
+
+export async function convertEnquiryCore(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  enquiryId: string,
+  actorUserId: string | null,
+  now: Date,
+) {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
     if (!enquiry) throw new Error('Enquiry not found.')
     if (enquiry.status === 'CONVERTED') {
@@ -241,7 +263,7 @@ async function runConvertEnquiry(enquiryId: string, actorUserId: string | null, 
       data: {
         companyId: company.id,
         clientId: client.id,
-        code: await nextProjectCode(tx, now.getFullYear()),
+        code: await nextProjectCode(tx, company.id, now),
         name: enquiry.eventType ?? 'Project',
 
         lifecycleStatus: 'BOOKING_REQUESTED',
@@ -285,7 +307,6 @@ async function runConvertEnquiry(enquiryId: string, actorUserId: string | null, 
     })
 
     return { clientId: client.id, projectId: project.id, alreadyConverted: false }
-  })
 }
 
 export async function cancelBooking(enquiryId: string, actorUserId: string | null = null) {

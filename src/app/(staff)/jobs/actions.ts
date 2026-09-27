@@ -92,14 +92,30 @@ export async function saveQuoteAction(
     return { status: 'error', message: 'Could not read the quote lines.' }
   }
 
-  const parsed = saveQuoteSchema.safeParse({ lines, validUntil: formData.get('validUntil') ?? '' })
+  const parsed = saveQuoteSchema.safeParse({
+    lines,
+    reference: formData.get('reference') ?? '',
+    issueDate: formData.get('issueDate') ?? '',
+    validUntil: formData.get('validUntil') ?? '',
+    introduction: formData.get('introduction') ?? '',
+    poNumber: formData.get('poNumber') ?? '',
+    notes: formData.get('notes') ?? '',
+    depositPercent: formData.get('depositPercent') ?? '',
+  })
   if (!parsed.success) {
     return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the quote.' }
   }
   const validUntil = parsed.data.validUntil ? new Date(parsed.data.validUntil) : null
 
   try {
-    await saveQuoteDraft(versionId, parsed.data.lines, validUntil)
+    await saveQuoteDraft(versionId, parsed.data.lines, validUntil, {
+      introduction: parsed.data.introduction,
+      poNumber: parsed.data.poNumber,
+      notes: parsed.data.notes,
+      depositPercent: parsed.data.depositPercent,
+      reference: parsed.data.reference,
+      issueDate: new Date(parsed.data.issueDate),
+    })
   } catch (error) {
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not save.' }
   }
@@ -130,7 +146,9 @@ export async function sendQuoteAction(
     where: { id: quoteId },
     include: { project: { include: { client: { select: { email: true, displayName: true } } } } },
   })
-  if (quote) {
+  let recipient = ''
+  if (quote?.project) {
+    recipient = quote.project.client.email ?? ''
     const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
     await sendQuoteEmail({
       to: quote.project.client.email,
@@ -139,7 +157,8 @@ export async function sendQuoteAction(
     })
   }
   revalidatePath(`/jobs/${projectId}`)
-  return { status: 'success' }
+
+  redirect(`/jobs/${projectId}?sent=${encodeURIComponent(recipient)}`)
 }
 
 export async function createContractAction(formData: FormData): Promise<void> {

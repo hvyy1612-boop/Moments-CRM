@@ -42,13 +42,10 @@ const money = (n: number) => aud.format(Number.isFinite(n) ? n : 0)
 const amountOf = (l: { unitPrice: string; quantity: number; discount: string }) =>
   Math.max((Number(l.unitPrice) || 0) * l.quantity - (Number(l.discount) || 0), 0)
 
-function CardHeader({ icon, title, action }: { icon: ReactNode; title: string; action?: ReactNode }) {
+function CardHeader({ title, action }: { title: string; action?: ReactNode }) {
   return (
     <div className="flex items-center justify-between border-b border-line px-4 py-3">
-      <div className="flex items-center gap-2">
-        <span className="text-accent">{icon}</span>
-        <h2 className="text-sm font-semibold text-ink">{title}</h2>
-      </div>
+      <h2 className="text-sm font-semibold text-ink">{title}</h2>
       {action}
     </div>
   )
@@ -311,7 +308,6 @@ export function InvoiceWorkspace(props: {
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-lg border border-line bg-surface">
           <CardHeader
-            icon={<svg {...svg}><path d="M6 3h9l3 3v15l-3-2-3 2-3-2-3 2V3z" /><path d="M9 8h6M9 12h6" /></svg>}
             title="Invoice details"
             action={editable ? <button type="button" onClick={() => setDetailsOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-accent hover:underline"><svg {...svg} className="h-3.5 w-3.5"><path d="M4 20h4l10-10-4-4L4 16v4z" /><path d="m13.5 6.5 4 4" /></svg>Edit</button> : null}
           />
@@ -326,7 +322,6 @@ export function InvoiceWorkspace(props: {
 
         <div className="rounded-lg border border-line bg-surface">
           <CardHeader
-            icon={<svg {...svg}><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>}
             title="Job details"
             action={<Link href={`/jobs/${job.id}`} className="text-xs font-semibold text-accent hover:underline">Open</Link>}
           />
@@ -339,24 +334,28 @@ export function InvoiceWorkspace(props: {
         </div>
 
         <div className="rounded-lg border border-line bg-surface">
-          <CardHeader
-            icon={<svg {...svg}><path d="M4 20a8 8 0 0 1 16 0" /><circle cx="12" cy="8" r="4" /></svg>}
-            title="Client"
-          />
-          <div className="flex flex-col gap-1.5 p-4 text-sm">
+          <CardHeader title="Client" />
+          <div className="flex flex-col gap-2 p-4 text-sm">
             <div className="font-medium text-ink">{client.name}</div>
-            {client.email ? <div className="text-ink-muted">{client.email}</div> : null}
-            {client.phone ? <div className="text-ink-muted">{client.phone}</div> : null}
-            {client.address ? <div className="whitespace-pre-line text-ink-muted">{client.address}</div> : null}
+            <div className="flex items-center gap-2 text-ink-muted">
+              <svg {...svg} className="h-4 w-4 shrink-0 text-muted"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg>
+              <span className="min-w-0 break-all">{client.email || '-'}</span>
+            </div>
+            <div className="flex items-center gap-2 text-ink-muted">
+              <svg {...svg} className="h-4 w-4 shrink-0 text-muted"><path d="M5 4h4l2 5-3 2a12 12 0 0 0 5 5l2-3 5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z" /></svg>
+              <span>{client.phone || '-'}</span>
+            </div>
+            {client.address ? <div className="whitespace-pre-line pt-0.5 text-ink-muted">{client.address}</div> : null}
           </div>
         </div>
       </div>
 
-      {/* Products & Packages + totals */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-        <div className="min-w-0 flex-1 rounded-lg border border-line bg-surface">
+      {/* Products & Packages + totals - one 3-column grid shared with the rows above and below, so every
+          vertical edge lines up: the table spans 2 columns (its right edge matches Job details / Payments
+          history) and the totals sit in column 3 (aligned with Client / Record a payment). */}
+      <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
+        <div className="min-w-0 rounded-lg border border-line bg-surface lg:col-span-2">
           <CardHeader
-            icon={<svg {...svg}><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><path d="M3 6h18M16 10a4 4 0 0 1-8 0" /></svg>}
             title="Products & packages"
             action={editable ? (
               <div ref={addWrap} className="relative">
@@ -387,40 +386,52 @@ export function InvoiceWorkspace(props: {
           />
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
+              {/* Description column absorbs the slack (width 100%) so every other column stays content-width
+                  and the numeric columns cluster tidily on the right; the drag handle and row actions each
+                  get their own gutter column, so the Item header lines up with the item name exactly. */}
+              <colgroup>
+                {editable ? <col /> : null}
+                <col />
+                <col style={{ width: '100%' }} />
+                <col />
+                <col />
+                <col />
+                <col />
+                {editable ? <col /> : null}
+              </colgroup>
               <thead>
-                <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
-                  <th className="px-4 py-2">Item</th>
-                  <th className="px-3 py-2">Description</th>
-                  <th className="px-3 py-2 text-right">Unit price</th>
-                  <th className="px-3 py-2 text-center">Qty</th>
-                  <th className="px-3 py-2 text-right">Discount</th>
-                  <th className="px-3 py-2 text-right">Amount</th>
-                  {editable ? <th className="px-3 py-2"></th> : null}
+                <tr className="border-b border-line-strong text-left text-sm text-ink-muted">
+                  {editable ? <th className="py-2.5" /> : null}
+                  <th className="px-4 py-2.5 font-medium">Item</th>
+                  <th className="px-4 py-2.5 font-medium">Description</th>
+                  <th className="whitespace-nowrap px-4 py-2.5 text-right font-medium">Unit price</th>
+                  <th className="whitespace-nowrap px-4 py-2.5 text-right font-medium">Qty</th>
+                  <th className="whitespace-nowrap px-4 py-2.5 text-right font-medium">Discount</th>
+                  <th className="whitespace-nowrap px-4 py-2.5 text-right font-medium">Amount</th>
+                  {editable ? <th className="py-2.5" /> : null}
                 </tr>
               </thead>
               <tbody>
                 {lines.length === 0 ? (
-                  <tr><td colSpan={editable ? 7 : 6} className="px-4 py-6 text-center text-sm text-ink-muted">No items yet.</td></tr>
+                  <tr><td colSpan={editable ? 8 : 6} className="px-4 py-6 text-center text-sm text-ink-muted">No items yet.</td></tr>
                 ) : lines.map((l, index) => (
-                  <tr key={l.id} onDragOver={(e) => e.preventDefault()} onDrop={() => reorder(index)} className="border-b border-line align-top last:border-b-0">
-                    <td className="px-4 py-3">
-                      <div className="flex items-start gap-1.5">
-                        {editable ? (
-                          <span draggable onDragStart={() => { dragIndex.current = index }} aria-label="Drag to reorder" className="mt-0.5 shrink-0 cursor-grab text-muted hover:text-ink">
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" /><circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" /><circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" /></svg>
-                          </span>
-                        ) : null}
-                        <span className="font-medium text-ink">{l.name || <span className="text-ink-muted">Untitled</span>}</span>
-                      </div>
-                    </td>
-                    <td className="max-w-sm whitespace-pre-line px-3 py-3 text-ink-muted">{l.description || '-'}</td>
-                    <td className="tabular px-3 py-3 text-right text-ink-muted">{money(Number(l.unitPrice) || 0)}</td>
-                    <td className="tabular px-3 py-3 text-center text-ink-muted">{l.quantity}</td>
-                    <td className="tabular px-3 py-3 text-right text-ink-muted">{Number(l.discount) > 0 ? `-${money(Number(l.discount))}` : '-'}</td>
-                    <td className="tabular px-3 py-3 text-right font-medium text-ink">{money(amountOf(l))}</td>
+                  <tr key={l.id} onDragOver={(e) => e.preventDefault()} onDrop={() => reorder(index)} className="group border-b border-line align-top last:border-b-0">
                     {editable ? (
-                      <td className="px-3 py-3">
-                        <div className="flex items-center justify-end gap-1">
+                      <td className="py-3 pl-3 align-top">
+                        <span draggable onDragStart={() => { dragIndex.current = index }} aria-label="Drag to reorder" className="flex cursor-grab justify-center pt-0.5 text-muted opacity-0 transition-opacity hover:text-ink focus-within:opacity-100 group-hover:opacity-100">
+                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" /><circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" /><circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" /></svg>
+                        </span>
+                      </td>
+                    ) : null}
+                    <td className="px-4 py-3 font-medium text-ink">{l.name || <span className="text-ink-muted">Untitled</span>}</td>
+                    <td className="whitespace-pre-line px-4 py-3 text-ink-muted">{l.description || '-'}</td>
+                    <td className="tabular whitespace-nowrap px-4 py-3 text-right text-ink-muted">{money(Number(l.unitPrice) || 0)}</td>
+                    <td className="tabular whitespace-nowrap px-4 py-3 text-right text-ink-muted">{l.quantity}</td>
+                    <td className="tabular whitespace-nowrap px-4 py-3 text-right text-ink-muted">{Number(l.discount) > 0 ? `-${money(Number(l.discount))}` : '-'}</td>
+                    <td className="tabular whitespace-nowrap px-4 py-3 text-right font-medium text-ink">{money(amountOf(l))}</td>
+                    {editable ? (
+                      <td className="py-3 pr-3 align-top">
+                        <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
                           <button type="button" onClick={() => openEdit(l)} aria-label="Edit item" className="rounded p-1 text-ink-muted hover:bg-paper hover:text-ink"><svg {...svg}><path d="M4 20h4l10-10-4-4L4 16v4z" /><path d="m13.5 6.5 4 4" /></svg></button>
                           <button type="button" onClick={() => duplicate(l.id)} aria-label="Duplicate item" className="rounded p-1 text-ink-muted hover:bg-paper hover:text-ink"><svg {...svg}><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg></button>
                           <button type="button" onClick={() => removeLine(l.id)} aria-label="Remove item" className="rounded p-1 text-ink-muted hover:bg-paper hover:text-danger"><svg {...svg}><path d="M6 6l12 12M18 6L6 18" /></svg></button>
@@ -434,7 +445,7 @@ export function InvoiceWorkspace(props: {
           </div>
         </div>
 
-        <div className="w-full rounded-lg border border-line bg-surface p-4 text-sm lg:w-72 lg:shrink-0">
+        <div className="rounded-lg border border-line bg-surface p-4 text-sm">
           <div className="flex justify-between py-0.5 text-ink-muted"><span>Subtotal (excl. GST)</span><span className="tabular">{money(subtotal)}</span></div>
           <div className="flex justify-between py-0.5 text-ink-muted"><span>GST (10%)</span><span className="tabular">{money(gst)}</span></div>
           {disc > 0 ? (
@@ -466,7 +477,6 @@ export function InvoiceWorkspace(props: {
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-lg border border-line bg-surface">
           <CardHeader
-            icon={<svg {...svg}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /></svg>}
             title="Payment schedule"
             action={editable ? <button type="button" onClick={openSchedule} className="text-xs font-semibold text-accent hover:underline">Edit schedule</button> : null}
           />
@@ -490,13 +500,13 @@ export function InvoiceWorkspace(props: {
         </div>
 
         <div className="rounded-lg border border-line bg-surface">
-          <CardHeader icon={<svg {...svg}><path d="M12 8v4l3 2" /><circle cx="12" cy="12" r="9" /></svg>} title="Payments history" />
+          <CardHeader title="Payments history" />
           <div className="p-4">
             {paymentRows.length === 0 ? (
               <p className="py-6 text-center text-sm text-ink-muted">No payments recorded yet.</p>
             ) : (
               <table className="w-full text-sm">
-                <thead><tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted"><th className="py-2">Date</th><th className="py-2 text-right">Amount</th><th className="py-2">Method</th><th className="py-2"></th></tr></thead>
+                <thead><tr className="border-b border-line-strong text-left text-sm text-ink-muted"><th className="py-2 font-medium">Date</th><th className="py-2 text-right font-medium">Amount</th><th className="py-2 font-medium">Method</th><th className="py-2"></th></tr></thead>
                 <tbody>
                   {paymentRows.map((p) => (
                     <tr key={p.id} className="border-b border-line align-top last:border-b-0">
@@ -513,7 +523,7 @@ export function InvoiceWorkspace(props: {
         </div>
 
         <div className="rounded-lg border border-line bg-surface">
-          <CardHeader icon={<svg {...svg}><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /></svg>} title="Record a payment" />
+          <CardHeader title="Record a payment" />
           <div className="p-4">
             {canPay ? (
               <RecordPayment csrf={csrf} projectId={projectId} invoiceId={invoiceId} balanceLabel={money(balance)} />

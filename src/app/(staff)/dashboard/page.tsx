@@ -8,12 +8,13 @@ import { getDashboardData, type DashboardPeriod } from '@/lib/domain/dashboard'
 import { ENQUIRY_STAGE_LABEL } from '@/features/enquiries/status'
 import { Donut, HBars, RevenueChart } from '@/components/dashboard/DashCharts'
 import { AppShell } from '../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { DashboardFilters } from './DashboardFilters'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Dashboard - Moments' }
 
-const PERIODS = ['30d', '90d', 'year']
+const PERIODS = ['today', '7d', 'month', 'custom']
 
 const STAGE_COLORS = ['var(--color-data-sage)', 'var(--color-data-blue)', 'var(--color-data-mauve)', 'var(--color-data-sand)', 'var(--color-data-neutral)', 'var(--color-data-grey)']
 const SERVICE_COLORS = ['var(--color-data-sage)', 'var(--color-data-blue)', 'var(--color-data-sand)', 'var(--color-data-mauve)', 'var(--color-data-neutral)', 'var(--color-data-grey)']
@@ -111,14 +112,16 @@ function StatusPill({ status }: { status: string }) {
   )
 }
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ period?: string; service?: string }> }) {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ period?: string; service?: string; from?: string; to?: string }> }) {
   const user = await requireRole('/dashboard')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
   const sp = await searchParams
-  const period = (PERIODS.includes(sp.period ?? '') ? sp.period : '90d') as DashboardPeriod
+  const period = (PERIODS.includes(sp.period ?? '') ? sp.period : '7d') as DashboardPeriod
   const service = sp.service ?? 'all'
-  const d = await getDashboardData({ period, service })
+  const from = sp.from
+  const to = sp.to
+  const d = await getDashboardData({ period, service, from, to })
 
   const collected = d.revenueSeries.reduce((s, p) => s + p.collected, 0)
   const revenueEmpty = d.revenueSeries.every((p) => p.booked === 0 && p.collected === 0)
@@ -133,14 +136,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return (
     <AppShell user={user} csrf={csrf} active="dashboard" bareHeader>
-      <div className="w-full">
+      <PageContainer variant="wide">
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-xl">
             <h1 className="font-semibold text-3xl leading-none text-ink">Dashboard</h1>
             <p className="mt-1.5 text-sm text-ink-muted">A snapshot of your studio&rsquo;s bookings, revenue and operations.</p>
           </div>
-          <DashboardFilters period={period} service={service} services={d.services} />
+          <DashboardFilters period={period} service={service} services={d.services} from={from} to={to} />
         </div>
 
         {/* KPI row */}
@@ -277,7 +280,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </section>
           </div>
         </div>
-      </div>
+      </PageContainer>
     </AppShell>
   )
 }

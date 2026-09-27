@@ -33,5 +33,9 @@ export const clientSchema = z.object({
     message: "Please enter the client's name.",
     path: ['firstName'],
   })
+  // A person's name is one person: no "&" (write "and", or add each person separately). Company names
+  // may keep "&" (e.g. "Smith & Sons").
+  .refine((d) => !d.firstName?.includes('&'), { message: "Please write 'and' instead of '&' in a name.", path: ['firstName'] })
+  .refine((d) => !d.lastName?.includes('&'), { message: "Please write 'and' instead of '&' in a name.", path: ['lastName'] })
 
 export type ClientInput = z.infer<typeof clientSchema>

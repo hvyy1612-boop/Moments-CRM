@@ -1,7 +1,7 @@
 'use client'
 
 import { ENQUIRY_STAGE_LABEL } from '@/features/enquiries/status'
-import { Popover } from './Popover'
+import { Popover } from '@/components/ui/Popover'
 import { setEnquiryStageAction } from './actions'
 
 const STAGES = ['NEW', 'CONTACTED', 'QUALIFIED', 'CONVERTED'] as const

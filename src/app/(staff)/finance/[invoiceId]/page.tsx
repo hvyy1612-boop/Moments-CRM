@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Prisma } from '@prisma/client'
 import Link from 'next/link'
+import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { InvoiceDocument } from '@/components/InvoiceDocument'
@@ -10,11 +11,11 @@ import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { listActivePackages } from '@/lib/domain/package'
-import { getInvoiceBalanceById } from '@/lib/domain/invoice-money'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyTime, sydneyYmd } from '@/lib/time'
 import { titleCase } from '@/lib/text'
 import { AppShell } from '../../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { InvoiceWorkspace } from './InvoiceWorkspace'
 import { CollapsiblePreview } from './CollapsiblePreview'
 import { InvoiceMoreMenu } from './InvoiceMoreMenu'
@@ -36,13 +37,13 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
-  const [inv, money] = await Promise.all([
-    prisma.invoice.findUnique({
+  const inv = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     select: {
       id: true, invoiceNumber: true, type: true, status: true, subtotal: true, taxTotal: true, total: true,
       amountPaid: true, invoiceDate: true, dueAt: true, poNumber: true, notes: true, accessToken: true,
       billingNameSnapshot: true, billingEmailSnapshot: true,
+      creditNotes: { where: { NOT: { status: 'VOIDED' } }, select: { amount: true } },
       lines: { orderBy: { sortOrder: 'asc' }, select: { itemName: true, description: true, quantity: true, unitPrice: true, discount: true, lineTotal: true } },
       instalments: { orderBy: { sortOrder: 'asc' }, select: { label: true, dueAt: true, amount: true, status: true } },
       payments: {
@@ -62,12 +63,10 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
         },
       },
     },
-    }),
-    getInvoiceBalanceById(invoiceId), // ledger-derived, credit-aware (docs/25 Part 1)
-  ])
+  })
   if (!inv) notFound()
 
-  const balance = money ? money.owed : inv.total.sub(inv.amountPaid)
+  const docCredits = inv.creditNotes.reduce((s, cn) => s.add(cn.amount), new Prisma.Decimal(0))
   const isDraft = inv.status === 'DRAFT'
   const canPay = inv.status !== 'DRAFT' && inv.status !== 'PAID' && inv.status !== 'VOID'
   const unpaid = inv.amountPaid.lte(0)
@@ -132,15 +131,13 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
     <>
       <div className="print:hidden">
       <AppShell user={user} csrf={csrf} active="finance">
+      <PageContainer variant="standard">
       <div>
         {/* Header (matches the Clients detail page: chevron back-link, ruled title, quiet actions). */}
-        <Link href="/finance" className="inline-flex items-center gap-0.5 text-sm text-ink-muted transition-colors hover:text-ink">
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
-          Payments
-        </Link>
+        <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Payments', href: '/finance' }, { label: `Invoice #${inv.invoiceNumber}` }]} />
         <div className="mt-3 flex flex-wrap items-start justify-between gap-4 border-b border-line pb-5">
           <div className="min-w-0">
-            <h1 className="truncate text-2xl font-semibold leading-tight text-ink">Invoice #{inv.invoiceNumber}</h1>
+            <h1 className="truncate text-xl font-semibold leading-tight text-ink">Invoice #{inv.invoiceNumber}</h1>
             <p className="mt-0.5 text-sm text-ink-muted">
               Status: <span className="font-semibold capitalize text-ink">{inv.status.toLowerCase().replace(/_/g, ' ')}</span>
               {' · '}{c.displayName} · <Link href={`/jobs/${inv.project.id}`} className="text-accent-ink hover:underline">{inv.project.name}</Link>
@@ -160,26 +157,6 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
             ) : null}
             <InvoiceMoreMenu csrf={csrf} invoiceId={inv.id} projectId={inv.project.id} isDraft={isDraft} canVoid={canVoid} canDelete={unpaid} />
           </div>
-        </div>
-
-        {/* Financial summary strip */}
-        <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-line bg-line sm:grid-cols-4">
-          {[
-            { label: 'Total', value: formatAud(inv.total), tone: 'text-ink', icon: <path d="M6 3h9l3 3v15l-3-2-3 2-3-2-3 2V3z" /> },
-            { label: 'Paid', value: formatAud(inv.amountPaid), tone: 'text-delivered-ink', icon: <path d="M20 6 9 17l-5-5" /> },
-            { label: 'Balance due', value: formatAud(balance), tone: balance.greaterThan(0) ? 'text-accent-ink' : 'text-ink', icon: <path d="M3 6h18M3 12h18M3 18h12" /> },
-            { label: 'Issue date', value: inv.invoiceDate ? formatSydneyDate(inv.invoiceDate) : '-', tone: 'text-ink', icon: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /></> },
-          ].map((m) => (
-            <div key={m.label} className="flex items-center gap-3 bg-surface p-4">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent-tint text-accent">
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">{m.icon}</svg>
-              </span>
-              <div className="min-w-0">
-                <div className="text-xs uppercase tracking-wide text-muted">{m.label}</div>
-                <div className={`tabular text-lg font-semibold ${m.tone}`}>{m.value}</div>
-              </div>
-            </div>
-          ))}
         </div>
 
         <div className="mt-5">
@@ -202,18 +179,19 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
         {/* Invoice preview (demoted, screen only) */}
         <div className="mt-8">
           <CollapsiblePreview>
-            <InvoiceDocument invoice={inv} />
+            <InvoiceDocument invoice={{ ...inv, creditsTotal: docCredits }} />
           </CollapsiblePreview>
         </div>
       </div>
-      </AppShell>
+      </PageContainer>
+    </AppShell>
       </div>
 
       {/* Print target: only the invoice sheet prints, so the PDF is the invoice alone — one page for a
           short invoice, with no app chrome and no blank trailing pages. */}
       <InvoiceFit />
       <div className="hidden print:block">
-        <InvoiceDocument invoice={inv} />
+        <InvoiceDocument invoice={{ ...inv, creditsTotal: docCredits }} />
       </div>
     </>
   )

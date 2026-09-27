@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { ProjectLifecycle } from '@prisma/client'
 import Link from 'next/link'
+import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { cookies } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
@@ -10,6 +11,7 @@ import { listActivePackages } from '@/lib/domain/package'
 import { listInvoiceTemplates } from '@/lib/domain/finance'
 import { titleCase } from '@/lib/text'
 import { AppShell } from '../../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 import { InvoiceEditor } from '../../jobs/[id]/InvoiceEditor'
 
 export const runtime = 'nodejs'
@@ -42,8 +44,9 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
 
     return (
       <AppShell user={user} csrf={csrf} active="finance">
-        <Link href="/finance" className="text-sm font-bold text-accent hover:underline">← Payments</Link>
-        <h1 className="mt-2 font-serif text-2xl font-semibold text-ink">New invoice</h1>
+      <PageContainer variant="narrow">
+        <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Payments', href: '/finance' }, { label: 'New invoice' }]} />
+        <h1 className="mt-2 font-serif text-xl font-semibold text-ink">New invoice</h1>
         <p className="mt-1 text-sm text-ink-muted">{project.client.displayName} · {project.name} ({project.code})</p>
         {isClosed ? (
           <p className="mt-4 rounded-md border border-dashed border-line bg-surface px-4 py-6 text-sm text-ink-muted">
@@ -52,7 +55,8 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
         ) : (
           <InvoiceEditor csrf={csrf} projectId={project.id} packages={packages} templates={templates} />
         )}
-      </AppShell>
+      </PageContainer>
+    </AppShell>
     )
   }
 
@@ -70,8 +74,9 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
 
   return (
     <AppShell user={user} csrf={csrf} active="finance">
-      <Link href="/finance" className="text-sm font-bold text-accent hover:underline">← Payments</Link>
-      <h1 className="mt-2 font-serif text-2xl font-semibold text-ink">New invoice</h1>
+      <PageContainer variant="narrow">
+      <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Payments', href: '/finance' }, { label: 'New invoice' }]} />
+      <h1 className="mt-2 font-serif text-xl font-semibold text-ink">New invoice</h1>
       <p className="mt-1 text-sm text-ink-muted">{clientName ? `Choose a job for ${clientName} to invoice.` : 'Choose a job to invoice.'}</p>
       {jobs.length === 0 ? (
         <p className="mt-4 rounded-md border border-dashed border-line bg-surface px-4 py-6 text-center text-sm text-ink-muted">
@@ -91,6 +96,7 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
           ))}
         </ul>
       )}
+    </PageContainer>
     </AppShell>
   )
 }

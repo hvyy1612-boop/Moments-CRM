@@ -3,7 +3,10 @@ import { maskEmail } from '@/lib/text'
 
 const LOG_LINKS = process.env.NODE_ENV !== 'production'
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
-const emailEnabled = Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM)
+
+const smtpEnabled = Boolean(process.env.SMTP_USER && process.env.SMTP_PASS)
+const resendEnabled = Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM)
+const emailEnabled = smtpEnabled || resendEnabled
 
 async function deliver(args: {
   to: string
@@ -22,6 +25,25 @@ async function deliver(args: {
     return
   }
   try {
+    if (smtpEnabled) {
+
+      const nodemailer = (await import('nodemailer')).default
+      const port = Number(process.env.SMTP_PORT ?? '465')
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST ?? 'smtp.gmail.com',
+        port,
+        secure: port === 465,
+        auth: { user: process.env.SMTP_USER!, pass: process.env.SMTP_PASS! },
+      })
+      await transporter.sendMail({
+        from: process.env.EMAIL_FROM ?? process.env.SMTP_USER!,
+        to: args.to,
+        subject: args.subject,
+        html: args.html,
+      })
+      logger.info(args.event, { to: maskEmail(args.to), delivered: true, via: 'smtp' })
+      return
+    }
     const res = await fetch(RESEND_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -34,7 +56,7 @@ async function deliver(args: {
       logger.error(`${args.event}.failed`, { to: maskEmail(args.to), status: res.status })
       return
     }
-    logger.info(args.event, { to: maskEmail(args.to), delivered: true })
+    logger.info(args.event, { to: maskEmail(args.to), delivered: true, via: 'resend' })
   } catch (error) {
     logger.error(`${args.event}.error`, {
       to: maskEmail(args.to),
@@ -56,6 +78,24 @@ export async function sendEmailWithResult(args: {
 }): Promise<SendResult> {
   if (!emailEnabled) return { outcome: 'SKIPPED_NO_PROVIDER' }
   try {
+    if (smtpEnabled) {
+      const nodemailer = (await import('nodemailer')).default
+      const port = Number(process.env.SMTP_PORT ?? '465')
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST ?? 'smtp.gmail.com',
+        port,
+        secure: port === 465,
+        auth: { user: process.env.SMTP_USER!, pass: process.env.SMTP_PASS! },
+      })
+      const info = await transporter.sendMail({
+        from: process.env.EMAIL_FROM ?? process.env.SMTP_USER!,
+        to: args.to,
+        subject: args.subject,
+        html: args.html,
+      })
+      logger.info('notification.send.accepted', { to: maskEmail(args.to), via: 'smtp' })
+      return { outcome: 'ACCEPTED', providerMessageId: info.messageId ?? null }
+    }
     const res = await fetch(RESEND_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -83,7 +123,7 @@ function shell(title: string, body: string): string {
     <div style="font-family:Georgia,serif;font-size:20px;letter-spacing:2px;text-transform:uppercase">Moments</div>
     <h1 style="font-family:Georgia,serif;font-size:22px;font-weight:600;margin:20px 0 12px">${title}</h1>
     ${body}
-    <p style="color:#9c948b;font-size:13px;margin-top:28px">Moments Photography and Film, Sydney.</p>
+    <p style="color:#9c948b;font-size:13px;margin-top:28px;line-height:1.6">Moments Photography &amp; Film<br>Sydney, Australia</p>
   </div>`
 }
 
@@ -91,14 +131,36 @@ function button(href: string, label: string): string {
   return `<a href="${href}" style="display:inline-block;background:#20201e;color:#ffffff;text-decoration:none;font-weight:700;padding:11px 18px;border-radius:7px">${label}</a>`
 }
 
+function link(href: string, label: string): string {
+  return `<a href="${href}" style="color:#1a73e8;text-decoration:underline;font-weight:600">${label}</a>`
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
 export type QuoteEmail = { to: string; clientName: string; quoteLink: string }
 
 export async function sendQuoteEmail(email: QuoteEmail): Promise<void> {
   const html = shell(
     'Your quote is ready',
-    `<p>Hi ${email.clientName}, your photography quote is ready to review.</p><p>${button(email.quoteLink, 'View your quote')}</p>`,
+    `<p>Hi ${escapeHtml(email.clientName)}, your photography quote is ready to review.</p><p>${link(email.quoteLink, 'View Quotation')}</p>`,
   )
   await deliver({ to: email.to, subject: 'Your Moments quote', html, event: 'email.quote_sent', devLink: email.quoteLink })
+}
+
+export type ComposedQuoteEmail = { to: string; subject: string; body: string; quoteLink: string }
+
+export async function sendComposedQuoteEmail(email: ComposedQuoteEmail): Promise<void> {
+  const paragraphs = email.body
+    .trim()
+    .split(/\n{2,}/)
+    .filter(Boolean)
+    .map((p) => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
+    .join('')
+  const subject = email.subject.trim() || 'Your Moments quote'
+  const html = shell('Your Quotation', `${paragraphs}<p>${link(email.quoteLink, 'View Quotation')}</p>`)
+  await deliver({ to: email.to, subject, html, event: 'email.quote_sent', devLink: email.quoteLink })
 }
 
 export type ContractEmail = { to: string; clientName: string; contractLink: string }

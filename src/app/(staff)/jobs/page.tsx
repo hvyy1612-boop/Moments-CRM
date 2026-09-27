@@ -5,16 +5,18 @@ import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { formatSydneyDate } from '@/lib/time'
-import { resolveLabel, type StatusLabel } from '@/features/projects/labels'
+import { resolveLabel } from '@/features/projects/labels'
 import { CLOSED_STATUSES } from '@/features/projects/lifecycle'
-import { PROJECT_STAGES, stageLabel } from '@/features/projects/workflow'
+import { PROJECT_STAGES } from '@/features/projects/workflow'
 import { getCompanyStatusLabels } from '@/lib/domain/status-labels'
-import { StatusPicker } from '@/features/projects/components/StatusPicker'
+import { sydneyYmd } from '@/lib/time'
 import { AppShell } from '../AppShell'
+import { PageContainer } from '@/components/PageContainer'
+import { PageHeader } from '@/components/PageHeader'
+import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
+import { JobsTable, type JobRow } from './JobsTable'
 import { JobSortSelect, JOB_DEFAULT_SORT, type JobSortValue } from './JobSortSelect'
 import { JobFilterMenu } from './JobFilterMenu'
-import { JobRowMenu } from './JobRowMenu'
 import { AddJobButton } from './AddJobButton'
 
 export const runtime = 'nodejs'
@@ -25,24 +27,10 @@ const SORTS: JobSortValue[] = ['newest', 'oldest', 'stage', 'client-asc']
 const STAGE_RANK = new Map(PROJECT_STAGES.map((s, i) => [s.key, i]))
 const stageRank = (key: string | null) => (key && STAGE_RANK.has(key) ? STAGE_RANK.get(key)! : PROJECT_STAGES.length)
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '?'
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
-  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
-}
-
-type Row = {
-  id: string
-  code: string
-  name: string
-  client: string
-  clientId: string
-  label: StatusLabel
-  closed: boolean
-  enquiredAt: Date
-  nextTask: string | null
-  nextStage: string | null
+function daysUntilSydney(due: Date, now: Date): number {
+  const a = sydneyYmd(due)
+  const b = sydneyYmd(now)
+  return Math.round((Date.UTC(a.year, a.month - 1, a.day) - Date.UTC(b.year, b.month - 1, b.day)) / 86400000)
 }
 
 export default async function JobsPage({
@@ -71,7 +59,19 @@ export default async function JobsPage({
         workItems: {
           where: { type: { not: 'AUTO' }, status: { not: 'CANCELLED' } },
           orderBy: { order: 'asc' },
-          select: { title: true, stage: true, status: true },
+          select: { type: true, stage: true, status: true, dueAt: true, dueOverrideAt: true },
+        },
+        bookings: {
+          where: { status: { not: 'CANCELLED' } },
+          orderBy: { startsAt: 'asc' },
+          take: 1,
+          select: { startsAt: true },
+        },
+
+        convertedFromEnquiries: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { eventDate: true },
         },
       },
     }),
@@ -79,14 +79,50 @@ export default async function JobsPage({
   ])
   const canEdit = can(user, 'PROJECT_EDIT')
 
-  let rows: Row[] = projects.map((p) => {
+  const now = new Date()
+  let rows: JobRow[] = projects.map((p) => {
     const next = p.workItems.find((t) => t.status !== 'COMPLETED')
-    const checklistDone = p.workItems.length > 0 && !next
+    const total = p.workItems.length
+    const doneCount = p.workItems.filter((t) => t.status === 'COMPLETED').length
+    const checklistDone = total > 0 && !next
+    const cancelled = p.lifecycleStatus === 'CANCELLED' || p.lifecycleStatus === 'LOST'
 
     const label =
       !p.statusLabelId && checklistDone
         ? (labels.find((l) => l.stage === 'COMPLETED') ?? resolveLabel(p, labels))
         : resolveLabel(p, labels)
+
+    const pct = total > 0 ? Math.round((doneCount / total) * 100) : null
+
+    const shootTask = p.workItems.find((t) => t.type === 'SHOOT' && (t.dueOverrideAt ?? t.dueAt))
+    const shootAt = (shootTask?.dueOverrideAt ?? shootTask?.dueAt) ?? p.bookings[0]?.startsAt ?? p.convertedFromEnquiries[0]?.eventDate ?? null
+
+    let alert: JobRow['alert'] = null
+    let alertLabel: string | null = null
+    if (!cancelled && !checklistDone) {
+      const nextDue = next?.dueOverrideAt ?? next?.dueAt ?? null
+      let taskKind: 'red' | 'amber' | null = null
+      let taskLabel: string | null = null
+      let taskDays = Infinity
+      if (nextDue) {
+        const d = daysUntilSydney(nextDue, now)
+        taskDays = d
+        if (d < 0) { taskKind = 'red'; taskLabel = `Task overdue by ${-d} day${-d === 1 ? '' : 's'}` }
+        else if (d <= 2) { taskKind = 'amber'; taskLabel = d === 0 ? 'Task due today' : `Task due in ${d} day${d === 1 ? '' : 's'}` }
+      }
+      let shootDays = Infinity
+      let shootLabel: string | null = null
+      if (shootAt) {
+        const s = daysUntilSydney(shootAt, now)
+        if (s >= 0 && s <= 2) { shootDays = s; shootLabel = s === 0 ? 'Shoot today' : `Shoot in ${s} day${s === 1 ? '' : 's'}` }
+      }
+      if (taskKind === 'red') { alert = 'red'; alertLabel = taskLabel }
+      else if (taskKind === 'amber' || shootLabel) {
+        alert = 'amber'
+        alertLabel = shootLabel && shootDays <= taskDays ? shootLabel : (taskLabel ?? shootLabel)
+      }
+    }
+
     return {
       id: p.id,
       code: p.code,
@@ -96,9 +132,14 @@ export default async function JobsPage({
       label,
 
       closed: CLOSED_STATUSES.has(p.lifecycleStatus),
+      cancelled,
+      completed: checklistDone,
+      stageKey: next?.stage ?? null,
+      pct,
+      shootAt,
       enquiredAt: p.enquiryReceivedAt,
-      nextTask: next?.title ?? null,
-      nextStage: next?.stage ?? null,
+      alert,
+      alertLabel,
     }
   })
 
@@ -106,8 +147,8 @@ export default async function JobsPage({
     const needle = q.toLowerCase()
     rows = rows.filter((r) => [r.client, r.name, r.code].some((f) => f.toLowerCase().includes(needle)))
   }
-  if (task === 'has') rows = rows.filter((r) => r.nextTask != null)
-  if (task === 'none') rows = rows.filter((r) => r.nextTask == null)
+  if (task === 'has') rows = rows.filter((r) => r.pct != null && !r.completed)
+  if (task === 'none') rows = rows.filter((r) => r.pct == null || r.completed)
 
   const activeCount = rows.filter((r) => !r.closed).length
   const completedCount = rows.filter((r) => r.closed).length
@@ -116,7 +157,10 @@ export default async function JobsPage({
 
   if (sort === 'oldest') rows = [...rows].sort((a, b) => a.enquiredAt.getTime() - b.enquiredAt.getTime())
   else if (sort === 'client-asc') rows = [...rows].sort((a, b) => a.client.localeCompare(b.client))
-  else if (sort === 'stage') rows = [...rows].sort((a, b) => stageRank(a.nextStage) - stageRank(b.nextStage) || b.enquiredAt.getTime() - a.enquiredAt.getTime())
+  else if (sort === 'stage') rows = [...rows].sort((a, b) => stageRank(a.stageKey) - stageRank(b.stageKey) || b.enquiredAt.getTime() - a.enquiredAt.getTime())
+
+  const alertRank = (a: JobRow['alert']) => (a === 'red' ? 0 : a === 'amber' ? 1 : 2)
+  rows = [...rows].sort((a, b) => alertRank(a.alert) - alertRank(b.alert))
 
   const listQs = new URLSearchParams()
   if (q) listQs.set('q', q)
@@ -140,27 +184,13 @@ export default async function JobsPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="jobs" bareHeader>
-      <div className="w-full">
-        <div className="text-xs font-semibold uppercase tracking-widest text-muted">Studio</div>
-        <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
-          <div className="max-w-md">
-            <h1 className="text-3xl font-semibold text-ink">Jobs</h1>
-            <p className="mt-1 text-sm text-ink-muted">Booked work from planning through the shoot, editing and delivery.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <form method="get" className="relative">
-              {sort !== JOB_DEFAULT_SORT ? <input type="hidden" name="sort" value={sort} /> : null}
-              {status ? <input type="hidden" name="status" value={status} /> : null}
-              {task ? <input type="hidden" name="task" value={task} /> : null}
-              {tab === 'completed' ? <input type="hidden" name="tab" value={tab} /> : null}
-              <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
-              </svg>
-              <input name="q" defaultValue={q} placeholder="Search jobs" aria-label="Search jobs" className="h-9 w-64 rounded-md border border-line bg-surface pl-9 pr-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent focus:ring-1 focus:ring-accent" />
-            </form>
-            {canEdit ? <AddJobButton csrf={csrf} /> : null}
-          </div>
-        </div>
+      <PageContainer variant="standard">
+        <PageHeader
+          breadcrumb={[DASHBOARD_CRUMB, { label: 'Jobs' }]}
+          title="Jobs"
+          description="Booked work from planning through the shoot, editing and delivery."
+          actions={canEdit ? <AddJobButton csrf={csrf} /> : null}
+        />
 
         <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
           <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Job status">
@@ -186,70 +216,23 @@ export default async function JobsPage({
           </div>
         </div>
 
-        {rows.length === 0 ? (
-          <p className="py-16 text-center text-sm text-ink-muted">
-            {q || status || task
-              ? 'No jobs match these filters.'
-              : tab === 'completed'
-                ? 'No completed jobs yet.'
-                : activeCount + completedCount > 0
-                  ? 'No active jobs right now - everything is complete.'
-                  : 'No jobs yet. Use Add job to create one.'}
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
-                  <th className="py-2 pr-4 font-medium">Client</th>
-                  <th className="py-2 pr-4 font-medium">Job</th>
-                  <th className="py-2 pr-4 font-medium">Enquired</th>
-                  <th className="py-2 pr-4 font-medium">Next task</th>
-                  <th className="py-2 pr-4 font-medium">Status</th>
-                  <th className="w-10 py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id} className="group border-b border-line align-middle transition-colors last:border-b-0 hover:bg-paper">
-                    <td className="py-3 pr-4">
-                      {/* Avatar + name mirror the Clients / Enquiries lists. The primary identifier opens
-                          the JOB (its task workflow), not the client profile - that stays in the row menu. */}
-                      <Link href={`/jobs/${row.id}${backParam}`} className="flex items-center gap-3">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">{initials(row.client)}</span>
-                        <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{row.client}</span>
-                      </Link>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <Link href={`/jobs/${row.id}${backParam}`} className="block">
-                        <span className="block font-medium text-ink transition-colors group-hover:text-accent-ink">{row.name}</span>
-                        <span className="tabular block text-xs text-ink-muted">{row.code}</span>
-                      </Link>
-                    </td>
-                    <td className="tabular py-3 pr-4 text-ink-muted">{formatSydneyDate(row.enquiredAt)}</td>
-                    <td className="py-3 pr-4">
-                      {row.nextTask ? (
-                        <>
-                          <span className="block text-ink">{row.nextTask}</span>
-                          {row.nextStage ? <span className="block text-xs text-ink-muted">{stageLabel(row.nextStage)}</span> : null}
-                        </>
-                      ) : (
-                        <span className="text-ink-muted">No pending task</span>
-                      )}
-                    </td>
-                    <td className="py-3 pr-4">
-                      <StatusPicker projectId={row.id} current={row.label} labels={labels} csrf={csrf} canEdit={canEdit} />
-                    </td>
-                    <td className="py-3">
-                      <JobRowMenu jobId={row.id} clientId={row.clientId} backParam={backParam} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        {/* Table (mt-4 so the active search sits below the toolbar with the same gap as Enquiries). */}
+        <div className="mt-4">
+          {rows.length === 0 ? (
+            <p className="py-16 text-center text-sm text-ink-muted">
+              {q || status || task
+                ? 'No jobs match these filters.'
+                : tab === 'completed'
+                  ? 'No completed jobs yet.'
+                  : activeCount + completedCount > 0
+                    ? 'No active jobs right now - everything is complete.'
+                    : 'No jobs yet. Use Add job to create one.'}
+            </p>
+          ) : (
+            <JobsTable rows={rows} backParam={backParam} />
+          )}
+        </div>
+      </PageContainer>
     </AppShell>
   )
 }

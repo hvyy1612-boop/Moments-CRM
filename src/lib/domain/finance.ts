@@ -5,18 +5,12 @@ import { sydneyLocalToUtc, systemClock } from '@/lib/time'
 import type { CreateInvoiceInput, CreateInvoiceLinesInput, RecordPaymentInput } from '@/lib/validation/finance'
 import { invoicePaidNet, lockInvoiceRow, refreshInvoiceAmountPaid } from './invoice-ledger'
 import { maybeAutoCompleteJob } from './project-workflow'
+import { nextRecordNumber } from './numbering'
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
-async function nextInvoiceNumber(tx: Tx, year: number): Promise<string> {
-  const prefix = `INV-${year}-`
-  const last = await tx.invoice.findFirst({
-    where: { invoiceNumber: { startsWith: prefix } },
-    orderBy: { invoiceNumber: 'desc' },
-    select: { invoiceNumber: true },
-  })
-  const next = last ? Number(last.invoiceNumber.slice(prefix.length)) + 1 : 1
-  return `${prefix}${String(next).padStart(4, '0')}`
+async function nextInvoiceNumber(tx: Tx, companyId: string, at: Date = systemClock.now()): Promise<string> {
+  return nextRecordNumber(tx, companyId, 'INVOICE', at)
 }
 
 export async function createInvoice(
@@ -49,7 +43,7 @@ export async function createInvoiceTx(
 
   const project = await tx.project.findUnique({
     where: { id: projectId },
-    select: { id: true, lifecycleStatus: true, client: { select: { displayName: true, email: true } } },
+    select: { id: true, companyId: true, lifecycleStatus: true, client: { select: { displayName: true, email: true } } },
   })
   if (!project) throw new Error('Project not found.')
   if (project.lifecycleStatus === 'CANCELLED' || project.lifecycleStatus === 'LOST') {
@@ -59,7 +53,7 @@ export async function createInvoiceTx(
   const invoice = await tx.invoice.create({
     data: {
       projectId,
-      invoiceNumber: await nextInvoiceNumber(tx, now.getFullYear()),
+      invoiceNumber: await nextInvoiceNumber(tx, project.companyId, now),
       type: input.type,
       status: 'DRAFT',
       subtotal,
@@ -122,7 +116,7 @@ export async function createInvoiceWithLines(
       return await prisma.$transaction(async (tx) => {
         const project = await tx.project.findUnique({
           where: { id: projectId },
-          select: { id: true, lifecycleStatus: true, client: { select: { displayName: true, email: true } } },
+          select: { id: true, companyId: true, lifecycleStatus: true, client: { select: { displayName: true, email: true } } },
         })
         if (!project) throw new Error('Project not found.')
         if (project.lifecycleStatus === 'CANCELLED' || project.lifecycleStatus === 'LOST') {
@@ -171,7 +165,7 @@ export async function createInvoiceWithLines(
         const invoice = await tx.invoice.create({
           data: {
             projectId,
-            invoiceNumber: wantedNumber || (await nextInvoiceNumber(tx, now.getFullYear())),
+            invoiceNumber: wantedNumber || (await nextInvoiceNumber(tx, project.companyId, now)),
             accessToken,
             type: input.type,
             status: 'DRAFT',
@@ -567,11 +561,12 @@ function invoiceToken(): string {
 
 export async function getInvoiceByToken(token: string) {
   if (!token || token.length < 16) return null
-  return prisma.invoice.findUnique({
+  const inv = await prisma.invoice.findUnique({
     where: { accessToken: token },
     select: {
       invoiceNumber: true, type: true, status: true, total: true,
       amountPaid: true, invoiceDate: true, dueAt: true, poNumber: true, notes: true,
+      creditNotes: { where: { NOT: { status: 'VOIDED' } }, select: { amount: true } },
       billingNameSnapshot: true, billingEmailSnapshot: true,
       lines: { orderBy: { sortOrder: 'asc' }, select: { itemName: true, description: true, quantity: true, unitPrice: true, discount: true, lineTotal: true } },
       project: {
@@ -584,6 +579,10 @@ export async function getInvoiceByToken(token: string) {
       },
     },
   })
+  if (!inv) return null
+
+  const creditsTotal = inv.creditNotes.reduce((s, c) => s.add(c.amount), new Prisma.Decimal(0))
+  return { ...inv, creditsTotal }
 }
 
 export async function saveInvoiceTemplate(name: string, lines: { itemName?: string; description: string; quantity: number; unitPrice: string }[]) {

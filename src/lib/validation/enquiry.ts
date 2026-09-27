@@ -30,5 +30,9 @@ export const enquirySchema = z.object({
   message: optionalText(2000),
   source: optionalText(60),
 })
+  // A person's name is one person: no "&" in first/last name (write "and", or add each person
+  // separately). The single `name` field stays flexible for the public form.
+  .refine((d) => !d.firstName?.includes('&'), { message: "Please write 'and' instead of '&' in a name.", path: ['firstName'] })
+  .refine((d) => !d.lastName?.includes('&'), { message: "Please write 'and' instead of '&' in a name.", path: ['lastName'] })
 
 export type EnquiryInput = z.infer<typeof enquirySchema>

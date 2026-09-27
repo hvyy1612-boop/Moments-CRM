@@ -20,8 +20,9 @@ export type SessionWindow = { expiresAt: Date; absoluteExpiresAt: Date }
 
 export function sessionWindow(now: Date, remember: boolean): SessionWindow {
   const absoluteMs = remember ? REMEMBER_TIMEOUT_MS : ABSOLUTE_TIMEOUT_MS
+  const idleMs = remember ? REMEMBER_TIMEOUT_MS : IDLE_TIMEOUT_MS
   const absoluteExpiresAt = new Date(now.getTime() + absoluteMs)
-  const expiresAt = new Date(Math.min(now.getTime() + IDLE_TIMEOUT_MS, absoluteExpiresAt.getTime()))
+  const expiresAt = new Date(Math.min(now.getTime() + idleMs, absoluteExpiresAt.getTime()))
   return { expiresAt, absoluteExpiresAt }
 }
 
@@ -61,7 +62,9 @@ export async function validateSession(
   if (!session || session.revokedAt) return null
   if (session.absoluteExpiresAt.getTime() <= now.getTime()) return null
   if (session.expiresAt.getTime() <= now.getTime()) return null
-  const nextIdle = new Date(Math.min(now.getTime() + IDLE_TIMEOUT_MS, session.absoluteExpiresAt.getTime()))
+
+  const slid = Math.max(session.expiresAt.getTime(), now.getTime() + IDLE_TIMEOUT_MS)
+  const nextIdle = new Date(Math.min(slid, session.absoluteExpiresAt.getTime()))
   await prisma.session.update({ where: { id: session.id }, data: { expiresAt: nextIdle, lastActiveAt: now } })
   return { userId: session.userId, sessionId: session.id }
 }

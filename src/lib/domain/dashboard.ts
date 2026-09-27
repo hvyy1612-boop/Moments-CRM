@@ -1,10 +1,11 @@
 import { prisma } from '@/lib/db'
 import { stageLabel } from '@/features/projects/workflow'
+import { sydneyLocalToUtc, sydneyYmd } from '@/lib/time'
 import { getInvoiceBalance } from './money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
 
-export type DashboardPeriod = '30d' | '90d' | 'year'
-const PERIOD_DAYS: Record<Exclude<DashboardPeriod, 'year'>, number> = { '30d': 30, '90d': 90 }
+export type DashboardPeriod = 'today' | '7d' | 'month' | 'custom'
+const SYDNEY = 'Australia/Sydney'
 
 export type Bar = { label: string; value: number; sub?: string }
 export type SeriesPoint = { label: string; booked: number; collected: number }
@@ -39,9 +40,44 @@ const INVOICE_COUNTED = ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'PAID', 'OVERDUE'] 
 const INVOICE_UNPAID = ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'OVERDUE'] as const
 const ACTIVE_STAGES_EXCLUDE = ['CANCELLED', 'LOST', 'COMPLETED', 'CLOSED']
 
-function periodStart(period: DashboardPeriod, now: Date): Date {
-  if (period === 'year') return new Date(now.getFullYear(), 0, 1)
-  return new Date(now.getTime() - PERIOD_DAYS[period] * 86_400_000)
+const DAY_MS = 86_400_000
+const pad = (n: number) => String(n).padStart(2, '0')
+const ymdKey = (y: number, m: number, d: number) => `${y}-${pad(m)}-${pad(d)}`
+
+function shiftDays(y: number, m: number, d: number, delta: number): { y: number; m: number; d: number } {
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  dt.setUTCDate(dt.getUTCDate() + delta)
+  return { y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate() }
+}
+
+function nextDayKey(key: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key)
+  if (!m) return null
+  const s = shiftDays(Number(m[1]), Number(m[2]), Number(m[3]), 1)
+  return ymdKey(s.y, s.m, s.d)
+}
+
+function resolveRange(period: DashboardPeriod, from: string | undefined, to: string | undefined, now: Date): { start: Date; end: Date } {
+  const t = sydneyYmd(now)
+  const tomorrow = shiftDays(t.year, t.month, t.day, 1)
+  const endOfToday = sydneyLocalToUtc(`${ymdKey(tomorrow.y, tomorrow.m, tomorrow.d)}T00:00`)
+  const sevenAgo = shiftDays(t.year, t.month, t.day, -6)
+  const default7 = { start: sydneyLocalToUtc(`${ymdKey(sevenAgo.y, sevenAgo.m, sevenAgo.d)}T00:00`), end: endOfToday }
+
+  if (period === 'today') return { start: sydneyLocalToUtc(`${ymdKey(t.year, t.month, t.day)}T00:00`), end: endOfToday }
+  if (period === 'month') return { start: sydneyLocalToUtc(`${ymdKey(t.year, t.month, 1)}T00:00`), end: endOfToday }
+  if (period === 'custom' && from && to) {
+    const toNext = nextDayKey(to)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(from) && toNext) {
+      const start = sydneyLocalToUtc(`${from}T00:00`)
+      const end = sydneyLocalToUtc(`${toNext}T00:00`)
+      if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && start.getTime() < end.getTime()) {
+        return { start, end }
+      }
+    }
+    return default7
+  }
+  return default7
 }
 
 function median(values: number[]): number {
@@ -51,34 +87,44 @@ function median(values: number[]): number {
   return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2
 }
 
-function buckets(start: Date, now: Date, period: DashboardPeriod): { label: string; from: number; to: number }[] {
+function buckets(start: Date, end: Date): { label: string; from: number; to: number }[] {
   const out: { label: string; from: number; to: number }[] = []
-  if (period === '30d') {
+  const days = (end.getTime() - start.getTime()) / DAY_MS
+  const fmtDay = new Intl.DateTimeFormat('en-AU', { timeZone: SYDNEY, day: 'numeric', month: 'short' })
+  const fmtMonth = new Intl.DateTimeFormat('en-AU', { timeZone: SYDNEY, month: 'short' })
 
-    for (let t = start.getTime(); t < now.getTime(); t += 7 * 86_400_000) {
-      const from = t
-      const to = Math.min(t + 7 * 86_400_000, now.getTime())
-      out.push({ label: new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short' }).format(new Date(from)), from, to })
+  if (days <= 14.5) {
+    for (let t = start.getTime(); t < end.getTime(); t += DAY_MS) {
+      out.push({ label: fmtDay.format(new Date(t)), from: t, to: Math.min(t + DAY_MS, end.getTime()) })
+    }
+    return out
+  }
+  if (days <= 92) {
+    for (let t = start.getTime(); t < end.getTime(); t += 7 * DAY_MS) {
+      out.push({ label: fmtDay.format(new Date(t)), from: t, to: Math.min(t + 7 * DAY_MS, end.getTime()) })
     }
     return out
   }
 
-  const cur = new Date(start.getFullYear(), start.getMonth(), 1)
-  while (cur.getTime() <= now.getTime()) {
-    const from = cur.getTime()
-    const next = new Date(cur.getFullYear(), cur.getMonth() + 1, 1)
-    out.push({ label: new Intl.DateTimeFormat('en-AU', { month: 'short' }).format(cur), from, to: next.getTime() })
-    cur.setMonth(cur.getMonth() + 1)
+  let { year, month } = sydneyYmd(start)
+  for (let i = 0; i < 60; i++) {
+    const from = sydneyLocalToUtc(`${ymdKey(year, month, 1)}T00:00`)
+    if (from.getTime() >= end.getTime()) break
+    const nm = month === 12 ? { y: year + 1, m: 1 } : { y: year, m: month + 1 }
+    const next = sydneyLocalToUtc(`${ymdKey(nm.y, nm.m, 1)}T00:00`)
+    out.push({ label: fmtMonth.format(from), from: from.getTime(), to: Math.min(next.getTime(), end.getTime()) })
+    year = nm.y
+    month = nm.m
   }
   return out
 }
 
 const num = (d: { toNumber(): number } | null | undefined): number => (d ? d.toNumber() : 0)
 
-export async function getDashboardData(opts: { period: DashboardPeriod; service: string }): Promise<DashboardData> {
+export async function getDashboardData(opts: { period: DashboardPeriod; service: string; from?: string; to?: string }): Promise<DashboardData> {
   const now = new Date()
-  const start = periodStart(opts.period, now)
-  const prevStart = new Date(start.getTime() - (now.getTime() - start.getTime()))
+  const { start, end } = resolveRange(opts.period, opts.from, opts.to, now)
+  const prevStart = new Date(start.getTime() - (end.getTime() - start.getTime()))
   const svc = opts.service && opts.service !== 'all' ? opts.service : null
   const matchesSvc = (pkgName: string | null | undefined): boolean => !svc || (pkgName ?? 'Other') === svc
 
@@ -89,7 +135,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
       select: { issuedAt: true, createdAt: true, project: { select: { package: { select: { name: true } } } }, ...INVOICE_MONEY_SELECT },
     }),
     prisma.paymentTransaction.findMany({
-      where: { status: 'SUCCEEDED', createdAt: { gte: start } },
+      where: { status: 'SUCCEEDED', createdAt: { gte: start, lt: end } },
       select: { amount: true, type: true, createdAt: true, payment: { select: { invoice: { select: { project: { select: { package: { select: { name: true } } } } } } } } },
     }),
     prisma.project.findMany({
@@ -113,7 +159,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
 
   const services = [...new Set(packages.map((p) => p.name).filter(Boolean))]
 
-  const inPeriodEnq = enquiries.filter((e) => e.createdAt >= start)
+  const inPeriodEnq = enquiries.filter((e) => e.createdAt >= start && e.createdAt < end)
   const bookingDenom = inPeriodEnq.length
   const bookingNum = inPeriodEnq.filter((e) => e.status === 'CONVERTED').length
   const bookingRatePct = bookingDenom ? Math.round((bookingNum / bookingDenom) * 100) : 0
@@ -140,7 +186,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
 
   const svcInvoices = invoices.filter((i) => matchesSvc(i.project?.package?.name))
   const inv = (i: (typeof invoices)[number]) => (i.issuedAt ?? i.createdAt)
-  const periodInvoices = svcInvoices.filter((i) => inv(i) >= start)
+  const periodInvoices = svcInvoices.filter((i) => inv(i) >= start && inv(i) < end)
   const bookedRevenue = periodInvoices.reduce((s, i) => s + num(i.total), 0)
   const prevInvoices = svcInvoices.filter((i) => inv(i) >= prevStart && inv(i) < start)
   const prevBooked = prevInvoices.reduce((s, i) => s + num(i.total), 0)
@@ -168,7 +214,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   }
 
   const svcPayments = payments.filter((p) => matchesSvc(p.payment?.invoice?.project?.package?.name))
-  const bk = buckets(start, now, opts.period)
+  const bk = buckets(start, end)
   const revenueSeries: SeriesPoint[] = bk.map((b) => ({
     label: b.label,
     booked: periodInvoices.filter((i) => { const t = inv(i).getTime(); return t >= b.from && t < b.to }).reduce((s, i) => s + num(i.total), 0),

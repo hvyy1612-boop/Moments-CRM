@@ -272,9 +272,11 @@ export async function toggleProjectTask(taskId: string, actorUserId: string) {
   const completing = task.status !== 'COMPLETED'
 
   const stageRank = new Map(PROJECT_STAGES.map((s, i) => [s.key, i]))
+  const optionalStages = new Set(PROJECT_STAGES.filter((s) => s.optional).map((s) => s.key))
   const rankOf = (t: { stage: string | null; order: number }) =>
     (stageRank.get(t.stage ?? '') ?? 999) * 100_000 + t.order
   const target = rankOf(task)
+  const targetStage = task.stage ?? ''
 
   await prisma.$transaction(async (tx) => {
     if (completing) {
@@ -282,7 +284,11 @@ export async function toggleProjectTask(taskId: string, actorUserId: string) {
         where: { projectId: task.projectId!, status: 'PENDING', type: { not: 'AUTO' } },
         select: { id: true, stage: true, order: true },
       })
-      const ids = pending.filter((t) => rankOf(t) <= target).map((t) => t.id)
+
+      const ids = pending
+        .filter((t) => rankOf(t) <= target)
+        .filter((t) => !optionalStages.has(t.stage ?? '') || (t.stage ?? '') === targetStage)
+        .map((t) => t.id)
       await tx.workItem.updateMany({
         where: { id: { in: ids } },
         data: { status: 'COMPLETED', completedByUserId: actorUserId, completedAt: new Date() },
@@ -323,7 +329,7 @@ const AUTO_COMPLETE_FROM = new Set(['BOOKING_REQUESTED', 'CONFIRMED', 'IN_PRODUC
 export async function maybeAutoCompleteJob(tx: Tx, projectId: string, actorUserId: string | null) {
   const project = await tx.project.findUnique({
     where: { id: projectId },
-    select: { companyId: true, lifecycleStatus: true, invoices: { select: INVOICE_MONEY_SELECT } },
+    select: { companyId: true, lifecycleStatus: true, packagePriceSnapshot: true, invoices: { select: INVOICE_MONEY_SELECT } },
   })
   if (!project || !AUTO_COMPLETE_FROM.has(project.lifecycleStatus)) return
 
@@ -333,8 +339,18 @@ export async function maybeAutoCompleteJob(tx: Tx, projectId: string, actorUserI
   ])
   if (total === 0 || pending > 0) return
 
-  const { outstanding } = getJobBalance(project.invoices.map(toInvoiceMoneyInput), null)
-  if (outstanding.greaterThan(0)) return
+  const acceptedQuote = await tx.quoteVersion.findFirst({
+    where: { quote: { projectId }, status: 'ACCEPTED' },
+    orderBy: { acceptedByClientAt: 'desc' },
+    select: { total: true },
+  })
+  const agreed = acceptedQuote?.total ?? project.packagePriceSnapshot ?? null
+  const bal = getJobBalance(project.invoices.map(toInvoiceMoneyInput), agreed)
+
+  const settled = bal.agreedValueKnown
+    ? bal.isFullySettled
+    : bal.outstanding.lessThanOrEqualTo(0) && bal.overpaymentToResolve.lessThanOrEqualTo(0)
+  if (!settled) return
 
   await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'COMPLETED' } })
   await tx.auditLog.create({

@@ -5,10 +5,12 @@ import { Prisma, type ClientSource, type ClientType } from '@prisma/client'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { formatSydneyDate } from '@/lib/time'
-import { titleCase } from '@/lib/text'
 import { AppShell } from '../AppShell'
-import { ClientRowMenu } from './ClientRowMenu'
+import { PageContainer } from '@/components/PageContainer'
+import { PageHeader } from '@/components/PageHeader'
+import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
+import { ClientsTable } from './ClientsTable'
+import { ImportedBanner } from './ImportedBanner'
 import { SortSelect, DEFAULT_SORT, type SortValue } from './SortSelect'
 import { FilterMenu } from './FilterMenu'
 import { ColumnsMenu } from './ColumnsMenu'
@@ -31,17 +33,10 @@ function orderFor(sort: SortValue): Prisma.ClientOrderByWithRelationInput {
   }
 }
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '?'
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
-  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
-}
-
 export default async function ClientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; sort?: string; source?: string; type?: string; jobs?: string }>
+  searchParams: Promise<{ q?: string; sort?: string; source?: string; type?: string; jobs?: string; imported?: string }>
 }) {
   const user = await requireRole('/clients')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
@@ -50,6 +45,7 @@ export default async function ClientsPage({
   const sp = await searchParams
   const q = (sp.q ?? '').trim()
   const sort: SortValue = SORTS.includes(sp.sort as SortValue) ? (sp.sort as SortValue) : DEFAULT_SORT
+  const importedCount = Number.parseInt(sp.imported ?? '', 10) || 0
   const source = sp.source ?? ''
   const type = sp.type ?? ''
   const jobs = sp.jobs ?? ''
@@ -72,10 +68,12 @@ export default async function ClientsPage({
     orderBy: orderFor(sort),
     select: {
       id: true,
+      clientNumber: true,
       displayName: true,
+      firstName: true,
+      lastName: true,
       email: true,
       phone: true,
-      source: true,
       createdAt: true,
       _count: { select: { projects: true } },
     },
@@ -83,10 +81,12 @@ export default async function ClientsPage({
 
   const allRows = clients.map((c) => ({
     id: c.id,
+    number: c.clientNumber,
     name: c.displayName,
+    firstName: c.firstName ?? c.displayName, // fall back to the display name so the name is never blank
+    lastName: c.lastName ?? '',
     email: c.email,
     phone: c.phone,
-    source: titleCase(c.source),
     projects: c._count.projects,
     since: c.createdAt,
   }))
@@ -105,59 +105,46 @@ export default async function ClientsPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
-      <div className="w-full">
-        {/* Header (shared PageHeader pattern: uppercase section eyebrow, then title + description). */}
-        <div className="text-xs font-semibold uppercase tracking-widest text-muted">Studio</div>
-        <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-semibold text-ink">Clients</h1>
-            <p className="mt-1 text-sm text-ink-muted">Manage client profiles and contact information.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <form method="get" className="relative">
-              {sort !== DEFAULT_SORT ? <input type="hidden" name="sort" value={sort} /> : null}
-              <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
-              </svg>
-              <input
-                name="q"
-                defaultValue={q}
-                placeholder="Search clients"
-                aria-label="Search clients"
-                className="h-9 w-64 rounded-md border border-line bg-surface pl-9 pr-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent focus:ring-1 focus:ring-accent"
-              />
-            </form>
-            {/* Import / Export surfaced as primary buttons (were hidden in a "..." menu). Import opens the
-                bulk CSV page; Export is a plain anchor so the CSV route's attachment downloads in place. */}
-            <Link
-              href="/clients/import"
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 3v12" /><path d="m8 11 4 4 4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-              </svg>
-              Import
-            </Link>
-            <a
-              href={exportHref}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 15V3" /><path d="m8 7 4-4 4 4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-              </svg>
-              Export
-            </a>
-            <Link
-              href="/clients/new"
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              Add client
-            </Link>
-          </div>
-        </div>
+      <PageContainer variant="standard">
+        <PageHeader
+          breadcrumb={[DASHBOARD_CRUMB, { label: 'Clients' }]}
+          title="Clients"
+          description="Manage client profiles and contact information."
+          actions={
+            <>
+              {/* Import opens the bulk CSV page; Export is a plain anchor so the CSV attachment downloads in place. */}
+              <Link
+                href="/clients/import"
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 3v12" /><path d="m8 11 4 4 4-4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                </svg>
+                Import
+              </Link>
+              <a
+                href={exportHref}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 15V3" /><path d="m8 7 4-4 4 4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                </svg>
+                Export
+              </a>
+              <Link
+                href="/clients/new"
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                Add client
+              </Link>
+            </>
+          }
+        />
+
+        <ImportedBanner count={importedCount} />
 
         {/* Toolbar */}
         <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
@@ -171,59 +158,17 @@ export default async function ClientsPage({
           </div>
         </div>
 
-        {/* Table */}
-        {rows.length === 0 ? (
-          <p className="py-16 text-center text-sm text-ink-muted">
-            {q ? `No clients match "${q}".` : 'No clients yet. Add your first client above, or convert an enquiry.'}
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="clients-table w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
-                  <th className="py-2 pr-4 font-medium">Client</th>
-                  <th data-col="phone" className="py-2 pr-4 font-medium">Phone</th>
-                  <th data-col="source" className="py-2 pr-4 font-medium">Source</th>
-                  <th data-col="jobs" className="py-2 pr-4 font-medium">Jobs</th>
-                  <th data-col="since" className="py-2 pr-4 font-medium">Client since</th>
-                  <th className="w-10 py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id} className="group border-b border-line transition-colors last:border-b-0 hover:bg-paper">
-                    <td className="py-3 pr-4">
-                      <Link href={`/clients/${row.id}${backParam}`} className="flex items-center gap-3">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-tint text-xs font-semibold text-accent-ink">
-                          {initials(row.name)}
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate font-medium text-ink transition-colors group-hover:text-accent-ink">{row.name}</span>
-                          <span className="block truncate text-xs text-ink-muted">{row.email}</span>
-                        </span>
-                      </Link>
-                    </td>
-                    <td data-col="phone" className="tabular py-3 pr-4 text-ink-muted">{row.phone ?? '-'}</td>
-                    <td data-col="source" className="py-3 pr-4 text-ink-muted">{row.source}</td>
-                    <td data-col="jobs" className="tabular py-3 pr-4 text-ink">{row.projects}</td>
-                    <td data-col="since" className="tabular py-3 pr-4 text-ink-muted">{formatSydneyDate(row.since)}</td>
-                    <td className="py-3">
-                      <ClientRowMenu
-                        clientId={row.id}
-                        name={row.name}
-                        email={row.email}
-                        csrf={csrf}
-                        canDelete={user.role === 'ADMIN'}
-                        backParam={backParam}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        {/* Table (mt-4 so the active search sits below the toolbar with the same gap as Enquiries). */}
+        <div className="mt-4">
+          {rows.length === 0 ? (
+            <p className="py-16 text-center text-sm text-ink-muted">
+              {q ? `No clients match "${q}".` : 'No clients yet. Add your first client above, or convert an enquiry.'}
+            </p>
+          ) : (
+            <ClientsTable rows={rows} csrf={csrf} canDelete={user.role === 'ADMIN'} backParam={backParam} />
+          )}
+        </div>
+      </PageContainer>
     </AppShell>
   )
 }

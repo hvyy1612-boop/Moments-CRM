@@ -56,7 +56,7 @@ async function runCreateFromPackage(input: DirectBookingInput, now: Date) {
       data: {
         companyId: company.id,
         clientId: client.id,
-        code: await nextProjectCode(tx, now.getFullYear()),
+        code: await nextProjectCode(tx, company.id, now),
         name: input.eventType ?? pkg.name,
         lifecycleStatus: 'BOOKING_REQUESTED',
         commercialStatus: 'UNQUOTED',

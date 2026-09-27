@@ -279,8 +279,30 @@ model Company {
   workItems WorkItem[]
   calendarEvents CalendarEvent[]
   invoiceTemplates InvoiceTemplate[]
+  numberCounters NumberCounter[]
 
   @@map("companies")
+}
+
+enum RecordNumberType {
+  CLIENT
+  ENQUIRY
+  QUOTE
+  JOB
+  INVOICE
+}
+
+model NumberCounter {
+  companyId String           @map("company_id") @db.VarChar(30)
+  type      RecordNumberType
+  year      Int
+  value     Int              @default(0)
+  updatedAt DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, type, year])
+  @@map("number_counter")
 }
 
 model User {
@@ -299,6 +321,10 @@ model User {
   failedAttempts     Int       @default(0) @map("failed_attempts")
   lockedUntil        DateTime? @map("locked_until") @db.Timestamptz
   passwordChangedAt  DateTime? @map("password_changed_at") @db.Timestamptz
+  activityPinHash           String?   @map("activity_pin_hash") @db.VarChar(255)
+  activityPinAlgo           String?   @map("activity_pin_algo") @db.VarChar(30)
+  activityPinFailedAttempts Int       @default(0) @map("activity_pin_failed_attempts")
+  activityPinLockedUntil    DateTime? @map("activity_pin_locked_until") @db.Timestamptz
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -385,6 +411,7 @@ model SignInLog {
 model Client {
   id                 String       @id @default(cuid()) @db.VarChar(30)
   companyId          String       @map("company_id") @db.VarChar(30)
+  clientNumber       String?      @map("client_number") @db.VarChar(20)
   type               ClientType   @default(INDIVIDUAL)
   status             ClientStatus @default(PROSPECT)
   source             ClientSource @default(MANUAL)
@@ -420,6 +447,7 @@ model Client {
   calendarEvents         CalendarEvent[]
   noteEntries            ClientNote[]
 
+  @@unique([companyId, clientNumber])
   @@index([companyId])
   @@index([status])
   @@map("clients")
@@ -457,6 +485,7 @@ model Project {
   source               String?          @db.VarChar(50)
   sourceDetail         String?          @map("source_detail") @db.VarChar(255)
   packageId            String?          @map("package_id") @db.VarChar(30)
+  sourceQuoteId        String?          @unique @map("source_quote_id") @db.VarChar(30)
   packagePriceSnapshot Decimal?         @map("package_price_snapshot") @db.Decimal(12, 2)
   confirmToken         String?          @unique @map("confirm_token") @db.VarChar(64)
   confirmedByClientAt  DateTime?        @map("confirmed_by_client_at") @db.Timestamptz
@@ -473,7 +502,8 @@ model Project {
   client                 Client          @relation(fields: [clientId], references: [id], onDelete: Restrict)
   owner                  User?           @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   package                Package?        @relation(fields: [packageId], references: [id], onDelete: SetNull)
-  quotes                 Quote[]
+  quotes                 Quote[]         @relation("ProjectQuotes")
+  sourceQuote            Quote?          @relation("ProjectSourceQuote", fields: [sourceQuoteId], references: [id], onDelete: SetNull)
   contracts              Contract[]
   bookings               Booking[]
   workItems              WorkItem[]
@@ -517,6 +547,7 @@ model Package {
 model Enquiry {
   id                 String        @id @default(cuid()) @db.VarChar(30)
   companyId          String        @map("company_id") @db.VarChar(30)
+  enquiryNumber      String?       @map("enquiry_number") @db.VarChar(20)
   ownerUserId        String?       @map("owner_user_id") @db.VarChar(30)
   name               String        @db.VarChar(150)
   firstName          String?       @map("first_name") @db.VarChar(80)
@@ -555,9 +586,11 @@ model Enquiry {
   client           Client?  @relation("ClientEnquiries", fields: [clientId], references: [id], onDelete: SetNull)
   convertedClient  Client?  @relation("EnquiryConvertedClient", fields: [convertedClientId], references: [id], onDelete: SetNull)
   convertedProject Project? @relation("EnquiryConvertedProject", fields: [convertedProjectId], references: [id], onDelete: SetNull)
+  quotes           Quote[]  @relation("EnquiryQuotes")
   communications   Communication[]
   workItems        WorkItem[]
 
+  @@unique([companyId, enquiryNumber])
   @@index([companyId])
   @@index([status])
   @@index([email])
@@ -567,18 +600,24 @@ model Enquiry {
 
 model Quote {
   id               String      @id @default(cuid()) @db.VarChar(30)
-  projectId        String      @map("project_id") @db.VarChar(30)
+  enquiryId        String?     @map("enquiry_id") @db.VarChar(30)
+  projectId        String?     @map("project_id") @db.VarChar(30)
+  seq              Int?
+  reference        String?     @db.VarChar(60)
   viewToken        String      @unique @map("view_token") @db.VarChar(64)
   status           QuoteStatus @default(DRAFT)
   currentVersionId String?     @unique @map("current_version_id") @db.VarChar(30)
   createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  project        Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  enquiry        Enquiry?       @relation("EnquiryQuotes", fields: [enquiryId], references: [id], onDelete: SetNull)
+  project        Project?       @relation("ProjectQuotes", fields: [projectId], references: [id], onDelete: Restrict)
+  sourcedProject Project?       @relation("ProjectSourceQuote")
   currentVersion QuoteVersion?  @relation("QuoteCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
   versions       QuoteVersion[] @relation("QuoteVersions")
 
   @@index([projectId])
+  @@index([enquiryId])
   @@map("quotes")
 }
 
@@ -592,6 +631,11 @@ model QuoteVersion {
   discountTotal        Decimal        @default(0) @map("discount_total") @db.Decimal(12, 2)
   taxTotal             Decimal        @default(0) @map("tax_total") @db.Decimal(12, 2)
   total                Decimal        @default(0) @db.Decimal(12, 2)
+  introduction         String?        @db.Text
+  poNumber             String?        @map("po_number") @db.VarChar(60)
+  notes                String?        @db.Text
+  depositPercent       Int?           @map("deposit_percent")
+  issueDate            DateTime?      @map("issue_date") @db.Timestamptz
   validUntil           DateTime?      @map("valid_until") @db.Timestamptz
   createdByUserId      String?        @map("created_by_user_id") @db.VarChar(30)
   sentToClientAt       DateTime?      @map("sent_to_client_at") @db.Timestamptz
@@ -621,6 +665,7 @@ model QuoteLine {
   lineType       String   @default("custom") @map("line_type") @db.VarChar(30)
   referenceId    String?  @map("reference_id") @db.VarChar(30)
   description    String   @db.VarChar(500)
+  details        String?  @db.Text
   quantity       Int      @default(1)
   unitPrice      Decimal  @default(0) @map("unit_price") @db.Decimal(12, 2)
   discount       Decimal  @default(0) @db.Decimal(12, 2)

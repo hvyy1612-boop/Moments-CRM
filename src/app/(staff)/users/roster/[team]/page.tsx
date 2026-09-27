@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
+import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
@@ -10,6 +10,7 @@ import { StaffRosterDoc, type RosterRow } from '@/components/StaffRosterDoc'
 import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
 import { AppShell } from '../../../AppShell'
+import { PageContainer } from '@/components/PageContainer'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Staff roster - Moments' }
@@ -59,17 +60,17 @@ export default async function StaffRosterPage({ params }: { params: Promise<{ te
     <>
       <div className="print:hidden">
         <AppShell user={user} csrf={csrf} active="users">
-          <div className="mx-auto max-w-3xl">
-            <Link href="/users" className="text-sm font-bold text-accent hover:underline">← Users</Link>
+          <PageContainer variant="narrow">
+            <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Users', href: '/users' }, { label: `${teamDef.label} roster` }]} />
             <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-              <h1 className="font-serif text-2xl font-semibold text-ink">{teamDef.label} roster</h1>
+              <h1 className="font-serif text-xl font-semibold text-ink">{teamDef.label} roster</h1>
               <PrintButton label="Download PDF" />
             </div>
             <p className="mt-1 text-sm text-ink-muted">
               Active accounts only. Use your browser&rsquo;s &ldquo;Save as PDF&rdquo; in the print dialog.
             </p>
             <div className="mt-5">{doc}</div>
-          </div>
+          </PageContainer>
         </AppShell>
       </div>
 

@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
 import type { AddGalleryItemInput, CreateGalleryInput } from '@/lib/validation/delivery'
+import { maybeAutoCompleteJob } from './project-workflow'
 
 const POST_CONFIRMATION = ['CONFIRMED', 'IN_PRODUCTION', 'COMPLETED']
 
@@ -99,10 +100,8 @@ export async function publishGallery(galleryId: string, actorUserId: string | nu
       where: { id: galleryId },
       data: { status: 'PUBLISHED', publishedAt: now },
     })
-    await tx.project.update({
-      where: { id: gallery.projectId },
-      data: { lifecycleStatus: 'COMPLETED' },
-    })
+
+    await maybeAutoCompleteJob(tx, gallery.projectId, actorUserId)
     await tx.auditLog.create({
       data: {
         action: 'gallery.published',
