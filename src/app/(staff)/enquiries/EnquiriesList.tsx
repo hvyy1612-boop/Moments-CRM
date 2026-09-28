@@ -89,7 +89,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
   ]
 
   return (
-    <PageContainer variant="standard">
+    <PageContainer variant="full">
       <PageHeader
         breadcrumb={[DASHBOARD_CRUMB, { label: 'Enquiries' }]}
         title="Enquiries"

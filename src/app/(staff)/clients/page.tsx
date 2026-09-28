@@ -107,7 +107,7 @@ export default async function ClientsPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
-      <PageContainer variant="standard">
+      <PageContainer variant="full">
         <PageHeader
           breadcrumb={[DASHBOARD_CRUMB, { label: 'Clients' }]}
           title="Clients"

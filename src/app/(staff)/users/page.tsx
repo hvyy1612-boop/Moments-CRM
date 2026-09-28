@@ -53,7 +53,7 @@ export default async function UsersPage() {
 
   return (
     <AppShell user={user} csrf={csrf} active="users">
-      <PageContainer variant="standard">
+      <PageContainer variant="full">
         <PageHeader
           breadcrumb={[DASHBOARD_CRUMB, { label: 'Users' }]}
           title="Users"

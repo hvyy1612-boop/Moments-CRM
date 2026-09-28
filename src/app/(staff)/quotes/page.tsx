@@ -39,7 +39,7 @@ export default async function QuotesPage() {
   return (
     <AppShell user={user} csrf={csrf} active="quotes">
       {/* Content measure so the table fills a normal wide screen without sprawling (shared with the other lists). */}
-      <PageContainer variant="standard">
+      <PageContainer variant="full">
         <PageHeader
           breadcrumb={[DASHBOARD_CRUMB, { label: 'Quotes' }]}
           title="Quotes"

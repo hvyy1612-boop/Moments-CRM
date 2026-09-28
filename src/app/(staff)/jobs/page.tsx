@@ -203,7 +203,7 @@ export default async function JobsPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="jobs" bareHeader>
-      <PageContainer variant="standard">
+      <PageContainer variant="full">
         <PageHeader
           breadcrumb={[DASHBOARD_CRUMB, { label: 'Jobs' }]}
           title="Jobs"

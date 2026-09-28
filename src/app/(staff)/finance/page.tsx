@@ -98,7 +98,7 @@ export default async function FinancePage() {
 
   return (
     <AppShell user={user} csrf={csrf} active="finance" bareHeader>
-      <PageContainer variant="standard">
+      <PageContainer variant="full">
         <PageHeader
           breadcrumb={[DASHBOARD_CRUMB, { label: 'Payments' }]}
           title="Payments"
