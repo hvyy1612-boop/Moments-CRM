@@ -8,10 +8,8 @@ import { Prisma, type EnquiryStatus } from '@prisma/client'
 import { StatusTag } from '@/components/ui/StatusTag'
 import { Button } from '@/components/ui/Button'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
-import { ensureClientPortalToken } from '@/lib/domain/client'
 import { getInvoiceBalance } from '@/lib/domain/money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
-import { CopyLinkField } from '@/components/ui/CopyLinkField'
 import { ClientNotesList } from './ClientNotesList'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
@@ -19,11 +17,9 @@ import { formatAud } from '@/lib/money'
 import { titleCase } from '@/lib/text'
 import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
 import { statusKind, statusLabel } from '@/features/projects/lifecycle'
-import { ENQUIRY_STAGE_LABEL, ENQUIRY_STAGE_KIND, OPEN_STATUSES, waitingLabel } from '@/features/enquiries/status'
-import { currentActionText } from '@/features/enquiries/workflow'
+import { ENQUIRY_STAGE_LABEL, ENQUIRY_STAGE_KIND, OPEN_STATUSES } from '@/features/enquiries/status'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
-import { setClientConsentAction } from '../actions'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { DeleteClientButton } from './DeleteClientButton'
 import { InvoiceActions } from './InvoiceActions'
@@ -180,7 +176,6 @@ export default async function ClientDetailPage({
     },
   })
   if (!client) notFound()
-  const portalToken = await ensureClientPortalToken(client.id)
 
   const [enquiries, communications, invoiceList] = await Promise.all([
     prisma.enquiry.findMany({
@@ -195,14 +190,12 @@ export default async function ClientDetailPage({
         id: true,
         eventType: true,
         status: true,
-        waitingOn: true,
         createdAt: true,
-        workItems: {
-          where: { status: 'PENDING' },
-          orderBy: { order: 'asc' },
-          take: 1,
-          select: { title: true },
-        },
+        partnerName: true,
+        eventDate: true,
+        coverage: true,
+        ceremonyLocation: true,
+        heardAbout: true,
       },
     }),
     prisma.communication.findMany({
@@ -337,27 +330,6 @@ export default async function ClientDetailPage({
               />
             </SectionCard>
 
-            <SectionCard title="Consent" icon={<IconMail />}>
-              <p className="text-sm text-ink">
-                Marketing consent: <span className="font-semibold">{client.marketingConsent ? 'Given' : 'Not given'}</span>
-              </p>
-              {client.consentUpdatedAt ? (
-                <p className="text-xs text-muted">Updated {formatSydneyDate(client.consentUpdatedAt)}</p>
-              ) : null}
-              <form action={setClientConsentAction} className="mt-3">
-                <input type="hidden" name="csrf" value={csrf} />
-                <input type="hidden" name="clientId" value={client.id} />
-                <input type="hidden" name="consent" value={client.marketingConsent ? 'false' : 'true'} />
-                <Button type="submit" variant="secondary" size="sm">
-                  {client.marketingConsent ? 'Withdraw consent' : 'Mark consented'}
-                </Button>
-              </form>
-            </SectionCard>
-
-            <SectionCard title="Client portal" icon={<IconMail />}>
-              <p className="text-sm text-ink-muted">One link for the client to see all their jobs, invoices, galleries and questionnaires.</p>
-              <CopyLinkField path={`/portal/${portalToken}`} />
-            </SectionCard>
           </div>
 
           {/* Right: activity */}
@@ -378,12 +350,12 @@ export default async function ClientDetailPage({
                         </StatusTag>
                       </div>
                       <div className="flex flex-col gap-1">
+                        {e.partnerName ? <Fact label="Partner" value={e.partnerName} /> : null}
+                        {e.eventDate ? <Fact label="Event date" value={formatSydneyDate(e.eventDate)} /> : null}
+                        {e.coverage ? <Fact label="Coverage" value={e.coverage} /> : null}
+                        {e.ceremonyLocation ? <Fact label="Location" value={e.ceremonyLocation} /> : null}
+                        {e.heardAbout ? <Fact label="Heard via" value={e.heardAbout} /> : null}
                         <Fact label="Received" value={formatSydneyDate(e.createdAt)} />
-                        <Fact label="Waiting on" value={waitingLabel(e.waitingOn)} />
-                        <Fact
-                          label="Next task"
-                          value={currentActionText(e.waitingOn, e.workItems[0]?.title ?? null)}
-                        />
                       </div>
                       <div className="mt-2.5">
                         <Link href={`/enquiries/${e.id}`} className="text-sm font-bold text-accent-ink hover:underline">
