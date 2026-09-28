@@ -165,12 +165,12 @@ export function OverviewTab({
           }
         >
           {addReq ? (
-            <form action={addRequirementAction} className="mb-4 flex flex-col gap-2 rounded border border-accent bg-paper p-3">
+            <form action={async (fd) => { await addRequirementAction(fd); setAddReq(false) }} className="mb-4 flex flex-col gap-2 rounded border border-accent bg-paper p-3">
               {hidden}
               <input name="label" required placeholder="Requirement (e.g. Photography style)" className={field} />
               <textarea name="detail" required placeholder="Details..." rows={2} className={field} />
               <div className="flex gap-2">
-                <button type="submit" className={btnPrimary} onClick={() => setAddReq(false)}>Add</button>
+                <button type="submit" className={btnPrimary}>Add</button>
                 <button type="button" onClick={() => setAddReq(false)} className={btnGhost}>Cancel</button>
               </div>
             </form>
@@ -211,7 +211,7 @@ export function OverviewTab({
           }
         >
           {editContact ? (
-            <form action={updateClientContactAction} className="mb-4 flex flex-col gap-2 rounded border border-accent bg-paper p-3">
+            <form action={async (fd) => { await updateClientContactAction(fd); setEditContact(false) }} className="mb-4 flex flex-col gap-2 rounded border border-accent bg-paper p-3">
               {hidden}
               <input type="hidden" name="clientId" value={client.clientId} />
               <input name="partnerName" defaultValue={client.partnerName ?? ''} placeholder="Partner" className={field} />
@@ -220,7 +220,7 @@ export function OverviewTab({
               <input name="instagram" defaultValue={client.instagram ?? ''} placeholder="Instagram handle" className={field} />
               <textarea name="notes" defaultValue={client.notes ?? ''} placeholder="Notes" rows={2} className={field} />
               <div className="flex gap-2">
-                <button type="submit" className={btnPrimary} onClick={() => setEditContact(false)}>Save</button>
+                <button type="submit" className={btnPrimary}>Save</button>
                 <button type="button" onClick={() => setEditContact(false)} className={btnGhost}>Cancel</button>
               </div>
             </form>
@@ -281,7 +281,7 @@ export function OverviewTab({
           }
         >
           {editTeam ? (
-            <form action={addTeamMemberAction} className="mb-4 flex flex-col gap-2 rounded border border-accent bg-paper p-3">
+            <form action={async (fd) => { await addTeamMemberAction(fd); setEditTeam(false) }} className="mb-4 flex flex-col gap-2 rounded border border-accent bg-paper p-3">
               {hidden}
               <div className="flex flex-wrap gap-2">
                 {resources.length > 0 ? (
@@ -296,7 +296,7 @@ export function OverviewTab({
               </div>
               {resources.length > 0 ? <input name="name" placeholder="Or type a name (if not listed)" className={field} /> : null}
               <div className="flex gap-2">
-                <button type="submit" className={btnPrimary} onClick={() => setEditTeam(false)}>Add</button>
+                <button type="submit" className={btnPrimary}>Add</button>
                 <button type="button" onClick={() => setEditTeam(false)} className={btnGhost}>Cancel</button>
               </div>
             </form>
@@ -412,7 +412,7 @@ export function OverviewTab({
                 ))}
               </ul>
               {addingMessage ? (
-                <form action={logProjectClientReplyAction} onSubmit={() => setAddingMessage(false)} className="mt-4 flex flex-col gap-2 border-t border-line pt-4">
+                <form action={async (fd) => { await logProjectClientReplyAction(fd); setAddingMessage(false) }} className="mt-4 flex flex-col gap-2 border-t border-line pt-4">
                   {hidden}
                   <textarea name="body" required rows={2} autoFocus placeholder="Paste what the client said..." className={field} />
                   <div className="flex gap-2">
@@ -435,7 +435,7 @@ export function OverviewTab({
                     <Avatar name={n.author} />
                     <div className="min-w-0 flex-1">
                       {editingNoteId === n.id ? (
-                        <form action={editInternalNoteAction} className="flex flex-col gap-2" onSubmit={() => setEditingNoteId(null)}>
+                        <form action={async (fd) => { await editInternalNoteAction(fd); setEditingNoteId(null) }} className="flex flex-col gap-2">
                           {hidden}
                           <input type="hidden" name="communicationId" value={n.id} />
                           <div className="flex flex-wrap items-baseline gap-x-2">
@@ -468,7 +468,7 @@ export function OverviewTab({
                 ))}
               </ul>
               {addingNote ? (
-                <form action={addInternalNoteAction} onSubmit={() => setAddingNote(false)} className="mt-4 flex flex-col gap-2 border-t border-line pt-4">
+                <form action={async (fd) => { await addInternalNoteAction(fd); setAddingNote(false) }} className="mt-4 flex flex-col gap-2 border-t border-line pt-4">
                   {hidden}
                   <textarea name="body" required rows={2} autoFocus placeholder="Note for the team (not shown to the client)..." className={field} />
                   <div className="flex gap-2">
