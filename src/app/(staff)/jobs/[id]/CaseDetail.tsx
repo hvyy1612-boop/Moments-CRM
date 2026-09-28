@@ -92,7 +92,7 @@ const menuLink = 'block w-full px-3 py-2 text-left text-sm text-ink hover:bg-pap
 function Card({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
     <section className="rounded border border-line bg-surface p-5">
-      {title ? <h2 className="text-lg">{title}</h2> : null}
+      {title ? <h2 className="text-lg font-semibold text-ink">{title}</h2> : null}
       {children}
     </section>
   )
@@ -484,7 +484,7 @@ export async function CaseDetail({
             <div className="flex flex-col gap-4">
               <section className="rounded border border-line bg-surface p-5">
                 <div className="flex flex-wrap items-baseline justify-between gap-3">
-                  <h2 className="text-lg">Quote</h2>
+                  <h2 className="text-lg font-semibold text-ink">Quote</h2>
                   {version ? <StatusPill tone={QUOTE_TONE[version.status] ?? 'neutral'}>{label(version.status)}</StatusPill> : null}
                 </div>
                 {!quote || !version ? (
@@ -553,7 +553,7 @@ export async function CaseDetail({
               {quoteAccepted ? (
                 <section className="rounded border border-line bg-surface p-5">
                   <div className="flex flex-wrap items-baseline justify-between gap-3">
-                    <h2 className="text-lg">Contract</h2>
+                    <h2 className="text-lg font-semibold text-ink">Contract</h2>
                     {contractVersion ? <StatusPill tone={CONTRACT_TONE[contractVersion.status] ?? 'neutral'}>{label(contractVersion.status)}</StatusPill> : null}
                   </div>
                   {!contract || !contractVersion ? (
@@ -583,7 +583,7 @@ export async function CaseDetail({
                 <section className="rounded border border-line bg-surface p-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h2 className="text-lg">Invoices &amp; payments</h2>
+                      <h2 className="text-lg font-semibold text-ink">Invoices &amp; payments</h2>
                       <p className="mt-1 text-sm text-ink-muted">
                         {invoiceCount} invoice{invoiceCount === 1 ? '' : 's'} · {formatAud(invoiceOutstanding)} outstanding · managed in Payments.
                       </p>

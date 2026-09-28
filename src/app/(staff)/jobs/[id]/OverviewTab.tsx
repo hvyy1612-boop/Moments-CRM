@@ -99,7 +99,7 @@ function Card({
         <div className="flex items-start gap-2.5">
           <span className="mt-0.5 text-ink-muted">{icon}</span>
           <div>
-            <h2 className="text-base font-bold text-ink">{title}</h2>
+            <h2 className="text-lg font-semibold text-ink">{title}</h2>
             {subtitle ? <p className="text-sm text-muted">{subtitle}</p> : null}
           </div>
         </div>
@@ -182,8 +182,8 @@ export function OverviewTab({
             <dl className="flex flex-col divide-y divide-line">
               {requirements.map((r) => (
                 <div key={r.id} className="group flex items-start justify-between gap-4 py-2.5 first:pt-0">
-                  <div className="grid flex-1 gap-1 sm:grid-cols-[160px_minmax(0,1fr)]">
-                    <dt className="text-sm font-bold text-ink">{r.label}</dt>
+                  <div className="flex flex-1 flex-col gap-1 sm:flex-row sm:gap-4">
+                    <dt className="text-sm font-bold text-ink sm:w-40 sm:shrink-0">{r.label}</dt>
                     <dd className="text-sm text-ink-muted">{r.detail}</dd>
                   </div>
                   <form action={deleteRequirementAction} className="opacity-0 transition-opacity group-hover:opacity-100">
@@ -374,7 +374,7 @@ export function OverviewTab({
           <div className="flex items-start gap-2.5">
             <span className="mt-0.5 text-ink-muted"><IconChat className="h-5 w-5" /></span>
             <div>
-              <h2 className="text-base font-bold text-ink">Activity &amp; communication</h2>
+              <h2 className="text-lg font-semibold text-ink">Activity &amp; communication</h2>
               <p className="text-sm text-muted">Recent messages with the client and internal team notes.</p>
             </div>
           </div>
