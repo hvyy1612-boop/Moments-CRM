@@ -223,7 +223,7 @@ export function PaymentsView({ rows, csrf }: { rows: Row[]; csrf: string }) {
                 Delete
               </button>
             </form>
-            <button type="button" onClick={() => setSelected(new Set())} className="rounded-md px-2.5 py-1 text-sm text-ink-muted transition-colors hover:bg-paper hover:text-ink">Clear</button>
+            <button type="button" onClick={() => setSelected(new Set())} className="rounded-md px-2.5 py-1 text-sm text-ink-muted transition-colors hover:bg-paper hover:text-ink">Cancel</button>
           </div>
         ) : null}
       </div>
