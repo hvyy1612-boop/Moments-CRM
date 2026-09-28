@@ -160,6 +160,20 @@ export async function CaseDetail({
   const taskTimes: Record<string, string> = {}
   for (const w of taskOverrides) if (w.dueOverrideAt) taskTimes[w.id] = sydneyDateTimeParts(w.dueOverrideAt).time
 
+  // Internal team notes (client-facing messages are not shown here) for the Notes section.
+  const internalNotes = await prisma.communication.findMany({
+    where: { projectId: project.id, internal: true },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      body: true,
+      createdAt: true,
+      editedAt: true,
+      by: { select: { name: true } },
+      editedBy: { select: { name: true } },
+    },
+  })
+
   // Active resources for the "Assigned team" picker (independent of booking confirmation).
   const teamResourceOptions = await prisma.resource.findMany({
     where: { companyId: project.companyId, status: 'active' },
@@ -245,7 +259,20 @@ export async function CaseDetail({
     notes: project.client.notes,
     href: `/clients/${project.client.id}`,
   }
-  const overviewRequirements = project.requirements.map((r) => ({ id: r.id, label: r.label, detail: r.detail }))
+  const overviewRequirements = project.requirements.map((r) => ({
+    id: r.id,
+    label: r.label,
+    detail: r.detail,
+    addedLabel: formatSydneyDateTime(r.createdAt),
+  }))
+  const overviewNotes = internalNotes.map((n) => ({
+    id: n.id,
+    author: n.by?.name ?? 'Staff',
+    body: n.body,
+    dateLabel: formatSydneyDateTime(n.createdAt),
+    editedByName: n.editedBy?.name ?? null,
+    editedLabel: n.editedAt ? formatSydneyDateTime(n.editedAt) : null,
+  }))
   const overviewTeam = project.teamMembers.map((t) => ({ id: t.id, name: t.name, role: t.role, email: t.resource?.linkedUser?.email ?? null }))
   const overviewUpcoming = {
     nextAction: board?.nextAction ?? null,
@@ -365,6 +392,7 @@ export async function CaseDetail({
               csrf={csrf}
               client={overviewClient}
               requirements={overviewRequirements}
+              notes={overviewNotes}
               team={overviewTeam}
               resources={teamResourceOptions}
               upcoming={overviewUpcoming}

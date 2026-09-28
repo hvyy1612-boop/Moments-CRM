@@ -2,9 +2,11 @@
 
 import { useState } from 'react'
 import {
+  addInternalNoteAction,
   addRequirementAction,
   addTeamMemberAction,
   deleteRequirementAction,
+  editInternalNoteAction,
   removeTeamMemberAction,
   updateClientContactAction,
 } from '../actions'
@@ -23,7 +25,8 @@ import {
   IconUsers,
 } from './icons'
 
-export type ReqRow = { id: string; label: string; detail: string }
+export type ReqRow = { id: string; label: string; detail: string; addedLabel: string }
+export type NoteRow = { id: string; author: string; body: string; dateLabel: string; editedByName: string | null; editedLabel: string | null }
 export type TeamRow = { id: string; name: string; role: string; email: string | null }
 export type ResourceOpt = { id: string; name: string }
 export type NextAction =
@@ -55,6 +58,18 @@ export type Upcoming = {
 const field = 'w-full rounded border border-line-strong bg-surface px-3 py-2 text-sm text-ink'
 const btnGhost = 'rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink'
 const addBtn = 'inline-flex items-center gap-1 rounded border border-line-strong px-2.5 py-1.5 text-sm font-bold text-ink-muted hover:text-ink'
+
+function initials(name: string) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '?'
+}
+
+function Avatar({ name }: { name: string }) {
+  return (
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sunk text-xs font-bold text-ink-muted">
+      {initials(name)}
+    </span>
+  )
+}
 
 function Card({
   icon,
@@ -93,6 +108,7 @@ export function OverviewTab({
   csrf,
   client,
   requirements,
+  notes,
   team,
   resources,
   upcoming,
@@ -101,13 +117,18 @@ export function OverviewTab({
   csrf: string
   client: ClientInfo
   requirements: ReqRow[]
+  notes: NoteRow[]
   team: TeamRow[]
   resources: ResourceOpt[]
   upcoming: Upcoming
 }) {
+  const [noteView, setNoteView] = useState<'requirements' | 'internal'>('requirements')
   const [addReq, setAddReq] = useState(false)
   const [addMember, setAddMember] = useState(false)
   const [editContact, setEditContact] = useState(false)
+  const [addingNote, setAddingNote] = useState(false)
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const editingNote = editingNoteId ? notes.find((n) => n.id === editingNoteId) ?? null : null
 
   const hidden = (
     <>
@@ -120,50 +141,91 @@ export function OverviewTab({
     <div className="flex flex-col gap-4">
       {/* Four cards in two aligned rows (requirements|client info, team|upcoming). */}
       <div className="grid gap-4 lg:grid-cols-5 lg:items-stretch">
-        {/* Client requirements */}
+        {/* Notes: client requirements + internal team notes, chosen from a dropdown. */}
         <Card
           className="lg:col-span-3"
           icon={<IconChecklist className="h-5 w-5" />}
-          title="Client requirements"
-          subtitle="Confirmed preferences, requests and restrictions for this job."
+          title="Notes"
+          subtitle="Client requirements and internal team notes for this job."
           action={
-            <button type="button" onClick={() => setAddReq(true)} className={addBtn}>
-              <IconPlus className="h-4 w-4" /> Add requirement
-            </button>
+            <div className="flex items-center gap-2">
+              <select
+                value={noteView}
+                onChange={(e) => setNoteView(e.target.value as 'requirements' | 'internal')}
+                aria-label="Choose which notes to view"
+                className="rounded border border-line-strong bg-surface px-3 py-1.5 text-sm font-bold text-ink"
+              >
+                <option value="requirements">Client requirements</option>
+                <option value="internal">Internal notes</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => (noteView === 'requirements' ? setAddReq(true) : setAddingNote(true))}
+                className={addBtn}
+              >
+                <IconPlus className="h-4 w-4" /> Add
+              </button>
+            </div>
           }
         >
-          {requirements.length === 0 ? (
-            <p className="text-sm text-ink-muted">No requirements recorded yet.</p>
-          ) : (
-            <table className="w-full table-fixed border-collapse text-sm">
-              <colgroup>
-                <col className="w-56" />
-                <col />
-                <col className="w-20" />
-              </colgroup>
-              <thead>
-                <tr className="border-b border-line">
-                  <th className="pb-2 pr-4 text-left text-xs font-bold uppercase tracking-wide text-muted">Requirement</th>
-                  <th className="pb-2 pr-4 text-left text-xs font-bold uppercase tracking-wide text-muted">Details</th>
-                  <th className="pb-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {requirements.map((r) => (
-                  <tr key={r.id} className="group border-b border-line align-top last:border-b-0">
-                    <td className="py-3 pr-4 font-bold text-ink break-words">{r.label}</td>
-                    <td className="py-3 pr-4 whitespace-pre-line break-words text-ink-muted">{r.detail}</td>
-                    <td className="py-3 text-right">
-                      <form action={deleteRequirementAction} className="opacity-0 transition-opacity group-hover:opacity-100">
-                        {hidden}
-                        <input type="hidden" name="requirementId" value={r.id} />
-                        <button type="submit" aria-label="Remove requirement" className="text-sm text-muted hover:text-lost-ink">Remove</button>
-                      </form>
-                    </td>
+          {noteView === 'requirements' ? (
+            requirements.length === 0 ? (
+              <p className="text-sm text-ink-muted">No client requirements recorded yet.</p>
+            ) : (
+              <table className="w-full table-fixed border-collapse text-sm">
+                <colgroup>
+                  <col className="w-48" />
+                  <col />
+                  <col className="w-44" />
+                  <col className="w-16" />
+                </colgroup>
+                <thead>
+                  <tr className="border-b border-line">
+                    <th className="pb-2 pr-4 text-left text-xs font-bold uppercase tracking-wide text-muted">Requirement</th>
+                    <th className="pb-2 pr-4 text-left text-xs font-bold uppercase tracking-wide text-muted">Details</th>
+                    <th className="pb-2 pr-4 text-left text-xs font-bold uppercase tracking-wide text-muted">Added</th>
+                    <th className="pb-2" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {requirements.map((r) => (
+                    <tr key={r.id} className="group border-b border-line align-top last:border-b-0">
+                      <td className="py-3 pr-4 font-bold text-ink break-words">{r.label}</td>
+                      <td className="py-3 pr-4 whitespace-pre-line break-words text-ink-muted">{r.detail}</td>
+                      <td className="py-3 pr-4 text-ink-muted">{r.addedLabel}</td>
+                      <td className="py-3 text-right">
+                        <form action={deleteRequirementAction} className="opacity-0 transition-opacity group-hover:opacity-100">
+                          {hidden}
+                          <input type="hidden" name="requirementId" value={r.id} />
+                          <button type="submit" aria-label="Remove requirement" className="text-sm text-muted hover:text-lost-ink">Remove</button>
+                        </form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          ) : notes.length === 0 ? (
+            <p className="text-sm text-ink-muted">No internal notes yet.</p>
+          ) : (
+            <ul className="flex flex-col divide-y divide-line">
+              {notes.map((n) => (
+                <li key={n.id} className="group flex items-start gap-3 py-3 first:pt-0">
+                  <Avatar name={n.author} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="text-sm font-bold text-ink">{n.author}</span>
+                      <span className="text-xs text-muted">{n.dateLabel}</span>
+                    </div>
+                    <p className="mt-0.5 whitespace-pre-line text-sm text-ink">{n.body}</p>
+                    {n.editedLabel ? (
+                      <p className="mt-1 text-xs text-muted">Edited by {n.editedByName ?? 'staff'} · {n.editedLabel}</p>
+                    ) : null}
+                  </div>
+                  <button type="button" onClick={() => setEditingNoteId(n.id)} className="text-sm font-bold text-accent-ink opacity-0 transition-opacity hover:underline group-hover:opacity-100">Edit</button>
+                </li>
+              ))}
+            </ul>
           )}
         </Card>
 
@@ -357,6 +419,35 @@ export function OverviewTab({
             <button type="submit" className={modalPrimaryBtn}>Save changes</button>
           </ModalFooter>
         </form>
+      </Modal>
+
+      <Modal open={addingNote} onClose={() => setAddingNote(false)} title="Add internal note" description="A note for the team - not shown to the client.">
+        <form action={async (fd) => { await addInternalNoteAction(fd); setAddingNote(false) }} className="flex min-h-0 flex-1 flex-col">
+          <div className={modalBody}>
+            {hidden}
+            <ModalField label="Note"><textarea name="body" required rows={5} placeholder="Note for the team..." className={field} /></ModalField>
+          </div>
+          <ModalFooter>
+            <button type="button" onClick={() => setAddingNote(false)} className={modalCancelBtn}>Cancel</button>
+            <button type="submit" className={modalPrimaryBtn}>Add note</button>
+          </ModalFooter>
+        </form>
+      </Modal>
+
+      <Modal open={Boolean(editingNote)} onClose={() => setEditingNoteId(null)} title="Edit note">
+        {editingNote ? (
+          <form action={async (fd) => { await editInternalNoteAction(fd); setEditingNoteId(null) }} className="flex min-h-0 flex-1 flex-col">
+            <div className={modalBody}>
+              {hidden}
+              <input type="hidden" name="communicationId" value={editingNote.id} />
+              <ModalField label="Note"><textarea name="body" required rows={5} defaultValue={editingNote.body} className={field} /></ModalField>
+            </div>
+            <ModalFooter>
+              <button type="button" onClick={() => setEditingNoteId(null)} className={modalCancelBtn}>Cancel</button>
+              <button type="submit" className={modalPrimaryBtn}>Save</button>
+            </ModalFooter>
+          </form>
+        ) : null}
       </Modal>
     </div>
   )
