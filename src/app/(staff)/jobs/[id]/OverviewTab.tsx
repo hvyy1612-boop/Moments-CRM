@@ -12,6 +12,7 @@ import {
   removeTeamMemberAction,
   updateClientContactAction,
 } from '../actions'
+import { Modal, ModalField, ModalFooter, modalBody, modalCancelBtn, modalPrimaryBtn } from '@/components/ui/Modal'
 import {
   IconCalendar,
   IconChat,
@@ -59,8 +60,8 @@ export type MsgRow = { id: string; author: string; body: string; dateLabel: stri
 export type NoteRow = { id: string; author: string; body: string; dateLabel: string; editedByName: string | null; editedLabel: string | null }
 
 const field = 'w-full rounded border border-line-strong bg-surface px-3 py-2 text-sm text-ink'
-const btnPrimary = 'rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface'
 const btnGhost = 'rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink'
+const addBtn = 'inline-flex items-center gap-1 rounded border border-line-strong px-2.5 py-1.5 text-sm font-bold text-ink-muted hover:text-ink'
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '?'
@@ -128,12 +129,13 @@ export function OverviewTab({
   notes: NoteRow[]
 }) {
   const [addReq, setAddReq] = useState(false)
-  const [editTeam, setEditTeam] = useState(false)
+  const [addMember, setAddMember] = useState(false)
   const [editContact, setEditContact] = useState(false)
   const [activityTab, setActivityTab] = useState<'messages' | 'notes'>('messages')
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [addingMessage, setAddingMessage] = useState(false)
   const [addingNote, setAddingNote] = useState(false)
+  const editingNote = editingNoteId ? notes.find((n) => n.id === editingNoteId) ?? null : null
 
   const hidden = (
     <>
@@ -153,23 +155,11 @@ export function OverviewTab({
           title="Client requirements"
           subtitle="Confirmed preferences, requests and restrictions for this job."
           action={
-            <button type="button" onClick={() => setAddReq((v) => !v)} className="inline-flex items-center gap-1 rounded border border-line-strong px-2.5 py-1.5 text-sm font-bold text-ink-muted hover:text-ink">
+            <button type="button" onClick={() => setAddReq(true)} className={addBtn}>
               <IconPlus className="h-4 w-4" /> Add requirement
             </button>
           }
         >
-          {addReq ? (
-            <form action={async (fd) => { await addRequirementAction(fd); setAddReq(false) }} className="mb-4 flex flex-col gap-2 rounded border border-accent bg-paper p-3">
-              {hidden}
-              <input name="label" required placeholder="Requirement (e.g. Photography style)" className={field} />
-              <textarea name="detail" required placeholder="Details..." rows={2} className={field} />
-              <div className="flex gap-2">
-                <button type="submit" className={btnPrimary}>Add</button>
-                <button type="button" onClick={() => setAddReq(false)} className={btnGhost}>Cancel</button>
-              </div>
-            </form>
-          ) : null}
-
           {requirements.length === 0 ? (
             <p className="text-sm text-ink-muted">No requirements recorded yet.</p>
           ) : (
@@ -203,23 +193,8 @@ export function OverviewTab({
           icon={<IconClient className="h-5 w-5" />}
           title="Client information"
           subtitle="Contact details and key information."
-          action={<button type="button" onClick={() => setEditContact((v) => !v)} className={btnGhost}>Edit</button>}
+          action={<button type="button" onClick={() => setEditContact(true)} className={btnGhost}>Edit</button>}
         >
-          {editContact ? (
-            <form action={async (fd) => { await updateClientContactAction(fd); setEditContact(false) }} className="mb-4 flex flex-col gap-2 rounded border border-accent bg-paper p-3">
-              {hidden}
-              <input type="hidden" name="clientId" value={client.clientId} />
-              <input name="partnerName" defaultValue={client.partnerName ?? ''} placeholder="Partner" className={field} />
-              <input name="phone" defaultValue={client.phone ?? ''} placeholder="Phone" className={field} />
-              <input name="preferredContact" defaultValue={client.preferredContact ?? ''} placeholder="Preferred contact (e.g. Email)" className={field} />
-              <input name="instagram" defaultValue={client.instagram ?? ''} placeholder="Instagram handle" className={field} />
-              <div className="flex gap-2">
-                <button type="submit" className={btnPrimary}>Save</button>
-                <button type="button" onClick={() => setEditContact(false)} className={btnGhost}>Cancel</button>
-              </div>
-            </form>
-          ) : null}
-
           <dl className="flex flex-col gap-2.5 text-sm">
             <InfoRow label="Primary contact" value={client.displayName} />
             <InfoRow label="Partner" value={client.partnerName} />
@@ -268,33 +243,11 @@ export function OverviewTab({
           title="Assigned team"
           subtitle="People responsible for this job."
           action={
-            <button type="button" onClick={() => setEditTeam((v) => !v)} className="inline-flex items-center gap-1 rounded border border-line-strong px-2.5 py-1.5 text-sm font-bold text-ink-muted hover:text-ink">
+            <button type="button" onClick={() => setAddMember(true)} className={addBtn}>
               <IconPlus className="h-4 w-4" /> Add member
             </button>
           }
         >
-          {editTeam ? (
-            <form action={async (fd) => { await addTeamMemberAction(fd); setEditTeam(false) }} className="mb-4 flex flex-col gap-2 rounded border border-accent bg-paper p-3">
-              {hidden}
-              <div className="flex flex-wrap gap-2">
-                {resources.length > 0 ? (
-                  <select name="resourceId" defaultValue="" className={`${field} flex-1`}>
-                    <option value="">Select a person...</option>
-                    {resources.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                  </select>
-                ) : (
-                  <input name="name" placeholder="Name" className={`${field} flex-1`} />
-                )}
-                <input name="role" required placeholder="Role (e.g. Lead Photographer)" className={`${field} flex-1`} />
-              </div>
-              {resources.length > 0 ? <input name="name" placeholder="Or type a name (if not listed)" className={field} /> : null}
-              <div className="flex gap-2">
-                <button type="submit" className={btnPrimary}>Add</button>
-                <button type="button" onClick={() => setEditTeam(false)} className={btnGhost}>Cancel</button>
-              </div>
-            </form>
-          ) : null}
-
           {team.length === 0 ? (
             <p className="text-sm text-ink-muted">No team assigned yet.</p>
           ) : (
@@ -399,20 +352,9 @@ export function OverviewTab({
                   </li>
                 ))}
               </ul>
-              {addingMessage ? (
-                <form action={async (fd) => { await logProjectClientReplyAction(fd); setAddingMessage(false) }} className="mt-4 flex flex-col gap-2 border-t border-line pt-4">
-                  {hidden}
-                  <textarea name="body" required rows={2} autoFocus placeholder="Paste what the client said..." className={field} />
-                  <div className="flex gap-2">
-                    <button type="submit" className={btnPrimary}>Add message</button>
-                    <button type="button" onClick={() => setAddingMessage(false)} className={btnGhost}>Cancel</button>
-                  </div>
-                </form>
-              ) : (
-                <button type="button" onClick={() => setAddingMessage(true)} className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-accent-ink hover:underline">
-                  <IconPlus className="h-4 w-4" /> Add message
-                </button>
-              )}
+              <button type="button" onClick={() => setAddingMessage(true)} className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-accent-ink hover:underline">
+                <IconPlus className="h-4 w-4" /> Add message
+              </button>
             </>
           ) : (
             <>
@@ -422,57 +364,124 @@ export function OverviewTab({
                   <li key={n.id} className="group flex items-start gap-3 py-3 first:pt-0">
                     <Avatar name={n.author} />
                     <div className="min-w-0 flex-1">
-                      {editingNoteId === n.id ? (
-                        <form action={async (fd) => { await editInternalNoteAction(fd); setEditingNoteId(null) }} className="flex flex-col gap-2">
-                          {hidden}
-                          <input type="hidden" name="communicationId" value={n.id} />
-                          <div className="flex flex-wrap items-baseline gap-x-2">
-                            <span className="text-sm font-bold text-ink">{n.author}</span>
-                            <span className="text-xs text-muted">{n.dateLabel}</span>
-                          </div>
-                          <textarea name="body" required rows={2} defaultValue={n.body} className={field} />
-                          <div className="flex gap-2">
-                            <button type="submit" className={btnPrimary}>Save</button>
-                            <button type="button" onClick={() => setEditingNoteId(null)} className={btnGhost}>Cancel</button>
-                          </div>
-                        </form>
-                      ) : (
-                        <>
-                          <div className="flex flex-wrap items-baseline gap-x-2">
-                            <span className="text-sm font-bold text-ink">{n.author}</span>
-                            <span className="text-xs text-muted">{n.dateLabel}</span>
-                          </div>
-                          <p className="mt-0.5 whitespace-pre-line text-sm text-ink">{n.body}</p>
-                          {n.editedLabel ? (
-                            <p className="mt-1 text-xs text-muted">Edited by {n.editedByName ?? 'staff'} · {n.editedLabel}</p>
-                          ) : null}
-                        </>
-                      )}
+                      <div className="flex flex-wrap items-baseline gap-x-2">
+                        <span className="text-sm font-bold text-ink">{n.author}</span>
+                        <span className="text-xs text-muted">{n.dateLabel}</span>
+                      </div>
+                      <p className="mt-0.5 whitespace-pre-line text-sm text-ink">{n.body}</p>
+                      {n.editedLabel ? (
+                        <p className="mt-1 text-xs text-muted">Edited by {n.editedByName ?? 'staff'} · {n.editedLabel}</p>
+                      ) : null}
                     </div>
-                    {editingNoteId === n.id ? null : (
-                      <button type="button" onClick={() => setEditingNoteId(n.id)} className="opacity-0 transition-opacity group-hover:opacity-100 text-sm font-bold text-accent-ink hover:underline">Edit</button>
-                    )}
+                    <button type="button" onClick={() => setEditingNoteId(n.id)} className="opacity-0 transition-opacity group-hover:opacity-100 text-sm font-bold text-accent-ink hover:underline">Edit</button>
                   </li>
                 ))}
               </ul>
-              {addingNote ? (
-                <form action={async (fd) => { await addInternalNoteAction(fd); setAddingNote(false) }} className="mt-4 flex flex-col gap-2 border-t border-line pt-4">
-                  {hidden}
-                  <textarea name="body" required rows={2} autoFocus placeholder="Note for the team (not shown to the client)..." className={field} />
-                  <div className="flex gap-2">
-                    <button type="submit" className={btnPrimary}>Add note</button>
-                    <button type="button" onClick={() => setAddingNote(false)} className={btnGhost}>Cancel</button>
-                  </div>
-                </form>
-              ) : (
-                <button type="button" onClick={() => setAddingNote(true)} className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-accent-ink hover:underline">
-                  <IconPlus className="h-4 w-4" /> Add note
-                </button>
-              )}
+              <button type="button" onClick={() => setAddingNote(true)} className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-accent-ink hover:underline">
+                <IconPlus className="h-4 w-4" /> Add note
+              </button>
             </>
           )}
         </div>
       </section>
+
+      {/* ---- Modals (Carbon transactional dialogs) ---- */}
+      <Modal open={addReq} onClose={() => setAddReq(false)} title="Add requirement" description="Record a confirmed client preference, request or restriction.">
+        <form action={async (fd) => { await addRequirementAction(fd); setAddReq(false) }} className="flex min-h-0 flex-1 flex-col">
+          <div className={modalBody}>
+            {hidden}
+            <ModalField label="Requirement"><input name="label" required placeholder="e.g. Photography style" className={field} /></ModalField>
+            <ModalField label="Details"><textarea name="detail" required rows={4} placeholder="Describe the requirement..." className={field} /></ModalField>
+          </div>
+          <ModalFooter>
+            <button type="button" onClick={() => setAddReq(false)} className={modalCancelBtn}>Cancel</button>
+            <button type="submit" className={modalPrimaryBtn}>Add requirement</button>
+          </ModalFooter>
+        </form>
+      </Modal>
+
+      <Modal open={addMember} onClose={() => setAddMember(false)} title="Add team member" description="Assign a person responsible for this job.">
+        <form action={async (fd) => { await addTeamMemberAction(fd); setAddMember(false) }} className="flex min-h-0 flex-1 flex-col">
+          <div className={modalBody}>
+            {hidden}
+            {resources.length > 0 ? (
+              <ModalField label="Person">
+                <select name="resourceId" defaultValue="" className={field}>
+                  <option value="">Select a person...</option>
+                  {resources.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </ModalField>
+            ) : null}
+            <ModalField label={resources.length > 0 ? 'Or type a name (if not listed)' : 'Name'}>
+              <input name="name" placeholder="Full name" className={field} />
+            </ModalField>
+            <ModalField label="Role"><input name="role" required placeholder="e.g. Lead Photographer" className={field} /></ModalField>
+          </div>
+          <ModalFooter>
+            <button type="button" onClick={() => setAddMember(false)} className={modalCancelBtn}>Cancel</button>
+            <button type="submit" className={modalPrimaryBtn}>Add member</button>
+          </ModalFooter>
+        </form>
+      </Modal>
+
+      <Modal open={editContact} onClose={() => setEditContact(false)} title="Edit client information" label={client.displayName}>
+        <form action={async (fd) => { await updateClientContactAction(fd); setEditContact(false) }} className="flex min-h-0 flex-1 flex-col">
+          <div className={modalBody}>
+            {hidden}
+            <input type="hidden" name="clientId" value={client.clientId} />
+            <ModalField label="Partner"><input name="partnerName" defaultValue={client.partnerName ?? ''} placeholder="Partner name" className={field} /></ModalField>
+            <ModalField label="Phone"><input name="phone" defaultValue={client.phone ?? ''} placeholder="Phone number" className={field} /></ModalField>
+            <ModalField label="Preferred contact"><input name="preferredContact" defaultValue={client.preferredContact ?? ''} placeholder="e.g. Email (SMS on shoot day)" className={field} /></ModalField>
+            <ModalField label="Instagram"><input name="instagram" defaultValue={client.instagram ?? ''} placeholder="handle" className={field} /></ModalField>
+          </div>
+          <ModalFooter>
+            <button type="button" onClick={() => setEditContact(false)} className={modalCancelBtn}>Cancel</button>
+            <button type="submit" className={modalPrimaryBtn}>Save changes</button>
+          </ModalFooter>
+        </form>
+      </Modal>
+
+      <Modal open={addingMessage} onClose={() => setAddingMessage(false)} title="Record a client message" description="Log a message the client sent you.">
+        <form action={async (fd) => { await logProjectClientReplyAction(fd); setAddingMessage(false) }} className="flex min-h-0 flex-1 flex-col">
+          <div className={modalBody}>
+            {hidden}
+            <ModalField label="Message"><textarea name="body" required rows={5} placeholder="Paste what the client said..." className={field} /></ModalField>
+          </div>
+          <ModalFooter>
+            <button type="button" onClick={() => setAddingMessage(false)} className={modalCancelBtn}>Cancel</button>
+            <button type="submit" className={modalPrimaryBtn}>Add message</button>
+          </ModalFooter>
+        </form>
+      </Modal>
+
+      <Modal open={addingNote} onClose={() => setAddingNote(false)} title="Add internal note" description="A note for the team - not shown to the client.">
+        <form action={async (fd) => { await addInternalNoteAction(fd); setAddingNote(false) }} className="flex min-h-0 flex-1 flex-col">
+          <div className={modalBody}>
+            {hidden}
+            <ModalField label="Note"><textarea name="body" required rows={5} placeholder="Note for the team..." className={field} /></ModalField>
+          </div>
+          <ModalFooter>
+            <button type="button" onClick={() => setAddingNote(false)} className={modalCancelBtn}>Cancel</button>
+            <button type="submit" className={modalPrimaryBtn}>Add note</button>
+          </ModalFooter>
+        </form>
+      </Modal>
+
+      <Modal open={Boolean(editingNote)} onClose={() => setEditingNoteId(null)} title="Edit note">
+        {editingNote ? (
+          <form action={async (fd) => { await editInternalNoteAction(fd); setEditingNoteId(null) }} className="flex min-h-0 flex-1 flex-col">
+            <div className={modalBody}>
+              {hidden}
+              <input type="hidden" name="communicationId" value={editingNote.id} />
+              <ModalField label="Note"><textarea name="body" required rows={5} defaultValue={editingNote.body} className={field} /></ModalField>
+            </div>
+            <ModalFooter>
+              <button type="button" onClick={() => setEditingNoteId(null)} className={modalCancelBtn}>Cancel</button>
+              <button type="submit" className={modalPrimaryBtn}>Save</button>
+            </ModalFooter>
+          </form>
+        ) : null}
+      </Modal>
     </div>
   )
 }
