@@ -163,27 +163,35 @@ export function OverviewTab({
           {requirements.length === 0 ? (
             <p className="text-sm text-ink-muted">No requirements recorded yet.</p>
           ) : (
-            <div>
-              <div className="hidden border-b border-line pb-2 pr-16 sm:flex sm:gap-6">
-                <span className="w-48 shrink-0 text-xs font-bold uppercase tracking-wide text-muted">Requirement</span>
-                <span className="flex-1 text-xs font-bold uppercase tracking-wide text-muted">Details</span>
-              </div>
-              <dl className="flex flex-col divide-y divide-line">
+            <table className="w-full table-fixed border-collapse text-sm">
+              <colgroup>
+                <col className="w-56" />
+                <col />
+                <col className="w-20" />
+              </colgroup>
+              <thead>
+                <tr className="border-b border-line">
+                  <th className="pb-2 pr-4 text-left text-xs font-bold uppercase tracking-wide text-muted">Requirement</th>
+                  <th className="pb-2 pr-4 text-left text-xs font-bold uppercase tracking-wide text-muted">Details</th>
+                  <th className="pb-2" />
+                </tr>
+              </thead>
+              <tbody>
                 {requirements.map((r) => (
-                  <div key={r.id} className="group relative py-3">
-                    <div className="flex min-w-0 flex-col gap-1 pr-16 sm:flex-row sm:gap-6">
-                      <dt className="text-sm font-bold text-ink sm:w-48 sm:shrink-0">{r.label}</dt>
-                      <dd className="min-w-0 flex-1 whitespace-pre-line text-sm text-ink-muted">{r.detail}</dd>
-                    </div>
-                    <form action={deleteRequirementAction} className="absolute right-0 top-3 opacity-0 transition-opacity group-hover:opacity-100">
-                      {hidden}
-                      <input type="hidden" name="requirementId" value={r.id} />
-                      <button type="submit" aria-label="Remove requirement" className="text-sm text-muted hover:text-lost-ink">Remove</button>
-                    </form>
-                  </div>
+                  <tr key={r.id} className="group border-b border-line align-top last:border-b-0">
+                    <td className="py-3 pr-4 font-bold text-ink break-words">{r.label}</td>
+                    <td className="py-3 pr-4 whitespace-pre-line break-words text-ink-muted">{r.detail}</td>
+                    <td className="py-3 text-right">
+                      <form action={deleteRequirementAction} className="opacity-0 transition-opacity group-hover:opacity-100">
+                        {hidden}
+                        <input type="hidden" name="requirementId" value={r.id} />
+                        <button type="submit" aria-label="Remove requirement" className="text-sm text-muted hover:text-lost-ink">Remove</button>
+                      </form>
+                    </td>
+                  </tr>
                 ))}
-              </dl>
-            </div>
+              </tbody>
+            </table>
           )}
         </Card>
 
@@ -251,32 +259,40 @@ export function OverviewTab({
           {team.length === 0 ? (
             <p className="text-sm text-ink-muted">No team assigned yet.</p>
           ) : (
-            <div>
-              <div className="hidden border-b border-line pb-2 pr-20 sm:flex sm:gap-6">
-                <span className="w-48 shrink-0 text-xs font-bold uppercase tracking-wide text-muted">Name</span>
-                <span className="flex-1 text-xs font-bold uppercase tracking-wide text-muted">Role</span>
-              </div>
-              <ul className="flex flex-col divide-y divide-line">
+            <table className="w-full table-fixed border-collapse text-sm">
+              <colgroup>
+                <col className="w-56" />
+                <col />
+                <col className="w-24" />
+              </colgroup>
+              <thead>
+                <tr className="border-b border-line">
+                  <th className="pb-2 pr-4 text-left text-xs font-bold uppercase tracking-wide text-muted">Name</th>
+                  <th className="pb-2 pr-4 text-left text-xs font-bold uppercase tracking-wide text-muted">Role</th>
+                  <th className="pb-2" />
+                </tr>
+              </thead>
+              <tbody>
                 {team.map((m) => (
-                  <li key={m.id} className="group relative py-3">
-                    <div className="flex min-w-0 flex-col gap-1 pr-20 sm:flex-row sm:gap-6">
-                      <span className="text-sm font-bold text-ink sm:w-48 sm:shrink-0">{m.name}</span>
-                      <span className="min-w-0 flex-1 text-sm text-ink-muted">{m.role}</span>
-                    </div>
-                    <div className="absolute right-0 top-3 flex items-center gap-3">
-                      {m.email ? (
-                        <a href={`mailto:${m.email}`} aria-label={`Email ${m.name}`} className="text-ink-muted hover:text-ink"><IconMail className="h-4 w-4" /></a>
-                      ) : null}
-                      <form action={removeTeamMemberAction} className="opacity-0 transition-opacity group-hover:opacity-100">
-                        {hidden}
-                        <input type="hidden" name="memberId" value={m.id} />
-                        <button type="submit" className="text-sm text-muted hover:text-lost-ink">Remove</button>
-                      </form>
-                    </div>
-                  </li>
+                  <tr key={m.id} className="group border-b border-line align-top last:border-b-0">
+                    <td className="py-3 pr-4 font-bold text-ink break-words">{m.name}</td>
+                    <td className="py-3 pr-4 break-words text-ink-muted">{m.role}</td>
+                    <td className="py-3">
+                      <div className="flex items-center justify-end gap-3">
+                        {m.email ? (
+                          <a href={`mailto:${m.email}`} aria-label={`Email ${m.name}`} className="text-ink-muted hover:text-ink"><IconMail className="h-4 w-4" /></a>
+                        ) : null}
+                        <form action={removeTeamMemberAction} className="opacity-0 transition-opacity group-hover:opacity-100">
+                          {hidden}
+                          <input type="hidden" name="memberId" value={m.id} />
+                          <button type="submit" className="text-sm text-muted hover:text-lost-ink">Remove</button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
                 ))}
-              </ul>
-            </div>
+              </tbody>
+            </table>
           )}
         </Card>
 
