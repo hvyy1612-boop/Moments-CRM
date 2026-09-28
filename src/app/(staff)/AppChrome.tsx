@@ -1,23 +1,18 @@
-'use client'
-
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
 import type { Alert } from '@/lib/domain/alerts'
-import { Sidebar, type SidebarItem } from './Sidebar'
+import type { SidebarItem } from './Sidebar'
+import { FloatingNav } from './FloatingNav'
 import { TopNav } from './TopNav'
 
-const COLLAPSE_KEY = 'sidebar.collapsed'
-
 /**
- * The single authenticated application shell. Holds the sidebar collapse state so the top-nav toggle
- * and the sidebar stay in sync, and lays out one continuous nav surface (top nav + sidebar) beside the
- * page content. There is no border or shadow between the top nav and the sidebar - they share the page
- * background and are separated only by spacing and alignment.
+ * The single authenticated application shell: a global top nav, the app's existing horizontal mobile nav
+ * (below md), and a slim floating navigation pill (md and up) that overlays the left edge. The pill is
+ * fixed/vertically-centred, so `main` reserves left padding on md+ to clear it. Notification dots are
+ * derived from real recent alerts (enquiries / payments), never hard-coded.
  */
 export function AppChrome({
   items,
-  groups,
   active,
   initial,
   userName,
@@ -27,7 +22,6 @@ export function AppChrome({
   children,
 }: {
   items: SidebarItem[]
-  groups: string[]
   active: string
   initial: string
   userName: string
@@ -36,41 +30,19 @@ export function AppChrome({
   alerts: Alert[]
   children: ReactNode
 }) {
-  const [collapsed, setCollapsed] = useState(false)
-
-  useEffect(() => {
-    try {
-      setCollapsed(localStorage.getItem(COLLAPSE_KEY) === '1')
-    } catch {
-      /* ignore */
-    }
-  }, [])
-
-  function toggle() {
-    setCollapsed((c) => {
-      const next = !c
-      try {
-        localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0')
-      } catch {
-        /* ignore */
-      }
-      return next
-    })
-  }
+  const notifKeys = Array.from(
+    new Set(
+      alerts
+        .map((a) => (a.kind === 'enquiry' ? 'enquiries' : a.kind === 'payment' ? 'finance' : ''))
+        .filter(Boolean),
+    ),
+  )
 
   return (
     <div className="min-h-screen bg-paper">
-      <TopNav
-        collapsed={collapsed}
-        onToggle={toggle}
-        initial={initial}
-        userName={userName}
-        userRole={userRole}
-        csrf={csrf}
-        alerts={alerts}
-      />
+      <TopNav initial={initial} userName={userName} userRole={userRole} csrf={csrf} alerts={alerts} />
 
-      {/* Mobile navigation (below md, where the sidebar is hidden). */}
+      {/* Mobile navigation (below md, where the floating pill is hidden). */}
       <nav className="flex gap-1 overflow-x-auto bg-paper px-3 pb-2 md:hidden">
         {items
           .filter((i) => i.built)
@@ -88,13 +60,10 @@ export function AppChrome({
           ))}
       </nav>
 
-      <div className="flex">
-        <Sidebar items={items} groups={groups} active={active} collapsed={collapsed} />
-        {/* Workspace only: `main` provides the remaining width + vertical padding. The horizontal page
-            gutter and the content measure are owned by PageContainer, so every page shares one gutter and
-            no content can end up flush against the sidebar. */}
-        <main className="min-w-0 flex-1 pb-6 pt-1.5 sm:pb-8">{children}</main>
-      </div>
+      <FloatingNav items={items} active={active} notifKeys={notifKeys} />
+
+      {/* main reserves left room on md+ so page content never sits under the floating pill. */}
+      <main className="min-w-0 pb-6 pt-1.5 sm:pb-8 md:pl-24">{children}</main>
     </div>
   )
 }

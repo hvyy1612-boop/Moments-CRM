@@ -30,9 +30,8 @@ type NavItem = {
 }
 
 // Order follows Monday's logic: the entities you work in every day come first (enquiries → jobs →
-// clients), then operations, then the Dashboard as an overview near the end (not first).
-const GROUPS: NavGroup[] = ['Overview', 'Studio', 'Operations', 'System']
-
+// clients), then operations, then the Dashboard as an overview near the end (not first). The floating
+// nav renders the items flat (icon-only) in this array order; groups are retained on items for reference.
 const S = {
   fill: 'none',
   stroke: 'currentColor',
@@ -91,7 +90,6 @@ export async function AppShell({
   return (
     <AppChrome
       items={items}
-      groups={GROUPS}
       active={active}
       initial={initial}
       userName={user.name}
