@@ -13,11 +13,9 @@ import {
   updateClientContactAction,
 } from '../actions'
 import {
-  IconArrowRight,
   IconCalendar,
   IconChat,
   IconChecklist,
-  IconChevronRight,
   IconClient,
   IconExternal,
   IconFolder,
@@ -59,12 +57,10 @@ export type Upcoming = {
 }
 export type MsgRow = { id: string; author: string; body: string; dateLabel: string; inbound: boolean }
 export type NoteRow = { id: string; author: string; body: string; dateLabel: string; editedByName: string | null; editedLabel: string | null }
-export type TabHrefs = { workflow: string; shoot: string; finance: string; files: string }
 
 const field = 'w-full rounded border border-line-strong bg-surface px-3 py-2 text-sm text-ink'
 const btnPrimary = 'rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface'
 const btnGhost = 'rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink'
-const linkBtn = 'inline-flex items-center gap-1 text-sm font-bold text-accent-ink hover:underline'
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '?'
@@ -120,7 +116,6 @@ export function OverviewTab({
   upcoming,
   messages,
   notes,
-  hrefs,
 }: {
   projectId: string
   csrf: string
@@ -131,7 +126,6 @@ export function OverviewTab({
   upcoming: Upcoming
   messages: MsgRow[]
   notes: NoteRow[]
-  hrefs: TabHrefs
 }) {
   const [addReq, setAddReq] = useState(false)
   const [editTeam, setEditTeam] = useState(false)
@@ -209,12 +203,7 @@ export function OverviewTab({
           icon={<IconClient className="h-5 w-5" />}
           title="Client information"
           subtitle="Contact details and key information."
-          action={
-            <div className="flex items-center gap-3">
-              <button type="button" onClick={() => setEditContact((v) => !v)} className={btnGhost}>Edit</button>
-              <a href={client.href} className={linkBtn}>View full client <IconArrowRight className="h-4 w-4" /></a>
-            </div>
-          }
+          action={<button type="button" onClick={() => setEditContact((v) => !v)} className={btnGhost}>Edit</button>}
         >
           {editContact ? (
             <form action={async (fd) => { await updateClientContactAction(fd); setEditContact(false) }} className="mb-4 flex flex-col gap-2 rounded border border-accent bg-paper p-3">
@@ -224,7 +213,6 @@ export function OverviewTab({
               <input name="phone" defaultValue={client.phone ?? ''} placeholder="Phone" className={field} />
               <input name="preferredContact" defaultValue={client.preferredContact ?? ''} placeholder="Preferred contact (e.g. Email)" className={field} />
               <input name="instagram" defaultValue={client.instagram ?? ''} placeholder="Instagram handle" className={field} />
-              <textarea name="notes" defaultValue={client.notes ?? ''} placeholder="Notes" rows={2} className={field} />
               <div className="flex gap-2">
                 <button type="submit" className={btnPrimary}>Save</button>
                 <button type="button" onClick={() => setEditContact(false)} className={btnGhost}>Cancel</button>
@@ -270,7 +258,6 @@ export function OverviewTab({
               </dd>
             </div>
             <InfoRow label="Client since" value={client.clientSince} />
-            <InfoRow label="Notes" value={client.notes} />
           </dl>
         </Card>
 
@@ -334,17 +321,15 @@ export function OverviewTab({
           )}
         </Card>
 
-        {/* Upcoming summary: clickable rows into the relevant tab (image 34). */}
+        {/* Upcoming summary: at-a-glance info (read-only). */}
         <Card
           className="lg:col-span-2"
           icon={<IconCalendar className="h-5 w-5" />}
           title="Upcoming summary"
           subtitle="Next key actions, shoot details and payment."
-          action={<a href={hrefs.workflow} className={linkBtn}>View workflow <IconArrowRight className="h-4 w-4" /></a>}
         >
           <div className="flex flex-col gap-2">
             <SummaryRow
-              href={hrefs.workflow}
               icon={<IconChecklist className="h-4 w-4" />}
               title={upcoming.nextAction ? (upcoming.nextAction.kind === 'task' ? upcoming.nextAction.title : `Waiting on ${upcoming.nextAction.label}`) : 'All caught up'}
               sub={upcoming.nextAction && upcoming.nextAction.kind === 'task'
@@ -353,19 +338,16 @@ export function OverviewTab({
               danger={Boolean(upcoming.nextAction && upcoming.nextAction.kind === 'task' && upcoming.nextAction.needsAttention)}
             />
             <SummaryRow
-              href={hrefs.shoot}
               icon={<IconCalendar className="h-4 w-4" />}
               title={upcoming.shootLabel ?? 'Not scheduled'}
               sub={upcoming.shootLocation}
             />
             <SummaryRow
-              href={hrefs.finance}
               icon={<IconReceipt className="h-4 w-4" />}
               title={upcoming.paymentLabel}
               sub={upcoming.paymentSub}
             />
             <SummaryRow
-              href={hrefs.files}
               icon={<IconFolder className="h-4 w-4" />}
               title={upcoming.deliveryLabel}
               sub={upcoming.deliverySub}
@@ -505,26 +487,23 @@ function InfoRow({ label, value }: { label: string; value: string | null }) {
 }
 
 function SummaryRow({
-  href,
   icon,
   title,
   sub,
   danger = false,
 }: {
-  href: string
   icon: React.ReactNode
   title: string
   sub: string | null
   danger?: boolean
 }) {
   return (
-    <a href={href} className="flex items-center gap-3 rounded-md border border-line px-3 py-2.5 transition-colors hover:bg-paper">
+    <div className="flex items-center gap-3 rounded-md border border-line px-3 py-2.5">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-sunk text-ink-muted">{icon}</span>
       <span className="min-w-0 flex-1">
         <span className={`block truncate text-sm font-bold ${danger ? 'text-danger' : 'text-ink'}`}>{title}</span>
         {sub ? <span className="block truncate text-sm text-muted">{sub}</span> : null}
       </span>
-      <IconChevronRight className="h-4 w-4 shrink-0 text-muted" />
-    </a>
+    </div>
   )
 }

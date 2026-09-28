@@ -27,15 +27,11 @@ import { ContractSend } from './ContractSend'
 import type { HistoryEntry } from './HistoryLogModal'
 import { OverviewTab } from './OverviewTab'
 import { ProjectWorkflow } from './ProjectWorkflow'
-import { Delivery } from './Delivery'
 import { QuoteBuilder } from './QuoteBuilder'
-import { Scheduling } from './Scheduling'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import {
   IconCalendar,
-  IconCamera,
   IconChecklist,
-  IconFolder,
   IconLayout,
   IconMore,
   IconPin,
@@ -81,22 +77,10 @@ function historyDetails(action: string, after: unknown): string {
 const TABS = [
   { key: 'overview', label: 'Overview', Icon: IconLayout },
   { key: 'workflow', label: 'Workflow', Icon: IconChecklist },
-  { key: 'shoot', label: 'Shoot details', Icon: IconCamera },
-  { key: 'files', label: 'Files / Delivery', Icon: IconFolder },
   { key: 'finance', label: 'Finance', Icon: IconReceipt },
 ] as const
 type TabKey = (typeof TABS)[number]['key']
 const menuLink = 'block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper'
-
-/** Section card wrapper, reused across the tabs. */
-function Card({ title, children }: { title?: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded border border-line bg-surface p-5">
-      {title ? <h2 className="text-lg font-semibold text-ink">{title}</h2> : null}
-      {children}
-    </section>
-  )
-}
 
 /**
  * Shared case detail for a booked Job, laid out as a tabbed workspace: one job header (name, key facts
@@ -168,14 +152,6 @@ export async function CaseDetail({
   )
   const canInvoice = project.lifecycleStatus !== 'CANCELLED' && project.lifecycleStatus !== 'LOST'
 
-  const resources = isConfirmed
-    ? await prisma.resource.findMany({
-        where: { companyId: project.companyId, status: 'active' },
-        orderBy: { name: 'asc' },
-        select: { id: true, name: true, resourceType: true },
-      })
-    : []
-
   const board = await getProjectBoard(project.id)
   const taskOverrides = await prisma.workItem.findMany({
     where: { projectId: project.id, dueOverrideAt: { not: null } },
@@ -218,19 +194,6 @@ export async function CaseDetail({
     dateLabel: formatSydneyDateTime(r.createdAt),
     user: r.actor?.name ?? 'System',
     details: historyDetails(r.action, r.afterData),
-  }))
-
-  const bookingViews = project.bookings.map((booking) => ({
-    id: booking.id,
-    title: booking.title,
-    timeLabel: `${formatSydneyDateTime(booking.startsAt)} - ${formatSydneyDateTime(booking.endsAt)}`,
-    location: booking.location,
-    status: booking.status,
-    assignments: booking.assignments.map((assignment) => ({
-      id: assignment.id,
-      resourceName: assignment.resource.name,
-      role: assignment.role,
-    })),
   }))
 
   const invoiceCount = project.invoices.length
@@ -441,7 +404,6 @@ export async function CaseDetail({
               upcoming={overviewUpcoming}
               messages={overviewMessages}
               notes={overviewNotes}
-              hrefs={{ workflow: tabHref('workflow'), shoot: tabHref('shoot'), finance: tabHref('finance'), files: tabHref('files') }}
             />
           ) : null}
 
@@ -451,33 +413,6 @@ export async function CaseDetail({
             ) : (
               <p className="text-sm text-ink-muted">No workflow for this job yet.</p>
             )
-          ) : null}
-
-          {activeTab === 'shoot' ? (
-            <Card title="Shoot details">
-              {isConfirmed ? (
-                <div className="mt-4">
-                  <Scheduling csrf={csrf} projectId={project.id} bookings={bookingViews} resources={resources} />
-                </div>
-              ) : shootBooking ? (
-                <dl className="mt-3 flex flex-col gap-2 text-sm">
-                  <div className="flex justify-between gap-3"><dt className="text-ink-muted">When</dt><dd className="text-ink">{shootDateLabel}</dd></div>
-                  <div className="flex justify-between gap-3"><dt className="text-ink-muted">Location</dt><dd className="text-ink">{shootLocation ?? 'Not set'}</dd></div>
-                </dl>
-              ) : (
-                <p className="mt-3 text-sm text-ink-muted">No shoot scheduled yet. Scheduling opens once the job is confirmed.</p>
-              )}
-            </Card>
-          ) : null}
-
-          {activeTab === 'files' ? (
-            <Card title="Files / Delivery">
-              {isConfirmed ? (
-                <div className="mt-2"><Delivery csrf={csrf} projectId={project.id} gallery={galleryView} /></div>
-              ) : (
-                <p className="mt-3 text-sm text-ink-muted">Delivery opens once the job is confirmed and the shoot is done.</p>
-              )}
-            </Card>
           ) : null}
 
           {activeTab === 'finance' ? (

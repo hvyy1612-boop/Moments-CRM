@@ -1009,7 +1009,6 @@ export async function updateClientContactAction(formData: FormData): Promise<voi
       preferredContact: str('preferredContact'),
       instagram: str('instagram'),
       phone: str('phone'),
-      notes: str('notes'),
     },
   })
   revalidatePath(`/jobs/${projectId}`)
