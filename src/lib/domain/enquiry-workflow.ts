@@ -13,7 +13,7 @@ import { syncEnquiryStageFromTasks } from './enquiry-stage'
 /** Interactive-transaction client type. */
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
-const OPEN = new Set(['NEW', 'CONTACTED', 'QUALIFIED'])
+const OPEN = new Set(['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION'])
 
 /** Runs inside createEnquiry's transaction: store the client's first message and seed the default flow. */
 export async function seedEnquiryWorkflow(
@@ -62,7 +62,7 @@ export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> 
     where: { id: enquiryId },
     select: { createdAt: true, status: true },
   })
-  const booked = enquiry?.status === 'CONVERTED'
+  const booked = enquiry?.status === 'BOOKING_CONFIRMED'
   const items = await prisma.workItem.findMany({
     // Live enquiry: hide tasks dropped from the flow. Booked: include them all - the record is complete.
     where: booked ? { enquiryId } : { enquiryId, status: { not: 'CANCELLED' } },
@@ -108,7 +108,7 @@ export async function sendStaffReply(enquiryId: string, body: string, actorUserI
     })
     await tx.enquiry.update({
       where: { id: enquiryId },
-      data: { status: enquiry.status === 'NEW' ? 'CONTACTED' : enquiry.status, waitingOn: 'CLIENT' },
+      data: { status: enquiry.status === 'NEW_ENQUIRY' ? 'CONTACTED' : enquiry.status, waitingOn: 'CLIENT' },
     })
     await tx.auditLog.create({
       data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.replied', entityType: 'Enquiry', entityId: enquiryId },
@@ -142,8 +142,8 @@ export async function startQuoting(enquiryId: string, actorUserId: string) {
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
     if (!enquiry) throw new Error('Enquiry not found.')
-    if (enquiry.status !== 'CONTACTED') throw new Error('This enquiry is not in the discussion stage.')
-    await tx.enquiry.update({ where: { id: enquiryId }, data: { status: 'QUALIFIED', waitingOn: 'STUDIO' } })
+    if (enquiry.status !== 'CONTACTED') throw new Error('This enquiry is not in the Contacted stage.')
+    await tx.enquiry.update({ where: { id: enquiryId }, data: { status: 'CONSULTATION', waitingOn: 'STUDIO' } })
     await tx.auditLog.create({
       data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.moved_to_quote', entityType: 'Enquiry', entityId: enquiryId },
     })

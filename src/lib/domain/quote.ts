@@ -121,6 +121,17 @@ export async function sendQuote(quoteId: string, actorUserId: string | null) {
 
     await tx.quoteVersion.update({ where: { id: version.id }, data: { status: 'SENT', sentToClientAt: now } })
     await tx.quote.update({ where: { id: quoteId }, data: { status: 'SENT' } })
+    // Actually sending the quote is the business event that moves the enquiry to "Quote sent" (spec §6):
+    // preparing a draft never does. Forward-only - only an open, pre-quote lead is advanced.
+    if (quote.enquiryId) {
+      const enq = await tx.enquiry.findUnique({ where: { id: quote.enquiryId }, select: { status: true, companyId: true } })
+      if (enq && ['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION'].includes(enq.status)) {
+        await tx.enquiry.update({ where: { id: quote.enquiryId }, data: { status: 'QUOTE_SENT' } })
+        await tx.auditLog.create({
+          data: { companyId: enq.companyId, actorUserId, action: 'enquiry.stage_auto', entityType: 'Enquiry', entityId: quote.enquiryId, beforeData: { status: enq.status }, afterData: { status: 'QUOTE_SENT' } },
+        })
+      }
+    }
     // Sending a quote does not touch the operational lifecycle (docs/24 Increment 1).
     await tx.auditLog.create({
       data: { action: 'quote.sent', entityType: 'Quote', entityId: quoteId, actorUserId },
@@ -324,7 +335,7 @@ export async function createQuoteForEnquiry(enquiryId: string, createdByUserId: 
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId }, select: { id: true, status: true, companyId: true } })
     if (!enquiry) throw new Error('Enquiry not found.')
-    if (enquiry.status === 'LOST' || enquiry.status === 'ARCHIVED') throw new Error('Reopen the enquiry before quoting it.')
+    if (enquiry.status === 'DECLINED') throw new Error('Reopen the enquiry before quoting it.')
     const agg = await tx.quote.aggregate({ _max: { seq: true } })
     const seq = (agg._max.seq ?? 0) + 1
     const quote = await tx.quote.create({
@@ -367,7 +378,7 @@ export async function acceptQuote(quoteId: string, actorUserId: string | null = 
         if (quote.status !== 'SENT' && quote.status !== 'VIEWED') throw new Error('Only a sent quote can be accepted.')
         if (version.total.lessThanOrEqualTo(0)) throw new Error('Add at least one line before accepting.')
         if (version.validUntil && version.validUntil.getTime() < now.getTime()) throw new Error('This quote has expired; revise it before accepting.')
-        if (quote.enquiry.status === 'LOST' || quote.enquiry.status === 'ARCHIVED') throw new Error('Reopen the enquiry before accepting a quote.')
+        if (quote.enquiry.status === 'DECLINED') throw new Error('Reopen the enquiry before accepting a quote.')
 
         const otherAccepted = await tx.quote.findFirst({ where: { enquiryId: quote.enquiryId, status: 'ACCEPTED', NOT: { id: quote.id } }, select: { id: true } })
         if (otherAccepted) throw new Error('Another quote on this enquiry has already been accepted.')

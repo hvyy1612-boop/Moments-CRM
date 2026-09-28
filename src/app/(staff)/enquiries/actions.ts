@@ -128,7 +128,7 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
 
   switch (op) {
     case 'lost':
-      await markEnquiryLost(enquiryId, 'Cancelled', user.id)
+      await markEnquiryLost(enquiryId, 'Declined', user.id)
       break
     case 'cancel_job':
       await cancelBooking(enquiryId, user.id)
@@ -167,18 +167,19 @@ export async function setEnquiryStageAction(formData: FormData): Promise<void> {
 
   const current = await prisma.enquiry.findUnique({ where: { id: enquiryId }, select: { status: true } })
   const cur = current?.status
-  const openTarget = target === 'NEW' || target === 'CONTACTED' || target === 'QUALIFIED'
+  // Only the three EARLY stages may be set by hand. Quote sent / Awaiting booking / Booking confirmed are
+  // reached by real events (send quote, accept, deposit paid), never a manual jump (spec §4, §14).
+  const openTarget = target === 'NEW_ENQUIRY' || target === 'CONTACTED' || target === 'CONSULTATION'
 
-  // A cancelled lead moved back into the pipeline: reopen (restores the checklist), then advance / book.
-  if ((cur === 'LOST' || cur === 'ARCHIVED') && (openTarget || target === 'CONVERTED')) {
+  // A declined lead moved back into the pipeline: reopen (restores the checklist), then advance / convert.
+  if (cur === 'DECLINED' && (openTarget || target === 'CONVERT')) {
     await reopenEnquiry(enquiryId, user.id) // -> CONTACTED
     if (openTarget && target !== 'CONTACTED') {
-      await advanceEnquiry(enquiryId, target as 'NEW' | 'CONTACTED' | 'QUALIFIED', user.id)
+      await advanceEnquiry(enquiryId, target as 'NEW_ENQUIRY' | 'CONTACTED' | 'CONSULTATION', user.id)
     }
-    if (target === 'CONVERTED') {
-      const result = await convertEnquiry(enquiryId, user.id)
-      if (result.projectId && !result.alreadyConverted) await seedProjectWorkflow(result.projectId)
-    }
+    // Convert creates the (provisional) Job and moves the lead to Awaiting booking confirmation. It does
+    // NOT start production - that waits for the deposit (finance -> confirmBookingByDepositTx).
+    if (target === 'CONVERT') await convertEnquiry(enquiryId, user.id)
     revalidatePath('/enquiries')
     revalidatePath(`/enquiries/${enquiryId}`)
     revalidatePath('/jobs')
@@ -186,22 +187,22 @@ export async function setEnquiryStageAction(formData: FormData): Promise<void> {
   }
 
   switch (target) {
-    case 'NEW':
-      await advanceEnquiry(enquiryId, 'NEW', user.id)
+    case 'NEW_ENQUIRY':
+      await advanceEnquiry(enquiryId, 'NEW_ENQUIRY', user.id)
       break
     case 'CONTACTED':
       await advanceEnquiry(enquiryId, 'CONTACTED', user.id)
       break
-    case 'QUALIFIED':
-      await advanceEnquiry(enquiryId, 'QUALIFIED', user.id)
+    case 'CONSULTATION':
+      await advanceEnquiry(enquiryId, 'CONSULTATION', user.id)
       break
-    case 'CONVERTED': {
-      const result = await convertEnquiry(enquiryId, user.id)
-      if (result.projectId && !result.alreadyConverted) await seedProjectWorkflow(result.projectId)
+    case 'CONVERT': {
+      // Provisional Job only; no production workflow until the deposit confirms the booking.
+      await convertEnquiry(enquiryId, user.id)
       break
     }
-    case 'LOST': {
-      const reason = String(formData.get('reason') ?? '').trim() || 'Cancelled'
+    case 'DECLINE': {
+      const reason = String(formData.get('reason') ?? '').trim() || 'Declined'
       await markEnquiryLost(enquiryId, reason, user.id)
       break
     }

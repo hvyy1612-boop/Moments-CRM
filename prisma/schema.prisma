@@ -191,12 +191,13 @@ enum OutboxStatus {
 
 // B2: acquisition layer — lead (Enquiry) tách khỏi Client. Xem docs/18-crm-flow-reference.md.
 enum EnquiryStatus {
-  NEW
+  NEW_ENQUIRY
   CONTACTED
-  QUALIFIED
-  CONVERTED
-  LOST
-  ARCHIVED
+  CONSULTATION
+  QUOTE_SENT
+  AWAITING_BOOKING_CONFIRMATION
+  BOOKING_CONFIRMED
+  DECLINED
 }
 
 // Operational owner of the next response, kept SEPARATE from the pipeline stage above. STUDIO = the
@@ -636,7 +637,7 @@ model Enquiry {
   styleReason          String?       @map("style_reason") @db.Text
   heardAbout           String?       @map("heard_about") @db.VarChar(120)
   source               EnquirySource @default(WEBSITE)
-  status               EnquiryStatus @default(NEW)
+  status               EnquiryStatus @default(NEW_ENQUIRY)
   waitingOn            WaitingOn?    @map("waiting_on")
   lostReason           String?       @map("lost_reason") @db.VarChar(500)
   clientId             String?       @map("client_id") @db.VarChar(30) // the client this lead is about (SN "Primary Client Contact")

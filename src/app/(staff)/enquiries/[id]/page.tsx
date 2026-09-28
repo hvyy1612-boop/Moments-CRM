@@ -90,7 +90,11 @@ export default async function EnquiryDetailPage({
     select: { id: true, action: true, createdAt: true, actor: { select: { name: true } } },
   })
 
-  const open = isOpenEnquiry(enquiry.status)
+  // A Job exists once the lead is accepted/converted (Awaiting or Confirmed). "open" = a live lead with
+  // no Job yet, so only those stages offer Create quote / Create Job.
+  const hasJob = enquiry.convertedProjectId != null
+  const confirmed = enquiry.status === 'BOOKING_CONFIRMED'
+  const open = isOpenEnquiry(enquiry.status) && !hasJob
   const board = await getEnquiryBoard(id)
   // Time-of-day for tasks that carry a manual due date+time (stored in dueAt for enquiry tasks). The
   // board row only carries the date, so the edit form reads the time from here to pre-fill its input.
@@ -128,10 +132,12 @@ export default async function EnquiryDetailPage({
           <div className="rounded-md border border-line bg-surface p-5">
             <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Workflow</h2>
 
-            {enquiry.status === 'CONVERTED' ? (
+            {hasJob ? (
               <div className="flex flex-col gap-3">
                 <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">
-                  Booked - the enquiry checklist is complete. Open the job below to continue the work.
+                  {confirmed
+                    ? 'Booking confirmed - the deposit is paid and the job is active. Open the job below to continue the work.'
+                    : 'Awaiting booking confirmation - a job is held for this enquiry, but production starts once the booking deposit is paid.'}
                 </div>
                 <EnquiryWorkflow
                   stages={board.stages}
@@ -178,11 +184,11 @@ export default async function EnquiryDetailPage({
                       type="submit"
                       className="rounded-md border border-line-strong px-3 py-1.5 text-sm font-bold text-lost-ink transition-colors hover:bg-sunk"
                     >
-                      Cancel
+                      Decline
                     </button>
                   </form>
                 </>
-              ) : enquiry.status === 'CONVERTED' ? (
+              ) : hasJob ? (
                 <>
                   {enquiry.convertedProjectId ? (
                     <Link
@@ -192,17 +198,27 @@ export default async function EnquiryDetailPage({
                       Open the job
                     </Link>
                   ) : null}
-                  <form action={updateEnquiryAction}>
-                    <input type="hidden" name="csrf" value={csrf} />
-                    <input type="hidden" name="enquiryId" value={enquiry.id} />
-                    <input type="hidden" name="op" value="cancel_job" />
-                    <button
-                      type="submit"
-                      className="rounded px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline"
-                    >
-                      Cancel job
-                    </button>
-                  </form>
+                  {confirmed ? (
+                    // A confirmed booking that falls through is a JOB cancellation (enquiry keeps its history).
+                    <form action={updateEnquiryAction}>
+                      <input type="hidden" name="csrf" value={csrf} />
+                      <input type="hidden" name="enquiryId" value={enquiry.id} />
+                      <input type="hidden" name="op" value="cancel_job" />
+                      <button type="submit" className="rounded px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline">
+                        Cancel job
+                      </button>
+                    </form>
+                  ) : (
+                    // Still awaiting the deposit: the client can pull out before booking -> Declined.
+                    <form action={updateEnquiryAction}>
+                      <input type="hidden" name="csrf" value={csrf} />
+                      <input type="hidden" name="enquiryId" value={enquiry.id} />
+                      <input type="hidden" name="op" value="lost" />
+                      <button type="submit" className="rounded px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline">
+                        Decline
+                      </button>
+                    </form>
+                  )}
                 </>
               ) : (
                 <form action={updateEnquiryAction}>

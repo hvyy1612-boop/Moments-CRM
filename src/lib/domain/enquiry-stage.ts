@@ -8,17 +8,19 @@ import { prisma } from '@/lib/db'
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
-export const OPEN_STAGE_ORDER = ['NEW', 'CONTACTED', 'QUALIFIED'] as const
+// Only the three EARLY stages are derived from the checklist. Quote sent / Awaiting booking / Booking
+// confirmed are driven by real business events (send quote, accept, deposit paid), never by ticking a task.
+export const OPEN_STAGE_ORDER = ['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION'] as const
 export type OpenStage = (typeof OPEN_STAGE_ORDER)[number]
 const OPEN = new Set<string>(OPEN_STAGE_ORDER)
 
 type DeriveTask = { stage: string | null; status: string; type: string }
 
-/** The three workflow groups map 1:1 to the three open stages, in order. */
+/** The three workflow groups map 1:1 to the three early open stages, in order. */
 const GROUP_TO_STAGE: [string, OpenStage][] = [
-  ['new', 'NEW'],
+  ['new', 'NEW_ENQUIRY'],
   ['discussion', 'CONTACTED'],
-  ['quote', 'QUALIFIED'],
+  ['quote', 'CONSULTATION'],
 ]
 
 /**
@@ -32,7 +34,7 @@ export function deriveOpenStage(tasks: DeriveTask[]): OpenStage {
     const groupTasks = real.filter((t) => t.stage === group)
     if (groupTasks.some((t) => t.status !== 'COMPLETED')) return stage
   }
-  return 'QUALIFIED'
+  return 'CONSULTATION'
 }
 
 /**

@@ -120,10 +120,12 @@ async function runCreateEnquiry(input: CreateEnquiryInput, actorUserId: string |
   })
 }
 
-const OPEN_STAGES = ['NEW', 'CONTACTED', 'QUALIFIED'] as const
+// Only the three EARLY stages may be set by hand. Quote sent / Awaiting booking confirmation / Booking
+// confirmed are driven by real events (send quote, accept quote, deposit paid), never a manual dropdown.
+const OPEN_STAGES = ['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION'] as const
 type OpenStage = (typeof OPEN_STAGES)[number]
 
-/** Move a lead forward within the open stages (NEW → CONTACTED → QUALIFIED). Not for convert/lost. */
+/** Move a lead forward within the early stages (New enquiry → Contacted → Consultation). Not for quote/convert/decline. */
 export async function advanceEnquiry(
   enquiryId: string,
   to: OpenStage,
@@ -162,10 +164,12 @@ export async function markEnquiryLost(
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
     if (!enquiry) throw new Error('Enquiry not found.')
-    if (enquiry.status === 'CONVERTED') throw new Error('A converted enquiry cannot be marked lost.')
+    // A confirmed booking is a successful conversion - its history stays. If the client later pulls out,
+    // that is a Job cancellation, NOT a decline (spec §3).
+    if (enquiry.status === 'BOOKING_CONFIRMED') throw new Error('A confirmed booking cannot be declined - cancel the Job instead.')
     const updated = await tx.enquiry.update({
       where: { id: enquiryId },
-      data: { status: 'LOST', lostReason: reason, waitingOn: null },
+      data: { status: 'DECLINED', lostReason: reason, waitingOn: null },
     })
     await cancelOpenWorkItems(tx, enquiryId)
     await tx.auditLog.create({
@@ -187,8 +191,8 @@ export async function reopenEnquiry(enquiryId: string, actorUserId: string | nul
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
     if (!enquiry) throw new Error('Enquiry not found.')
-    if (enquiry.status !== 'LOST' && enquiry.status !== 'ARCHIVED') {
-      throw new Error('Only a lost or archived enquiry can be reopened.')
+    if (enquiry.status !== 'DECLINED') {
+      throw new Error('Only a declined enquiry can be reopened.')
     }
     const updated = await tx.enquiry.update({
       where: { id: enquiryId },
@@ -245,14 +249,16 @@ export async function convertEnquiryCore(
 ) {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
     if (!enquiry) throw new Error('Enquiry not found.')
-    if (enquiry.status === 'CONVERTED') {
+    // Idempotent by the linked Job, not the stage: once a (provisional) Job exists this returns it, so a
+    // repeat accept/convert never creates a second Job - regardless of whether the deposit is paid yet.
+    if (enquiry.convertedProjectId) {
       return {
         clientId: enquiry.convertedClientId,
         projectId: enquiry.convertedProjectId,
         alreadyConverted: true,
       }
     }
-    if (enquiry.status === 'LOST' || enquiry.status === 'ARCHIVED') {
+    if (enquiry.status === 'DECLINED') {
       throw new Error('Reopen the enquiry before converting it.')
     }
     const company = await requireCompany(tx)
@@ -301,10 +307,13 @@ export async function convertEnquiryCore(
       },
     })
 
+    // Neutral model: accepting/converting moves the lead to AWAITING booking confirmation, NOT booked.
+    // The Job exists (so a deposit invoice has a home) but stays provisional - production is not started
+    // and the enquiry only becomes BOOKING_CONFIRMED when the booking deposit is paid (see finance).
     await tx.enquiry.update({
       where: { id: enquiry.id },
       data: {
-        status: 'CONVERTED',
+        status: 'AWAITING_BOOKING_CONFIRMATION',
         waitingOn: null,
         convertedClientId: client.id,
         convertedProjectId: project.id,
@@ -345,25 +354,17 @@ export async function cancelBooking(enquiryId: string, actorUserId: string | nul
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
     if (!enquiry) throw new Error('Enquiry not found.')
-    if (enquiry.status !== 'CONVERTED') throw new Error('This enquiry is not booked.')
+    if (enquiry.status !== 'BOOKING_CONFIRMED') throw new Error('This enquiry is not a confirmed booking.')
 
+    // Spec §3: cancelling a CONFIRMED booking is a JOB-lifecycle event. The Job is cancelled, but the
+    // enquiry KEEPS its BOOKING_CONFIRMED history and its link to the Job - it was a successful
+    // conversion and must not be rewritten to DECLINED (that would corrupt conversion reporting).
     if (enquiry.convertedProjectId) {
       await tx.project.update({
         where: { id: enquiry.convertedProjectId },
         data: { lifecycleStatus: 'CANCELLED' },
       })
     }
-    await tx.enquiry.update({
-      where: { id: enquiryId },
-      data: {
-        status: 'LOST',
-        lostReason: 'Booking cancelled',
-        waitingOn: null,
-        convertedProjectId: null,
-        convertedClientId: null,
-        convertedAt: null,
-      },
-    })
     await tx.auditLog.create({
       data: {
         companyId: enquiry.companyId,

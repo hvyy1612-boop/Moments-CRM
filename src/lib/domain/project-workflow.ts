@@ -55,6 +55,32 @@ export async function seedProjectWorkflow(projectId: string) {
   await prisma.$transaction((tx) => seedIfNeeded(tx, projectId, project.companyId))
 }
 
+/**
+ * Confirm a booking once its deposit is paid (neutral Enquiry model). Called from the finance deposit
+ * handler inside the SAME transaction. Activates the provisional Job (BOOKING_REQUESTED -> CONFIRMED +
+ * seeds the production workflow) and flips the linked enquiry AWAITING_BOOKING_CONFIRMATION ->
+ * BOOKING_CONFIRMED. Fully idempotent: the lifecycle only advances from BOOKING_REQUESTED, the seed is
+ * guarded, and the enquiry only flips from AWAITING - so replaying the payment event is a no-op.
+ */
+export async function confirmBookingByDepositTx(tx: Tx, projectId: string, actorUserId: string | null) {
+  const project = await tx.project.findUnique({ where: { id: projectId }, select: { companyId: true, lifecycleStatus: true } })
+  if (!project) return
+  if (project.lifecycleStatus === 'BOOKING_REQUESTED') {
+    await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'CONFIRMED' } })
+  }
+  await seedIfNeeded(tx, projectId, project.companyId)
+  const enquiry = await tx.enquiry.findFirst({
+    where: { convertedProjectId: projectId },
+    select: { id: true, status: true, companyId: true },
+  })
+  if (enquiry && enquiry.status === 'AWAITING_BOOKING_CONFIRMATION') {
+    await tx.enquiry.update({ where: { id: enquiry.id }, data: { status: 'BOOKING_CONFIRMED' } })
+    await tx.auditLog.create({
+      data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.booking_confirmed', entityType: 'Enquiry', entityId: enquiry.id, afterData: { projectId } },
+    })
+  }
+}
+
 /** Read the project's business facts + editable task rows and build the board. Seeds once on first read. */
 export async function getProjectBoard(projectId: string): Promise<ProjectBoard> {
   const project = await prisma.project.findUniqueOrThrow({

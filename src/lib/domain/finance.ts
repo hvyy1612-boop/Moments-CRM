@@ -4,7 +4,7 @@ import { splitGstInclusive } from '@/lib/money'
 import { sydneyLocalToUtc, systemClock } from '@/lib/time'
 import type { CreateInvoiceInput, CreateInvoiceLinesInput, RecordPaymentInput } from '@/lib/validation/finance'
 import { invoicePaidNet, lockInvoiceRow, refreshInvoiceAmountPaid } from './invoice-ledger'
-import { maybeAutoCompleteJob } from './project-workflow'
+import { confirmBookingByDepositTx, maybeAutoCompleteJob } from './project-workflow'
 import { nextRecordNumber } from './numbering'
 
 /**
@@ -584,6 +584,10 @@ export async function recordPayment(
           data: { commercialStatus: next },
         })
       }
+      // Neutral Enquiry model: the booking deposit is the confirmation gate. Paying a DEPOSIT (or paying
+      // in full) confirms the booking - it activates the provisional Job and flips the linked enquiry to
+      // BOOKING_CONFIRMED. Idempotent, so replaying the payment does nothing extra.
+      if (invoice.projectId) await confirmBookingByDepositTx(tx, invoice.projectId, actorUserId)
       // Payment is one half of "done"; auto-complete the job if the checklist is finished too.
       if (invoice.projectId) await maybeAutoCompleteJob(tx, invoice.projectId, actorUserId)
     }

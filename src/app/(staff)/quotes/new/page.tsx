@@ -21,7 +21,7 @@ export default async function CreateQuotePage() {
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
   const enquiries = await prisma.enquiry.findMany({
-    where: { status: { in: ['NEW', 'CONTACTED', 'QUALIFIED'] } },
+    where: { status: { in: ['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION', 'QUOTE_SENT'] } },
     orderBy: { createdAt: 'desc' },
     select: { id: true, name: true, eventType: true, createdAt: true, client: { select: { displayName: true } } },
     take: 100,
