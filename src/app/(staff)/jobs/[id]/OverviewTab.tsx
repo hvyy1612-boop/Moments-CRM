@@ -182,11 +182,11 @@ export function OverviewTab({
             <dl className="flex flex-col divide-y divide-line">
               {requirements.map((r) => (
                 <div key={r.id} className="group flex items-start justify-between gap-4 py-3 first:pt-0">
-                  <div className="min-w-0 flex-1">
-                    <dt className="text-sm font-bold text-ink">{r.label}</dt>
-                    <dd className="mt-0.5 whitespace-pre-line text-sm text-ink-muted">{r.detail}</dd>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:gap-6">
+                    <dt className="text-sm font-bold text-ink sm:w-48 sm:shrink-0">{r.label}</dt>
+                    <dd className="min-w-0 flex-1 whitespace-pre-line text-sm text-ink-muted">{r.detail}</dd>
                   </div>
-                  <form action={deleteRequirementAction} className="opacity-0 transition-opacity group-hover:opacity-100">
+                  <form action={deleteRequirementAction} className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100">
                     {hidden}
                     <input type="hidden" name="requirementId" value={r.id} />
                     <button type="submit" aria-label="Remove requirement" className="text-sm text-muted hover:text-lost-ink">Remove</button>
