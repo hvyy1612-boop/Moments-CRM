@@ -474,10 +474,6 @@ export async function CaseDetail({
                       <span className="text-ink">Total</span>
                       <span className="tabular-nums text-ink">{formatAud(version.total)}</span>
                     </div>
-                    <div className="mt-4">
-                      <p className="text-sm text-ink-muted">Client link</p>
-                      <CopyLinkField path={`/quote/${quote.viewToken}`} />
-                    </div>
                     {version.acceptedByClientAt ? (
                       <p className="mt-2 text-sm text-ink">Accepted by {version.acceptedByClientName} on {formatSydneyDate(version.acceptedByClientAt)}.</p>
                     ) : null}
