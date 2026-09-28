@@ -251,26 +251,32 @@ export function OverviewTab({
           {team.length === 0 ? (
             <p className="text-sm text-ink-muted">No team assigned yet.</p>
           ) : (
-            <ul className="flex flex-col divide-y divide-line">
-              {team.map((m) => (
-                <li key={m.id} className="group flex items-center justify-between gap-3 py-2.5 first:pt-0">
-                  <div>
-                    <p className="text-sm font-bold text-ink">{m.name}</p>
-                    <p className="text-sm text-muted">{m.role}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {m.email ? (
-                      <a href={`mailto:${m.email}`} aria-label={`Email ${m.name}`} className="text-ink-muted hover:text-ink"><IconMail className="h-4 w-4" /></a>
-                    ) : null}
-                    <form action={removeTeamMemberAction} className="opacity-0 transition-opacity group-hover:opacity-100">
-                      {hidden}
-                      <input type="hidden" name="memberId" value={m.id} />
-                      <button type="submit" className="text-sm text-muted hover:text-lost-ink">Remove</button>
-                    </form>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <div>
+              <div className="hidden border-b border-line pb-2 pr-20 sm:flex sm:gap-6">
+                <span className="w-48 shrink-0 text-xs font-bold uppercase tracking-wide text-muted">Name</span>
+                <span className="flex-1 text-xs font-bold uppercase tracking-wide text-muted">Role</span>
+              </div>
+              <ul className="flex flex-col divide-y divide-line">
+                {team.map((m) => (
+                  <li key={m.id} className="group relative py-3">
+                    <div className="flex min-w-0 flex-col gap-1 pr-20 sm:flex-row sm:gap-6">
+                      <span className="text-sm font-bold text-ink sm:w-48 sm:shrink-0">{m.name}</span>
+                      <span className="min-w-0 flex-1 text-sm text-ink-muted">{m.role}</span>
+                    </div>
+                    <div className="absolute right-0 top-3 flex items-center gap-3">
+                      {m.email ? (
+                        <a href={`mailto:${m.email}`} aria-label={`Email ${m.name}`} className="text-ink-muted hover:text-ink"><IconMail className="h-4 w-4" /></a>
+                      ) : null}
+                      <form action={removeTeamMemberAction} className="opacity-0 transition-opacity group-hover:opacity-100">
+                        {hidden}
+                        <input type="hidden" name="memberId" value={m.id} />
+                        <button type="submit" className="text-sm text-muted hover:text-lost-ink">Remove</button>
+                      </form>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </Card>
 
