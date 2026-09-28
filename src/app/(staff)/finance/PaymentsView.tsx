@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { DataTable, type DataColumn, type Selection } from '@/components/ui/DataTable'
 import { COL } from '@/components/ui/tableColumns'
 import { Popover } from '@/components/ui/Popover'
+import { deleteInvoicesAction } from './actions'
 
 export type Row = {
   id: string
@@ -122,7 +123,7 @@ const columns: DataColumn<Row>[] = [
  * (All / Unpaid / Paid / Overdue) and search replace the old stacked groups; a summary line shows the
  * count + total of what is on screen, and overdue / due-soon rows carry a red heads-up and a tinted row.
  */
-export function PaymentsView({ rows }: { rows: Row[] }) {
+export function PaymentsView({ rows, csrf }: { rows: Row[]; csrf: string }) {
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -141,7 +142,8 @@ export function PaymentsView({ rows }: { rows: Row[] }) {
   )
 
   const total = filtered.reduce((sum, r) => sum + r.amountNum, 0)
-  const selectedCount = filtered.filter((r) => selected.has(r.id)).length
+  const selectedIds = Array.from(selected)
+  const selectedCount = selectedIds.length
 
   const selection: Selection<Row> = {
     isSelected: (id) => selected.has(id),
@@ -197,9 +199,31 @@ export function PaymentsView({ rows }: { rows: Row[] }) {
           {filtered.length} payment{filtered.length !== 1 ? 's' : ''} · <span className="tabular text-ink">{aud.format(total)}</span>
         </p>
         {selectedCount > 0 ? (
-          <div className="flex items-center gap-3 text-sm">
-            <span className="text-ink-muted">{selectedCount} selected</span>
-            <button type="button" onClick={() => setSelected(new Set())} className="font-medium text-accent-ink hover:underline">Clear</button>
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="mr-1 text-sm font-medium text-ink">{selectedCount} selected</span>
+            <a
+              href={`/finance/report?ids=${selectedIds.join(',')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium text-ink transition-colors hover:bg-sunk"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 17v2a2 2 0 002 2h10a2 2 0 002-2v-2" /></svg>
+              Export PDF
+            </a>
+            <form
+              action={deleteInvoicesAction}
+              onSubmit={(e) => {
+                if (!window.confirm(`Delete ${selectedCount} invoice${selectedCount > 1 ? 's' : ''}? Invoices with recorded payments are kept. This can't be undone.`)) e.preventDefault()
+              }}
+            >
+              <input type="hidden" name="csrf" value={csrf} />
+              <input type="hidden" name="ids" value={selectedIds.join(',')} />
+              <button type="submit" className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium text-lost-ink transition-colors hover:bg-lost/50">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" /></svg>
+                Delete
+              </button>
+            </form>
+            <button type="button" onClick={() => setSelected(new Set())} className="rounded-md px-2.5 py-1 text-sm text-ink-muted transition-colors hover:bg-paper hover:text-ink">Clear</button>
           </div>
         ) : null}
       </div>
