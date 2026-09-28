@@ -607,7 +607,7 @@ export function InvoiceWorkspace(props: {
                   <option value="SUPPLEMENTARY">Supplementary</option>
                 </Select>
               </Field>
-              <Field label="Invoice number" htmlFor="ws-num" hint="Blank = auto (INV-...)."><TextInput id="ws-num" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Auto" maxLength={30} /></Field>
+              <Field label="Invoice number" htmlFor="ws-num" hint="Blank = auto (I...)."><TextInput id="ws-num" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Auto" maxLength={30} /></Field>
               <Field label="Issue date" htmlFor="ws-date"><TextInput id="ws-date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} /></Field>
               <Field label="PO number (optional)" htmlFor="ws-po"><TextInput id="ws-po" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="-" maxLength={60} /></Field>
               <div className="flex items-center justify-end gap-2 border-t border-line pt-3">

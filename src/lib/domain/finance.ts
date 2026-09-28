@@ -16,7 +16,7 @@ import { nextRecordNumber } from './numbering'
 /** The interactive-transaction client type, carrying the db.ts extensions. */
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
-/** Human invoice number, INV<YYYY><4d> (e.g. INV20260001), from the shared per-company/year counter. */
+/** Human invoice number, I<YYYY><4d> (e.g. I20260001), from the shared per-company/year counter. */
 async function nextInvoiceNumber(tx: Tx, companyId: string, at: Date = systemClock.now()): Promise<string> {
   return nextRecordNumber(tx, companyId, 'INVOICE', at)
 }

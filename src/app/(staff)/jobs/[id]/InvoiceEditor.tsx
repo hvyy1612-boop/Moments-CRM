@@ -247,7 +247,7 @@ export function InvoiceEditor({
                   </Select>
                 </label>
                 <label className="flex flex-col text-xs text-ink-muted">Invoice number
-                  <TextInput value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Auto (INV-...)" maxLength={30} className="mt-1 h-9" />
+                  <TextInput value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Auto (I...)" maxLength={30} className="mt-1 h-9" />
                 </label>
                 <label className="flex flex-col text-xs text-ink-muted">Issue date
                   <TextInput type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="mt-1 h-9" />
@@ -291,7 +291,7 @@ export function InvoiceEditor({
                 <option value="SUPPLEMENTARY">Supplementary</option>
               </Select>
             </Field>
-            <Field label="Invoice number" htmlFor="inv-num" hint="Blank = auto (INV-...).">
+            <Field label="Invoice number" htmlFor="inv-num" hint="Blank = auto (I...).">
               <TextInput id="inv-num" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Auto" maxLength={30} />
             </Field>
             <Field label="Issue date" htmlFor="inv-date">
