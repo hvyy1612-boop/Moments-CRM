@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
+import { useRowSelection } from '@/components/ui/useRowSelection'
+import { ExportBar } from '@/components/ui/ExportBar'
 import { COL } from '@/components/ui/tableColumns'
 import { formatSydneyDate } from '@/lib/time'
 import type { StatusLabel } from '@/features/projects/labels'
@@ -79,6 +81,7 @@ function Progress({ r }: { r: JobRow }) {
  * due within 2 days) carry a warning icon and are floated to the top by the page so staff never miss them.
  */
 export function JobsTable({ rows, backParam }: { rows: JobRow[]; backParam: string }) {
+  const { selectedIds, selection } = useRowSelection<JobRow>()
   const columns: DataColumn<JobRow>[] = [
     {
       key: 'client',
@@ -109,14 +112,18 @@ export function JobsTable({ rows, backParam }: { rows: JobRow[]; backParam: stri
   ]
 
   return (
-    <DataTable
-      ariaLabel="Jobs"
-      columns={columns}
-      rows={rows}
-      rowKey={(r) => r.id}
-      pageSize={30}
-      search={(r) => `${r.client} ${r.name} ${r.code}`}
-      searchPlaceholder="Search jobs"
-    />
+    <>
+      <ExportBar count={selectedIds.length} reportHref={`/jobs/report?ids=${selectedIds.join(',')}`} className="mb-3" />
+      <DataTable
+        ariaLabel="Jobs"
+        columns={columns}
+        rows={rows}
+        rowKey={(r) => r.id}
+        pageSize={30}
+        selection={selection}
+        search={(r) => `${r.client} ${r.name} ${r.code}`}
+        searchPlaceholder="Search jobs"
+      />
+    </>
   )
 }

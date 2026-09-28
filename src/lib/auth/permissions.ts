@@ -35,8 +35,10 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   // Staff workspace: the dashboard, enquiries, projects, and the project detail.
   '/dashboard': { roles: ['ADMIN', 'STUDIO'] },
   '/enquiries': { roles: ['ADMIN', 'STUDIO'] },
+  '/enquiries/report': { roles: ['ADMIN', 'STUDIO'] },
   '/enquiries/[id]': { roles: ['ADMIN', 'STUDIO'] },
   '/jobs': { roles: ['ADMIN', 'STUDIO'] },
+  '/jobs/report': { roles: ['ADMIN', 'STUDIO'] },
   '/jobs/[id]': { roles: ['ADMIN', 'STUDIO'] },
   // Enquiry-stage quotes (docs/31): the Quotes record list, create flow, and detail/builder.
   '/quotes': { roles: ['ADMIN', 'STUDIO'] },
@@ -49,6 +51,7 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/finance/report': { roles: ['ADMIN', 'STUDIO'] },
   '/finance/[invoiceId]': { roles: ['ADMIN', 'STUDIO'] },
   '/clients': { roles: ['ADMIN', 'STUDIO'] },
+  '/clients/report': { roles: ['ADMIN', 'STUDIO'] },
   '/clients/new': { roles: ['ADMIN', 'STUDIO'] },
   '/clients/import': { roles: ['ADMIN', 'STUDIO'] },
   '/clients/export': { roles: ['ADMIN', 'STUDIO'] },

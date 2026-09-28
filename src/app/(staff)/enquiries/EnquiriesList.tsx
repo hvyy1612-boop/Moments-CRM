@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { titleCase } from '@/lib/text'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
+import { useRowSelection } from '@/components/ui/useRowSelection'
+import { ExportBar } from '@/components/ui/ExportBar'
 import { PageContainer } from '@/components/PageContainer'
 import { PageHeader } from '@/components/PageHeader'
 import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
@@ -45,6 +47,7 @@ const SORTS: { key: SortKey; label: string }[] = [
 export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: string }) {
   const [tab, setTab] = useState<TabKey>('all')
   const [sort, setSort] = useState<SortKey>('newest')
+  const { selectedIds, selection } = useRowSelection<EnquiryRowData>()
 
   const counts = useMemo(() => {
     const map: Record<string, number> = { all: rows.filter((r) => r.status !== 'DECLINED').length }
@@ -156,6 +159,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
       </div>
 
       {/* Table */}
+      <ExportBar count={selectedIds.length} reportHref={`/enquiries/report?ids=${selectedIds.join(',')}`} className="mt-4" />
       <div className="mt-4">
         <DataTable
           ariaLabel="Enquiries"
@@ -163,6 +167,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
           rows={visible}
           rowKey={(r) => r.id}
           pageSize={30}
+          selection={selection}
           search={(r) => `${r.number ?? ''} ${r.name} ${r.event}`}
           searchPlaceholder="Search enquiries"
           emptyMessage="No enquiries in this view yet."

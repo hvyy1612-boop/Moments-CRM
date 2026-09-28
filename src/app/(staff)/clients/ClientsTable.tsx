@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
+import { useRowSelection } from '@/components/ui/useRowSelection'
+import { ExportBar } from '@/components/ui/ExportBar'
 import { COL } from '@/components/ui/tableColumns'
 import { formatSydneyDate } from '@/lib/time'
 import { ClientRowMenu } from './ClientRowMenu'
@@ -30,6 +32,7 @@ const isRecentlyAdded = (since: Date) => Date.now() - new Date(since).getTime() 
  * column is a fixed em track), all left-aligned. `storageKey` wires the Columns show/hide menu.
  */
 export function ClientsTable({ rows, csrf, canDelete, backParam }: { rows: ClientRow[]; csrf: string; canDelete: boolean; backParam: string }) {
+  const { selectedIds, selection } = useRowSelection<ClientRow>()
   const columns: DataColumn<ClientRow>[] = [
     {
       key: 'number',
@@ -68,16 +71,20 @@ export function ClientsTable({ rows, csrf, canDelete, backParam }: { rows: Clien
   ]
 
   return (
-    <DataTable
-      ariaLabel="Clients"
-      columns={columns}
-      rows={rows}
-      rowKey={(r) => r.id}
-      storageKey="clients.hiddenCols"
-      pageSize={30}
-      search={(r) => `${r.number ?? ''} ${r.firstName} ${r.lastName} ${r.name} ${r.email} ${r.phone ?? ''}`}
-      searchPlaceholder="Search clients"
-      rowClassName={(r) => (isRecentlyAdded(r.since) ? 'bg-accent-tint/40' : undefined)}
-    />
+    <>
+      <ExportBar count={selectedIds.length} reportHref={`/clients/report?ids=${selectedIds.join(',')}`} className="mb-3" />
+      <DataTable
+        ariaLabel="Clients"
+        columns={columns}
+        rows={rows}
+        rowKey={(r) => r.id}
+        storageKey="clients.hiddenCols"
+        pageSize={30}
+        selection={selection}
+        search={(r) => `${r.number ?? ''} ${r.firstName} ${r.lastName} ${r.name} ${r.email} ${r.phone ?? ''}`}
+        searchPlaceholder="Search clients"
+        rowClassName={(r) => (isRecentlyAdded(r.since) ? 'bg-accent-tint/40' : undefined)}
+      />
+    </>
   )
 }
