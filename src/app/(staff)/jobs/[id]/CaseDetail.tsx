@@ -2,7 +2,6 @@ import Link from 'next/link'
 import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
-import { CopyLinkField } from '@/components/ui/CopyLinkField'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { SentToast } from '@/components/ui/SentToast'
 import { requireRole } from '@/lib/auth/guard'
@@ -493,10 +492,6 @@ export async function CaseDetail({
                   ) : (
                     <div className="mt-4">
                       <p className="text-sm text-ink-muted">Waiting for the client to sign.</p>
-                      <div className="mt-2">
-                        <p className="text-sm text-ink-muted">Client link</p>
-                        <CopyLinkField path={`/contract/${contract.signToken}`} />
-                      </div>
                     </div>
                   )}
                 </section>

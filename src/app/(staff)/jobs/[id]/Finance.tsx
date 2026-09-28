@@ -12,7 +12,6 @@ import {
   recordPaymentAction,
   type QuoteActionState,
 } from '../actions'
-import { CopyLinkField } from '@/components/ui/CopyLinkField'
 
 const IDLE: QuoteActionState = { status: 'idle' }
 
@@ -146,12 +145,6 @@ export function Finance({
                   View / PDF →
                 </Link>
               </div>
-              {invoice.accessToken ? (
-                <div className="mt-2">
-                  <p className="text-xs text-ink-muted">Client link</p>
-                  <CopyLinkField path={`/invoice/${invoice.accessToken}`} />
-                </div>
-              ) : null}
 
               {invoice.isDraft ? (
                 <form action={issueInvoiceAction} className="mt-3 border-t border-line pt-3">
