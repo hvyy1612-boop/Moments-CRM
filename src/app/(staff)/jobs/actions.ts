@@ -870,3 +870,163 @@ export async function createStaffEnquiryAction(
   }
   redirect(`/jobs/${projectId}`)
 }
+
+// ---------------------------------------------------------------------------
+// Job Overview: client requirements, moodboard, assigned team, internal notes.
+// All plain form actions guarded by CSRF + staff role; they refresh the job page.
+// ---------------------------------------------------------------------------
+
+/** Add a confirmed client requirement (label + detail) to a job. */
+export async function addRequirementAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const label = String(formData.get('label') ?? '').trim()
+  const detail = String(formData.get('detail') ?? '').trim()
+  if (!projectId || !label || !detail) return
+  const sortOrder = await prisma.projectRequirement.count({ where: { projectId } })
+  await prisma.projectRequirement.create({ data: { projectId, label, detail, sortOrder } })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+/** Remove a client requirement. */
+export async function deleteRequirementAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const id = String(formData.get('requirementId') ?? '')
+  if (!projectId || !id) return
+  await prisma.projectRequirement.deleteMany({ where: { id, projectId } })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+/** Promote a client message into a confirmed requirement ("Add to requirements"). */
+export async function addMessageToRequirementsAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const communicationId = String(formData.get('communicationId') ?? '')
+  if (!projectId || !communicationId) return
+  const message = await prisma.communication.findFirst({ where: { id: communicationId, projectId }, select: { body: true } })
+  if (!message) return
+  const sortOrder = await prisma.projectRequirement.count({ where: { projectId } })
+  await prisma.projectRequirement.create({ data: { projectId, label: 'Client request', detail: message.body, sortOrder } })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+/** Add a moodboard image or reference link to a job. */
+export async function addMoodboardItemAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const url = String(formData.get('url') ?? '').trim()
+  const caption = String(formData.get('caption') ?? '').trim() || null
+  const kind = String(formData.get('kind') ?? 'image') === 'link' ? 'link' : 'image'
+  if (!projectId || !url) return
+  const sortOrder = await prisma.moodboardItem.count({ where: { projectId } })
+  await prisma.moodboardItem.create({ data: { projectId, url, caption, kind, sortOrder } })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+/** Remove a moodboard item. */
+export async function deleteMoodboardItemAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const id = String(formData.get('itemId') ?? '')
+  if (!projectId || !id) return
+  await prisma.moodboardItem.deleteMany({ where: { id, projectId } })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+/** Add a team member (optionally linked to a resource) with a role. */
+export async function addTeamMemberAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const role = String(formData.get('role') ?? '').trim()
+  const resourceId = String(formData.get('resourceId') ?? '').trim() || null
+  let name = String(formData.get('name') ?? '').trim()
+  if (!projectId || !role) return
+  if (resourceId && !name) {
+    const resource = await prisma.resource.findFirst({ where: { id: resourceId }, select: { name: true } })
+    name = resource?.name ?? ''
+  }
+  if (!name) return
+  const sortOrder = await prisma.projectTeamMember.count({ where: { projectId } })
+  await prisma.projectTeamMember.create({ data: { projectId, resourceId, name, role, sortOrder } })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+/** Remove a team member from a job. */
+export async function removeTeamMemberAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const id = String(formData.get('memberId') ?? '')
+  if (!projectId || !id) return
+  await prisma.projectTeamMember.deleteMany({ where: { id, projectId } })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+/** Add an internal team note (not client-facing) to a job's activity feed. */
+export async function addInternalNoteAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const body = String(formData.get('body') ?? '').trim()
+  if (!projectId || !body) return
+  await prisma.communication.create({
+    data: { projectId, type: 'NOTE', direction: 'internal', internal: true, body, byUserId: user.id },
+  })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+/** Update the client's extra contact details shown on the Overview (partner, preferred, instagram, phone, notes). */
+export async function updateClientContactAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const clientId = String(formData.get('clientId') ?? '')
+  if (!projectId || !clientId) return
+  const str = (k: string) => {
+    const v = String(formData.get(k) ?? '').trim()
+    return v.length > 0 ? v : null
+  }
+  await prisma.client.update({
+    where: { id: clientId },
+    data: {
+      partnerName: str('partnerName'),
+      preferredContact: str('preferredContact'),
+      instagram: str('instagram'),
+      phone: str('phone'),
+      notes: str('notes'),
+    },
+  })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+/** Edit an internal team note; records which staff edited it and when (shown as a small line). */
+export async function editInternalNoteAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const communicationId = String(formData.get('communicationId') ?? '')
+  const body = String(formData.get('body') ?? '').trim()
+  if (!projectId || !communicationId || !body) return
+  await prisma.communication.updateMany({
+    where: { id: communicationId, projectId, internal: true },
+    data: { body, editedByUserId: user.id, editedAt: new Date() },
+  })
+  revalidatePath(`/jobs/${projectId}`)
+}

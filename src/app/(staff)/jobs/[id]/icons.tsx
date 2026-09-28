@@ -47,6 +47,9 @@ export const IconUsers = (p: IconProps) => (
 export const IconChevron = (p: IconProps) => (
   <Svg {...p}><path d="M6 9l6 6 6-6" /></Svg>
 )
+export const IconChevronRight = (p: IconProps) => (
+  <Svg {...p}><path d="M9 6l6 6-6 6" /></Svg>
+)
 export const IconLayout = (p: IconProps) => (
   <Svg {...p}><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 10h16M10 10v10" /></Svg>
 )
@@ -61,4 +64,28 @@ export const IconFolder = (p: IconProps) => (
 )
 export const IconReceipt = (p: IconProps) => (
   <Svg {...p}><path d="M6 3h12v18l-2.5-1.5L13 21l-2.5-1.5L8 21l-2-1.5V3Z" /><path d="M9 8h6M9 12h6" /></Svg>
+)
+export const IconPlus = (p: IconProps) => (
+  <Svg {...p}><path d="M12 5v14M5 12h14" /></Svg>
+)
+export const IconMail = (p: IconProps) => (
+  <Svg {...p}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M4 7l8 6 8-6" /></Svg>
+)
+export const IconPhone = (p: IconProps) => (
+  <Svg {...p}><path d="M5 4h4l1.5 5-2 1.5a12 12 0 0 0 5 5l1.5-2 5 1.5v4a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1Z" /></Svg>
+)
+export const IconChat = (p: IconProps) => (
+  <Svg {...p}><path d="M4 5h16v11H9l-4 3V5Z" /></Svg>
+)
+export const IconArrowRight = (p: IconProps) => (
+  <Svg {...p}><path d="M5 12h14M13 6l6 6-6 6" /></Svg>
+)
+export const IconExternal = (p: IconProps) => (
+  <Svg {...p}><path d="M14 5h5v5M19 5l-8 8M18 13v6H5V6h6" /></Svg>
+)
+export const IconLink = (p: IconProps) => (
+  <Svg {...p}><path d="M9 15l6-6M10 6l1-1a4 4 0 0 1 6 6l-1 1M14 18l-1 1a4 4 0 0 1-6-6l1-1" /></Svg>
+)
+export const IconClient = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="8" r="3.5" /><path d="M4.5 20a7.5 7.5 0 0 1 15 0" /></Svg>
 )

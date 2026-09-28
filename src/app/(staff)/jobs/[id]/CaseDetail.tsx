@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/Button'
 import { CopyLinkField } from '@/components/ui/CopyLinkField'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { SentToast } from '@/components/ui/SentToast'
-import { Textarea } from '@/components/ui/form'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
@@ -13,7 +12,6 @@ import { formatSydneyDate, formatSydneyDateTime, sydneyDateTimeParts } from '@/l
 import { getProjectBoard } from '@/lib/domain/project-workflow'
 import { getJobBalance } from '@/lib/domain/money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
-import { statusLabel } from '@/features/projects/lifecycle'
 import { listActivePackages } from '@/lib/domain/package'
 import { quoteDisplayNumber } from '@/lib/domain/quote'
 import { AppShell } from '../../AppShell'
@@ -22,13 +20,12 @@ import {
   closeJobAction,
   createContractAction,
   createQuoteAction,
-  logProjectClientReplyAction,
   saveQuoteAction,
-  sendProjectReplyAction,
   sendQuoteAction,
 } from '../actions'
 import { ContractSend } from './ContractSend'
 import type { HistoryEntry } from './HistoryLogModal'
+import { OverviewTab } from './OverviewTab'
 import { ProjectWorkflow } from './ProjectWorkflow'
 import { Delivery } from './Delivery'
 import { QuoteBuilder } from './QuoteBuilder'
@@ -152,6 +149,11 @@ export async function CaseDetail({
         orderBy: { createdAt: 'desc' },
         include: { items: { orderBy: { sortOrder: 'asc' } } },
       },
+      requirements: { orderBy: { sortOrder: 'asc' } },
+      teamMembers: {
+        orderBy: { sortOrder: 'asc' },
+        include: { resource: { include: { linkedUser: { select: { email: true } } } } },
+      },
     },
   })
   if (!project) notFound()
@@ -184,7 +186,23 @@ export async function CaseDetail({
   const communications = await prisma.communication.findMany({
     where: { projectId: project.id },
     orderBy: { createdAt: 'asc' },
-    select: { id: true, direction: true, body: true, createdAt: true, by: { select: { name: true } } },
+    select: {
+      id: true,
+      direction: true,
+      body: true,
+      createdAt: true,
+      internal: true,
+      editedAt: true,
+      by: { select: { name: true } },
+      editedBy: { select: { name: true } },
+    },
+  })
+
+  // Active resources for the "Assigned team" picker (independent of booking confirmation).
+  const teamResourceOptions = await prisma.resource.findMany({
+    where: { companyId: project.companyId, status: 'active' },
+    orderBy: { name: 'asc' },
+    select: { id: true, name: true },
   })
 
   const history: HistoryEntry[] = (
@@ -262,6 +280,57 @@ export async function CaseDetail({
   const activeTab: TabKey = (TABS.some((t) => t.key === tab) ? tab : 'overview') as TabKey
   const tabHref = (key: TabKey) =>
     `/jobs/${project.id}?tab=${key}${back ? `&back=${encodeURIComponent(back)}` : ''}`
+
+  // ---- Overview view-models (real data only) ----
+  const addressParts = [project.client.street, project.client.suburb, project.client.state, project.client.postcode].filter(Boolean)
+  const overviewClient = {
+    clientId: project.client.id,
+    displayName: project.client.displayName,
+    partnerName: project.client.partnerName,
+    phone: project.client.phone,
+    email: project.client.email,
+    preferredContact: project.client.preferredContact,
+    address: addressParts.length ? addressParts.join(', ') : null,
+    instagram: project.client.instagram,
+    clientSince: formatSydneyDate(project.client.createdAt),
+    notes: project.client.notes,
+    href: `/clients/${project.client.id}`,
+  }
+  const overviewRequirements = project.requirements.map((r) => ({ id: r.id, label: r.label, detail: r.detail }))
+  const overviewTeam = project.teamMembers.map((t) => ({ id: t.id, name: t.name, role: t.role, email: t.resource?.linkedUser?.email ?? null }))
+  // Client messages = the client's own messages only (one person); staff communicate via Internal notes.
+  const overviewMessages = communications
+    .filter((c) => !c.internal && c.direction === 'inbound')
+    .map((c) => ({
+      id: c.id,
+      author: project.client.displayName,
+      body: c.body,
+      dateLabel: formatSydneyDateTime(c.createdAt),
+      inbound: true,
+    }))
+  const overviewNotes = communications
+    .filter((c) => c.internal)
+    .map((c) => ({
+      id: c.id,
+      author: c.by?.name ?? 'Staff',
+      body: c.body,
+      dateLabel: formatSydneyDateTime(c.createdAt),
+      editedByName: c.editedBy?.name ?? null,
+      editedLabel: c.editedAt ? formatSydneyDateTime(c.editedAt) : null,
+    }))
+  const overviewUpcoming = {
+    nextAction: board?.nextAction ?? null,
+    shootLabel: shootDateLabel,
+    shootLocation,
+    paymentLabel: invoiceOutstanding.greaterThan(0)
+      ? `${formatAud(invoiceOutstanding)} remaining`
+      : invoiceCount > 0 ? 'Fully paid' : 'No invoice yet',
+    paymentSub: invoiceOutstanding.greaterThan(0)
+      ? 'Balance outstanding'
+      : invoiceCount > 0 ? 'All invoices settled' : null,
+    deliveryLabel: galleryView ? (galleryView.publishedLabel ? 'Gallery delivered' : 'Gallery in progress') : 'Delivery not started',
+    deliverySub: galleryView?.publishedLabel ? `Published ${galleryView.publishedLabel}` : (galleryView?.title ?? null),
+  }
 
   return (
     <AppShell user={user} csrf={csrf} active={section} bareHeader>
@@ -362,76 +431,18 @@ export async function CaseDetail({
 
         <div className="mt-6">
           {activeTab === 'overview' ? (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <section className="rounded border border-line bg-surface p-5 lg:col-span-2">
-                <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Conversation</h2>
-                <div className="flex flex-col gap-3">
-                  {communications.length === 0 ? (
-                    <p className="text-base text-ink-muted">No messages yet.</p>
-                  ) : (
-                    communications.map((c) => {
-                      const inbound = c.direction === 'inbound'
-                      return (
-                        <div key={c.id} className={inbound ? '' : 'text-right'}>
-                          <div className="text-sm text-muted">
-                            {inbound ? 'Client' : (c.by?.name ?? 'Staff')} · {formatSydneyDateTime(c.createdAt)}
-                          </div>
-                          <div className={`mt-1 inline-block max-w-[85%] whitespace-pre-line rounded-md px-3 py-2 text-base ${inbound ? 'bg-paper text-ink' : 'bg-ink text-surface'}`}>
-                            {c.body}
-                          </div>
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-                <div className="mt-4 flex flex-col gap-4 border-t border-line pt-4">
-                  <form action={sendProjectReplyAction} className="flex flex-col gap-2">
-                    <input type="hidden" name="csrf" value={csrf} />
-                    <input type="hidden" name="projectId" value={project.id} />
-                    <label className="text-sm font-bold text-ink">Reply to client</label>
-                    <Textarea name="body" required placeholder="Write your reply..." />
-                    <div><Button size="sm" type="submit">Send reply</Button></div>
-                  </form>
-                  <form action={logProjectClientReplyAction} className="flex flex-col gap-2">
-                    <input type="hidden" name="csrf" value={csrf} />
-                    <input type="hidden" name="projectId" value={project.id} />
-                    <label className="text-sm font-bold text-ink">Log a message from the client</label>
-                    <Textarea name="body" required placeholder="Paste what the client said..." />
-                    <div><button type="submit" className="rounded border border-line-strong px-3 py-1.5 text-sm font-bold text-ink-muted hover:text-ink">Record client message</button></div>
-                  </form>
-                </div>
-              </section>
-
-              <div className="flex flex-col gap-4">
-                <Card title="Summary">
-                  <dl className="mt-2 flex flex-col gap-2 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <dt className="text-ink-muted">Status</dt>
-                      <dd><StatusPill tone="info">{statusLabel(project.lifecycleStatus)}</StatusPill></dd>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <dt className="text-ink-muted">Enquired</dt>
-                      <dd className="text-ink">{formatSydneyDate(project.enquiryReceivedAt)}</dd>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <dt className="text-ink-muted">Shoot</dt>
-                      <dd className="text-ink">{shootDateLabel ?? 'Not scheduled'}</dd>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <dt className="text-ink-muted">Reference</dt>
-                      <dd className="text-ink">{project.code}</dd>
-                    </div>
-                  </dl>
-                </Card>
-                <Card title="Client">
-                  <dl className="mt-2 grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
-                    <div><dt className="text-ink-muted">Email</dt><dd className="text-ink">{project.client.email}</dd></div>
-                    <div><dt className="text-ink-muted">Phone</dt><dd className="text-ink">{project.client.phone ?? 'Not given'}</dd></div>
-                  </dl>
-                  {project.enquiryNotes ? <p className="mt-3 whitespace-pre-line text-sm text-ink">{project.enquiryNotes}</p> : null}
-                </Card>
-              </div>
-            </div>
+            <OverviewTab
+              projectId={project.id}
+              csrf={csrf}
+              client={overviewClient}
+              requirements={overviewRequirements}
+              team={overviewTeam}
+              resources={teamResourceOptions}
+              upcoming={overviewUpcoming}
+              messages={overviewMessages}
+              notes={overviewNotes}
+              hrefs={{ workflow: tabHref('workflow'), shoot: tabHref('shoot'), finance: tabHref('finance'), files: tabHref('files') }}
+            />
           ) : null}
 
           {activeTab === 'workflow' ? (
