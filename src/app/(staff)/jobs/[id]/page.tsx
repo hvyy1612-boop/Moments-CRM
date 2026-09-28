@@ -13,12 +13,12 @@ export default async function ProjectDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ back?: string; sent?: string }>
+  searchParams: Promise<{ back?: string; sent?: string; tab?: string }>
 }) {
   const user = await requireRole('/jobs/[id]')
   const { id } = await params
-  const { back, sent } = await searchParams
+  const { back, sent, tab } = await searchParams
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
-  return <CaseDetail id={id} user={user} csrf={csrf} section="jobs" back={back} sent={sent} />
+  return <CaseDetail id={id} user={user} csrf={csrf} section="jobs" back={back} sent={sent} tab={tab} />
 }
