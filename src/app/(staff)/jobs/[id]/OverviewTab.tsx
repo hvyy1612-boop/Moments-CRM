@@ -2,13 +2,9 @@
 
 import { useState } from 'react'
 import {
-  addInternalNoteAction,
-  addMessageToRequirementsAction,
   addRequirementAction,
   addTeamMemberAction,
   deleteRequirementAction,
-  editInternalNoteAction,
-  logProjectClientReplyAction,
   removeTeamMemberAction,
   updateClientContactAction,
 } from '../actions'
@@ -56,24 +52,9 @@ export type Upcoming = {
   deliveryLabel: string
   deliverySub: string | null
 }
-export type MsgRow = { id: string; author: string; body: string; dateLabel: string; inbound: boolean }
-export type NoteRow = { id: string; author: string; body: string; dateLabel: string; editedByName: string | null; editedLabel: string | null }
-
 const field = 'w-full rounded border border-line-strong bg-surface px-3 py-2 text-sm text-ink'
 const btnGhost = 'rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink'
 const addBtn = 'inline-flex items-center gap-1 rounded border border-line-strong px-2.5 py-1.5 text-sm font-bold text-ink-muted hover:text-ink'
-
-function initials(name: string) {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '?'
-}
-
-function Avatar({ name }: { name: string }) {
-  return (
-    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sunk text-xs font-bold text-ink-muted">
-      {initials(name)}
-    </span>
-  )
-}
 
 function Card({
   icon,
@@ -115,8 +96,6 @@ export function OverviewTab({
   team,
   resources,
   upcoming,
-  messages,
-  notes,
 }: {
   projectId: string
   csrf: string
@@ -125,17 +104,10 @@ export function OverviewTab({
   team: TeamRow[]
   resources: ResourceOpt[]
   upcoming: Upcoming
-  messages: MsgRow[]
-  notes: NoteRow[]
 }) {
   const [addReq, setAddReq] = useState(false)
   const [addMember, setAddMember] = useState(false)
   const [editContact, setEditContact] = useState(false)
-  const [activityTab, setActivityTab] = useState<'messages' | 'notes'>('messages')
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
-  const [addingMessage, setAddingMessage] = useState(false)
-  const [addingNote, setAddingNote] = useState(false)
-  const editingNote = editingNoteId ? notes.find((n) => n.id === editingNoteId) ?? null : null
 
   const hidden = (
     <>
@@ -331,82 +303,6 @@ export function OverviewTab({
         </Card>
       </div>
 
-      {/* Activity & communication (full width) */}
-      <section className="rounded border border-line bg-surface p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-start gap-2.5">
-            <span className="mt-0.5 text-ink-muted"><IconChat className="h-5 w-5" /></span>
-            <div>
-              <h2 className="text-lg font-semibold text-ink">Activity &amp; communication</h2>
-              <p className="text-sm text-muted">Recent messages with the client and internal team notes.</p>
-            </div>
-          </div>
-          <div className="inline-flex overflow-hidden rounded-md border border-line-strong">
-            <button type="button" onClick={() => setActivityTab('messages')} className={`px-3 py-1.5 text-sm font-bold ${activityTab === 'messages' ? 'bg-ink text-surface' : 'bg-surface text-ink-muted hover:text-ink'}`}>
-              Client messages ({messages.length})
-            </button>
-            <button type="button" onClick={() => setActivityTab('notes')} className={`px-3 py-1.5 text-sm font-bold ${activityTab === 'notes' ? 'bg-ink text-surface' : 'bg-surface text-ink-muted hover:text-ink'}`}>
-              Internal notes ({notes.length})
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-4">
-          {activityTab === 'messages' ? (
-            <>
-              <ul className="flex flex-col divide-y divide-line">
-                {messages.length === 0 ? <li className="py-2 text-sm text-ink-muted">No client messages yet.</li> : null}
-                {messages.map((m) => (
-                  <li key={m.id} className="group flex items-start gap-3 py-3 first:pt-0">
-                    <Avatar name={m.author} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-baseline gap-x-2">
-                        <span className="text-sm font-bold text-ink">{m.author}</span>
-                        <span className="text-xs text-muted">{m.dateLabel}</span>
-                      </div>
-                      <p className="mt-0.5 whitespace-pre-line text-sm text-ink">{m.body}</p>
-                    </div>
-                    <form action={addMessageToRequirementsAction} className="opacity-0 transition-opacity group-hover:opacity-100">
-                      {hidden}
-                      <input type="hidden" name="communicationId" value={m.id} />
-                      <button type="submit" className="whitespace-nowrap text-sm font-bold text-accent-ink hover:underline">Add to requirements</button>
-                    </form>
-                  </li>
-                ))}
-              </ul>
-              <button type="button" onClick={() => setAddingMessage(true)} className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-accent-ink hover:underline">
-                <IconPlus className="h-4 w-4" /> Add message
-              </button>
-            </>
-          ) : (
-            <>
-              <ul className="flex flex-col divide-y divide-line">
-                {notes.length === 0 ? <li className="py-2 text-sm text-ink-muted">No internal notes yet.</li> : null}
-                {notes.map((n) => (
-                  <li key={n.id} className="group flex items-start gap-3 py-3 first:pt-0">
-                    <Avatar name={n.author} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-baseline gap-x-2">
-                        <span className="text-sm font-bold text-ink">{n.author}</span>
-                        <span className="text-xs text-muted">{n.dateLabel}</span>
-                      </div>
-                      <p className="mt-0.5 whitespace-pre-line text-sm text-ink">{n.body}</p>
-                      {n.editedLabel ? (
-                        <p className="mt-1 text-xs text-muted">Edited by {n.editedByName ?? 'staff'} · {n.editedLabel}</p>
-                      ) : null}
-                    </div>
-                    <button type="button" onClick={() => setEditingNoteId(n.id)} className="opacity-0 transition-opacity group-hover:opacity-100 text-sm font-bold text-accent-ink hover:underline">Edit</button>
-                  </li>
-                ))}
-              </ul>
-              <button type="button" onClick={() => setAddingNote(true)} className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-accent-ink hover:underline">
-                <IconPlus className="h-4 w-4" /> Add note
-              </button>
-            </>
-          )}
-        </div>
-      </section>
-
       {/* ---- Modals (Carbon transactional dialogs) ---- */}
       <Modal open={addReq} onClose={() => setAddReq(false)} title="Add requirement" description="Record a confirmed client preference, request or restriction.">
         <form action={async (fd) => { await addRequirementAction(fd); setAddReq(false) }} className="flex min-h-0 flex-1 flex-col">
@@ -461,48 +357,6 @@ export function OverviewTab({
             <button type="submit" className={modalPrimaryBtn}>Save changes</button>
           </ModalFooter>
         </form>
-      </Modal>
-
-      <Modal open={addingMessage} onClose={() => setAddingMessage(false)} title="Record a client message" description="Log a message the client sent you.">
-        <form action={async (fd) => { await logProjectClientReplyAction(fd); setAddingMessage(false) }} className="flex min-h-0 flex-1 flex-col">
-          <div className={modalBody}>
-            {hidden}
-            <ModalField label="Message"><textarea name="body" required rows={5} placeholder="Paste what the client said..." className={field} /></ModalField>
-          </div>
-          <ModalFooter>
-            <button type="button" onClick={() => setAddingMessage(false)} className={modalCancelBtn}>Cancel</button>
-            <button type="submit" className={modalPrimaryBtn}>Add message</button>
-          </ModalFooter>
-        </form>
-      </Modal>
-
-      <Modal open={addingNote} onClose={() => setAddingNote(false)} title="Add internal note" description="A note for the team - not shown to the client.">
-        <form action={async (fd) => { await addInternalNoteAction(fd); setAddingNote(false) }} className="flex min-h-0 flex-1 flex-col">
-          <div className={modalBody}>
-            {hidden}
-            <ModalField label="Note"><textarea name="body" required rows={5} placeholder="Note for the team..." className={field} /></ModalField>
-          </div>
-          <ModalFooter>
-            <button type="button" onClick={() => setAddingNote(false)} className={modalCancelBtn}>Cancel</button>
-            <button type="submit" className={modalPrimaryBtn}>Add note</button>
-          </ModalFooter>
-        </form>
-      </Modal>
-
-      <Modal open={Boolean(editingNote)} onClose={() => setEditingNoteId(null)} title="Edit note">
-        {editingNote ? (
-          <form action={async (fd) => { await editInternalNoteAction(fd); setEditingNoteId(null) }} className="flex min-h-0 flex-1 flex-col">
-            <div className={modalBody}>
-              {hidden}
-              <input type="hidden" name="communicationId" value={editingNote.id} />
-              <ModalField label="Note"><textarea name="body" required rows={5} defaultValue={editingNote.body} className={field} /></ModalField>
-            </div>
-            <ModalFooter>
-              <button type="button" onClick={() => setEditingNoteId(null)} className={modalCancelBtn}>Cancel</button>
-              <button type="submit" className={modalPrimaryBtn}>Save</button>
-            </ModalFooter>
-          </form>
-        ) : null}
       </Modal>
     </div>
   )

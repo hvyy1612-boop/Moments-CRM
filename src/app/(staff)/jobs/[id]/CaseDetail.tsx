@@ -159,20 +159,6 @@ export async function CaseDetail({
   })
   const taskTimes: Record<string, string> = {}
   for (const w of taskOverrides) if (w.dueOverrideAt) taskTimes[w.id] = sydneyDateTimeParts(w.dueOverrideAt).time
-  const communications = await prisma.communication.findMany({
-    where: { projectId: project.id },
-    orderBy: { createdAt: 'asc' },
-    select: {
-      id: true,
-      direction: true,
-      body: true,
-      createdAt: true,
-      internal: true,
-      editedAt: true,
-      by: { select: { name: true } },
-      editedBy: { select: { name: true } },
-    },
-  })
 
   // Active resources for the "Assigned team" picker (independent of booking confirmation).
   const teamResourceOptions = await prisma.resource.findMany({
@@ -261,26 +247,6 @@ export async function CaseDetail({
   }
   const overviewRequirements = project.requirements.map((r) => ({ id: r.id, label: r.label, detail: r.detail }))
   const overviewTeam = project.teamMembers.map((t) => ({ id: t.id, name: t.name, role: t.role, email: t.resource?.linkedUser?.email ?? null }))
-  // Client messages = the client's own messages only (one person); staff communicate via Internal notes.
-  const overviewMessages = communications
-    .filter((c) => !c.internal && c.direction === 'inbound')
-    .map((c) => ({
-      id: c.id,
-      author: project.client.displayName,
-      body: c.body,
-      dateLabel: formatSydneyDateTime(c.createdAt),
-      inbound: true,
-    }))
-  const overviewNotes = communications
-    .filter((c) => c.internal)
-    .map((c) => ({
-      id: c.id,
-      author: c.by?.name ?? 'Staff',
-      body: c.body,
-      dateLabel: formatSydneyDateTime(c.createdAt),
-      editedByName: c.editedBy?.name ?? null,
-      editedLabel: c.editedAt ? formatSydneyDateTime(c.editedAt) : null,
-    }))
   const overviewUpcoming = {
     nextAction: board?.nextAction ?? null,
     shootLabel: shootDateLabel,
@@ -402,8 +368,6 @@ export async function CaseDetail({
               team={overviewTeam}
               resources={teamResourceOptions}
               upcoming={overviewUpcoming}
-              messages={overviewMessages}
-              notes={overviewNotes}
             />
           ) : null}
 
