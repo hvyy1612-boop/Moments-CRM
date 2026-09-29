@@ -3,8 +3,9 @@ import { sydneyYmd, systemClock } from '@/lib/time'
 
 /**
  * One source of truth for human-facing record numbers: `<PREFIX><YYYY><4-digit>`, per company, reset each
- * calendar year (Sydney time). Client `C20260001`, Enquiry `E20260001`, Quote `Q20260001`, Job `J20260001`,
- * Invoice `I20260001`. Every type uses a single-letter prefix so the numbers read consistently.
+ * calendar year (Sydney time). Client `C20260001`, Lead `L20260001` (DB type ENQUIRY; was `E` until
+ * 2026-09-30), Quote `Q20260001`, Job `J20260001`, Invoice `I20260001`. Every type uses a single-letter
+ * prefix so the numbers read consistently.
  *
  * Uniqueness is bulletproof by design (three layers):
  *  1. Each record's number column has a UNIQUE constraint — Postgres physically rejects a duplicate.
@@ -16,7 +17,8 @@ import { sydneyYmd, systemClock } from '@/lib/time'
 
 export type RecordType = 'CLIENT' | 'ENQUIRY' | 'QUOTE' | 'JOB' | 'INVOICE'
 
-const PREFIX: Record<RecordType, string> = { CLIENT: 'C', ENQUIRY: 'E', QUOTE: 'Q', JOB: 'J', INVOICE: 'I' }
+// ENQUIRY is the Lead record (staff-facing name), so its numbers read L... like the rest of the UI.
+const PREFIX: Record<RecordType, string> = { CLIENT: 'C', ENQUIRY: 'L', QUOTE: 'Q', JOB: 'J', INVOICE: 'I' }
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
