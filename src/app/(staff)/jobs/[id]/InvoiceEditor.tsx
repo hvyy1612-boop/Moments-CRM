@@ -397,7 +397,7 @@ export function InvoiceEditor({
               <p className="text-sm text-muted">No products or packages added yet.</p>
             </div>
           ) : (
-            <div className="mt-2 overflow-x-auto rounded-md border border-line">
+            <div className="mt-2 overflow-x-auto rounded-md border border-muted">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-line-strong text-left text-xs uppercase tracking-wide text-muted">
@@ -468,7 +468,7 @@ export function InvoiceEditor({
           {presetSchedule ? (
             // A preset is shown read-only (it follows the total); "Customise" turns it into editable rows.
             <div className="mt-3 max-w-2xl">
-              <div className="divide-y divide-line rounded border border-line bg-surface">
+              <div className="divide-y divide-line-strong rounded border border-muted bg-surface">
                 {presetSchedule.map((r) => (
                   // Phone: label + amount on one line, the due date under the label. Wider: three aligned columns.
                   <div key={r.label} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-2 text-sm sm:grid-cols-[minmax(0,1fr)_9em_8em]">
@@ -535,7 +535,7 @@ export function InvoiceEditor({
                 )}
               </div>
               <div className="flex justify-between py-1 text-ink"><span>GST (10%)</span><span className="tabular">{money(gst)}</span></div>
-              <div className="mt-2 flex items-baseline justify-between border-t border-line pt-3 font-semibold text-ink">
+              <div className="mt-2 flex items-baseline justify-between border-t border-line-strong pt-3 font-semibold text-ink">
                 <span className="text-lg">Total due</span>
                 <span className="tabular text-xl">{money(total)}</span>
               </div>
