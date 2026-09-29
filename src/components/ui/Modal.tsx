@@ -11,7 +11,7 @@ import { createPortal } from 'react-dom'
  * focus is trapped inside and the body scroll is locked while open. Styled with the
  * app's own tokens (monochrome) rather than Carbon's blue.
  */
-const SIZE: Record<string, string> = { xs: 'max-w-sm', sm: 'max-w-lg', md: 'max-w-2xl' }
+const SIZE: Record<string, string> = { xs: 'max-w-sm', sm: 'max-w-lg', md: 'max-w-2xl', lg: 'max-w-4xl' }
 
 /** Body zone: scrolls when the content is taller than the modal; header/footer stay fixed. */
 export const modalBody = 'flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4'
@@ -49,7 +49,7 @@ export function Modal({
   title: string
   label?: string
   description?: string
-  size?: 'xs' | 'sm' | 'md'
+  size?: 'xs' | 'sm' | 'md' | 'lg'
   children: React.ReactNode
 }) {
   const ref = useRef<HTMLDivElement>(null)

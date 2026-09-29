@@ -14,6 +14,7 @@ import { ImportedBanner } from './ImportedBanner'
 import { SortSelect, DEFAULT_SORT, type SortValue } from './SortSelect'
 import { FilterMenu } from './FilterMenu'
 import { ColumnsMenu } from './ColumnsMenu'
+import { AddClientButton } from './AddClientButton'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Clients - Moments' }
@@ -133,15 +134,8 @@ export default async function ClientsPage({
                 </svg>
                 Export
               </a>
-              <Link
-                href="/clients/new"
-                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-                Add client
-              </Link>
+              {/* Opens the intake in a Modal (no full-page navigation). */}
+              <AddClientButton csrf={csrf} />
             </>
           }
         />

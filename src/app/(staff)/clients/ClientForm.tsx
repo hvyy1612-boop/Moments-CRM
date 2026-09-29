@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Checkbox, Field, Select, TextInput, Textarea } from '@/components/ui/form'
 
@@ -17,7 +18,11 @@ export type ClientFormValues = {
 }
 
 /** Shared client form. With `showEnquiryFields`, it doubles as the single intake: adding the client
- *  also opens an enquiry (event type / date / source / note feed the new lead). */
+ *  also opens an enquiry (event type / date / source / note feed the new lead).
+ *
+ *  Two layouts from one field set: the default is a bordered card (the full-page /clients/new and the
+ *  edit page); `bare` drops the card and splits into a scrollable body + a pinned footer so the same
+ *  form drops straight into the "Add client" Modal. Pass `footer` to supply the modal's Cancel + Save. */
 export function ClientForm({
   action,
   csrf,
@@ -25,6 +30,8 @@ export function ClientForm({
   clientId,
   submitLabel,
   showEnquiryFields = false,
+  bare = false,
+  footer,
 }: {
   action: (formData: FormData) => void | Promise<void>
   csrf: string
@@ -32,13 +39,20 @@ export function ClientForm({
   clientId?: string
   submitLabel: string
   showEnquiryFields?: boolean
+  bare?: boolean
+  footer?: ReactNode
 }) {
   const v = values
-  return (
-    <form action={action} className="mt-6 rounded-md border border-line bg-surface p-6">
+
+  const hidden = (
+    <>
       <input type="hidden" name="csrf" value={csrf} />
       {clientId ? <input type="hidden" name="clientId" value={clientId} /> : null}
+    </>
+  )
 
+  const fields = (
+    <>
       <div className="mb-5">
         <Checkbox
           name="isCompany"
@@ -149,7 +163,28 @@ export function ClientForm({
           />
         </Field>
       </div>
+    </>
+  )
 
+  // Modal layout: no card, a scrollable body and a pinned footer (the Modal card owns the border,
+  // rounding and max height). The body scrolls when the intake outgrows the viewport.
+  if (bare) {
+    return (
+      <form action={action} className="flex min-h-0 flex-1 flex-col">
+        {hidden}
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{fields}</div>
+        <div className="border-t border-line px-6 py-4">
+          {footer ?? <Button type="submit">{submitLabel}</Button>}
+        </div>
+      </form>
+    )
+  }
+
+  // Full-page layout: a bordered card (the /clients/new and edit pages).
+  return (
+    <form action={action} className="mt-6 rounded-md border border-line bg-surface p-6">
+      {hidden}
+      {fields}
       <div className="mt-6">
         <Button type="submit">{submitLabel}</Button>
       </div>
