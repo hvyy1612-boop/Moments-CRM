@@ -75,7 +75,7 @@ export default async function NotificationsSettingsPage({
       <PageHeader
         breadcrumb={[DASHBOARD_CRUMB, { label: 'Settings', href: '/settings' }, { label: 'Notifications' }]}
         title="Notifications"
-        description="Automatic client reminders and internal follow-ups. Both gates below must be on before any client email is sent; everything starts off, so nothing sends until you deliberately turn it on."
+        description="Automatic client reminders and internal follow-ups. Both settings below must be on before any client email is sent. Everything starts off, so nothing sends until you turn it on yourself."
       />
 
       {sp.saved ? (
@@ -91,21 +91,21 @@ export default async function NotificationsSettingsPage({
         <PageForm>
           <FormBlock
             title="Automation switches"
-            description="Separate from the email provider key: turning these on decides whether reminders are created and attempted."
+            description="Separate from the email setup below. These switches decide whether reminders are created and attempted at all."
           >
             <FormCell>
               <Checkbox id="clientEmailsEnabled" name="clientEmailsEnabled" defaultChecked={clientOn} label="Send client payment reminders automatically" />
-              <p className="ml-6 mt-0.5 text-xs text-muted">Payment reminders at each overdue milestone. Also needs the email provider (below) to actually deliver.</p>
+              <p className="ml-6 mt-0.5 text-xs text-muted">Sends a reminder each time a payment becomes overdue. The email provider below must be ready for these to actually send.</p>
             </FormCell>
             <FormCell>
               <Checkbox id="internalFollowupsEnabled" name="internalFollowupsEnabled" defaultChecked={followupsOn} label="Open internal follow-up tasks for overdue invoices" />
-              <p className="ml-6 mt-0.5 text-xs text-muted">A staff task at +7 days overdue, auto-resolved when the balance clears. Internal only - never emails the client.</p>
+              <p className="ml-6 mt-0.5 text-xs text-muted">Creates a staff to-do once an invoice is 7 days overdue. It clears itself when the balance is paid. Internal only; it never emails the client.</p>
             </FormCell>
             <FormCell span={4}>
               <Field
                 label="Only act on instalments due on/after"
                 htmlFor="remindersActiveFrom"
-                hint="Prevents backfilling old overdue invoices when you first switch on. Leave blank for no date floor."
+                hint="Stops old overdue invoices from being picked up when you first switch this on. Leave blank to include every date."
               >
                 <TextInput id="remindersActiveFrom" type="date" name="remindersActiveFrom" defaultValue={activeFrom} />
               </Field>
@@ -119,14 +119,14 @@ export default async function NotificationsSettingsPage({
 
       <PageForm className="mt-8 border-t border-line pt-8">
         {/* Gate 2 - provider readiness (read-only; set by environment, not here). */}
-        <FormBlock title="Email provider" description="The delivery channel (Resend). Configured with environment variables, not on this page.">
+        <FormBlock title="Email provider" description="The service that sends your emails (Resend). It is set up in the server configuration, not on this page.">
           <FormCell span={8}>
             <div className="flex items-center justify-between gap-3 border-y border-line py-3">
               <span className="text-sm text-ink">Provider configured</span>
               {emailProviderReady ? <StatusPill tone="good">Ready</StatusPill> : <StatusPill tone="warn">Not configured</StatusPill>}
             </div>
             {!emailProviderReady ? (
-              <p className="mt-2 text-xs text-muted">Client reminders will be held (not sent, never faked) until RESEND_API_KEY and EMAIL_FROM are set. Internal follow-up tasks do not need the provider.</p>
+              <p className="mt-2 text-xs text-muted">Client reminders are held until the email provider is connected, and are never sent before then. Internal follow-up tasks do not need the email provider.</p>
             ) : null}
           </FormCell>
         </FormBlock>
@@ -134,7 +134,7 @@ export default async function NotificationsSettingsPage({
         {/* The impact preview: exactly what a live run would do right now, computed without writing anything. */}
         <FormBlock
           title="Impact preview"
-          description="A dry run of the reminder scan against today's unpaid instalments. Nothing here is sent or created - it shows what a live run would do with the switches above."
+          description="A preview of what the reminder run would do against today's unpaid instalments. Nothing here is sent or created; it only shows what would happen with the settings above."
         >
           <FormCell>
         <p className="mb-3 text-sm text-muted">{reminders.length} reminder{reminders.length === 1 ? '' : 's'} · {followups.length} follow-up{followups.length === 1 ? '' : 's'}</p>
