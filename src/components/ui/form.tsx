@@ -12,8 +12,11 @@ const controlBase =
   'focus:border-accent focus:ring-1 focus:ring-accent ' +
   'disabled:cursor-not-allowed disabled:bg-paper disabled:text-ink-muted'
 
+// Default border is `border-ink` (near-black), not the faint `border-line`: the hairline light border
+// read as washed-out on white. Only the colour changes here - width stays the single `border` in
+// controlBase - so fields are clearly outlined without getting heavier. Focus still wins with the accent.
 function borderFor(hasError: boolean): string {
-  return hasError ? 'border-danger focus:border-danger focus:ring-danger' : 'border-line'
+  return hasError ? 'border-danger focus:border-danger focus:ring-danger' : 'border-ink'
 }
 
 /** Field wraps a control with a label, an optional hint, and an inline error message. */
