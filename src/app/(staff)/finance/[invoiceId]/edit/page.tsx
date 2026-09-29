@@ -94,8 +94,11 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ in
             lines: inv.lines
               .filter((l) => l !== discountLine)
               .map((l) => ({
-                name: l.itemName ?? '',
-                description: l.description,
+                // Older deposit/balance invoices stored the label in `description` with no `itemName`,
+                // which the "name required" validation then blocked on save. Promote that label to the
+                // name (and drop the now-duplicate description) so the row is valid and saveable.
+                name: l.itemName || l.description || '',
+                description: l.itemName ? l.description : '',
                 quantity: l.quantity,
                 unitPrice: l.unitPrice.toString(),
                 discount: l.discount.greaterThan(0) ? l.discount.toString() : '',

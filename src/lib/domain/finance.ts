@@ -84,7 +84,9 @@ export async function createInvoiceTx(
       billingNameSnapshot: project.client.displayName,
       billingEmailSnapshot: project.client.email,
       lines: {
-        create: { description: input.description, quantity: 1, unitPrice: total, tax: taxTotal, lineTotal: total, sortOrder: 0 },
+        // The single label is the item NAME (itemName is what the line table + validation key on);
+        // leave description empty so a deposit/balance line is valid and never reads as "Untitled item".
+        create: { itemName: input.description, description: '', quantity: 1, unitPrice: total, tax: taxTotal, lineTotal: total, sortOrder: 0 },
       },
     },
   })
