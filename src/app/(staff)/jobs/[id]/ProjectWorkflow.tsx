@@ -184,7 +184,6 @@ export function ProjectWorkflow({
               {!isCollapsed ? (
                 <div className="border-t border-line">
                   {stage.total > 0 ? (
-                    <div className="overflow-x-auto">
                     <div className={PHASE_GRID}>
                       <div className={`${ROW} border-transparent bg-paper text-xs font-bold uppercase tracking-wide text-muted`}>
                         <span />
@@ -268,7 +267,6 @@ export function ProjectWorkflow({
                           )
                         })
                       )}
-                    </div>
                     </div>
                   ) : null}
 

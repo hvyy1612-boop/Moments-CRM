@@ -8,14 +8,15 @@ import { IconMore, IconSystem, IconUser } from './icons'
 // One shared column grid so the phase header and every row line up in true columns
 // (checkbox | Task | Due date | Owner | Status | actions). The parent owns the track sizes; each
 // row re-uses them with subgrid, which keeps a per-row box for hover and attention tint.
-// Task is the one flexible column and carries a floor so its title, description and completed-by text
-// stay readable and take the widest share; Due / Owner / Status are compact em tracks (they scale with
-// text size) that read as one tight metadata cluster, not four loose columns; actions is a fixed-narrow
-// track with the kebab centred. The parent wraps this grid in overflow-x-auto, so on a narrow viewport
-// the whole table scrolls rather than squeezing Task or letting the metadata collide.
+// Task is the one flexible column and takes the widest share so its title, description and
+// completed-by text stay readable; Due / Owner / Status are compact em tracks (they scale with text
+// size) that read as one tight metadata cluster, not four loose columns; actions is a fixed-narrow
+// track with the kebab centred. Task has no floor (it can shrink and truncate its title) and the grid
+// is deliberately NOT wrapped in an overflow scroller - an overflow container would clip the row's
+// absolutely-positioned "..." actions menu, so we let Task flex instead.
 export const PHASE_GRID =
-  'grid grid-cols-[max-content_minmax(18em,2.6fr)_6.5em_8.5em_5.75em_2.75em] items-center'
-export const ROW = 'col-span-full grid grid-cols-subgrid items-center gap-x-4 border-l-2 px-3 py-2.5'
+  'grid grid-cols-[max-content_minmax(0,1fr)_6.5em_11.5em_5.75em_2.75em] items-center'
+export const ROW = 'col-span-full grid grid-cols-subgrid items-center gap-x-6 border-l-2 px-3 py-2.5'
 
 /** Done / Pending only. Attention is NEVER a status - it is shown on the due date, not here.
  *  Kept monochrome (Carbon): solid ink for Done, a light outline for Pending - no colour. */
