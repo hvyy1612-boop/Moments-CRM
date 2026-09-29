@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { FormEventHandler, ReactNode } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Checkbox, Field, Select, TextInput, Textarea } from '@/components/ui/form'
 
@@ -17,12 +17,16 @@ export type ClientFormValues = {
   isCompany?: boolean
 }
 
+/** The four contact fields the modal enforces; each holds an inline message when that field is invalid. */
+export type ContactErrors = { firstName?: string; lastName?: string; email?: string; phone?: string }
+
 /** Shared client form. With `showEnquiryFields`, it doubles as the single intake: adding the client
  *  also opens an enquiry (event type / date / source / note feed the new lead).
  *
  *  Two layouts from one field set: the default is a bordered card (the full-page /clients/new and the
  *  edit page); `bare` drops the card and splits into a scrollable body + a pinned footer so the same
- *  form drops straight into the "Add client" Modal. Pass `footer` to supply the modal's Cancel + Save. */
+ *  form drops straight into the "Add client" Modal. In the modal, `requireContact` marks First/Last/
+ *  Email/Phone as required and `errors` renders the inline validation the caller ran on submit. */
 export function ClientForm({
   action,
   csrf,
@@ -32,6 +36,9 @@ export function ClientForm({
   showEnquiryFields = false,
   bare = false,
   footer,
+  errors,
+  requireContact = false,
+  onSubmit,
 }: {
   action: (formData: FormData) => void | Promise<void>
   csrf: string
@@ -41,8 +48,12 @@ export function ClientForm({
   showEnquiryFields?: boolean
   bare?: boolean
   footer?: ReactNode
+  errors?: ContactErrors
+  requireContact?: boolean
+  onSubmit?: FormEventHandler<HTMLFormElement>
 }) {
   const v = values
+  const e = errors ?? {}
 
   const hidden = (
     <>
@@ -63,20 +74,20 @@ export function ClientForm({
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="First name" htmlFor="firstName" required>
-          <TextInput id="firstName" name="firstName" required defaultValue={v.firstName ?? ''} autoComplete="given-name" />
+        <Field label="First name" htmlFor="firstName" required error={e.firstName}>
+          <TextInput id="firstName" name="firstName" required hasError={!!e.firstName} defaultValue={v.firstName ?? ''} autoComplete="given-name" />
         </Field>
-        <Field label="Last name" htmlFor="lastName">
-          <TextInput id="lastName" name="lastName" defaultValue={v.lastName ?? ''} autoComplete="family-name" />
+        <Field label="Last name" htmlFor="lastName" required={requireContact} error={e.lastName}>
+          <TextInput id="lastName" name="lastName" hasError={!!e.lastName} defaultValue={v.lastName ?? ''} autoComplete="family-name" />
         </Field>
         <Field label="Company" htmlFor="company" hint="Optional. Shown as the client name for a company.">
           <TextInput id="company" name="company" defaultValue={v.company ?? ''} autoComplete="organization" />
         </Field>
-        <Field label="Email" htmlFor="email" required>
-          <TextInput id="email" name="email" type="email" required defaultValue={v.email ?? ''} autoComplete="email" />
+        <Field label="Email" htmlFor="email" required error={e.email}>
+          <TextInput id="email" name="email" type="email" required hasError={!!e.email} defaultValue={v.email ?? ''} autoComplete="email" />
         </Field>
-        <Field label="Phone" htmlFor="phone">
-          <TextInput id="phone" name="phone" defaultValue={v.phone ?? ''} autoComplete="tel" />
+        <Field label="Phone" htmlFor="phone" required={requireContact} error={e.phone}>
+          <TextInput id="phone" name="phone" hasError={!!e.phone} defaultValue={v.phone ?? ''} autoComplete="tel" />
         </Field>
         <Field label="Street" htmlFor="street">
           <TextInput id="street" name="street" defaultValue={v.street ?? ''} autoComplete="address-line1" />
@@ -96,7 +107,9 @@ export function ClientForm({
       </div>
 
       {showEnquiryFields ? (
-        <div className="mt-6 border-t border-line pt-6">
+        // In the modal (`bare`) the section is set off by spacing + the caption alone - no rule, to keep
+        // the frame clean. The full-page card keeps its divider so the long page still reads in sections.
+        <div className={bare ? 'mt-8' : 'mt-6 border-t border-line pt-6'}>
           <p className="mb-4 text-xs font-bold uppercase tracking-wide text-muted">Enquiry</p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Partner's name" htmlFor="partnerName">
@@ -167,10 +180,10 @@ export function ClientForm({
   )
 
   // Modal layout: no card, a scrollable body and a pinned footer (the Modal card owns the border,
-  // rounding and max height). The body scrolls when the intake outgrows the viewport.
+  // rounding and max height). `noValidate` lets our inline validation replace native browser tooltips.
   if (bare) {
     return (
-      <form action={action} className="flex min-h-0 flex-1 flex-col">
+      <form action={action} onSubmit={onSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
         {hidden}
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{fields}</div>
         <div className="border-t border-line px-6 py-4">

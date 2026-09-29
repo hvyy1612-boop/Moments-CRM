@@ -3,8 +3,26 @@
 import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
-import { ClientForm } from './ClientForm'
+import { ClientForm, type ContactErrors } from './ClientForm'
 import { createClientAction } from './actions'
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** The same required-field checks the intake enforces, run in the browser so staff see the red line and
+ * inline message the moment they submit, instead of the modal closing / posting an incomplete record. */
+function validateContact(fd: FormData): ContactErrors {
+  const first = String(fd.get('firstName') ?? '').trim()
+  const last = String(fd.get('lastName') ?? '').trim()
+  const email = String(fd.get('email') ?? '').trim()
+  const phone = String(fd.get('phone') ?? '').trim()
+  const errors: ContactErrors = {}
+  if (!first) errors.firstName = 'Please enter a first name.'
+  if (!last) errors.lastName = 'Please enter a last name.'
+  if (!email) errors.email = 'Please enter an email address.'
+  else if (!EMAIL_RE.test(email)) errors.email = 'Please enter a valid email address.'
+  if (!phone) errors.phone = 'Please enter a phone number.'
+  return errors
+}
 
 /**
  * "Add client" opens the intake in a Modal instead of navigating to /clients/new - the studio adds a
@@ -14,12 +32,21 @@ import { createClientAction } from './actions'
  */
 export function AddClientButton({ csrf }: { csrf: string }) {
   const [open, setOpen] = useState(false)
+  const [errors, setErrors] = useState<ContactErrors>({})
+
+  const close = () => {
+    setErrors({})
+    setOpen(false)
+  }
 
   return (
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setErrors({})
+          setOpen(true)
+        }}
         className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
       >
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -30,21 +57,33 @@ export function AddClientButton({ csrf }: { csrf: string }) {
 
       <Modal
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={close}
         title="Add a client"
         description="Record the client and their enquiry. This opens a lead in Enquiries you can work through, and becomes a job once you convert it."
         size="lg"
+        headerBorder={false}
       >
         <ClientForm
           action={createClientAction}
           csrf={csrf}
-          submitLabel="Add client"
+          submitLabel="Save client"
           showEnquiryFields
           bare
+          requireContact
+          errors={errors}
+          onSubmit={(event) => {
+            const found = validateContact(new FormData(event.currentTarget))
+            if (Object.keys(found).length > 0) {
+              event.preventDefault()
+              setErrors(found)
+            } else {
+              setErrors({})
+            }
+          }}
           footer={
             <div className="flex gap-3">
-              <Button type="submit">Add client</Button>
-              <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="submit" size="lg">Save client</Button>
+              <Button type="button" variant="secondary" size="lg" onClick={close}>Cancel</Button>
             </div>
           }
         />

@@ -42,6 +42,7 @@ export function Modal({
   label,
   description,
   size = 'sm',
+  headerBorder = true,
   children,
 }: {
   open: boolean
@@ -50,6 +51,8 @@ export function Modal({
   label?: string
   description?: string
   size?: 'xs' | 'sm' | 'md' | 'lg'
+  /** Draw the rule under the header. Off for a cleaner, SN-style frame on long form modals. */
+  headerBorder?: boolean
   children: React.ReactNode
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -66,7 +69,9 @@ export function Modal({
           'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
         ) ?? [],
       )
-    focusables()[0]?.focus()
+    // Focus the panel itself, not the first control - otherwise the close x lights up with the focus
+    // ring the instant the modal opens (it reads as a stray outlined box). Tab then moves into the form.
+    ref.current?.focus()
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
@@ -105,15 +110,16 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`flex max-h-[85vh] w-full ${SIZE[size]} flex-col rounded-md border border-line bg-surface shadow-lg`}
+        tabIndex={-1}
+        className={`flex max-h-[85vh] w-full ${SIZE[size]} flex-col rounded-md border border-line-strong bg-surface shadow-lg focus:outline-none`}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-line px-6 py-4">
+        <div className={`flex items-start justify-between gap-3 px-6 py-4 ${headerBorder ? 'border-b border-line' : ''}`}>
           <div className="min-w-0">
             {label ? <p className="text-xs font-bold uppercase tracking-wide text-muted">{label}</p> : null}
             <h2 className="text-lg font-semibold text-ink">{title}</h2>
             {description ? <p className="mt-1 text-sm text-muted">{description}</p> : null}
           </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="-mr-2 shrink-0 rounded p-1 text-ink-muted hover:text-ink">
+          <button type="button" onClick={onClose} aria-label="Close" className="-mr-2 -mt-1 shrink-0 rounded p-1.5 text-ink-muted transition-colors hover:bg-sunk hover:text-ink">
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M6 6l12 12M18 6L6 18" />
             </svg>
