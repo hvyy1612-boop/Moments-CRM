@@ -24,6 +24,7 @@ export function AppChrome({
   userRole,
   csrf,
   alerts,
+  notifKeys = [],
   children,
 }: {
   items: SidebarItem[]
@@ -34,18 +35,11 @@ export function AppChrome({
   userRole: string
   csrf: string
   alerts: Alert[]
+  /** Nav keys that should show a notification dot (real state, computed server-side). */
+  notifKeys?: string[]
   children: ReactNode
 }) {
   const [collapsed, setCollapsed] = useState(false)
-
-  // Real notification dots: map recent alerts to their nav section (never hard-coded).
-  const notifKeys = Array.from(
-    new Set(
-      alerts
-        .map((a) => (a.kind === 'enquiry' ? 'enquiries' : a.kind === 'payment' ? 'finance' : ''))
-        .filter(Boolean),
-    ),
-  )
 
   useEffect(() => {
     try {

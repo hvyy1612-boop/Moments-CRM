@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { can, type Permission } from '@/lib/auth/authz'
 import type { SessionUser } from '@/lib/auth/guard'
 import { getRecentAlerts } from '@/lib/domain/alerts'
+import { prisma } from '@/lib/db'
 import { AppChrome } from './AppChrome'
 
 export type NavKey =
@@ -88,6 +89,12 @@ export async function AppShell({
   const initial = user.name.trim().charAt(0).toUpperCase() || 'U'
   const alerts = await getRecentAlerts()
 
+  // Gmail-style nav dot: how many enquiries are still unread (never opened, not yet converted/declined).
+  const unreadEnquiries = await prisma.enquiry.count({
+    where: { viewedAt: null, convertedProjectId: null, status: { not: 'DECLINED' } },
+  })
+  const notifKeys = unreadEnquiries > 0 ? ['enquiries'] : []
+
   return (
     <AppChrome
       items={items}
@@ -98,6 +105,7 @@ export async function AppShell({
       userRole={user.role}
       csrf={csrf}
       alerts={alerts}
+      notifKeys={notifKeys}
     >
       {children}
     </AppChrome>

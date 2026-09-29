@@ -27,6 +27,7 @@ import {
 } from '../actions'
 import { createQuoteForEnquiryAction } from '../../quotes/actions'
 import { EnquiryWorkflow } from './EnquiryWorkflow'
+import { MarkEnquiryViewed } from './MarkEnquiryViewed'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Enquiry - Moments' }
@@ -107,6 +108,7 @@ export default async function EnquiryDetailPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="enquiries" bareHeader>
+      <MarkEnquiryViewed id={enquiry.id} />
       <PageContainer variant="standard">
         <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Enquiries', href: backHref }, { label: enquiry.name }]} />
 

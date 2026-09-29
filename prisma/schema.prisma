@@ -644,6 +644,7 @@ model Enquiry {
   convertedClientId    String?       @map("converted_client_id") @db.VarChar(30)
   convertedProjectId   String?       @map("converted_project_id") @db.VarChar(30)
   convertedAt          DateTime?     @map("converted_at") @db.Timestamptz
+  viewedAt             DateTime?     @map("viewed_at") @db.Timestamptz // Gmail-style read state: null = new/unread until a staff opens the detail
   createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 

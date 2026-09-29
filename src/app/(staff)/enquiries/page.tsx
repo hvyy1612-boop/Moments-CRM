@@ -35,6 +35,7 @@ export default async function EnquiriesPage() {
       convertedProjectId: true,
       updatedAt: true,
       createdAt: true,
+      viewedAt: true,
     },
   })
 
@@ -51,6 +52,7 @@ export default async function EnquiriesPage() {
     convertedProjectId: e.convertedProjectId,
     waitingMs: e.updatedAt.getTime(),
     createdMs: e.createdAt.getTime(),
+    unread: e.viewedAt === null,
   }))
 
   return (

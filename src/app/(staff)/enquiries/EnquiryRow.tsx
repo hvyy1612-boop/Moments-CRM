@@ -17,6 +17,8 @@ export type EnquiryRowData = {
   convertedProjectId: string | null
   waitingMs: number
   createdMs: number
+  /** Gmail-style: true until a staff member opens the enquiry detail. Drives the bold row + nav dot. */
+  unread: boolean
 }
 
 /** Initials for the avatar chip, e.g. "Ha Vy Tran" -> "HT". Mirrors the Clients list. */

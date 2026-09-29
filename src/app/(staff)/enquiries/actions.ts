@@ -369,3 +369,16 @@ export async function markEnquiryLostAction(formData: FormData): Promise<void> {
   revalidatePath('/enquiries')
 }
 
+
+/**
+ * Mark an enquiry as read (Gmail-style): sets viewedAt once, the first time a staff member opens its
+ * detail. Idempotent (only updates while still null) and called from a client effect on the detail page
+ * so it fires on a real view, not on route prefetch. Clears the "new" bold row + the nav dot.
+ */
+export async function markEnquiryViewedAction(id: string): Promise<void> {
+  const user = await getSessionUser()
+  if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDIO')) return
+  if (!id) return
+  await prisma.enquiry.updateMany({ where: { id, viewedAt: null }, data: { viewedAt: new Date() } })
+  revalidatePath('/enquiries')
+}

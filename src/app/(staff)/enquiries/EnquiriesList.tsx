@@ -74,9 +74,12 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
       header: 'Enquiry ID',
       width: COL.constrained,
       cell: (r) => (
-        <Link href={`/enquiries/${r.id}`} className="tabular block whitespace-nowrap font-medium text-ink transition-colors group-hover:text-accent-ink">
-          {r.number ?? '-'}
-        </Link>
+        <span className="flex items-center gap-2">
+          <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${r.unread ? 'bg-warn' : 'bg-transparent'}`} />
+          <Link href={`/enquiries/${r.id}`} className={`tabular block whitespace-nowrap text-ink transition-colors group-hover:text-accent-ink ${r.unread ? 'font-semibold' : 'font-medium'}`}>
+            {r.number ?? '-'}
+          </Link>
+        </span>
       ),
     },
     { key: 'created', header: 'Created', width: COL.constrained, cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{createdLabel(r.createdMs)}</span> },
@@ -85,7 +88,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
       header: 'Client',
       width: COL.flexHigh,
       cell: (r) => (
-        <Link href={`/enquiries/${r.id}`} className="block truncate text-ink transition-colors hover:text-accent-ink">
+        <Link href={`/enquiries/${r.id}`} className={`block truncate text-ink transition-colors hover:text-accent-ink ${r.unread ? 'font-semibold' : ''}`}>
           {r.name}
         </Link>
       ),
@@ -166,6 +169,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
           columns={columns}
           rows={visible}
           rowKey={(r) => r.id}
+          rowClassName={(r) => (r.unread ? 'font-semibold' : undefined)}
           pageSize={30}
           selection={selection}
           search={(r) => `${r.number ?? ''} ${r.name} ${r.event}`}
