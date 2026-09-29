@@ -5,6 +5,8 @@ import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Field, Select, Textarea, TextInput } from '@/components/ui/form'
 import { createInvoiceLinesAction, saveInvoiceTemplateAction, updateInvoiceLinesAction, type QuoteActionState } from '../actions'
+import { formatScheduleDate, presetRows, type ScheduleKey, type ScheduleRow } from '@/features/finance/payment-schedule'
+import { PaymentScheduleSelect } from './PaymentScheduleSelect'
 
 const IDLE: QuoteActionState = { status: 'idle' }
 
@@ -31,6 +33,8 @@ export type ContactPrefill = {
   numberPreview: string
   defaultType: string
   issueDate: string
+  /** The job's main shoot date (YYYY-MM-DD) for shoot-based payment schedules; null when not booked yet. */
+  shootDate?: string | null
 }
 type Line = { id: number; name: string; description: string; quantity: number; unitPrice: string; discount: string }
 type Instalment = { id: number; label: string; dueAt: string; amount: string }
@@ -103,6 +107,10 @@ export function InvoiceEditor({
   const [, startSave] = useTransition()
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [instalments, setInstalments] = useState<Instalment[]>(() => (initial?.instalments ?? []).map((it, i) => ({ id: i + 1, ...it })))
+  // Payment schedule: a preset (recomputed live from the total + dates), hand-edited rows (CUSTOM), or none.
+  const [schedule, setSchedule] = useState<ScheduleKey>((initial?.instalments.length ?? 0) > 0 ? 'CUSTOM' : 'NONE')
+  const [discountOpen, setDiscountOpen] = useState(Boolean(initial?.discount))
+  const shootDate = contact?.shootDate ?? null
   const [nextInstId, setNextInstId] = useState((initial?.instalments.length ?? 0) + 1)
   const [state, action, pending] = useActionState(editing ? updateInvoiceLinesAction : createInvoiceLinesAction, IDLE)
 
@@ -201,23 +209,23 @@ export function InvoiceEditor({
   const total = Math.max(gross - disc, 0)
   const gst = total / 11
   const subtotal = total - gst
-  const dueDates = instalments.map((it) => it.dueAt).filter(Boolean).sort()
+  // The schedule actually submitted: a preset is recomputed from the live total and dates (so adding an item
+  // never leaves it stale), CUSTOM uses the hand-edited rows, NONE sends nothing (one full payment on issue).
+  const presetSchedule = schedule !== 'NONE' && schedule !== 'CUSTOM' ? presetRows(schedule, total, invoiceDate, shootDate) : null
+  const scheduleRows: ScheduleRow[] =
+    schedule === 'CUSTOM' ? instalments.map(({ label, dueAt, amount }) => ({ label, dueAt, amount })) : (presetSchedule ?? [])
+  const dueDates = scheduleRows.map((it) => it.dueAt).filter(Boolean).sort()
   const dueDisplay = dueDates.length > 0 ? dueDates[dueDates.length - 1]! : 'On issue'
 
   const scheduled = instalments.reduce((s, it) => s + (Number(it.amount) || 0), 0)
-  const scheduleMismatch = instalments.length > 0 && Math.abs(scheduled - total) > 0.005
+  const scheduleMismatch = schedule === 'CUSTOM' && instalments.length > 0 && Math.abs(scheduled - total) > 0.005
 
-  function genFull() {
-    setInstalments([{ id: nextInstId, label: 'Full payment', dueAt: invoiceDate, amount: total.toFixed(2) }])
-    setNextInstId((n) => n + 1)
-  }
-  function genDeposit() {
-    const half = Math.round((total / 2) * 100) / 100
-    setInstalments([
-      { id: nextInstId, label: 'Deposit (50%)', dueAt: invoiceDate, amount: half.toFixed(2) },
-      { id: nextInstId + 1, label: 'Balance (50%)', dueAt: '', amount: (total - half).toFixed(2) },
-    ])
-    setNextInstId((n) => n + 2)
+  /** Turn the current preset into editable rows (keeps the old "edit the instalments by hand" ability). */
+  function customiseSchedule() {
+    const rows = presetSchedule ?? []
+    setInstalments(rows.map((r, i) => ({ id: nextInstId + i, ...r })))
+    setNextInstId((n) => n + rows.length)
+    setSchedule('CUSTOM')
   }
   function addInst() {
     setInstalments((is) => [...is, { id: nextInstId, label: '', dueAt: '', amount: '' }])
@@ -241,7 +249,7 @@ export function InvoiceEditor({
     lines.map((l) => ({ itemName: l.name, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: l.discount || '' })),
   )
   const instalmentPayload = JSON.stringify(
-    instalments.map((it) => ({ label: it.label, dueAt: it.dueAt, amount: it.amount || '0' })),
+    scheduleRows.map((it) => ({ label: it.label, dueAt: it.dueAt, amount: it.amount || '0' })),
   )
 
   return (
@@ -271,10 +279,9 @@ export function InvoiceEditor({
           </>
         ) : null}
 
-        {/* Full-width workspace (same pattern as the Quote builder): the editing column fills the page and
-            a sticky summary on the right keeps the total and the primary action in view while scrolling. */}
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_20em] lg:items-start">
-        <div className="flex min-w-0 flex-col gap-8">
+        {/* One full-width column (approved mockup): fields, then products, then totals on the right with the
+            payment schedule on the left and notes + the action under the totals. */}
+        <div className="flex flex-col gap-8">
         {workspace || contact ? null : <p className="text-sm font-semibold text-ink">{editing ? 'Edit invoice' : 'New invoice'}</p>}
 
         {contact ? (
@@ -450,39 +457,77 @@ export function InvoiceEditor({
             </div>
           )}
 
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            {/* With items, the (outlined, never dark) add button sits under the table; when empty it lives
-                inside the empty state above instead. */}
-            {lines.length > 0 ? (
-              <>
-                <Button type="button" variant="secondary" onClick={openAdd}>
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-                  Add products &amp; packages
-                </Button>
-                <Button type="button" variant="secondary" size="sm" onClick={saveTemplate}>Save as template</Button>
-              </>
-            ) : null}
-            <div className="flex items-center gap-2">
-              <label htmlFor="inv-discount" className="text-sm text-ink-muted">Discount</label>
-              <TextInput id="inv-discount" inputMode="decimal" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="0.00" className="h-8 w-28" />
+          {/* With items, the (outlined, never dark) add button sits under the table; when empty it lives
+              inside the empty state above instead. */}
+          {lines.length > 0 ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Button type="button" variant="secondary" onClick={openAdd}>
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                Add products &amp; packages
+              </Button>
+              <Button type="button" variant="secondary" size="sm" onClick={saveTemplate}>Save as template</Button>
             </div>
-          </div>
+          ) : null}
         </section>
 
-        {/* Payment schedule */}
-        <section className="border-t border-line pt-6">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-ink">Payment schedule</p>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" size="sm" onClick={genFull}>Full payment</Button>
-              <Button type="button" variant="secondary" size="sm" onClick={genDeposit}>50% + 50%</Button>
-              <Button type="button" variant="secondary" size="sm" onClick={addInst}>Add instalment</Button>
+        {/* Totals (right) / payment schedule (left) / notes + action (right), per the approved mockup. */}
+        <div className="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-12">
+          <div className="text-sm lg:col-span-4 lg:col-start-9">
+            <div className="flex justify-between py-1 text-ink"><span>Subtotal (excl. GST)</span><span className="tabular">{money(subtotal)}</span></div>
+            <div className="flex items-center justify-between gap-3 py-1 text-ink">
+              <label htmlFor="inv-discount">Discount</label>
+              {discountOpen || disc > 0 ? (
+                <TextInput
+                  id="inv-discount"
+                  inputMode="decimal"
+                  value={discount}
+                  onChange={(e) => setDiscount(e.target.value)}
+                  onBlur={() => { if (!(Number(discount) > 0)) setDiscountOpen(false) }}
+                  placeholder="0.00"
+                  autoFocus={discountOpen && !discount}
+                  className="h-8 w-28 text-right"
+                />
+              ) : (
+                <button type="button" onClick={() => setDiscountOpen(true)} className="text-ink-muted hover:text-ink hover:underline">None</button>
+              )}
             </div>
+            <div className="flex justify-between py-1 text-ink"><span>GST (10%)</span><span className="tabular">{money(gst)}</span></div>
+            <div className="mt-2 flex items-baseline justify-between border-t border-line pt-3 font-semibold text-ink">
+              <span className="text-lg">Total due</span>
+              <span className="tabular text-xl">{money(total)}</span>
+            </div>
+            {workspace ? (
+              <>
+                <div className="mt-1 flex justify-between py-0.5 text-ink-muted"><span>Paid</span><span className="tabular text-delivered-ink">{money(paidNum)}</span></div>
+                <div className="flex justify-between py-0.5 font-semibold text-ink"><span>Balance</span><span className="tabular">{money(Math.max(total - paidNum, 0))}</span></div>
+              </>
+            ) : null}
           </div>
-          {instalments.length === 0 ? (
-            <p className="mt-2 text-sm text-ink-muted">No split - a single full payment on issue.</p>
-          ) : (
-            <div className="mt-2 flex flex-col gap-2">
+
+        {/* Payment schedule (left) */}
+        <section className="lg:col-span-7 lg:row-start-2">
+          <label htmlFor="inv-schedule" className="text-sm font-semibold text-ink">Payment schedule</label>
+          <div className="mt-2 max-w-2xl">
+            <PaymentScheduleSelect id="inv-schedule" value={schedule} onChange={setSchedule} shootDate={shootDate} />
+          </div>
+          {presetSchedule ? (
+            // A preset is shown read-only (it follows the total); "Customise" turns it into editable rows.
+            <div className="mt-3 max-w-2xl">
+              <div className="divide-y divide-line rounded border border-line bg-surface">
+                {presetSchedule.map((r) => (
+                  // Phone: label + amount on one line, the due date under the label. Wider: three aligned columns.
+                  <div key={r.label} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-2 text-sm sm:grid-cols-[minmax(0,1fr)_9em_8em]">
+                    <span className="text-ink">{r.label}</span>
+                    <span className="tabular whitespace-nowrap text-ink-muted max-sm:col-start-1 max-sm:row-start-2">Due {formatScheduleDate(r.dueAt)}</span>
+                    <span className="tabular text-right font-medium text-ink max-sm:col-start-2 max-sm:row-start-1">{money(Number(r.amount))}</span>
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={customiseSchedule} className="mt-2 text-sm font-medium text-accent-ink hover:underline">Customise</button>
+            </div>
+          ) : null}
+          {schedule === 'CUSTOM' ? (
+            <div className="mt-3 flex flex-col gap-2">
               {instalments.map((it) => (
                 // Content-sized tracks (Carbon: width reflects the expected content) - a label, a date and an
                 // amount never need the full editing column, so the row stays compact on wide screens.
@@ -497,39 +542,29 @@ export function InvoiceEditor({
                   </div>
                 </div>
               ))}
-              <p className={`text-xs ${scheduleMismatch ? 'font-bold text-danger' : 'text-ink-muted'}`}>
-                Scheduled {money(scheduled)} of {money(total)}{scheduleMismatch ? ' - must match the total' : ''}
-              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button type="button" variant="secondary" size="sm" onClick={addInst}>Add instalment</Button>
+                <p className={`text-xs ${scheduleMismatch ? 'font-bold text-danger' : 'text-ink-muted'}`}>
+                  Scheduled {money(scheduled)} of {money(total)}{scheduleMismatch ? ' - must match the total' : ''}
+                </p>
+              </div>
             </div>
-          )}
+          ) : null}
         </section>
 
-        <Field label="Notes (optional)" htmlFor="inv-notes">
-          <Textarea id="inv-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} placeholder="Notes shown on the invoice..." />
-        </Field>
-        </div>
-
-        {/* Summary (sticky right column): the running total next to the action that raises it. On phones it
-            follows the form, so the order reads fields -> items -> schedule -> notes -> total -> submit. */}
-        <aside className="flex flex-col gap-3 lg:sticky lg:top-6">
-          <div className="rounded-md border border-line bg-surface p-4 text-sm">
-            <p className="mb-2 font-semibold text-ink">Summary</p>
-            <div className="flex justify-between py-0.5 text-ink-muted"><span>Subtotal (excl. GST)</span><span className="tabular">{money(subtotal)}</span></div>
-            <div className="flex justify-between py-0.5 text-ink-muted"><span>GST (10%)</span><span className="tabular">{money(gst)}</span></div>
-            {disc > 0 ? <div className="flex justify-between py-0.5 text-ink-muted"><span>Discount</span><span className="tabular">-{money(disc)}</span></div> : null}
-            <div className="mt-1 flex justify-between border-t border-line pt-2 text-base font-semibold text-ink"><span>Total (incl. GST)</span><span className="tabular">{money(total)}</span></div>
-            {workspace ? (
-              <>
-                <div className="mt-1 flex justify-between py-0.5 text-ink-muted"><span>Paid</span><span className="tabular text-delivered-ink">{money(paidNum)}</span></div>
-                <div className="flex justify-between py-0.5 font-semibold text-ink"><span>Balance</span><span className="tabular">{money(Math.max(total - paidNum, 0))}</span></div>
-              </>
-            ) : null}
+        {/* Right column under the totals: the $0 notice, notes, then the action. */}
+        <div className="flex flex-col gap-6 lg:col-span-4 lg:col-start-9 lg:row-start-2">
+          {total <= 0 ? <Alert tone="info" title="A payment schedule cannot be calculated because the total amount due is $0.00." /> : null}
+          <Field label="Notes (optional)" htmlFor="inv-notes">
+            <Textarea id="inv-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} placeholder="Notes shown on the invoice..." />
+          </Field>
+          <div>
+            <Button type="submit" loading={pending} disabled={lines.length === 0 || scheduleMismatch}>
+              {editing ? 'Save changes' : 'Raise invoice'}
+            </Button>
           </div>
-          <Button type="submit" className="w-full" loading={pending} disabled={lines.length === 0 || scheduleMismatch}>
-            {editing ? 'Save changes' : 'Raise invoice'}
-          </Button>
-          {lines.length === 0 ? <p className="text-xs text-muted">Add at least one item to raise the invoice.</p> : null}
-        </aside>
+        </div>
+        </div>
         </div>
       </form>
 

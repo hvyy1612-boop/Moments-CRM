@@ -35,6 +35,8 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
       select: {
         id: true, name: true, code: true, companyId: true, lifecycleStatus: true,
         client: { select: { displayName: true, email: true, phone: true } },
+        // Main shoot = the earliest live booking (drives the shoot-date payment schedules).
+        bookings: { where: { status: { not: 'CANCELLED' } }, orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true } },
       },
     })
     if (!project) notFound()
@@ -62,6 +64,9 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
     const defaultType = priorInvoices === 0 ? 'DEPOSIT' : 'BALANCE'
     const td = sydneyYmd(new Date())
     const issueDefault = `${td.year}-${String(td.month).padStart(2, '0')}-${String(td.day).padStart(2, '0')}`
+    const shoot = project.bookings[0]?.startsAt
+    const sd = shoot ? sydneyYmd(shoot) : null
+    const shootDate = sd ? `${sd.year}-${String(sd.month).padStart(2, '0')}-${String(sd.day).padStart(2, '0')}` : null
 
     return (
       <AppShell user={user} csrf={csrf} active="finance">
@@ -87,6 +92,7 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
               numberPreview,
               defaultType,
               issueDate: issueDefault,
+              shootDate,
             }}
           />
         )}
