@@ -70,9 +70,9 @@ export function ProjectWorkflow({
   }
 
   return (
-    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-8">
-      {/* MAIN - 5/8 of the row */}
-      <div className="flex min-w-0 flex-col gap-4 lg:col-span-5">
+    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[repeat(16,minmax(0,1fr))]">
+      {/* MAIN - 11/16 of the row (workflow is dense, so it gets the wider share) */}
+      <div className="flex min-w-0 flex-col gap-4 lg:col-span-11">
         {/* Title + toolbar */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl">Workflow</h2>
@@ -184,6 +184,7 @@ export function ProjectWorkflow({
               {!isCollapsed ? (
                 <div className="border-t border-line">
                   {stage.total > 0 ? (
+                    <div className="overflow-x-auto">
                     <div className={PHASE_GRID}>
                       <div className={`${ROW} border-transparent bg-paper text-xs font-bold uppercase tracking-wide text-muted`}>
                         <span />
@@ -267,6 +268,7 @@ export function ProjectWorkflow({
                           )
                         })
                       )}
+                    </div>
                     </div>
                   ) : null}
 
@@ -388,8 +390,8 @@ export function ProjectWorkflow({
         )}
       </div>
 
-      {/* RAIL: Next action + the job's Client / Notes / Team cards (3/8 of the row) */}
-      <aside className="flex flex-col gap-3 lg:col-span-3">
+      {/* RAIL: Next action + the job's Client / Notes / Team cards (5/16 of the row) */}
+      <aside className="flex flex-col gap-3 lg:col-span-5">
         <div className="rounded-md border border-line-strong bg-surface p-4">
           <h2 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-muted">
             <span className="text-ink-muted"><IconArrowRight className="h-4 w-4" /></span>

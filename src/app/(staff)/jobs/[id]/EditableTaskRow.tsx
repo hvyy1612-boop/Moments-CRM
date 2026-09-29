@@ -8,10 +8,13 @@ import { IconMore, IconSystem, IconUser } from './icons'
 // One shared column grid so the phase header and every row line up in true columns
 // (checkbox | Task | Due date | Owner | Status | actions). The parent owns the track sizes; each
 // row re-uses them with subgrid, which keeps a per-row box for hover and attention tint.
-// Task flexes (widest); the metadata columns get defined widths (em, so they scale with text size)
-// instead of max-content, so they read as evenly-spaced columns rather than a cluster hugging the right.
+// Task is the one flexible column and carries a floor so its title, description and completed-by text
+// stay readable and take the widest share; Due / Owner / Status are compact em tracks (they scale with
+// text size) that read as one tight metadata cluster, not four loose columns; actions is a fixed-narrow
+// track with the kebab centred. The parent wraps this grid in overflow-x-auto, so on a narrow viewport
+// the whole table scrolls rather than squeezing Task or letting the metadata collide.
 export const PHASE_GRID =
-  'grid grid-cols-[max-content_minmax(0,1fr)_7em_9em_6em_max-content] items-center'
+  'grid grid-cols-[max-content_minmax(18em,2.6fr)_6.5em_8.5em_5.75em_2.75em] items-center'
 export const ROW = 'col-span-full grid grid-cols-subgrid items-center gap-x-4 border-l-2 px-3 py-2.5'
 
 /** Done / Pending only. Attention is NEVER a status - it is shown on the due date, not here.
@@ -153,7 +156,7 @@ export function EditableTaskRow({
       <StatusBadge done={done} />
 
       {/* Actions (kebab) */}
-      <details ref={menuRef} className="relative justify-self-end">
+      <details ref={menuRef} className="relative justify-self-center">
         <summary
           className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded text-muted hover:bg-sunk hover:text-ink [&::-webkit-details-marker]:hidden"
           aria-label="Task actions"
