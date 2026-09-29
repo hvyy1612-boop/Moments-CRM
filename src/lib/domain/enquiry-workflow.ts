@@ -137,6 +137,20 @@ export async function logClientReply(enquiryId: string, body: string, actorUserI
   })
 }
 
+/** Add an internal team note to a lead (never client-facing). Allowed at any status. */
+export async function addEnquiryNote(enquiryId: string, body: string, actorUserId: string) {
+  const text = body.trim()
+  if (!text) throw new Error('A note cannot be empty.')
+  const enquiry = await prisma.enquiry.findUnique({ where: { id: enquiryId }, select: { id: true, companyId: true } })
+  if (!enquiry) throw new Error('Lead not found.')
+  await prisma.communication.create({
+    data: { enquiryId, type: 'CLIENT_MESSAGE', direction: 'outbound', internal: true, body: text, byUserId: actorUserId },
+  })
+  await prisma.auditLog.create({
+    data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.note_added', entityType: 'Enquiry', entityId: enquiryId },
+  })
+}
+
 async function loadTask(taskId: string) {
   const task = await prisma.workItem.findUnique({
     where: { id: taskId },

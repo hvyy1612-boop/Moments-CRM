@@ -12,6 +12,7 @@ import { findOrCreateClient } from '@/lib/domain/client'
 import { cancelBooking, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
 import { enquirySchema } from '@/lib/validation/enquiry'
 import {
+  addEnquiryNote,
   addEnquiryTask,
   deleteEnquiryTask,
   logClientReply,
@@ -259,6 +260,17 @@ export async function logClientReplyAction(formData: FormData): Promise<void> {
   if (!enquiryId || !body.trim()) return
   await logClientReply(enquiryId, body, user.id)
   revalidatePath('/leads')
+  revalidatePath(`/leads/${enquiryId}`)
+}
+
+/** Add an internal note to a lead (the Notes card on the lead page). */
+export async function addEnquiryNoteAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  const body = String(formData.get('body') ?? '')
+  if (!enquiryId || !body.trim()) return
+  await addEnquiryNote(enquiryId, body, user.id)
   revalidatePath(`/leads/${enquiryId}`)
 }
 

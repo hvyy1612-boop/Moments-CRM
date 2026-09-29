@@ -4,9 +4,8 @@ import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { StatusTag } from '@/components/ui/StatusTag'
-import { StatusPill } from '@/components/ui/StatusPill'
-import { Button } from '@/components/ui/Button'
-import { Textarea } from '@/components/ui/form'
+import { StatusPill, type Tone } from '@/components/ui/StatusPill'
+import { IconButton, IconLink } from '@/components/ui/IconButton'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
@@ -23,18 +22,20 @@ import { quoteView } from '@/features/quotes/status'
 import { auditLabel } from '../../activity/audit'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
-import {
-  convertEnquiryAction,
-  logClientReplyAction,
-  sendReplyAction,
-  updateEnquiryAction,
-} from '../actions'
+import { convertEnquiryAction, updateEnquiryAction } from '../actions'
 import { createQuoteForEnquiryAction } from '../../quotes/actions'
 import { EnquiryWorkflow } from './EnquiryWorkflow'
+import { LeadNotes } from './LeadNotes'
 import { MarkEnquiryViewed } from './MarkEnquiryViewed'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Lead - Moments' }
+
+const PLUS = <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+
+const INVOICE_TONE: Record<string, Tone> = {
+  DRAFT: 'neutral', ISSUED: 'info', SENT: 'info', PARTIALLY_PAID: 'warn', PAID: 'good', OVERDUE: 'bad', VOID: 'neutral',
+}
 
 function titleCase(value: string): string {
   return value
@@ -68,7 +69,6 @@ export default async function EnquiryDetailPage({
       phone: true,
       eventType: true,
       eventDate: true,
-      message: true,
       partnerName: true,
       coverage: true,
       gettingReadyLocation: true,
@@ -79,16 +79,12 @@ export default async function EnquiryDetailPage({
       status: true,
       waitingOn: true,
       convertedProjectId: true,
-      communications: {
-        orderBy: { createdAt: 'asc' },
-        select: { id: true, direction: true, body: true, createdAt: true, by: { select: { name: true } } },
-      },
     },
   })
   // /leads/[id] loads the Enquiry (lead) entity ONLY - it never guesses a Project id (docs/24 FIX 11).
   if (!enquiry) notFound()
 
-  const [activity, quotes] = await Promise.all([
+  const [activity, quotes, invoices, noteComms] = await Promise.all([
     prisma.auditLog.findMany({
       where: { entityType: 'Enquiry', entityId: id },
       orderBy: { createdAt: 'desc' },
@@ -101,7 +97,22 @@ export default async function EnquiryDetailPage({
       orderBy: { createdAt: 'desc' },
       select: { id: true, reference: true, status: true, createdAt: true, currentVersion: { select: { total: true, sentToClientAt: true } } },
     }),
+    // Invoices live on the Job the lead converted into (there is none before that).
+    enquiry.convertedProjectId
+      ? prisma.invoice.findMany({
+          where: { projectId: enquiry.convertedProjectId },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, invoiceNumber: true, status: true, total: true, type: true },
+        })
+      : Promise.resolve([]),
+    // Internal notes on this lead (stored as internal communications), newest first.
+    prisma.communication.findMany({
+      where: { enquiryId: id, internal: true },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, body: true, createdAt: true, by: { select: { name: true } } },
+    }),
   ])
+  const leadNotes = noteComms.map((n) => ({ id: n.id, body: n.body, at: formatSydneyDateTime(n.createdAt), by: n.by?.name ?? null }))
 
   // A Job exists once the lead is accepted/converted (Awaiting or Confirmed). "open" = a live lead with
   // no Job yet, so only those stages offer Create quote / Create Job.
@@ -141,52 +152,35 @@ export default async function EnquiryDetailPage({
           ) : null}
         </p>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* Workflow */}
-          <div className="rounded-md border border-line bg-surface p-5">
-            <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Workflow</h2>
-
+        {/* Workflow (left, like the Jobs workflow) + a rail of Quote / Invoice / Notes (right). */}
+        <div className="mt-6 grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
+          {/* MAIN: workflow + the lead outcome actions */}
+          <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
             {hasJob ? (
-              <div className="flex flex-col gap-3">
-                <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">
-                  {confirmed
-                    ? 'Booking confirmed - the deposit is paid and the job is active. Open the job below to continue the work.'
-                    : 'Awaiting booking confirmation - a job is held for this lead, but production starts once the booking deposit is paid.'}
-                </div>
-                <EnquiryWorkflow
-                  stages={board.stages}
-                  allDone={board.allDone}
-                  enquiryId={enquiry.id}
-                  csrf={csrf}
-                  readOnly
-                />
+              <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">
+                {confirmed
+                  ? 'Booking confirmed - the deposit is paid and the job is active. Open the job to continue the work.'
+                  : 'Awaiting booking confirmation - a job is held for this lead, but production starts once the booking deposit is paid.'}
               </div>
-            ) : (
-              <EnquiryWorkflow
-                stages={board.stages}
-                allDone={board.allDone}
-                enquiryId={enquiry.id}
-                csrf={csrf}
-                taskTimes={taskTimes}
-              />
-            )}
+            ) : null}
 
-            {/* Outcomes */}
-            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
+            <EnquiryWorkflow
+              stages={board.stages}
+              allDone={board.allDone}
+              enquiryId={enquiry.id}
+              csrf={csrf}
+              taskTimes={taskTimes}
+              readOnly={hasJob}
+            />
+
+            {/* Outcome actions */}
+            <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
               {open ? (
                 <>
-                  <form action={createQuoteForEnquiryAction}>
-                    <input type="hidden" name="csrf" value={csrf} />
-                    <input type="hidden" name="enquiryId" value={enquiry.id} />
-                    <Button type="submit" size="sm">Create quote</Button>
-                  </form>
                   <form action={convertEnquiryAction}>
                     <input type="hidden" name="csrf" value={csrf} />
                     <input type="hidden" name="enquiryId" value={enquiry.id} />
-                    <button
-                      type="submit"
-                      className="rounded-md border border-line-strong px-3 py-1.5 text-sm font-bold text-ink transition-colors hover:bg-sunk"
-                    >
+                    <button type="submit" className="rounded-md bg-ink px-3 py-1.5 text-sm font-bold text-surface transition-opacity hover:opacity-90">
                       Create Job
                     </button>
                   </form>
@@ -194,10 +188,7 @@ export default async function EnquiryDetailPage({
                     <input type="hidden" name="csrf" value={csrf} />
                     <input type="hidden" name="enquiryId" value={enquiry.id} />
                     <input type="hidden" name="op" value="lost" />
-                    <button
-                      type="submit"
-                      className="rounded-md border border-line-strong px-3 py-1.5 text-sm font-bold text-lost-ink transition-colors hover:bg-sunk"
-                    >
+                    <button type="submit" className="rounded-md border border-line-strong px-3 py-1.5 text-sm font-bold text-lost-ink transition-colors hover:bg-sunk">
                       Decline
                     </button>
                   </form>
@@ -205,10 +196,7 @@ export default async function EnquiryDetailPage({
               ) : hasJob ? (
                 <>
                   {enquiry.convertedProjectId ? (
-                    <Link
-                      href={`/jobs/${enquiry.convertedProjectId}`}
-                      className="font-bold text-accent-ink hover:underline"
-                    >
+                    <Link href={`/jobs/${enquiry.convertedProjectId}`} className="font-bold text-accent-ink hover:underline">
                       Open the job
                     </Link>
                   ) : null}
@@ -223,7 +211,6 @@ export default async function EnquiryDetailPage({
                       </button>
                     </form>
                   ) : (
-                    // Still awaiting the deposit: the client can pull out before booking -> Declined.
                     <form action={updateEnquiryAction}>
                       <input type="hidden" name="csrf" value={csrf} />
                       <input type="hidden" name="enquiryId" value={enquiry.id} />
@@ -239,10 +226,7 @@ export default async function EnquiryDetailPage({
                   <input type="hidden" name="csrf" value={csrf} />
                   <input type="hidden" name="enquiryId" value={enquiry.id} />
                   <input type="hidden" name="op" value="reopen" />
-                  <button
-                    type="submit"
-                    className="rounded border border-line-strong px-3 py-1.5 text-sm font-bold text-ink-muted hover:text-ink"
-                  >
+                  <button type="submit" className="rounded border border-line-strong px-3 py-1.5 text-sm font-bold text-ink-muted hover:text-ink">
                     Reopen lead
                   </button>
                 </form>
@@ -250,88 +234,70 @@ export default async function EnquiryDetailPage({
             </div>
           </div>
 
-          {/* Conversation */}
-          <div className="rounded-md border border-line bg-surface p-5">
-            <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Conversation</h2>
-            <div className="flex flex-col gap-3">
-              {enquiry.communications.length === 0 ? (
-                <p className="text-base text-ink-muted">No messages yet.</p>
-              ) : (
-                enquiry.communications.map((c) => {
-                  const inbound = c.direction === 'inbound'
-                  return (
-                    <div key={c.id} className={inbound ? '' : 'text-right'}>
-                      <div className="text-sm text-muted">
-                        {inbound ? 'Client' : (c.by?.name ?? 'Staff')} · {formatSydneyDateTime(c.createdAt)}
-                      </div>
-                      <div
-                        className={`mt-1 inline-block max-w-[85%] whitespace-pre-line rounded-md px-3 py-2 text-base ${
-                          inbound ? 'bg-paper text-ink' : 'bg-ink text-surface'
-                        }`}
-                      >
-                        {c.body}
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-
-            {open ? (
-              <div className="mt-4 flex flex-col gap-4 border-t border-line pt-4">
-                <form action={sendReplyAction} className="flex flex-col gap-2">
-                  <input type="hidden" name="csrf" value={csrf} />
-                  <input type="hidden" name="enquiryId" value={enquiry.id} />
-                  <label className="text-sm font-bold text-ink">Reply to client</label>
-                  <Textarea name="body" required placeholder="Write your reply..." />
-                  <div>
-                    <Button size="sm" type="submit">
-                      Send reply
-                    </Button>
-                  </div>
-                </form>
-                <form action={logClientReplyAction} className="flex flex-col gap-2">
-                  <input type="hidden" name="csrf" value={csrf} />
-                  <input type="hidden" name="enquiryId" value={enquiry.id} />
-                  <label className="text-sm font-bold text-ink">Log a message from the client</label>
-                  <Textarea name="body" required placeholder="Paste what the client said..." />
-                  <div>
-                    <button
-                      type="submit"
-                      className="rounded border border-line-strong px-3 py-1.5 text-sm font-bold text-ink-muted hover:text-ink"
-                    >
-                      Record client message
-                    </button>
-                  </div>
-                </form>
+          {/* RAIL: Quotes / Invoices / Notes, each with a + to add */}
+          <aside className="flex flex-col gap-4 lg:col-span-1">
+            {/* Quotes */}
+            <section className="rounded-md border border-line bg-surface p-5">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-xs font-bold uppercase tracking-wide text-muted">Quotes</h2>
+                {open ? (
+                  <form action={createQuoteForEnquiryAction}>
+                    <input type="hidden" name="csrf" value={csrf} />
+                    <input type="hidden" name="enquiryId" value={enquiry.id} />
+                    <IconButton type="submit" label="Create quote" tone="accent" icon={PLUS} />
+                  </form>
+                ) : null}
               </div>
-            ) : null}
-          </div>
-        </div>
+              {quotes.length === 0 ? (
+                <p className="text-sm text-ink-muted">No quotes yet.</p>
+              ) : (
+                <ul>
+                  {quotes.map((q) => {
+                    const view = quoteView(q.status)
+                    const sent = q.currentVersion?.sentToClientAt
+                    return (
+                      <li key={q.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line py-2.5 first:border-t-0">
+                        <Link href={`/quotes/${q.id}`} className="tabular font-semibold text-ink hover:text-accent-ink hover:underline">
+                          {q.reference ?? 'Quote'}
+                        </Link>
+                        <StatusPill tone={view.tone}>{view.label}</StatusPill>
+                        <span className="tabular ml-auto text-sm font-medium text-ink">{q.currentVersion ? formatAud(q.currentVersion.total) : '-'}</span>
+                        <span className="w-full text-xs text-ink-muted">{sent ? `Sent ${formatSydneyDate(sent)}` : `Created ${formatSydneyDate(q.createdAt)}`}</span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </section>
 
-        {/* Quotes made for this lead */}
-        <div className="mt-4 rounded-md border border-line bg-surface p-5">
-          <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Quotes</h2>
-          {quotes.length === 0 ? (
-            <p className="text-base text-ink-muted">No quotes yet.{open ? ' Use Create quote above to send one.' : ''}</p>
-          ) : (
-            <ul>
-              {quotes.map((q) => {
-                const view = quoteView(q.status)
-                const sent = q.currentVersion?.sentToClientAt
-                return (
-                  <li key={q.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line py-2.5 first:border-t-0">
-                    <Link href={`/quotes/${q.id}`} className="tabular font-semibold text-ink hover:text-accent-ink hover:underline">
-                      {q.reference ?? 'Quote'}
-                    </Link>
-                    <StatusPill tone={view.tone}>{view.label}</StatusPill>
-                    <span className="text-sm text-ink-muted">{sent ? `Sent ${formatSydneyDate(sent)}` : `Created ${formatSydneyDate(q.createdAt)}`}</span>
-                    <span className="tabular ml-auto text-sm font-medium text-ink">{q.currentVersion ? formatAud(q.currentVersion.total) : '-'}</span>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
+            {/* Invoices (exist once the lead is booked into a job) */}
+            <section className="rounded-md border border-line bg-surface p-5">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-xs font-bold uppercase tracking-wide text-muted">Invoices</h2>
+                {hasJob && enquiry.convertedProjectId ? (
+                  <IconLink label="Create invoice" tone="accent" href={`/finance/new?job=${enquiry.convertedProjectId}`} icon={PLUS} />
+                ) : null}
+              </div>
+              {invoices.length === 0 ? (
+                <p className="text-sm text-ink-muted">{hasJob ? 'No invoices yet.' : 'Available once the lead is booked.'}</p>
+              ) : (
+                <ul>
+                  {invoices.map((inv) => (
+                    <li key={inv.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line py-2.5 first:border-t-0">
+                      <Link href={`/finance/${inv.id}`} className="tabular font-semibold text-ink hover:text-accent-ink hover:underline">
+                        {inv.invoiceNumber}
+                      </Link>
+                      <StatusPill tone={INVOICE_TONE[inv.status] ?? 'neutral'}>{inv.status.toLowerCase().replace(/_/g, ' ')}</StatusPill>
+                      <span className="tabular ml-auto text-sm font-medium text-ink">{formatAud(inv.total)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            {/* Notes (replaces the old Conversation panel) */}
+            <LeadNotes enquiryId={enquiry.id} csrf={csrf} notes={leadNotes} />
+          </aside>
         </div>
 
         {/* Enquiry details (wedding-enquiry fields captured on the add-client / website form) */}
