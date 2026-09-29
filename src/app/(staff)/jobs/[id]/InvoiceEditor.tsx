@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState, type ReactNode } from 'rea
 import Link from 'next/link'
 import { Alert } from '@/components/ui/Alert'
 import { Button, secondaryLinkLg } from '@/components/ui/Button'
+import { MainAside } from '@/components/EditLayout'
 import { Field, Select, Textarea, TextInput } from '@/components/ui/form'
 import { createInvoiceLinesAction, updateInvoiceLinesAction, type QuoteActionState } from '../actions'
 import { formatScheduleDate, presetRows, type ScheduleKey, type ScheduleRow } from '@/features/finance/payment-schedule'
@@ -457,42 +458,9 @@ export function InvoiceEditor({
 
         </section>
 
-        {/* Totals (right) / payment schedule (left) / notes + action (right), per the approved mockup. */}
-        <div className="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-12">
-          <div className="text-sm lg:col-span-4 lg:col-start-9">
-            <div className="flex justify-between py-1 text-ink"><span>Subtotal (excl. GST)</span><span className="tabular">{money(subtotal)}</span></div>
-            <div className="flex items-center justify-between gap-3 py-1 text-ink">
-              <label htmlFor="inv-discount">Discount</label>
-              {discountOpen || disc > 0 ? (
-                <TextInput
-                  id="inv-discount"
-                  inputMode="decimal"
-                  value={discount}
-                  onChange={(e) => setDiscount(e.target.value)}
-                  onBlur={() => { if (!(Number(discount) > 0)) setDiscountOpen(false) }}
-                  placeholder="0.00"
-                  autoFocus={discountOpen && !discount}
-                  className="h-8 w-28 text-right"
-                />
-              ) : (
-                <button type="button" onClick={() => setDiscountOpen(true)} className="text-ink-muted hover:text-ink hover:underline">None</button>
-              )}
-            </div>
-            <div className="flex justify-between py-1 text-ink"><span>GST (10%)</span><span className="tabular">{money(gst)}</span></div>
-            <div className="mt-2 flex items-baseline justify-between border-t border-line pt-3 font-semibold text-ink">
-              <span className="text-lg">Total due</span>
-              <span className="tabular text-xl">{money(total)}</span>
-            </div>
-            {workspace ? (
-              <>
-                <div className="mt-1 flex justify-between py-0.5 text-ink-muted"><span>Paid</span><span className="tabular text-delivered-ink">{money(paidNum)}</span></div>
-                <div className="flex justify-between py-0.5 font-semibold text-ink"><span>Balance</span><span className="tabular">{money(Math.max(total - paidNum, 0))}</span></div>
-              </>
-            ) : null}
-          </div>
-
-        {/* Payment schedule (left) */}
-        <section className="lg:col-span-7 lg:row-start-2">
+        {/* Payment schedule is its own full-width row; the $0 notice explains an empty schedule. */}
+        <section className="min-w-0">
+          {total <= 0 ? <Alert tone="info" title="A payment schedule cannot be calculated because the total amount due is $0.00." /> : null}
           <label htmlFor="inv-schedule" className="text-sm font-semibold text-ink">Payment schedule</label>
           <div className="mt-2 max-w-2xl">
             <PaymentScheduleSelect id="inv-schedule" value={schedule} onChange={setSchedule} shootDate={shootDate} />
@@ -539,19 +507,50 @@ export function InvoiceEditor({
           ) : null}
         </section>
 
-        {/* Right column under the totals: the $0 notice + notes. */}
-        <div className="flex flex-col gap-6 lg:col-span-4 lg:col-start-9 lg:row-start-2">
-          {total <= 0 ? <Alert tone="info" title="A payment schedule cannot be calculated because the total amount due is $0.00." /> : null}
-          <Field label="Notes (optional)" htmlFor="inv-notes">
-            <Textarea id="inv-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} placeholder="Notes shown on the invoice..." />
-          </Field>
-        </div>
+        {/* Notes (main) + Financial summary (aside) share one row and a top keyline. */}
+        <MainAside
+          main={
+            <Field label="Notes (optional)" htmlFor="inv-notes">
+              <Textarea id="inv-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={6} maxLength={2000} placeholder="Notes shown on the invoice..." />
+            </Field>
+          }
+          aside={
+            <div className="text-sm">
+              <div className="flex justify-between py-1 text-ink"><span>Subtotal (excl. GST)</span><span className="tabular">{money(subtotal)}</span></div>
+              <div className="flex items-center justify-between gap-3 py-1 text-ink">
+                <label htmlFor="inv-discount">Discount</label>
+                {discountOpen || disc > 0 ? (
+                  <TextInput
+                    id="inv-discount"
+                    inputMode="decimal"
+                    value={discount}
+                    onChange={(e) => setDiscount(e.target.value)}
+                    onBlur={() => { if (!(Number(discount) > 0)) setDiscountOpen(false) }}
+                    placeholder="0.00"
+                    autoFocus={discountOpen && !discount}
+                    className="h-8 w-28 text-right"
+                  />
+                ) : (
+                  <button type="button" onClick={() => setDiscountOpen(true)} className="text-ink-muted hover:text-ink hover:underline">None</button>
+                )}
+              </div>
+              <div className="flex justify-between py-1 text-ink"><span>GST (10%)</span><span className="tabular">{money(gst)}</span></div>
+              <div className="mt-2 flex items-baseline justify-between border-t border-line pt-3 font-semibold text-ink">
+                <span className="text-lg">Total due</span>
+                <span className="tabular text-xl">{money(total)}</span>
+              </div>
+              {workspace ? (
+                <>
+                  <div className="mt-1 flex justify-between py-0.5 text-ink-muted"><span>Paid</span><span className="tabular text-delivered-ink">{money(paidNum)}</span></div>
+                  <div className="flex justify-between py-0.5 font-semibold text-ink"><span>Balance</span><span className="tabular">{money(Math.max(total - paidNum, 0))}</span></div>
+                </>
+              ) : null}
+            </div>
+          }
+        />
 
-        {/* Action group: bottom-LEFT, Carbon in-page pattern - primary first, secondary after. A
-            2-col grid (minmax(0,1fr) tracks) + w-full on each child renders the two buttons at
-            EXACTLY equal width regardless of label. Cancel is a styled <a> (secondaryLinkLg), never
-            a <Button> nested in a <Link> (invalid HTML that broke the earlier equal-width attempt). */}
-        <div className="lg:col-span-12 lg:row-start-3">
+        {/* Action footer: its own full-width row (Carbon in-page - primary first, secondary after). */}
+        <div>
           <div className="grid w-full max-w-sm grid-cols-2 gap-3">
             <Button type="submit" size="lg" loading={pending} disabled={lines.length === 0 || scheduleMismatch} className="w-full rounded-lg">
               {editing ? 'Save changes' : 'Save invoice'}
@@ -560,7 +559,6 @@ export function InvoiceEditor({
               Cancel
             </Link>
           </div>
-        </div>
         </div>
         </div>
       </form>

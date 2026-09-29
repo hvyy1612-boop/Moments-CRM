@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState, type ReactNode } from 'rea
 import Link from 'next/link'
 import { Alert } from '@/components/ui/Alert'
 import { Button, secondaryLinkLg } from '@/components/ui/Button'
+import { MainAside } from '@/components/EditLayout'
 import { Field, Select, TextInput, Textarea } from '@/components/ui/form'
 import { estimateTotals, estimateDeposit, toCents, formatCents } from '@/lib/pricing-estimate'
 import type { QuoteActionState } from '../actions'
@@ -224,51 +225,53 @@ export function QuoteBuilder({
             </div>
           </section>
 
-          {/* Footer: totals (right), notes (left), Save / Send under the totals — the invoice's 12-col base. */}
-          <div className="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-12">
-            <div className="text-sm lg:col-span-4 lg:col-start-9 lg:row-start-1">
-              <div className="flex justify-between py-1 text-ink"><span>Subtotal (excl. GST)</span><span className="tabular-nums">{formatCents(est.exGstCents)}</span></div>
-              <div className="flex justify-between py-1 text-ink"><span>GST (incl., ÷ 11)</span><span className="tabular-nums">{formatCents(est.gstCents)}</span></div>
-              <div className="mt-2 flex items-baseline justify-between border-t border-line pt-3 font-semibold text-ink">
-                <span className="text-lg">Total (incl. GST)</span>
-                <span className="tabular-nums text-xl">{formatCents(est.totalCents)}</span>
+          {/* Notes (main) + Financial summary (aside) sit in ONE row sharing a top keyline. */}
+          <MainAside
+            main={
+              <div>
+                <label htmlFor="notes" className="text-sm font-semibold text-ink">Notes (optional)</label>
+                <Textarea id="notes" name="notes" rows={6} defaultValue={initialNotes} placeholder="Any extra notes for the client..." className="mt-2" />
               </div>
-              <div className="mt-2 flex items-center justify-between gap-3 py-0.5 text-ink">
-                <span className="flex items-center gap-2">Deposit
-                  <span className="inline-flex items-center gap-1">
-                    <TextInput value={depositPercent} onChange={(e) => setDepositPercent(e.target.value)} inputMode="numeric" className="h-8 w-14 text-right" aria-label="Deposit percent" />%
+            }
+            aside={
+              <div className="text-sm">
+                <div className="flex justify-between py-1 text-ink"><span>Subtotal (excl. GST)</span><span className="tabular-nums">{formatCents(est.exGstCents)}</span></div>
+                <div className="flex justify-between py-1 text-ink"><span>GST (incl., ÷ 11)</span><span className="tabular-nums">{formatCents(est.gstCents)}</span></div>
+                <div className="mt-2 flex items-baseline justify-between border-t border-line pt-3 font-semibold text-ink">
+                  <span className="text-lg">Total (incl. GST)</span>
+                  <span className="tabular-nums text-xl">{formatCents(est.totalCents)}</span>
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3 py-0.5 text-ink">
+                  <span className="flex items-center gap-2">Deposit
+                    <span className="inline-flex items-center gap-1">
+                      <TextInput value={depositPercent} onChange={(e) => setDepositPercent(e.target.value)} inputMode="numeric" className="h-8 w-14 text-right" aria-label="Deposit percent" />%
+                    </span>
                   </span>
-                </span>
-                <span className="tabular-nums font-medium text-ink">{formatCents(dep.depositCents)}</span>
+                  <span className="tabular-nums font-medium text-ink">{formatCents(dep.depositCents)}</span>
+                </div>
+                <div className="flex justify-between py-0.5 text-ink-muted"><span>Balance due later</span><span className="tabular-nums">{formatCents(dep.balanceCents)}</span></div>
               </div>
-              <div className="flex justify-between py-0.5 text-ink-muted"><span>Balance due later</span><span className="tabular-nums">{formatCents(dep.balanceCents)}</span></div>
-            </div>
+            }
+          />
 
-            <div className="lg:col-span-7 lg:row-start-2">
-              <label htmlFor="notes" className="text-sm font-semibold text-ink">Notes (optional)</label>
-              <Textarea id="notes" name="notes" rows={3} defaultValue={initialNotes} placeholder="Any extra notes for the client..." className="mt-2" />
-            </div>
-
-            {/* Action group: bottom-LEFT, Carbon in-page pattern - primary first, secondary after, both
-                the same size/width, kept as one adjacent group (not right-aligned, no wide gap). */}
-            <div className="flex flex-col gap-3 lg:col-span-12 lg:row-start-3">
-              <p className="text-xs text-ink-muted">
-                {cancelHref
-                  ? 'Prices include GST and are recalculated when you save.'
-                  : 'Prices include GST and are recalculated when you save. Sending saves your latest changes first, then opens the email to the client.'}
-              </p>
-              {cancelHref ? (
-                <div className="grid w-full max-w-sm grid-cols-2 gap-3">
-                  <Button type="submit" size="lg" loading={saving} className="w-full rounded-lg">Save quote</Button>
-                  <Link href={cancelHref} className={`w-full ${secondaryLinkLg}`}>Cancel</Link>
-                </div>
-              ) : (
-                <div className="grid w-full max-w-sm grid-cols-2 gap-3">
-                  <Button type="button" size="lg" loading={saving && pendingSendRef.current} onClick={startSend} className="w-full rounded-lg">{sendLabel}</Button>
-                  <Button type="submit" variant="secondary" size="lg" loading={saving && !pendingSendRef.current} className="w-full rounded-lg">Save draft</Button>
-                </div>
-              )}
-            </div>
+          {/* Action footer: its own full-width row (Carbon in-page - primary first, secondary after). */}
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-ink-muted">
+              {cancelHref
+                ? 'Prices include GST and are recalculated when you save.'
+                : 'Prices include GST and are recalculated when you save. Sending saves your latest changes first, then opens the email to the client.'}
+            </p>
+            {cancelHref ? (
+              <div className="grid w-full max-w-sm grid-cols-2 gap-3">
+                <Button type="submit" size="lg" loading={saving} className="w-full rounded-lg">Save quote</Button>
+                <Link href={cancelHref} className={`w-full ${secondaryLinkLg}`}>Cancel</Link>
+              </div>
+            ) : (
+              <div className="grid w-full max-w-sm grid-cols-2 gap-3">
+                <Button type="button" size="lg" loading={saving && pendingSendRef.current} onClick={startSend} className="w-full rounded-lg">{sendLabel}</Button>
+                <Button type="submit" variant="secondary" size="lg" loading={saving && !pendingSendRef.current} className="w-full rounded-lg">Save draft</Button>
+              </div>
+            )}
           </div>
         </div>
       </form>
