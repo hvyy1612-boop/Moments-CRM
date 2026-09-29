@@ -8,6 +8,7 @@ import { MainAside } from '@/components/EditLayout'
 import { Field, TextInput, Textarea } from '@/components/ui/form'
 import { estimateTotals, estimateDeposit, toCents, formatCents } from '@/lib/pricing-estimate'
 import { AddItemModal, LineItemsTable, EMPTY_DRAFT, draftDiscountOff, type CatalogueItem, type ItemDraft, type LineItem } from '@/components/LineItems'
+import { useToast } from '@/components/ui/ToastProvider'
 import type { QuoteActionState } from '../actions'
 
 type QuoteFormAction = (prev: QuoteActionState, formData: FormData) => Promise<QuoteActionState>
@@ -128,6 +129,7 @@ export function QuoteBuilder({
   // "Send" auto-saves the current lines first (the send action reads the saved quote from the DB), then
   // opens the compose dialog — so a user who just added items no longer sees "this quote has no items".
   const pendingSendRef = useRef(false)
+  const toast = useToast()
 
   // On success the send action REDIRECTS to the destination page with a `?sent=` param, which shows the
   // "Quote sent" toast there (SentToast). The toast can't live here: a successful send flips the quote out
@@ -137,14 +139,19 @@ export function QuoteBuilder({
   // After the auto-save triggered by "Send" resolves: open the dialog on success, or drop the intent on
   // error (the save error — e.g. no lines — is shown inline). saveState is a fresh object per submit.
   useEffect(() => {
-    if (!pendingSendRef.current) return
     if (saveState.status === 'success') {
-      pendingSendRef.current = false
-      setSendOpen(true)
+      if (pendingSendRef.current) {
+        // The save was a "Send" pre-save: open the compose dialog, no toast (Send shows its own).
+        pendingSendRef.current = false
+        setSendOpen(true)
+      } else {
+        // A plain Save: confirm with a toast (matches the invoice save feedback).
+        toast({ title: cancelHref ? 'Quote saved' : 'Draft saved' })
+      }
     } else if (saveState.status === 'error') {
       pendingSendRef.current = false
     }
-  }, [saveState])
+  }, [saveState, toast, cancelHref])
 
   const startSend = () => {
     pendingSendRef.current = true
@@ -240,7 +247,6 @@ export function QuoteBuilder({
     <div className="mt-4 flex flex-col gap-5">
       <form ref={saveFormRef} action={save} className="border-t border-line pt-6">
         {saveState.status === 'error' ? <div className="mb-6"><Alert tone="danger" title={saveState.message} /></div> : null}
-        {saveState.status === 'success' ? <div className="mb-6"><Alert tone="success" title={cancelHref ? 'Quote saved' : 'Draft saved'} /></div> : null}
         <input type="hidden" name="csrf" value={csrf} />
         <input type="hidden" name="versionId" value={versionId} />
         <input type="hidden" name="projectId" value={projectId} />
