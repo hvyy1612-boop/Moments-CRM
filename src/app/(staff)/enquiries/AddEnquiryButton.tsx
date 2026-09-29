@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
+import { IconButton } from '@/components/ui/IconButton'
 import { Field, TextInput, Textarea } from '@/components/ui/form'
 import { addEnquiryAction, type AddEnquiryState } from './actions'
 import { ClientContactPicker } from './ClientContactPicker'
@@ -17,7 +18,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 /** Same required-field checks the server runs, done in the browser so staff see the red line the
  * moment they submit a blank starred field (Google/Facebook style) instead of a native tooltip. */
 function validateContact(fd: FormData): ClientErrors {
-  // An existing client was picked - nothing else to fill in.
+  // An existing client was picked (or pre-bound) - nothing else to fill in.
   if (String(fd.get('clientId') ?? '').trim()) return {}
   // Search mode with nothing chosen: the new-client fields are not even on screen.
   if (!fd.has('name')) {
@@ -32,12 +33,38 @@ function validateContact(fd: FormData): ClientErrors {
   return errs
 }
 
-/** "Add enquiry" opens a compact sheet that creates a REAL Enquiry (a lead) and opens it. */
-export function AddEnquiryButton({ csrf }: { csrf: string }) {
+const IconEnquiryPlus = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+    <path d="M14 3v5h5" />
+    <path d="M12 11v6M9 14h6" />
+  </svg>
+)
+
+/**
+ * "Add enquiry" opens a compact sheet that creates a REAL Enquiry (a lead) and opens it.
+ *
+ * Two entry points: the plain list button (no client) opens the search-or-add client picker; passing
+ * `clientId` pre-binds the enquiry to THAT existing client (a repeat booking - anniversary, family
+ * shoot...), so it links the new lead to the client and never creates a duplicate. `trigger="icon"`
+ * renders it as a round icon action for the client-header toolbar.
+ */
+export function AddEnquiryButton({
+  csrf,
+  clientId,
+  clientName,
+  trigger = 'button',
+}: {
+  csrf: string
+  clientId?: string
+  clientName?: string
+  trigger?: 'button' | 'icon'
+}) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [state, action, pending] = useActionState(addEnquiryAction, INITIAL)
   const [clientErrors, setClientErrors] = useState<ClientErrors>({})
+  const boundToClient = Boolean(clientId)
   const serverErrors = state.status === 'error' ? (state.errors ?? {}) : {}
   // Client-side check wins while it stands; the server's answer fills in once the form actually posts.
   const errors = {
@@ -50,19 +77,25 @@ export function AddEnquiryButton({ csrf }: { csrf: string }) {
     if (state.status === 'created') router.push(`/enquiries/${state.enquiryId}`)
   }, [state, router])
 
+  const openModal = () => {
+    setClientErrors({})
+    setOpen(true)
+  }
+
   return (
     <>
-      <button
-        type="button"
-        onClick={() => {
-          setClientErrors({})
-          setOpen(true)
-        }}
-        className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
-      >
-        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-        Add enquiry
-      </button>
+      {trigger === 'icon' ? (
+        <IconButton label="Add enquiry" tone="accent" icon={<IconEnquiryPlus />} onClick={openModal} />
+      ) : (
+        <button
+          type="button"
+          onClick={openModal}
+          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          Add enquiry
+        </button>
+      )}
 
       {open ? (
         <div
@@ -74,7 +107,7 @@ export function AddEnquiryButton({ csrf }: { csrf: string }) {
         >
           <div className="w-full max-w-md rounded-xl border border-line bg-surface p-6 shadow-lg">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-ink">Add enquiry</h2>
+              <h2 className="text-lg font-semibold text-ink">{boundToClient ? `New enquiry for ${clientName ?? 'this client'}` : 'Add enquiry'}</h2>
               <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="rounded p-1 text-ink-muted hover:bg-sunk hover:text-ink">
                 <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
               </button>
@@ -98,10 +131,19 @@ export function AddEnquiryButton({ csrf }: { csrf: string }) {
               className="flex flex-col gap-4"
             >
               <input type="hidden" name="csrf" value={csrf} />
-              <ClientContactPicker
-                errors={errors}
-                onFieldInput={(field) => setClientErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev))}
-              />
+              {boundToClient ? (
+                <>
+                  <input type="hidden" name="clientId" value={clientId} />
+                  <p className="rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink-muted">
+                    This enquiry is added to <span className="font-medium text-ink">{clientName ?? 'this client'}</span>. It will not create a new client.
+                  </p>
+                </>
+              ) : (
+                <ClientContactPicker
+                  errors={errors}
+                  onFieldInput={(field) => setClientErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev))}
+                />
+              )}
               <Field label="Event type" htmlFor="enq-type">
                 <TextInput id="enq-type" name="eventType" placeholder="Wedding, Events, Portrait" autoComplete="off" />
               </Field>
