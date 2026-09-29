@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ADDABLE_TASK_TYPES, type ProjectBoard } from '@/features/projects/workflow'
 import {
   checkTaskForm,
@@ -28,12 +28,15 @@ export function ProjectWorkflow({
   csrf,
   taskTimes = {},
   history = [],
+  rail,
 }: {
   board: ProjectBoard
   projectId: string
   csrf: string
   taskTimes?: Record<string, string>
   history?: HistoryEntry[]
+  /** Extra cards rendered in the right rail, under "Next action" (the job's Client / Notes / Team). */
+  rail?: ReactNode
 }) {
   const { stages, allDone, attentionCount, nextAction } = board
 
@@ -63,9 +66,9 @@ export function ProjectWorkflow({
   }
 
   return (
-    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
-      {/* MAIN */}
-      <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
+    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-8">
+      {/* MAIN - 5/8 of the row */}
+      <div className="flex min-w-0 flex-col gap-4 lg:col-span-5">
         {/* Title + toolbar */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl">Workflow</h2>
@@ -316,9 +319,9 @@ export function ProjectWorkflow({
         ) : null}
       </div>
 
-      {/* RAIL: Next action only */}
-      <aside className="lg:col-span-1">
-        <div className="rounded-md border border-line bg-surface p-4">
+      {/* RAIL: Next action + the job's Client / Notes / Team cards (3/8 of the row) */}
+      <aside className="flex flex-col gap-3 lg:col-span-3">
+        <div className="rounded-md border border-line-strong bg-surface p-4">
           <div className="mb-3 text-sm font-bold text-ink">Next action</div>
           {allDone || !nextAction ? (
             <p className="text-sm text-ink-muted">All caught up - no task is waiting.</p>
@@ -355,6 +358,7 @@ export function ProjectWorkflow({
             </div>
           )}
         </div>
+        {rail}
       </aside>
     </div>
   )

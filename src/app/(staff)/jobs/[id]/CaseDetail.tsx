@@ -26,14 +26,13 @@ import {
 } from '../actions'
 import { ContractSend } from './ContractSend'
 import type { HistoryEntry } from './HistoryLogModal'
-import { OverviewTab } from './OverviewTab'
+import { JobSidebar } from './JobSidebar'
 import { ProjectWorkflow } from './ProjectWorkflow'
 import { QuoteBuilder } from './QuoteBuilder'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import {
   IconCalendar,
   IconChecklist,
-  IconLayout,
   IconMore,
   IconPin,
   IconReceipt,
@@ -66,7 +65,6 @@ function historyDetails(action: string, after: unknown): string {
 }
 
 const TABS = [
-  { key: 'overview', label: 'Overview', Icon: IconLayout },
   { key: 'workflow', label: 'Workflow', Icon: IconChecklist },
   { key: 'finance', label: 'Finance', Icon: IconReceipt },
 ] as const
@@ -214,18 +212,6 @@ export async function CaseDetail({
     isAddOn: p.isAddOn,
   }))
 
-  const gallery = project.galleries[0]
-  const galleryView = gallery
-    ? {
-        id: gallery.id,
-        title: gallery.title,
-        status: gallery.status,
-        accessToken: gallery.accessToken,
-        publishedLabel: gallery.publishedAt ? formatSydneyDate(gallery.publishedAt) : null,
-        items: gallery.items.map((item) => ({ id: item.id, caption: item.caption, url: item.url })),
-      }
-    : null
-
   // Header facts: shoot date + location come from the first booking (the shoot), when one exists.
   const shootBooking = project.bookings[0] ?? null
   const shootDateLabel = shootBooking ? formatSydneyDateTime(shootBooking.startsAt) : null
@@ -238,7 +224,7 @@ export async function CaseDetail({
   const phaseTotal = corePhases.length + 1
   const phaseNum = board?.allDone ? phaseTotal : activeIdx >= 0 ? activeIdx + 1 : 1
 
-  const activeTab: TabKey = (TABS.some((t) => t.key === tab) ? tab : 'overview') as TabKey
+  const activeTab: TabKey = (TABS.some((t) => t.key === tab) ? tab : 'workflow') as TabKey
   const tabHref = (key: TabKey) =>
     `/jobs/${project.id}?tab=${key}${back ? `&back=${encodeURIComponent(back)}` : ''}`
 
@@ -272,19 +258,6 @@ export async function CaseDetail({
     editedLabel: n.editedAt ? formatSydneyDateTime(n.editedAt) : null,
   }))
   const overviewTeam = project.teamMembers.map((t) => ({ id: t.id, name: t.name, role: t.role, email: t.resource?.linkedUser?.email ?? null }))
-  const overviewUpcoming = {
-    nextAction: board?.nextAction ?? null,
-    shootLabel: shootDateLabel,
-    shootLocation,
-    paymentLabel: invoiceOutstanding.greaterThan(0)
-      ? `${formatAud(invoiceOutstanding)} remaining`
-      : invoiceCount > 0 ? 'Fully paid' : 'No invoice yet',
-    paymentSub: invoiceOutstanding.greaterThan(0)
-      ? 'Balance outstanding'
-      : invoiceCount > 0 ? 'All invoices settled' : null,
-    deliveryLabel: galleryView ? (galleryView.publishedLabel ? 'Gallery delivered' : 'Gallery in progress') : 'Delivery not started',
-    deliverySub: galleryView?.publishedLabel ? `Published ${galleryView.publishedLabel}` : (galleryView?.title ?? null),
-  }
 
   return (
     <AppShell user={user} csrf={csrf} active={section} bareHeader>
@@ -384,22 +357,26 @@ export async function CaseDetail({
         </nav>
 
         <div className="mt-6">
-          {activeTab === 'overview' ? (
-            <OverviewTab
-              projectId={project.id}
-              csrf={csrf}
-              client={overviewClient}
-              requirements={overviewRequirements}
-              notes={overviewNotes}
-              team={overviewTeam}
-              resources={teamResourceOptions}
-              upcoming={overviewUpcoming}
-            />
-          ) : null}
-
           {activeTab === 'workflow' ? (
             hasBoard && board ? (
-              <ProjectWorkflow board={board} projectId={project.id} csrf={csrf} taskTimes={taskTimes} history={history} />
+              <ProjectWorkflow
+                board={board}
+                projectId={project.id}
+                csrf={csrf}
+                taskTimes={taskTimes}
+                history={history}
+                rail={
+                  <JobSidebar
+                    projectId={project.id}
+                    csrf={csrf}
+                    client={overviewClient}
+                    requirements={overviewRequirements}
+                    notes={overviewNotes}
+                    team={overviewTeam}
+                    resources={teamResourceOptions}
+                  />
+                }
+              />
             ) : (
               <p className="text-sm text-ink-muted">No workflow for this job yet.</p>
             )
