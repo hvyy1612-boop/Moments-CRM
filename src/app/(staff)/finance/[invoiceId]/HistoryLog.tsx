@@ -32,30 +32,30 @@ export function HistoryLog({ rows }: { rows: HistoryRow[] }) {
           <p className="border-t border-line px-5 py-6 text-sm text-ink-muted">No activity recorded yet.</p>
         ) : (
           <div className="overflow-x-auto border-t border-line">
-            <table className="w-full text-sm">
+            <table className="w-full table-fixed text-sm">
               <thead>
                 <tr className="bg-sunk text-left text-ink">
-                  <th scope="col" className="px-5 py-3 font-semibold">Date</th>
-                  <th scope="col" className="hidden px-5 py-3 font-semibold sm:table-cell">Time</th>
-                  <th scope="col" className="hidden px-5 py-3 font-semibold md:table-cell">User</th>
-                  <th scope="col" className="px-5 py-3 font-semibold">Action</th>
+                  <th scope="col" className="border-r border-line px-5 py-3 font-semibold">Date</th>
+                  <th scope="col" className="hidden border-r border-line px-5 py-3 font-semibold sm:table-cell">Time</th>
+                  <th scope="col" className="hidden border-r border-line px-5 py-3 font-semibold md:table-cell">User</th>
+                  <th scope="col" className="border-r border-line px-5 py-3 font-semibold">Action</th>
                   <th scope="col" className="px-5 py-3 font-semibold">Details</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id} className="border-t border-line align-top">
-                    <td className="tabular whitespace-nowrap px-5 py-4 text-ink">
+                    <td className="tabular whitespace-nowrap border-r border-line px-5 py-4 text-ink">
                       {r.date}
                       <span className="block text-xs text-ink-muted sm:hidden">{r.time}</span>
                     </td>
-                    <td className="tabular hidden whitespace-nowrap px-5 py-4 text-ink-muted sm:table-cell">{r.time}</td>
-                    <td className="hidden whitespace-nowrap px-5 py-4 text-ink md:table-cell">{r.user}</td>
-                    <td className="whitespace-nowrap px-5 py-4 text-ink">
+                    <td className="tabular hidden whitespace-nowrap border-r border-line px-5 py-4 text-ink-muted sm:table-cell">{r.time}</td>
+                    <td className="hidden whitespace-nowrap border-r border-line px-5 py-4 text-ink md:table-cell">{r.user}</td>
+                    <td className="whitespace-nowrap border-r border-line px-5 py-4 text-ink">
                       {r.action}
                       <span className="block text-xs text-ink-muted md:hidden">{r.user}</span>
                     </td>
-                    <td className="min-w-48 px-5 py-4 text-ink-muted">{r.details}</td>
+                    <td className="px-5 py-4 text-ink-muted">{r.details}</td>
                   </tr>
                 ))}
               </tbody>

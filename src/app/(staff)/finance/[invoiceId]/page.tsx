@@ -224,12 +224,12 @@ export default async function InvoiceDetailPage({
                   ) : null}
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full table-fixed text-sm">
                     <thead>
                       <tr className="bg-sunk text-left text-ink">
-                        <th scope="col" className="px-5 py-3 font-semibold">Status</th>
-                        {single ? null : <th scope="col" className="hidden px-5 py-3 font-semibold sm:table-cell">Payment</th>}
-                        <th scope="col" className="px-5 py-3 font-semibold">Due date</th>
+                        <th scope="col" className="border-r border-line px-5 py-3 font-semibold">Status</th>
+                        {single ? null : <th scope="col" className="hidden border-r border-line px-5 py-3 font-semibold sm:table-cell">Payment</th>}
+                        <th scope="col" className="border-r border-line px-5 py-3 font-semibold">Due date</th>
                         <th scope="col" className="px-5 py-3 text-right font-semibold">Amount</th>
                       </tr>
                     </thead>
@@ -237,9 +237,9 @@ export default async function InvoiceDetailPage({
                       {scheduleRows.map((r) => (
                         // Phone: the payment name folds under the due date (no sideways scroll).
                         <tr key={r.key} className="border-t border-line align-top">
-                          <td className="whitespace-nowrap px-5 py-4"><StatusPill tone={r.status.tone}>{r.status.label}</StatusPill></td>
-                          {single ? null : <td className="hidden whitespace-nowrap px-5 py-4 text-ink sm:table-cell">{r.label}</td>}
-                          <td className="tabular px-5 py-4 text-ink">
+                          <td className="border-r border-line px-5 py-4"><StatusPill tone={r.status.tone}>{r.status.label}</StatusPill></td>
+                          {single ? null : <td className="hidden border-r border-line px-5 py-4 text-ink sm:table-cell">{r.label}</td>}
+                          <td className="border-r border-line px-5 py-4 tabular text-ink">
                             <span className="whitespace-nowrap">{r.dueLabel}</span>
                             {r.isToday ? <>{' '}<span className="whitespace-nowrap text-ink-muted">(today)</span></> : null}
                             {single ? null : <span className="block text-xs text-ink-muted sm:hidden">{r.label}</span>}
