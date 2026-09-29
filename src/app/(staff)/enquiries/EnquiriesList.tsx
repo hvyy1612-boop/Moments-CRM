@@ -102,15 +102,9 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
     },
     {
       key: 'stage',
-      // Size the column to the widest pill so a long label ("Awaiting booking confirmation") stays on ONE
-      // line instead of wrapping to 3 and making the row tall/uneven.
       header: 'Stage',
-      width: 'minmax(10em,max-content)',
-      cell: (r) => (
-        <StatusTag kind={ENQUIRY_STAGE_KIND[r.status] ?? 'enquiry'}>
-          <span className="whitespace-nowrap">{ENQUIRY_STAGE_LABEL[r.status] ?? titleCase(r.status)}</span>
-        </StatusTag>
-      ),
+      width: COL.content,
+      cell: (r) => <StatusTag kind={ENQUIRY_STAGE_KIND[r.status] ?? 'enquiry'}>{ENQUIRY_STAGE_LABEL[r.status] ?? titleCase(r.status)}</StatusTag>,
     },
   ]
 
@@ -125,24 +119,38 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
 
       {/* Stage tabs + sort */}
       <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
-        <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Enquiry stage">
-          {TABS.map((t) => {
-            const active = t.key === tab
-            return (
-              <button
-                key={t.key}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setTab(t.key)}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${active ? 'bg-sunk font-medium text-ink' : 'text-ink-muted hover:bg-paper hover:text-ink'}`}
-              >
-                {t.label}
-                <span className={`tabular rounded-full px-1.5 py-0.5 text-xs leading-none ${active ? 'bg-line text-ink-muted' : 'bg-sunk text-ink-muted'}`}>{counts[t.key] ?? 0}</span>
-              </button>
-            )
-          })}
-        </div>
+        {/* Stage filter as a compact structured-list dropdown (not a wide tab strip). */}
+        <Popover
+          width={280}
+          align="left"
+          renderTrigger={({ ref, onClick }) => (
+            <button ref={ref} type="button" onClick={onClick} className="inline-flex items-center gap-2 rounded-md border border-line-strong px-3 py-1.5 text-sm text-ink transition-colors hover:bg-sunk">
+              <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 5h18M6 12h12M10 19h4" /></svg>
+              <span className="font-medium">{TABS.find((t) => t.key === tab)?.label ?? 'All'}</span>
+              <span className="tabular rounded-full bg-sunk px-1.5 py-0.5 text-xs leading-none text-ink-muted">{counts[tab] ?? 0}</span>
+              <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+            </button>
+          )}
+        >
+          {({ close }) => (
+            <div className="flex flex-col">
+              {TABS.map((t) => {
+                const active = t.key === tab
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => { setTab(t.key); close() }}
+                    className={`flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-paper ${active ? 'font-medium text-ink' : 'text-ink-muted'}`}
+                  >
+                    <span>{t.label}</span>
+                    <span className={`tabular rounded-full px-1.5 py-0.5 text-xs leading-none ${active ? 'bg-line text-ink-muted' : 'bg-sunk text-ink-muted'}`}>{counts[t.key] ?? 0}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </Popover>
         <Popover
           width={200}
           align="right"
