@@ -10,7 +10,7 @@ import { scanPaymentReminders, type ReminderImpactItem } from '@/lib/domain/noti
 import { PageHeader } from '@/components/PageHeader'
 import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { Button } from '@/components/ui/Button'
-import { Checkbox, TextInput } from '@/components/ui/form'
+import { Checkbox, Field, FormActions, FormBlock, FormCell, PageForm, TextInput } from '@/components/ui/form'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
@@ -71,7 +71,7 @@ export default async function NotificationsSettingsPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="settings">
-      <PageContainer variant="narrow">
+      <PageContainer variant="standard">
       <PageHeader
         breadcrumb={[DASHBOARD_CRUMB, { label: 'Settings', href: '/settings' }, { label: 'Notifications' }]}
         title="Notifications"
@@ -85,53 +85,59 @@ export default async function NotificationsSettingsPage({
         <div className="mb-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">Could not save. Refresh and try again.</div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Gate 1 - the automation switches (this page writes them; audited). */}
-        <form action={updateAutomationSettingsAction} className="rounded-md border border-line bg-surface p-5">
-          <input type="hidden" name="csrf" value={csrf} />
-          <h2 className="mb-1 text-sm font-bold text-ink">Automation switches</h2>
-          <p className="mb-4 text-sm text-ink-muted">These are separate from the email provider key: turning them on decides whether reminders are created and attempted.</p>
-
-          <div className="flex flex-col gap-4">
-            <div>
+      {/* Gate 1 - the automation switches (this page writes them; audited). Carbon page-form layout. */}
+      <form action={updateAutomationSettingsAction} className="mt-8">
+        <input type="hidden" name="csrf" value={csrf} />
+        <PageForm>
+          <FormBlock
+            title="Automation switches"
+            description="Separate from the email provider key: turning these on decides whether reminders are created and attempted."
+          >
+            <FormCell>
               <Checkbox id="clientEmailsEnabled" name="clientEmailsEnabled" defaultChecked={clientOn} label="Send client payment reminders automatically" />
               <p className="ml-6 mt-0.5 text-xs text-muted">Payment reminders at each overdue milestone. Also needs the email provider (below) to actually deliver.</p>
-            </div>
-            <div>
+            </FormCell>
+            <FormCell>
               <Checkbox id="internalFollowupsEnabled" name="internalFollowupsEnabled" defaultChecked={followupsOn} label="Open internal follow-up tasks for overdue invoices" />
               <p className="ml-6 mt-0.5 text-xs text-muted">A staff task at +7 days overdue, auto-resolved when the balance clears. Internal only - never emails the client.</p>
-            </div>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-ink">Only act on instalments due on/after</span>
-              <TextInput type="date" name="remindersActiveFrom" defaultValue={activeFrom} className="max-w-xs" />
-              <span className="text-xs text-muted">Prevents backfilling old overdue invoices when you first switch on. Leave blank for no date floor.</span>
-            </label>
-          </div>
+            </FormCell>
+            <FormCell span={4}>
+              <Field
+                label="Only act on instalments due on/after"
+                htmlFor="remindersActiveFrom"
+                hint="Prevents backfilling old overdue invoices when you first switch on. Leave blank for no date floor."
+              >
+                <TextInput id="remindersActiveFrom" type="date" name="remindersActiveFrom" defaultValue={activeFrom} />
+              </Field>
+            </FormCell>
+          </FormBlock>
+          <FormActions>
+            <Button type="submit">Save settings</Button>
+          </FormActions>
+        </PageForm>
+      </form>
 
-          <div className="mt-5"><Button type="submit">Save settings</Button></div>
-        </form>
-
+      <PageForm className="mt-8 border-t border-line pt-8">
         {/* Gate 2 - provider readiness (read-only; set by environment, not here). */}
-        <div className="rounded-md border border-line bg-surface p-5">
-          <h2 className="mb-1 text-sm font-bold text-ink">Email provider</h2>
-          <p className="mb-4 text-sm text-ink-muted">The delivery channel (Resend). Configured with environment variables, not on this page.</p>
-          <div className="flex items-center justify-between gap-3 border-t border-line py-3">
-            <span className="text-sm text-ink">Provider configured</span>
-            {emailProviderReady ? <StatusPill tone="good">Ready</StatusPill> : <StatusPill tone="warn">Not configured</StatusPill>}
-          </div>
-          {!emailProviderReady ? (
-            <p className="mt-2 text-xs text-muted">Client reminders will be held (not sent, never faked) until RESEND_API_KEY and EMAIL_FROM are set. Internal follow-up tasks do not need the provider.</p>
-          ) : null}
-        </div>
-      </div>
+        <FormBlock title="Email provider" description="The delivery channel (Resend). Configured with environment variables, not on this page.">
+          <FormCell span={8}>
+            <div className="flex items-center justify-between gap-3 border-y border-line py-3">
+              <span className="text-sm text-ink">Provider configured</span>
+              {emailProviderReady ? <StatusPill tone="good">Ready</StatusPill> : <StatusPill tone="warn">Not configured</StatusPill>}
+            </div>
+            {!emailProviderReady ? (
+              <p className="mt-2 text-xs text-muted">Client reminders will be held (not sent, never faked) until RESEND_API_KEY and EMAIL_FROM are set. Internal follow-up tasks do not need the provider.</p>
+            ) : null}
+          </FormCell>
+        </FormBlock>
 
-      {/* The impact preview: exactly what a live run would do right now, computed without writing anything. */}
-      <section className="mt-4 rounded-md border border-line bg-surface p-5">
-        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-bold text-ink">Impact preview</h2>
-          <span className="text-sm text-muted">{reminders.length} reminder{reminders.length === 1 ? '' : 's'} · {followups.length} follow-up{followups.length === 1 ? '' : 's'}</span>
-        </div>
-        <p className="mb-4 text-sm text-ink-muted">A dry run of the reminder scan against today&rsquo;s unpaid instalments. Nothing here is sent or created - it shows what a live run would do with the switches above.</p>
+        {/* The impact preview: exactly what a live run would do right now, computed without writing anything. */}
+        <FormBlock
+          title="Impact preview"
+          description="A dry run of the reminder scan against today's unpaid instalments. Nothing here is sent or created - it shows what a live run would do with the switches above."
+        >
+          <FormCell>
+        <p className="mb-3 text-sm text-muted">{reminders.length} reminder{reminders.length === 1 ? '' : 's'} · {followups.length} follow-up{followups.length === 1 ? '' : 's'}</p>
 
         {reminders.length === 0 && followups.length === 0 ? (
           <p className="rounded-md border border-dashed border-line bg-paper px-4 py-6 text-center text-sm text-ink-muted">Nothing is due for a reminder right now.</p>
@@ -173,7 +179,9 @@ export default async function NotificationsSettingsPage({
             </table>
           </div>
         )}
-      </section>
+          </FormCell>
+        </FormBlock>
+      </PageForm>
     </PageContainer>
     </AppShell>
   )

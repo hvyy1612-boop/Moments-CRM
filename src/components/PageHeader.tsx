@@ -37,7 +37,8 @@ export function PageHeader({
             <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">{eyebrow}</div>
           ) : null}
           <h1 className="text-xl font-semibold text-ink">{title}</h1>
-          {description ? <p className="mt-1 text-sm text-ink-muted">{description}</p> : null}
+          {/* Pages fill the workspace, but running text keeps a readable measure (~65 characters). */}
+          {description ? <p className="mt-1 max-w-prose text-sm text-ink-muted">{description}</p> : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>

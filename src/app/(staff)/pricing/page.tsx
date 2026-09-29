@@ -27,7 +27,7 @@ export default async function PricingPage() {
 
   return (
     <AppShell user={user} csrf={csrf} active="pricing">
-      <PageContainer variant="narrow">
+      <PageContainer variant="standard">
       <PageHeader
         breadcrumb={[DASHBOARD_CRUMB, { label: 'Price calculator' }]}
         title="Price calculator"

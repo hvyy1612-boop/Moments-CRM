@@ -86,6 +86,60 @@ export function FormSection({ title, description, control, children }: { title: 
   )
 }
 
+/*
+ * Dedicated-page form layout (Carbon "Forms" pattern). Pages fill the workspace, so a form must balance
+ * across the width WITHOUT stretching inputs:
+ *  - "On dedicated page forms, use the responsive grid to drive layout decisions."
+ *  - "The field widths should reflect the intended length of the content while still aligning to the
+ *    responsive column" grid -> each field declares a column span sized to its content (FormCell).
+ *  - Top-aligned labels (Carbon default); Carbon's spacing maps to h-10 inputs, gap-y-8 between fields,
+ *    a gap-x-8 gutter between form columns and ~pt-12 before the buttons; buttons left-aligned in-page.
+ * On desktop each FormBlock is one row of a 12-column grid: group heading + short description in the left
+ * 4 columns, the fields in the right 8 (their own 12-column grid). Below lg it all stacks to one column.
+ * Dialogs/side panels keep their box layout - use these only on full pages.
+ */
+export function PageForm({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={`flex flex-col${className ? ` ${className}` : ''}`}>{children}</div>
+}
+
+/** One titled group of related fields; blocks are separated by a hairline rule. */
+export function FormBlock({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+  return (
+    <section className="grid grid-cols-1 gap-x-8 gap-y-5 border-t border-line py-8 first:border-t-0 first:pt-0 lg:grid-cols-12">
+      <div className="lg:col-span-4">
+        <h2 className="text-base font-semibold text-ink">{title}</h2>
+        {description ? <p className="mt-1 max-w-prose text-sm text-ink-muted">{description}</p> : null}
+      </div>
+      <div className="grid grid-cols-12 gap-x-8 gap-y-8 lg:col-span-8">{children}</div>
+    </section>
+  )
+}
+
+// Static class names so Tailwind generates them. Full width on phones; the span applies from sm up.
+const CELL_SPAN = {
+  3: 'sm:col-span-3',
+  4: 'sm:col-span-4',
+  5: 'sm:col-span-5',
+  6: 'sm:col-span-6',
+  7: 'sm:col-span-7',
+  8: 'sm:col-span-8',
+  12: 'sm:col-span-12',
+} as const
+
+/** A field's slot in a FormBlock, sized to its expected content (12 = the full field column). */
+export function FormCell({ span = 12, children }: { span?: keyof typeof CELL_SPAN; children: ReactNode }) {
+  return <div className={`col-span-12 ${CELL_SPAN[span]}`}>{children}</div>
+}
+
+/** The form's buttons: left-aligned, lined up with the field column, ~pt-12 below the last field. */
+export function FormActions({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-1 gap-x-8 pt-4 lg:grid-cols-12">
+      <div className="flex flex-wrap items-center gap-3 lg:col-span-8 lg:col-start-5">{children}</div>
+    </div>
+  )
+}
+
 type InputProps = InputHTMLAttributes<HTMLInputElement> & { hasError?: boolean }
 export function TextInput({ hasError = false, className, ...rest }: InputProps) {
   return <input className={`${controlBase} h-10 ${borderFor(hasError)} ${className ?? ''}`} {...rest} />
