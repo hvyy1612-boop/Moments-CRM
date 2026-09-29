@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { Alert } from '@/components/ui/Alert'
-import { Button } from '@/components/ui/Button'
+import { Button, secondaryLinkLg } from '@/components/ui/Button'
 import { Field, Select, TextInput, Textarea } from '@/components/ui/form'
 import { estimateTotals, estimateDeposit, toCents, formatCents } from '@/lib/pricing-estimate'
 import type { QuoteActionState } from '../actions'
@@ -260,7 +260,7 @@ export function QuoteBuilder({
               {cancelHref ? (
                 <div className="grid w-full max-w-sm grid-cols-2 gap-3">
                   <Button type="submit" size="lg" loading={saving} className="w-full rounded-lg">Save quote</Button>
-                  <Link href={cancelHref} className="w-full"><Button type="button" variant="secondary" size="lg" className="w-full rounded-lg">Cancel</Button></Link>
+                  <Link href={cancelHref} className={`w-full ${secondaryLinkLg}`}>Cancel</Link>
                 </div>
               ) : (
                 <div className="grid w-full max-w-sm grid-cols-2 gap-3">

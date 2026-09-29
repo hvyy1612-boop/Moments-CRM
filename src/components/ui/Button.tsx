@@ -27,6 +27,15 @@ const sizes: Record<Size, string> = {
   xl: 'h-14 px-8 text-base',
 }
 
+// A link (<a>/<Link>) that must read as a Large *secondary* Button inside a Carbon action group.
+// Use this instead of putting a <Button> inside a <Link>: a <button> nested in an <a> is invalid HTML
+// and the anchor then won't stretch, so a Save/Cancel pair renders unequal. Pair with flex-1 on the
+// anchor (and on the sibling Button) to force two exactly-equal-width buttons regardless of label.
+export const secondaryLinkLg =
+  'inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-line bg-surface ' +
+  'px-6 text-base font-medium whitespace-nowrap text-ink outline-none transition-colors duration-150 ' +
+  'hover:bg-paper focus-visible:ring-2 focus-visible:ring-accent'
+
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: Variant
   size?: Size

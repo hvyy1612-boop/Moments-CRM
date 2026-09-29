@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useState, useTransition, type ReactNode } from 'react'
 import Link from 'next/link'
 import { Alert } from '@/components/ui/Alert'
-import { Button } from '@/components/ui/Button'
+import { Button, secondaryLinkLg } from '@/components/ui/Button'
 import { Field, Select, Textarea, TextInput } from '@/components/ui/form'
 import { createInvoiceLinesAction, saveInvoiceTemplateAction, updateInvoiceLinesAction, type QuoteActionState } from '../actions'
 import { formatScheduleDate, presetRows, type ScheduleKey, type ScheduleRow } from '@/features/finance/payment-schedule'
@@ -566,15 +566,17 @@ export function InvoiceEditor({
           </Field>
         </div>
 
-        {/* Action group: bottom-LEFT, Carbon in-page pattern - primary first, secondary after, same
-            size/width, one adjacent group (not right-aligned). */}
+        {/* Action group: bottom-LEFT, Carbon in-page pattern - primary first, secondary after. A
+            2-col grid (minmax(0,1fr) tracks) + w-full on each child renders the two buttons at
+            EXACTLY equal width regardless of label. Cancel is a styled <a> (secondaryLinkLg), never
+            a <Button> nested in a <Link> (invalid HTML that broke the earlier equal-width attempt). */}
         <div className="lg:col-span-12 lg:row-start-3">
           <div className="grid w-full max-w-sm grid-cols-2 gap-3">
             <Button type="submit" size="lg" loading={pending} disabled={lines.length === 0 || scheduleMismatch} className="w-full rounded-lg">
               {editing ? 'Save changes' : 'Save invoice'}
             </Button>
-            <Link href={editing ? `/finance/${invoiceId}` : projectId ? `/jobs/${projectId}` : '/finance'} className="w-full">
-              <Button type="button" variant="secondary" size="lg" className="w-full rounded-lg">Cancel</Button>
+            <Link href={editing ? `/finance/${invoiceId}` : projectId ? `/jobs/${projectId}` : '/finance'} className={`w-full ${secondaryLinkLg}`}>
+              Cancel
             </Link>
           </div>
         </div>
