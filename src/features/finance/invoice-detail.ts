@@ -1,0 +1,136 @@
+/**
+ * Invoice detail page (pure presentation logic, no UI). The money itself comes from the backend
+ * derivation (`getInvoiceBalance` in lib/domain/money.ts); this only turns those facts and the audit
+ * trail into the words and tones the page shows. Kept separate so it is unit-tested directly.
+ */
+
+export type InvoiceStatusCode = 'DRAFT' | 'ISSUED' | 'SENT' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'VOID'
+
+export const INVOICE_STATUS_LABEL: Record<InvoiceStatusCode, string> = {
+  DRAFT: 'Draft',
+  ISSUED: 'Issued',
+  SENT: 'Sent',
+  PARTIALLY_PAID: 'Partially paid',
+  PAID: 'Paid',
+  OVERDUE: 'Overdue',
+  VOID: 'Voided',
+}
+
+/** Tone for the shared StatusPill (ui/StatusPill): neutral unless the state carries meaning. */
+export type Tone = 'neutral' | 'info' | 'good' | 'warn' | 'bad'
+
+export const INVOICE_STATUS_TONE: Record<InvoiceStatusCode, Tone> = {
+  DRAFT: 'warn',
+  ISSUED: 'neutral',
+  SENT: 'info',
+  PARTIALLY_PAID: 'warn',
+  PAID: 'good',
+  OVERDUE: 'bad',
+  VOID: 'neutral',
+}
+
+export type InstalmentState = 'PAID' | 'PARTIAL' | 'UNPAID'
+export type InstalmentStatus = { label: 'Paid' | 'Partially paid' | 'Overdue' | 'Unpaid' | 'Upcoming' | 'Void'; tone: Tone }
+
+/**
+ * One schedule row's status. The allocation state comes from the backend ledger; this only adds the
+ * date reading. A draft is never overdue (it has not been issued), and nothing on a void invoice is due.
+ */
+export function instalmentStatus(
+  state: InstalmentState,
+  dueYmd: string | null,
+  todayYmd: string,
+  invoiceStatus: InvoiceStatusCode,
+): InstalmentStatus {
+  if (invoiceStatus === 'VOID') return { label: 'Void', tone: 'neutral' }
+  // A draft owes nothing in the ledger yet (its obligation starts when issued), so its rows can read as
+  // "paid" to the allocator; nothing can have been paid on a draft.
+  if (invoiceStatus === 'DRAFT') return dueYmd && dueYmd > todayYmd ? { label: 'Upcoming', tone: 'neutral' } : { label: 'Unpaid', tone: 'neutral' }
+  if (state === 'PAID') return { label: 'Paid', tone: 'good' }
+  if (state === 'PARTIAL') return { label: 'Partially paid', tone: 'warn' }
+  if (dueYmd && dueYmd < todayYmd) return { label: 'Overdue', tone: 'bad' }
+  if (dueYmd && dueYmd > todayYmd) return { label: 'Upcoming', tone: 'neutral' }
+  return { label: 'Unpaid', tone: 'neutral' }
+}
+
+/**
+ * The latest payment that went towards each instalment, as that payment's YYYY-MM-DD date (null when
+ * nothing has been paid towards it). Payments fill the schedule in order, oldest first, the same way the
+ * backend allocates the paid total; each payment counts net of its refunds.
+ */
+export function lastPaymentPerInstalment(
+  instalmentCents: number[],
+  payments: { ymd: string | null; netCents: number }[],
+): (string | null)[] {
+  const ends: number[] = []
+  let acc = 0
+  for (const c of instalmentCents) ends.push((acc += c))
+  const out: (string | null)[] = instalmentCents.map(() => null)
+  let paid = 0
+  for (const p of payments) {
+    if (p.netCents <= 0) continue
+    const from = paid
+    const to = (paid += p.netCents)
+    instalmentCents.forEach((_, i) => {
+      const start = ends[i]! - instalmentCents[i]!
+      if (from < ends[i]! && to > start && p.ymd) out[i] = p.ymd
+    })
+  }
+  return out
+}
+
+const aud = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
+const money = (v: unknown) => {
+  const n = Number(v)
+  return Number.isFinite(n) ? aud.format(n) : null
+}
+const field = (data: unknown, key: string): unknown =>
+  data && typeof data === 'object' && key in data ? (data as Record<string, unknown>)[key] : undefined
+
+const METHOD: Record<string, string> = { BANK_TRANSFER: 'bank transfer', CARD: 'card', CASH: 'cash', OTHER: 'another method' }
+
+/**
+ * One audit entry as a History log row (action + details), or null for events the log does not show.
+ * Only REAL recorded events are described; nothing is inferred or invented.
+ */
+export function describeInvoiceEvent(e: {
+  action: string
+  afterData: unknown
+  invoiceNumber: string
+  /** For payment events: the payment's method, when the payment row still exists. */
+  paymentMethod?: string | null
+}): { action: string; details: string } | null {
+  const amount = money(field(e.afterData, 'amount'))
+  switch (e.action) {
+    case 'invoice.created': {
+      const total = money(field(e.afterData, 'total'))
+      return { action: 'Created', details: `Invoice ${e.invoiceNumber} was created${total ? ` for ${total}` : ''}.` }
+    }
+    case 'invoice.updated': {
+      const total = money(field(e.afterData, 'total'))
+      const payments = Number(field(e.afterData, 'instalments'))
+      const schedule = payments > 1 ? `, split into ${payments} payments` : payments === 1 ? ', one payment' : ''
+      return { action: 'Updated', details: `Invoice details saved${total ? `. Total ${total}${schedule}` : ''}.` }
+    }
+    case 'invoice.issued':
+      return { action: 'Issued', details: 'Invoice issued. The client link is live and payments can be recorded.' }
+    case 'invoice.sent': {
+      const to = field(e.afterData, 'to')
+      return { action: 'Sent', details: typeof to === 'string' && to ? `Invoice sent to ${to}.` : 'Invoice sent to the client.' }
+    }
+    case 'invoice.voided':
+      return { action: 'Voided', details: 'Invoice voided. It stays on record.' }
+    case 'invoice.credit_note_issued': {
+      const reason = field(e.afterData, 'reason')
+      return { action: 'Credit note', details: `Credit note${amount ? ` of ${amount}` : ''} issued${typeof reason === 'string' && reason ? `: ${reason}` : ''}.` }
+    }
+    case 'payment.recorded': {
+      const method = e.paymentMethod ? METHOD[e.paymentMethod] ?? null : null
+      return { action: 'Payment recorded', details: `${amount ?? 'A'} payment recorded${method ? ` by ${method}` : ''}.` }
+    }
+    case 'payment.refunded':
+      return { action: 'Refunded', details: `${amount ?? 'A payment'} refunded.` }
+    default:
+      return null
+  }
+}

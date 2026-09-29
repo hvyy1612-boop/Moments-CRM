@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { splitGstInclusive } from '@/lib/money'
 import { sydneyLocalToUtc, systemClock } from '@/lib/time'
+import { sendComposedInvoiceEmail, type SendResult } from '@/lib/email'
 import type { CreateInvoiceInput, CreateInvoiceLinesInput, RecordPaymentInput } from '@/lib/validation/finance'
 import { invoicePaidNet, lockInvoiceRow, refreshInvoiceAmountPaid } from './invoice-ledger'
 import { confirmBookingByDepositTx, maybeAutoCompleteJob } from './project-workflow'
@@ -320,6 +321,15 @@ export async function updateInvoiceWithLines(
 
     await tx.invoiceLine.deleteMany({ where: { invoiceId } })
     await tx.invoiceInstalment.deleteMany({ where: { invoiceId } })
+    // Same due rule as create: a split schedule is due at its latest instalment, otherwise the form's
+    // "Due" choice (On issue / 7 / 14 days) relative to the document date; no choice keeps the old rule.
+    const docDate = input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now
+    const dueFromInstalments = instalmentData.reduce<Date | null>((m, it) => (it.dueAt && (!m || it.dueAt > m) ? it.dueAt : m), null)
+    const dueFromRule =
+      input.due === 'NET7' ? new Date(docDate.getTime() + 7 * 86_400_000)
+      : input.due === 'NET14' ? new Date(docDate.getTime() + 14 * 86_400_000)
+      : input.due === 'ON_ISSUE' ? docDate
+      : null
     const invoice = await tx.invoice.update({
       where: { id: invoiceId },
       data: {
@@ -328,10 +338,16 @@ export async function updateInvoiceWithLines(
         subtotal,
         taxTotal,
         total,
-        invoiceDate: input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now,
-        dueAt: instalmentData.reduce<Date | null>((m, it) => (it.dueAt && (!m || it.dueAt > m) ? it.dueAt : m), null),
+        invoiceDate: docDate,
+        dueAt: dueFromInstalments ?? dueFromRule,
         poNumber: input.poNumber?.trim() || null,
         notes: input.notes?.trim() || null,
+        // Editing from the full invoice form also edits this invoice's billing snapshot (never the master
+        // Client). Callers that don't send these fields leave the snapshot as it was.
+        ...(input.billingName?.trim() ? { billingNameSnapshot: input.billingName.trim() } : {}),
+        ...(input.billingEmail?.trim() ? { billingEmailSnapshot: input.billingEmail.trim() } : {}),
+        ...(input.billingPhone !== undefined ? { billingPhoneSnapshot: input.billingPhone.trim() || null } : {}),
+        ...(input.jobName !== undefined ? { billingJobNameSnapshot: input.jobName.trim() || null } : {}),
         lines: { create: lineData },
         instalments: { create: instalmentData },
       },
@@ -342,7 +358,7 @@ export async function updateInvoiceWithLines(
         entityType: 'Invoice',
         entityId: invoiceId,
         actorUserId,
-        afterData: { total: total.toString(), lines: input.lines.length },
+        afterData: { total: total.toString(), lines: input.lines.length, instalments: instalmentData.length },
       },
     })
     return invoice
@@ -439,6 +455,47 @@ export async function issueCreditNoteTx(
     },
   })
   return creditNote
+}
+
+/**
+ * "Send invoice": email the client their private invoice link. A draft is issued first (the same
+ * `invoice.issued` event as Issue invoice). Only a delivery the email provider ACCEPTED marks the invoice
+ * Sent and logs `invoice.sent`; with no provider configured, or a failed send, it stays issued and the
+ * outcome says so - never a fake "sent" (Rule N9).
+ */
+export async function sendInvoice(
+  invoiceId: string,
+  email: { to: string; subject: string; body: string; baseUrl: string },
+  actorUserId: string | null,
+): Promise<{ outcome: SendResult['outcome'] }> {
+  const inv = await prisma.invoice.findUnique({ where: { id: invoiceId }, select: { status: true, accessToken: true } })
+  if (!inv) throw new Error('Invoice not found.')
+  if (inv.status === 'VOID') throw new Error('This invoice is void, so it cannot be sent.')
+  if (inv.status === 'DRAFT') await issueInvoice(invoiceId, actorUserId)
+  let token = inv.accessToken
+  if (!token) {
+    token = invoiceToken()
+    await prisma.invoice.update({ where: { id: invoiceId }, data: { accessToken: token } })
+  }
+
+  const now = systemClock.now()
+  const result = await sendComposedInvoiceEmail({
+    to: email.to,
+    subject: email.subject,
+    body: email.body,
+    invoiceLink: `${email.baseUrl}/invoice/${token}`,
+    idempotencyKey: `invoice-send-${invoiceId}-${now.getTime()}`,
+  })
+  if (result.outcome === 'ACCEPTED') {
+    await prisma.$transaction(async (tx) => {
+      // Issued -> Sent. A part-paid / overdue / paid invoice keeps its money status on a resend.
+      await tx.invoice.updateMany({ where: { id: invoiceId, status: 'ISSUED' }, data: { status: 'SENT' } })
+      await tx.auditLog.create({
+        data: { action: 'invoice.sent', entityType: 'Invoice', entityId: invoiceId, actorUserId, afterData: { to: email.to } },
+      })
+    })
+  }
+  return { outcome: result.outcome }
 }
 
 /** Issue a draft invoice to the client. */

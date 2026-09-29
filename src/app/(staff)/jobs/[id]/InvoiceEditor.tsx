@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState, useEffect, useRef, useState, useTransition, type ReactNode } from 'react'
+import Link from 'next/link'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Field, Select, Textarea, TextInput } from '@/components/ui/form'
@@ -19,6 +20,8 @@ export type InitialInvoice = {
   poNumber: string
   notes: string
   discount: string
+  /** Kept on save so editing an invoice never drops its discount wording. */
+  discountReason?: string
   lines: { name: string; description: string; quantity: number; unitPrice: string; discount: string }[]
   instalments: { label: string; dueAt: string; amount: string }[]
 }
@@ -35,6 +38,8 @@ export type ContactPrefill = {
   issueDate: string
   /** The job's main shoot date (YYYY-MM-DD) for shoot-based payment schedules; null when not booked yet. */
   shootDate?: string | null
+  /** Editing an existing invoice: its current due rule. */
+  due?: 'ON_ISSUE' | 'NET7' | 'NET14'
 }
 type Line = { id: number; name: string; description: string; quantity: number; unitPrice: string; discount: string }
 type Instalment = { id: number; label: string; dueAt: string; amount: string }
@@ -103,7 +108,7 @@ export function InvoiceEditor({
   const [clientName, setClientName] = useState(contact?.clientName ?? '')
   const [clientEmail, setClientEmail] = useState(contact?.clientEmail ?? '')
   const [clientPhone, setClientPhone] = useState(contact?.clientPhone ?? '')
-  const [due, setDue] = useState<'ON_ISSUE' | 'NET7' | 'NET14'>('ON_ISSUE')
+  const [due, setDue] = useState<'ON_ISSUE' | 'NET7' | 'NET14'>(contact?.due ?? 'ON_ISSUE')
   const [, startSave] = useTransition()
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [instalments, setInstalments] = useState<Instalment[]>(() => (initial?.instalments ?? []).map((it, i) => ({ id: i + 1, ...it })))
@@ -261,6 +266,7 @@ export function InvoiceEditor({
         {editing ? <input type="hidden" name="invoiceId" value={invoiceId} /> : null}
         <input type="hidden" name="lines" value={payload} />
         <input type="hidden" name="discount" value={disc > 0 ? String(disc) : ''} />
+        <input type="hidden" name="discountReason" value={disc > 0 ? (initial?.discountReason ?? '') : ''} />
         {/* Leaving the prefilled number untouched submits blank, so the server auto-allocates it (keeping
             the counter correct); a real edit is sent as the chosen number. */}
         <input type="hidden" name="invoiceNumber" value={contact && invoiceNumber === contact.numberPreview ? '' : invoiceNumber} />
@@ -558,10 +564,13 @@ export function InvoiceEditor({
           <Field label="Notes (optional)" htmlFor="inv-notes">
             <Textarea id="inv-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} placeholder="Notes shown on the invoice..." />
           </Field>
-          <div>
+          <div className="flex flex-wrap items-center gap-3">
             <Button type="submit" loading={pending} disabled={lines.length === 0 || scheduleMismatch}>
               {editing ? 'Save changes' : 'Save invoice'}
             </Button>
+            {editing ? (
+              <Link href={`/finance/${invoiceId}`} className="inline-flex h-10 items-center rounded border border-line bg-surface px-4 text-base font-medium text-ink transition-colors hover:bg-paper">Cancel</Link>
+            ) : null}
           </div>
         </div>
         </div>
