@@ -77,6 +77,19 @@ export function CheckBox({ done, muted = false }: { done: boolean; muted?: boole
 
 const menuItem = 'block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper'
 
+/** A task's stored due time (Sydney-local "HH:MM:SS", e.g. "15:00:00") shown as "3:00 pm".
+ *  Returns null when there is no time, so the row shows the date alone. */
+function formatDueTime(hms: string | undefined): string | null {
+  if (!hms) return null
+  const parts = hms.split(':')
+  const h = Number(parts[0])
+  const m = Number(parts[1])
+  if (Number.isNaN(h) || Number.isNaN(m)) return null
+  const period = h < 12 ? 'am' : 'pm'
+  const h12 = h % 12 === 0 ? 12 : h % 12
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`
+}
+
 /**
  * A single editable workflow task, laid out as a table row (subgrid). The tick is optimistic
  * (React 19 useOptimistic): the checkbox and title flip the instant it is clicked while the server
@@ -88,16 +101,21 @@ export function EditableTaskRow({
   projectId,
   csrf,
   onEdit,
+  dueTime,
 }: {
   task: BoardTaskRow
   projectId: string
   csrf: string
   onEdit: () => void
+  /** The task's stored due time as Sydney-local "HH:MM:SS" (from dueOverrideAt), or undefined. */
+  dueTime?: string
 }) {
   const [done, setDone] = useOptimistic(task.done)
   const [, startTransition] = useTransition()
   const menuRef = useRef<HTMLDetailsElement>(null)
   const attention = task.needsAttention && !done
+  // Show the time only when the task actually has a due date; a bare time with no date makes no sense.
+  const timeLabel = task.dueLabel ? formatDueTime(dueTime) : null
   const closeMenu = () => { if (menuRef.current) menuRef.current.open = false }
 
   function toggle() {
@@ -141,13 +159,16 @@ export function EditableTaskRow({
         {done && task.completedByName ? <span className="block text-xs text-muted">Done by {task.completedByName}</span> : null}
       </div>
 
-      {/* Due date */}
-      <div
-        className={`whitespace-nowrap text-sm ${
-          attention ? 'font-bold text-danger' : task.dueLabel ? 'text-ink-muted' : 'text-muted'
-        }`}
-      >
-        {task.dueLabel ?? (task.noDate ? 'No date' : '-')}
+      {/* Due date, with the stored time on a second line below it when the task has one */}
+      <div className="text-sm">
+        <div
+          className={`whitespace-nowrap ${
+            attention ? 'font-bold text-danger' : task.dueLabel ? 'text-ink-muted' : 'text-muted'
+          }`}
+        >
+          {task.dueLabel ?? (task.noDate ? 'No date' : '-')}
+        </div>
+        {timeLabel ? <div className="whitespace-nowrap text-xs text-muted">{timeLabel}</div> : null}
       </div>
 
       {/* Owner */}

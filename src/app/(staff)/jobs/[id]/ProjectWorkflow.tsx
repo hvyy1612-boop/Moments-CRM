@@ -262,6 +262,7 @@ export function ProjectWorkflow({
                               task={t}
                               projectId={projectId}
                               csrf={csrf}
+                              dueTime={taskTimes[t.id]}
                               onEdit={() => { setEditErrors({}); setEditingId(t.id) }}
                             />
                           )
