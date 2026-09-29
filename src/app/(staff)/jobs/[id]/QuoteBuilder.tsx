@@ -373,7 +373,7 @@ function SendQuoteDialog({
 }
 
 function EmptyLines() {
-  return <p className="rounded-md border border-dashed border-line bg-paper px-4 py-5 text-center text-sm text-ink-muted">Nothing added yet.</p>
+  return <p className="rounded-md border border-dashed border-muted bg-paper px-4 py-5 text-center text-sm text-ink-muted">Nothing added yet.</p>
 }
 
 /**
