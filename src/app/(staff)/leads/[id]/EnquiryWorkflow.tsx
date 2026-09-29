@@ -120,7 +120,7 @@ export function EnquiryWorkflow({
         const isCollapsed = collapsed[stage.key]
         const rows = stage.tasks.filter((t) => rowVisible(t.done, t.dueTone !== null && !t.done))
         return (
-          <section key={stage.key} className="rounded-md border border-line">
+          <section key={stage.key} className="rounded-md border border-line-strong">
             {renamingStage === stage.key && !readOnly ? (
               <form
                 action={renameEnquiryStageAction}

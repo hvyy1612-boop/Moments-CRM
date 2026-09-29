@@ -21,7 +21,7 @@ import {
 } from '../actions'
 import { AttentionDot, CheckBox, EditableTaskRow, OwnerCell, PHASE_GRID, ROW, StatusBadge } from './EditableTaskRow'
 import { HistoryLogModal, type HistoryEntry } from './HistoryLogModal'
-import { IconCalendar, IconChevron, IconUser } from './icons'
+import { IconArrowRight, IconCalendar, IconChevron, IconUser } from './icons'
 
 type Filter = 'all' | 'pending' | 'attention'
 
@@ -119,7 +119,7 @@ export function ProjectWorkflow({
           const isCollapsed = collapsed[stage.key]
           const rows = stage.tasks.filter((t) => rowVisible(t.done, t.needsAttention && !t.done))
           return (
-            <section key={stage.key} className="rounded-md border border-line">
+            <section key={stage.key} className="rounded-md border border-line-strong">
               {renamingStage === stage.key ? (
                 <form
                   action={renameProjectStageAction}
@@ -391,7 +391,10 @@ export function ProjectWorkflow({
       {/* RAIL: Next action + the job's Client / Notes / Team cards (3/8 of the row) */}
       <aside className="flex flex-col gap-3 lg:col-span-3">
         <div className="rounded-md border border-line-strong bg-surface p-4">
-          <div className="mb-3 text-sm font-bold text-ink">Next action</div>
+          <h2 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-muted">
+            <span className="text-ink-muted"><IconArrowRight className="h-4 w-4" /></span>
+            Next action
+          </h2>
           {allDone || !nextAction ? (
             <p className="text-sm text-ink-muted">All caught up - no task is waiting.</p>
           ) : nextAction.kind === 'task' ? (
