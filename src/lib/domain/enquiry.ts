@@ -160,7 +160,7 @@ export async function markEnquiryLost(
   actorUserId: string | null = null,
 ) {
   const reason = lostReason.trim()
-  if (!reason) throw new Error('A reason is required to mark an enquiry lost.')
+  if (!reason) throw new Error('Please enter a reason for marking this enquiry as lost.')
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
     if (!enquiry) throw new Error('Enquiry not found.')

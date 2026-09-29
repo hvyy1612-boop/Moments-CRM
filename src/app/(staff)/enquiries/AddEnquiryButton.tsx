@@ -21,7 +21,7 @@ function validateContact(fd: FormData): ClientErrors {
   if (String(fd.get('clientId') ?? '').trim()) return {}
   // Search mode with nothing chosen: the new-client fields are not even on screen.
   if (!fd.has('name')) {
-    return { contact: 'Add a client for this enquiry. Search for an existing one, or fill in the new client details.' }
+    return { contact: 'Please add a client for this enquiry. Search for an existing one, or fill in the new client details.' }
   }
   const name = String(fd.get('name') ?? '').trim()
   const email = String(fd.get('email') ?? '').trim()

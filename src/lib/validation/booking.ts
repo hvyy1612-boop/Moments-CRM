@@ -13,8 +13,8 @@ const optionalText = (max: number) =>
 export const createBookingSchema = z
   .object({
     title: optionalText(200),
-    startsAt: z.string().trim().min(1, 'Choose a start time.'),
-    endsAt: z.string().trim().min(1, 'Choose an end time.'),
+    startsAt: z.string().trim().min(1, 'Please choose a start time.'),
+    endsAt: z.string().trim().min(1, 'Please choose an end time.'),
     location: optionalText(300),
     notes: optionalText(2000),
   })
@@ -24,7 +24,7 @@ export const createBookingSchema = z
   })
 
 export const assignResourceSchema = z.object({
-  resourceId: z.string().trim().min(1, 'Choose someone to assign.'),
+  resourceId: z.string().trim().min(1, 'Please choose someone to assign.'),
   role: optionalText(120),
 })
 
