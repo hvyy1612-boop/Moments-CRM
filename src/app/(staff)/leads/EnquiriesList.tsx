@@ -67,18 +67,17 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
   const TABS: { key: TabKey; label: string }[] = [{ key: 'all', label: 'All' }, ...ENQUIRY_STAGE_TABS]
 
   // Exactly six information columns (spec §9): Lead ID | Created | Client | Event | Type | Stage.
-  // Column sizing follows Carbon data-table theory: size to the content's ROLE. The metadata columns
-  // (Lead ID, Created, Type, Stage) are BOUNDED to fixed `em` tracks so they take exactly what their
-  // content needs and never stretch into dead space; Client is the one dominant flexible column and
-  // Event a secondary flexible one, so all remaining width pools into the identity columns that use it.
-  // (Fixed `em` and `fr` both resolve identically across the shared header/row grids, so keylines line
-  // up.) Stage is fixed wide enough for its longest label ("Awaiting booking confirmation") and its tag
-  // never wraps; at very narrow widths the whole table scrolls (DataTable's min width) rather than wrap.
+  // Column sizing: an EVEN Carbon-style rhythm across the full width (no single column absorbing the
+  // slack). Every column is a `fr` share (Client/Event 1.5, the rest 1-1.4) so the spacing reads
+  // balanced; each carries a small `em` min via minmax so text/pills never clip - at narrow widths the
+  // whole table scrolls (DataTable's min width) rather than squashing. Stage keeps the largest min for
+  // its longest label ("Awaiting booking confirmation"), whose tag never wraps. Header + rows share this
+  // one grid, so keylines always line up.
   const columns: DataColumn<EnquiryRowData>[] = [
     {
       key: 'number',
       header: 'Lead ID',
-      width: '9.5em',
+      width: 'minmax(8em, 1fr)',
       cell: (r) => (
         <span className="flex items-center gap-2">
           <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${r.unread ? 'bg-warn' : 'bg-transparent'}`} />
@@ -88,28 +87,28 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
         </span>
       ),
     },
-    { key: 'created', header: 'Created', width: '9.5em', cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{createdLabel(r.createdMs)}</span> },
+    { key: 'created', header: 'Created', width: 'minmax(8.5em, 1fr)', cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{createdLabel(r.createdMs)}</span> },
     {
       key: 'client',
       header: 'Client',
-      width: 'minmax(13em, 2fr)',
+      width: 'minmax(11em, 1.5fr)',
       cell: (r) => (
         <Link href={`/leads/${r.id}`} className={`block truncate text-ink transition-colors hover:text-accent-ink ${r.unread ? 'font-semibold' : ''}`}>
           {r.name}
         </Link>
       ),
     },
-    { key: 'event', header: 'Event', width: 'minmax(10em, 1fr)', cell: (r) => <span className="block truncate text-ink-muted">{r.event}</span> },
+    { key: 'event', header: 'Event', width: 'minmax(9em, 1.5fr)', cell: (r) => <span className="block truncate text-ink-muted">{r.event}</span> },
     {
       key: 'type',
       header: 'Type',
-      width: '9em',
+      width: 'minmax(8em, 1fr)',
       cell: (r) => <span className="inline-flex items-center whitespace-nowrap rounded-full bg-sunk px-2 py-0.5 text-xs text-ink-muted">{broadType(r.event)}</span>,
     },
     {
       key: 'stage',
       header: 'Stage',
-      width: '17.5em',
+      width: 'minmax(16em, 1.4fr)',
       cell: (r) => (
         <StatusTag kind={ENQUIRY_STAGE_KIND[r.status] ?? 'enquiry'}>
           <span className="whitespace-nowrap">{ENQUIRY_STAGE_LABEL[r.status] ?? titleCase(r.status)}</span>
