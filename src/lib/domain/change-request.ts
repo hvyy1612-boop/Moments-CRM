@@ -36,7 +36,7 @@ function describe(p: ChangeRequestPayload): string {
     case 'scopeChange':
       return `Scope change: ${p.summary} (fee ${p.fee.amount})`
     case 'priceDecrease':
-      return `Price decrease ${p.amount}${p.reason ? ` — ${p.reason}` : ''}`
+      return `Price decrease ${p.amount}${p.reason ? `: ${p.reason}` : ''}`
     case 'clientData':
       return `Client data change: ${p.summary}`
     case 'production':
