@@ -265,6 +265,7 @@ export function EnquiryWorkflow({
                             task={t}
                             enquiryId={enquiryId}
                             csrf={csrf}
+                            dueTime={taskTimes[t.id]}
                             onEdit={() => { setEditErrors({}); setEditingId(t.id) }}
                           />
                         )

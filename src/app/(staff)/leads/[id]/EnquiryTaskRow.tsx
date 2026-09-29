@@ -7,15 +7,29 @@ import { AttentionDot, StatusBadge } from '../../jobs/[id]/EditableTaskRow'
 import { IconMore } from '../../jobs/[id]/icons'
 
 // One shared column grid so the phase header and every row line up in true columns
-// (checkbox | Task | Due date | Status | actions), mirroring the Jobs workflow. Leads have no task owner,
-// so that column is dropped. Task flexes (widest); Due date + Status get defined em widths (not
-// max-content) so they read as one compact, evenly-spaced metadata cluster instead of drifting apart.
-// Each row re-uses the tracks with subgrid.
+// (checkbox | Task | Due date | Status | actions). Leads have no task owner, so that column is dropped.
+// With only two text-bearing metadata columns, giving Task all the slack (a lone 1fr) parks Due/Status
+// against the far right and opens one big empty gap that reads as uneven. Instead the slack is shared
+// proportionally - Task widest, then Due and Status - so every column carries a small, even trailing gap
+// and the row reads as evenly spaced. Header and every row share the tracks via subgrid.
 export const LEADS_PHASE_GRID =
-  'grid grid-cols-[max-content_minmax(0,1fr)_6.5em_5.75em_2.75em] items-center'
+  'grid grid-cols-[max-content_minmax(16em,2.6fr)_minmax(8em,1fr)_minmax(6.5em,0.9fr)_2.75em] items-center'
 export const LEADS_ROW = 'col-span-full grid grid-cols-subgrid items-center gap-x-6 border-l-2 px-3 py-2.5'
 
 const menuItem = 'block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper'
+
+/** A task's stored due time (Sydney-local "HH:MM:SS", e.g. "15:00:00") shown as "3:00 pm".
+ *  Returns null when there is no time, so the row shows the date alone. */
+function formatDueTime(hms: string | undefined): string | null {
+  if (!hms) return null
+  const parts = hms.split(':')
+  const h = Number(parts[0])
+  const m = Number(parts[1])
+  if (Number.isNaN(h) || Number.isNaN(m)) return null
+  const period = h < 12 ? 'am' : 'pm'
+  const h12 = h % 12 === 0 ? 12 : h % 12
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`
+}
 
 /**
  * A single editable lead task, laid out as a table row (subgrid) exactly like the Jobs EditableTaskRow.
@@ -28,16 +42,21 @@ export function EnquiryTaskRow({
   enquiryId,
   csrf,
   onEdit,
+  dueTime,
 }: {
   task: EnqTaskRow
   enquiryId: string
   csrf: string
   onEdit: () => void
+  /** The task's stored due time as Sydney-local "HH:MM:SS" (from dueAt), or undefined. */
+  dueTime?: string
 }) {
   const [done, setDone] = useOptimistic(task.done)
   const [, startTransition] = useTransition()
   const menuRef = useRef<HTMLDetailsElement>(null)
   const attention = task.dueTone !== null && !done
+  // Show the time only when the task actually has a due date; a bare time with no date makes no sense.
+  const timeLabel = task.dueLabel ? formatDueTime(dueTime) : null
   const closeMenu = () => { if (menuRef.current) menuRef.current.open = false }
 
   function toggle() {
@@ -77,16 +96,19 @@ export function EnquiryTaskRow({
         {done && task.completedByName ? <span className="block text-xs text-muted">Done by {task.completedByName}</span> : null}
       </div>
 
-      {/* Due date */}
-      <div className={`whitespace-nowrap text-sm ${attention ? 'font-bold text-danger' : task.dueLabel ? 'text-ink-muted' : 'text-muted'}`}>
-        {task.dueLabel ?? (task.noDate ? 'No date' : '-')}
+      {/* Due date, with the stored time on a second line below it when the task has one */}
+      <div className="text-sm">
+        <div className={`whitespace-nowrap ${attention ? 'font-bold text-danger' : task.dueLabel ? 'text-ink-muted' : 'text-muted'}`}>
+          {task.dueLabel ?? (task.noDate ? 'No date' : '-')}
+        </div>
+        {timeLabel ? <div className="whitespace-nowrap text-xs text-muted">{timeLabel}</div> : null}
       </div>
 
       {/* Status */}
       <StatusBadge done={done} />
 
       {/* Actions (kebab) */}
-      <details ref={menuRef} className="relative justify-self-end">
+      <details ref={menuRef} className="relative justify-self-center">
         <summary
           className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded text-muted hover:bg-sunk hover:text-ink [&::-webkit-details-marker]:hidden"
           aria-label="Task actions"
