@@ -383,9 +383,13 @@ export function InvoiceEditor({
           </div>
 
           {lines.length === 0 ? (
-            <p className="mt-2 rounded border border-dashed border-line px-3 py-6 text-center text-sm text-ink-muted">
-              No items yet. Use <span className="font-semibold text-ink">Add products &amp; packages</span> to add one.
-            </p>
+            // Empty state: only the action, centred in a quiet white bordered area - no copy, no dark fill.
+            <div className="mt-2 flex items-center justify-center rounded border border-line-strong bg-surface px-3 py-8">
+              <Button type="button" variant="secondary" onClick={openAdd}>
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                Add products &amp; packages
+              </Button>
+            </div>
           ) : (
             <div className="mt-2 overflow-x-auto rounded-md border border-line">
               <table className="w-full text-sm">
@@ -447,12 +451,16 @@ export function InvoiceEditor({
           )}
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <Button type="button" onClick={openAdd}>
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-              Add products &amp; packages
-            </Button>
+            {/* With items, the (outlined, never dark) add button sits under the table; when empty it lives
+                inside the empty state above instead. */}
             {lines.length > 0 ? (
-              <Button type="button" variant="secondary" size="sm" onClick={saveTemplate}>Save as template</Button>
+              <>
+                <Button type="button" variant="secondary" onClick={openAdd}>
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                  Add products &amp; packages
+                </Button>
+                <Button type="button" variant="secondary" size="sm" onClick={saveTemplate}>Save as template</Button>
+              </>
             ) : null}
             <div className="flex items-center gap-2">
               <label htmlFor="inv-discount" className="text-sm text-ink-muted">Discount</label>
