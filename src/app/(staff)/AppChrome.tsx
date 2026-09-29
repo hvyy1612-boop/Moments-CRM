@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import type { Alert } from '@/lib/domain/alerts'
+import { ToastProvider } from '@/components/ui/ToastProvider'
 import { Sidebar, type SidebarItem } from './Sidebar'
 import { TopNav } from './TopNav'
 
@@ -62,6 +63,7 @@ export function AppChrome({
   }
 
   return (
+    <ToastProvider>
     <div className="min-h-screen bg-paper">
       <TopNav
         collapsed={collapsed}
@@ -99,5 +101,6 @@ export function AppChrome({
         <main className="min-w-0 flex-1 pb-6 pt-1.5 sm:pb-8">{children}</main>
       </div>
     </div>
+    </ToastProvider>
   )
 }

@@ -11,6 +11,7 @@ import {
   updateClientContactAction,
 } from '../actions'
 import { Modal, ModalField, ModalFooter, modalBody, modalCancelBtn, modalPrimaryBtn } from '@/components/ui/Modal'
+import { useToast } from '@/components/ui/ToastProvider'
 import {
   IconCalendar,
   IconChat,
@@ -122,6 +123,7 @@ export function OverviewTab({
   resources: ResourceOpt[]
   upcoming: Upcoming
 }) {
+  const toast = useToast()
   const [noteView, setNoteView] = useState<'requirements' | 'internal'>('requirements')
   const [addReq, setAddReq] = useState(false)
   const [addMember, setAddMember] = useState(false)
@@ -367,7 +369,7 @@ export function OverviewTab({
 
       {/* ---- Modals (Carbon transactional dialogs) ---- */}
       <Modal open={addReq} onClose={() => setAddReq(false)} title="Add requirement" description="Record a confirmed client preference, request or restriction.">
-        <form action={async (fd) => { await addRequirementAction(fd); setAddReq(false) }} className="flex min-h-0 flex-1 flex-col">
+        <form action={async (fd) => { await addRequirementAction(fd); setAddReq(false); toast({ title: 'Requirement added' }) }} className="flex min-h-0 flex-1 flex-col">
           <div className={modalBody}>
             {hidden}
             <ModalField label="Requirement"><input name="label" required placeholder="e.g. Photography style" className={field} /></ModalField>
@@ -381,7 +383,7 @@ export function OverviewTab({
       </Modal>
 
       <Modal open={addMember} onClose={() => setAddMember(false)} title="Add team member" description="Assign a person responsible for this job.">
-        <form action={async (fd) => { await addTeamMemberAction(fd); setAddMember(false) }} className="flex min-h-0 flex-1 flex-col">
+        <form action={async (fd) => { await addTeamMemberAction(fd); setAddMember(false); toast({ title: 'Team member added' }) }} className="flex min-h-0 flex-1 flex-col">
           <div className={modalBody}>
             {hidden}
             {resources.length > 0 ? (
@@ -405,7 +407,7 @@ export function OverviewTab({
       </Modal>
 
       <Modal open={editContact} onClose={() => setEditContact(false)} title="Edit client information" label={client.displayName}>
-        <form action={async (fd) => { await updateClientContactAction(fd); setEditContact(false) }} className="flex min-h-0 flex-1 flex-col">
+        <form action={async (fd) => { await updateClientContactAction(fd); setEditContact(false); toast({ title: 'Client details updated' }) }} className="flex min-h-0 flex-1 flex-col">
           <div className={modalBody}>
             {hidden}
             <input type="hidden" name="clientId" value={client.clientId} />
@@ -422,7 +424,7 @@ export function OverviewTab({
       </Modal>
 
       <Modal open={addingNote} onClose={() => setAddingNote(false)} title="Add internal note" description="A note for the team - not shown to the client.">
-        <form action={async (fd) => { await addInternalNoteAction(fd); setAddingNote(false) }} className="flex min-h-0 flex-1 flex-col">
+        <form action={async (fd) => { await addInternalNoteAction(fd); setAddingNote(false); toast({ title: 'Note added' }) }} className="flex min-h-0 flex-1 flex-col">
           <div className={modalBody}>
             {hidden}
             <ModalField label="Note"><textarea name="body" required rows={5} placeholder="Note for the team..." className={field} /></ModalField>
@@ -436,7 +438,7 @@ export function OverviewTab({
 
       <Modal open={Boolean(editingNote)} onClose={() => setEditingNoteId(null)} title="Edit note">
         {editingNote ? (
-          <form action={async (fd) => { await editInternalNoteAction(fd); setEditingNoteId(null) }} className="flex min-h-0 flex-1 flex-col">
+          <form action={async (fd) => { await editInternalNoteAction(fd); setEditingNoteId(null); toast({ title: 'Note updated' }) }} className="flex min-h-0 flex-1 flex-col">
             <div className={modalBody}>
               {hidden}
               <input type="hidden" name="communicationId" value={editingNote.id} />
