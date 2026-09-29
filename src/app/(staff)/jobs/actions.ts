@@ -332,7 +332,7 @@ export async function createInvoiceLinesAction(
   revalidatePath(`/jobs/${projectId}`)
   revalidatePath('/finance')
   // Land on the invoice's own page - inline preview + Download PDF, no jumping around.
-  redirect(`/finance/${created.id}`)
+  redirect(`/finance/${created.id}?toast=invoice-created`)
 }
 
 /** Save edits to an existing (unpaid) invoice. Same shape as create, plus invoiceId. */
@@ -383,7 +383,7 @@ export async function updateInvoiceLinesAction(
   }
   revalidatePath('/finance')
   revalidatePath(`/finance/${invoiceId}`)
-  redirect(`/finance/${invoiceId}`)
+  redirect(`/finance/${invoiceId}?toast=invoice-updated`)
 }
 
 /** Refund all or part of a recorded payment. Reverts the invoice balance (domain handles it). */
