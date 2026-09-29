@@ -310,6 +310,12 @@ export async function createInvoiceLinesAction(
     discountReason: formData.get('discountReason') ?? '',
     lines,
     instalments,
+    // New invoice form: editable billing contact + job label + due rule (all optional).
+    billingName: formData.get('billingName') ?? '',
+    billingEmail: formData.get('billingEmail') ?? '',
+    billingPhone: formData.get('billingPhone') ?? '',
+    jobName: formData.get('jobName') ?? '',
+    due: formData.get('due') || undefined,
   })
   if (!parsed.success) {
     return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the invoice.' }

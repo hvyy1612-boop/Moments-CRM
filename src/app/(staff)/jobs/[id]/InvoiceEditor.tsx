@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useRef, useState, useTransition } from 'react'
+import { useActionState, useEffect, useRef, useState, useTransition, type ReactNode } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Field, Select, Textarea, TextInput } from '@/components/ui/form'
@@ -22,6 +22,16 @@ export type InitialInvoice = {
 }
 export type JobContext = { name: string; type: string | null; shootLabel: string | null; location: string | null }
 export type ClientContext = { name: string; email: string | null; phone: string | null; address: string | null }
+/** Prefills for the New-invoice-from-a-job form: all editable, none locked. */
+export type ContactPrefill = {
+  jobName: string
+  clientName: string
+  clientEmail: string
+  clientPhone: string
+  numberPreview: string
+  defaultType: string
+  issueDate: string
+}
 type Line = { id: number; name: string; description: string; quantity: number; unitPrice: string; discount: string }
 type Instalment = { id: number; label: string; dueAt: string; amount: string }
 type Draft = { name: string; description: string; quantity: number; unitPrice: string; discount: string; discountMode: 'percent' | 'fixed' }
@@ -34,6 +44,16 @@ function money(n: number): string {
 }
 function amountOf(l: { unitPrice: string; quantity: number; discount: string }): number {
   return Math.max((Number(l.unitPrice) || 0) * l.quantity - (Number(l.discount) || 0), 0)
+}
+
+/** One horizontal label:input row for the New-invoice two-column form (label left, field fills the rest). */
+function FieldRow({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[7em_minmax(0,1fr)] items-center gap-4">
+      <label htmlFor={htmlFor} className="text-sm font-medium text-ink">{label}</label>
+      {children}
+    </div>
+  )
 }
 
 /**
@@ -52,6 +72,7 @@ export function InvoiceEditor({
   job,
   client,
   amountPaid,
+  contact,
 }: {
   csrf: string
   projectId: string
@@ -62,6 +83,7 @@ export function InvoiceEditor({
   job?: JobContext
   client?: ClientContext
   amountPaid?: string
+  contact?: ContactPrefill
 }) {
   const editing = Boolean(invoiceId)
   const workspace = Boolean(job || client)
@@ -69,9 +91,15 @@ export function InvoiceEditor({
   const [lines, setLines] = useState<Line[]>(() => (initial?.lines ?? []).map((l, i) => ({ id: i + 1, ...l })))
   const [discount, setDiscount] = useState(initial?.discount ?? '')
   const [nextId, setNextId] = useState((initial?.lines.length ?? 0) + 1)
-  const [invoiceNumber, setInvoiceNumber] = useState(initial?.invoiceNumber ?? '')
-  const [invoiceDate, setInvoiceDate] = useState(initial?.invoiceDate || new Date().toISOString().slice(0, 10))
+  const [invoiceNumber, setInvoiceNumber] = useState(initial?.invoiceNumber || contact?.numberPreview || '')
+  const [invoiceDate, setInvoiceDate] = useState(initial?.invoiceDate || contact?.issueDate || new Date().toISOString().slice(0, 10))
   const [poNumber, setPoNumber] = useState(initial?.poNumber ?? '')
+  // New-invoice-from-a-job: editable, prefilled contact + due rule (spec). Client/job come from the Job.
+  const [jobName, setJobName] = useState(contact?.jobName ?? '')
+  const [clientName, setClientName] = useState(contact?.clientName ?? '')
+  const [clientEmail, setClientEmail] = useState(contact?.clientEmail ?? '')
+  const [clientPhone, setClientPhone] = useState(contact?.clientPhone ?? '')
+  const [due, setDue] = useState<'ON_ISSUE' | 'NET7' | 'NET14'>('ON_ISSUE')
   const [, startSave] = useTransition()
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [instalments, setInstalments] = useState<Instalment[]>(() => (initial?.instalments ?? []).map((it, i) => ({ id: i + 1, ...it })))
@@ -225,15 +253,50 @@ export function InvoiceEditor({
         {editing ? <input type="hidden" name="invoiceId" value={invoiceId} /> : null}
         <input type="hidden" name="lines" value={payload} />
         <input type="hidden" name="discount" value={disc > 0 ? String(disc) : ''} />
-        <input type="hidden" name="invoiceNumber" value={invoiceNumber} />
+        {/* Leaving the prefilled number untouched submits blank, so the server auto-allocates it (keeping
+            the counter correct); a real edit is sent as the chosen number. */}
+        <input type="hidden" name="invoiceNumber" value={contact && invoiceNumber === contact.numberPreview ? '' : invoiceNumber} />
         <input type="hidden" name="invoiceDate" value={invoiceDate} />
         <input type="hidden" name="poNumber" value={poNumber} />
         <input type="hidden" name="notes" value={notes} />
         <input type="hidden" name="instalments" value={instalmentPayload} />
+        {contact ? (
+          <>
+            <input type="hidden" name="type" value={contact.defaultType} />
+            <input type="hidden" name="billingName" value={clientName} />
+            <input type="hidden" name="billingEmail" value={clientEmail} />
+            <input type="hidden" name="billingPhone" value={clientPhone} />
+            <input type="hidden" name="jobName" value={jobName} />
+            <input type="hidden" name="due" value={due} />
+          </>
+        ) : null}
 
-        {workspace ? null : <p className="text-sm font-semibold text-ink">{editing ? 'Edit invoice' : 'New invoice'}</p>}
+        {workspace || contact ? null : <p className="text-sm font-semibold text-ink">{editing ? 'Edit invoice' : 'New invoice'}</p>}
 
-        {workspace ? (
+        {contact ? (
+          /* New invoice from a Job: a clean two-column label:input form (spec). Client/job are prefilled
+             from the Job but stay editable; they save to this invoice's snapshot, not the master Client. */
+          <div className="grid grid-cols-1 gap-x-12 gap-y-4 md:grid-cols-2">
+            <div className="flex flex-col gap-4">
+              <FieldRow label="Invoice number" htmlFor="inv-num"><TextInput id="inv-num" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} maxLength={30} /></FieldRow>
+              <FieldRow label="PO number" htmlFor="inv-po"><TextInput id="inv-po" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="Optional" maxLength={60} /></FieldRow>
+              <FieldRow label="Issue date" htmlFor="inv-date"><TextInput id="inv-date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} /></FieldRow>
+              <FieldRow label="Due" htmlFor="inv-due">
+                <Select id="inv-due" value={due} onChange={(e) => setDue(e.target.value as 'ON_ISSUE' | 'NET7' | 'NET14')}>
+                  <option value="ON_ISSUE">On issue</option>
+                  <option value="NET7">7 days</option>
+                  <option value="NET14">14 days</option>
+                </Select>
+              </FieldRow>
+            </div>
+            <div className="flex flex-col gap-4">
+              <FieldRow label="Job name" htmlFor="inv-job"><TextInput id="inv-job" value={jobName} onChange={(e) => setJobName(e.target.value)} maxLength={150} /></FieldRow>
+              <FieldRow label="Client name" htmlFor="inv-client"><TextInput id="inv-client" value={clientName} onChange={(e) => setClientName(e.target.value)} maxLength={150} /></FieldRow>
+              <FieldRow label="Email" htmlFor="inv-email"><TextInput id="inv-email" type="email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} maxLength={255} /></FieldRow>
+              <FieldRow label="Phone" htmlFor="inv-phone"><TextInput id="inv-phone" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} maxLength={40} /></FieldRow>
+            </div>
+          </div>
+        ) : workspace ? (
           /* Invoice · Job · Client context grid */
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             <div className="rounded-md border border-line bg-surface p-4">

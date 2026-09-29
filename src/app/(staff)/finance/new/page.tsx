@@ -9,6 +9,8 @@ import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { listActivePackages } from '@/lib/domain/package'
 import { listInvoiceTemplates } from '@/lib/domain/finance'
+import { currentNumberYear, formatRecordNumber } from '@/lib/domain/numbering'
+import { sydneyYmd } from '@/lib/time'
 import { titleCase } from '@/lib/text'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
@@ -30,7 +32,10 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
   if (sp.job) {
     const project = await prisma.project.findUnique({
       where: { id: sp.job },
-      select: { id: true, name: true, code: true, lifecycleStatus: true, client: { select: { displayName: true } } },
+      select: {
+        id: true, name: true, code: true, companyId: true, lifecycleStatus: true,
+        client: { select: { displayName: true, email: true, phone: true } },
+      },
     })
     if (!project) notFound()
     const packages = (await listActivePackages()).map((p) => ({
@@ -44,19 +49,50 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
     const templates = await listInvoiceTemplates()
     const isClosed = CLOSED.includes(project.lifecycleStatus)
 
+    // Prefills for the form (all editable): a preview of the next invoice number (read-only peek, does
+    // NOT consume the counter - creation still auto-allocates), today's issue date, and the type derived
+    // from whether this job has been invoiced before (first = Deposit, later = Balance).
+    const year = currentNumberYear()
+    const counter = await prisma.numberCounter.findUnique({
+      where: { companyId_type_year: { companyId: project.companyId, type: 'INVOICE', year } },
+      select: { value: true },
+    })
+    const numberPreview = formatRecordNumber('INVOICE', year, (counter?.value ?? 0) + 1)
+    const priorInvoices = await prisma.invoice.count({ where: { projectId: project.id, status: { not: 'VOID' } } })
+    const defaultType = priorInvoices === 0 ? 'DEPOSIT' : 'BALANCE'
+    const td = sydneyYmd(new Date())
+    const issueDefault = `${td.year}-${String(td.month).padStart(2, '0')}-${String(td.day).padStart(2, '0')}`
+
     return (
       <AppShell user={user} csrf={csrf} active="finance">
-      <PageContainer variant="narrow">
+      <PageContainer variant="standard">
+        {/* Intentional inner cap for a two-column form (like the import + printable-invoice caps): a
+            document-ish width that keeps fields readable rather than stretched across the workspace. */}
+        <div className="mx-auto w-full max-w-4xl">
         <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Payments', href: '/finance' }, { label: 'New invoice' }]} />
-        <h1 className="mt-2 font-serif text-xl font-semibold text-ink">New invoice</h1>
-        <p className="mt-1 text-sm text-ink-muted">{project.client.displayName} · {project.name} ({project.code})</p>
+        <h1 className="mt-2 text-xl font-semibold text-ink">New invoice</h1>
         {isClosed ? (
           <p className="mt-4 rounded-md border border-dashed border-line bg-surface px-4 py-6 text-sm text-ink-muted">
             This job is closed ({titleCase(project.lifecycleStatus.replace(/_/g, ' '))}). Reopen it before invoicing.
           </p>
         ) : (
-          <InvoiceEditor csrf={csrf} projectId={project.id} packages={packages} templates={templates} />
+          <InvoiceEditor
+            csrf={csrf}
+            projectId={project.id}
+            packages={packages}
+            templates={templates}
+            contact={{
+              jobName: project.name,
+              clientName: project.client.displayName,
+              clientEmail: project.client.email ?? '',
+              clientPhone: project.client.phone ?? '',
+              numberPreview,
+              defaultType,
+              issueDate: issueDefault,
+            }}
+          />
         )}
+        </div>
       </PageContainer>
     </AppShell>
     )

@@ -900,6 +900,10 @@ model Invoice {
   issuedAt             DateTime?     @map("issued_at") @db.Timestamptz
   billingNameSnapshot  String        @map("billing_name_snapshot") @db.VarChar(150)
   billingEmailSnapshot String?       @map("billing_email_snapshot") @db.VarChar(255)
+  // Editable-on-the-invoice contact + job label snapshots (the New invoice form can override these per
+  // invoice without touching the master Client). Null falls back to the client/project at display time.
+  billingPhoneSnapshot   String?     @map("billing_phone_snapshot") @db.VarChar(40)
+  billingJobNameSnapshot String?     @map("billing_job_name_snapshot") @db.VarChar(150)
   voidedAt             DateTime?     @map("voided_at") @db.Timestamptz
   voidReason           String?       @map("void_reason") @db.VarChar(500)
   invoiceDate          DateTime?     @map("invoice_date") @db.Timestamptz // document date shown on the invoice

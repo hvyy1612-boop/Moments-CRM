@@ -44,6 +44,13 @@ export const createInvoiceLinesSchema = z.object({
   discountReason: z.string().trim().max(100).optional().or(z.literal('')),
   lines: z.array(invoiceLine).min(1, 'Please add at least one item.').max(50),
   instalments: z.array(instalment).max(12).optional(),
+  // New invoice form (from a Job): editable, prefilled billing contact + job label + due rule. All
+  // optional so older callers are unaffected; when set they override the client/project snapshots.
+  billingName: z.string().trim().max(150).optional().or(z.literal('')),
+  billingEmail: z.string().trim().max(255).optional().or(z.literal('')),
+  billingPhone: z.string().trim().max(40).optional().or(z.literal('')),
+  jobName: z.string().trim().max(150).optional().or(z.literal('')),
+  due: z.enum(['ON_ISSUE', 'NET7', 'NET14']).optional(),
 })
 
 export const recordPaymentSchema = z.object({

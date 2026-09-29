@@ -186,6 +186,16 @@ export async function createInvoiceWithLines(
           instalmentData = [{ label: 'Full payment', dueAt: null, amount: total, status: 'UNPAID', sortOrder: 0 }]
         }
 
+        // Document date + due date. A multi-instalment schedule sets the due from its latest instalment;
+        // otherwise the "Due" rule from the form (On issue / 7 / 14 days) applies, relative to the doc date.
+        const docDate = input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now
+        const dueFromInstalments = instalmentData.reduce<Date | null>((m, it) => (it.dueAt && (!m || it.dueAt > m) ? it.dueAt : m), null)
+        const dueFromRule =
+          input.due === 'NET7' ? new Date(docDate.getTime() + 7 * 86_400_000)
+          : input.due === 'NET14' ? new Date(docDate.getTime() + 14 * 86_400_000)
+          : input.due === 'ON_ISSUE' ? docDate
+          : null
+
         const invoice = await tx.invoice.create({
           data: {
             projectId,
@@ -196,12 +206,15 @@ export async function createInvoiceWithLines(
             subtotal,
             taxTotal,
             total,
-            invoiceDate: input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now,
-            dueAt: instalmentData.reduce<Date | null>((m, it) => (it.dueAt && (!m || it.dueAt > m) ? it.dueAt : m), null),
+            invoiceDate: docDate,
+            dueAt: dueFromInstalments ?? dueFromRule,
             poNumber: input.poNumber?.trim() || null,
             notes: input.notes?.trim() || null,
-            billingNameSnapshot: project.client.displayName,
-            billingEmailSnapshot: project.client.email,
+            // Editable per-invoice snapshots (New invoice form); fall back to the client/project.
+            billingNameSnapshot: input.billingName?.trim() || project.client.displayName,
+            billingEmailSnapshot: input.billingEmail?.trim() || project.client.email,
+            billingPhoneSnapshot: input.billingPhone?.trim() || null,
+            billingJobNameSnapshot: input.jobName?.trim() || null,
             lines: { create: lineData },
             instalments: { create: instalmentData },
           },
