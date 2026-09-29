@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
@@ -11,7 +12,7 @@ import { computeDeposit } from '@/lib/domain/pricing'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyTime } from '@/lib/time'
 import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
-import { Button } from '@/components/ui/Button'
+import { IconButton, IconLink } from '@/components/ui/IconButton'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { SentToast } from '@/components/ui/SentToast'
 import { QuoteDocument, type QuoteDocData } from '@/components/QuoteDocument'
@@ -46,6 +47,15 @@ const QUOTE_EVENT: Record<string, { action: string; details: string }> = {
 const INVOICE_TONE: Record<string, Tone> = {
   DRAFT: 'neutral', ISSUED: 'info', SENT: 'info', PARTIALLY_PAID: 'warn', PAID: 'good', OVERDUE: 'bad', VOID: 'neutral',
 }
+
+// Action bar, matching the invoice header: one labelled primary (ink) + round icon buttons with tooltips.
+const PRIMARY_BTN = 'inline-flex h-9 items-center gap-1.5 rounded-md bg-ink px-3.5 text-sm font-medium text-surface transition-opacity hover:opacity-90'
+const ICON = { viewBox: '0 0 24 24', className: 'h-4 w-4', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true }
+const SendIcon = <svg {...ICON}><path d="m22 2-7 20-4-9-9-4 20-7z" /><path d="M22 2 11 13" /></svg>
+const EditIcon = <svg {...ICON}><path d="M4 20h4l10-10-4-4L4 16v4z" /><path d="m13.5 6.5 4 4" /></svg>
+const CheckIcon = <svg {...ICON}><path d="M20 6 9 17l-5-5" /></svg>
+const DeclineIcon = <svg {...ICON}><circle cx="12" cy="12" r="9" /><path d="M15 9l-6 6M9 9l6 6" /></svg>
+const DownloadIcon = <svg {...ICON}><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>
 
 export default async function QuoteDetailPage({
   params,
@@ -143,32 +153,33 @@ export default async function QuoteDetailPage({
             </div>
           </div>
 
-          {/* Action bar - only the actions this state actually needs. */}
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Action bar - one labelled primary + round icon buttons with tooltips, exactly like the invoice
+              header. Only the actions this state actually needs are shown. */}
+          <div className="flex flex-wrap items-center gap-2 print:hidden">
             {isDraft ? (
               <>
-                <Link href={`/quotes/${id}/edit`}><Button>Edit</Button></Link>
-                <FormButton action={shareQuoteAction} csrf={csrf} quoteId={id} label="Send quote" variant="secondary" />
-                <Link href={`/quotes/${id}/preview`}><Button variant="secondary">Save as PDF</Button></Link>
+                <PrimaryAction action={shareQuoteAction} csrf={csrf} quoteId={id} label="Send quote" icon={SendIcon} />
+                <IconLink label="Edit" tone="accent" href={`/quotes/${id}/edit`} icon={EditIcon} />
+                <IconLink label="Save as PDF" href={`/quotes/${id}/preview`} icon={DownloadIcon} />
               </>
             ) : isSentOrViewed ? (
               <>
                 {/* "Mark as accepted" is the Enquiry -> Job conversion, so it only applies to a quote linked to
                     an enquiry; a quote tied straight to a job has no enquiry to convert. */}
-                {quote.enquiry ? <FormButton action={acceptQuoteAction} csrf={csrf} quoteId={id} label="Mark as accepted" /> : null}
+                {quote.enquiry ? <PrimaryAction action={acceptQuoteAction} csrf={csrf} quoteId={id} label="Mark as accepted" icon={CheckIcon} /> : null}
                 {/* "Edit" a sent quote opens a NEW version (reviseQuoteAction); the client is still looking at the
                     version they were sent, so that one is never edited in place. */}
-                <FormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Edit" variant="secondary" />
-                <FormButton action={declineQuoteAction} csrf={csrf} quoteId={id} label="Declined" variant="danger" />
-                <Link href={`/quotes/${id}/preview`}><Button variant="secondary">Save as PDF</Button></Link>
+                <IconFormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Edit" tone="accent" icon={EditIcon} />
+                <IconFormButton action={declineQuoteAction} csrf={csrf} quoteId={id} label="Declined" tone="danger" icon={DeclineIcon} />
+                <IconLink label="Save as PDF" href={`/quotes/${id}/preview`} icon={DownloadIcon} />
               </>
             ) : quote.status === 'DECLINED' ? (
               <>
-                <FormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Edit" />
-                <Link href={`/quotes/${id}/preview`}><Button variant="secondary">Save as PDF</Button></Link>
+                <PrimaryAction action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Edit" icon={EditIcon} />
+                <IconLink label="Save as PDF" href={`/quotes/${id}/preview`} icon={DownloadIcon} />
               </>
             ) : (
-              <Link href={`/quotes/${id}/preview`}><Button variant="secondary">Save as PDF</Button></Link>
+              <IconLink label="Save as PDF" href={`/quotes/${id}/preview`} icon={DownloadIcon} />
             )}
           </div>
         </div>
@@ -250,12 +261,24 @@ export default async function QuoteDetailPage({
   )
 }
 
-function FormButton({ action, csrf, quoteId, label, variant }: { action: (fd: FormData) => Promise<void>; csrf: string; quoteId: string; label: string; variant?: 'primary' | 'secondary' | 'danger' | 'ghost' }) {
+/** The labelled primary action (ink button with a leading icon), as a server-action form. */
+function PrimaryAction({ action, csrf, quoteId, label, icon }: { action: (fd: FormData) => Promise<void>; csrf: string; quoteId: string; label: string; icon: ReactNode }) {
   return (
     <form action={action}>
       <input type="hidden" name="csrf" value={csrf} />
       <input type="hidden" name="quoteId" value={quoteId} />
-      <Button type="submit" variant={variant}>{label}</Button>
+      <button type="submit" className={PRIMARY_BTN}>{icon}{label}</button>
+    </form>
+  )
+}
+
+/** A secondary action as a round icon button with a tooltip, wrapping a server-action form. */
+function IconFormButton({ action, csrf, quoteId, label, icon, tone }: { action: (fd: FormData) => Promise<void>; csrf: string; quoteId: string; label: string; icon: ReactNode; tone?: 'neutral' | 'accent' | 'warn' | 'danger' }) {
+  return (
+    <form action={action}>
+      <input type="hidden" name="csrf" value={csrf} />
+      <input type="hidden" name="quoteId" value={quoteId} />
+      <IconButton type="submit" label={label} tone={tone} icon={icon} />
     </form>
   )
 }
