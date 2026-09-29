@@ -560,7 +560,7 @@ export function InvoiceEditor({
           </Field>
           <div>
             <Button type="submit" loading={pending} disabled={lines.length === 0 || scheduleMismatch}>
-              {editing ? 'Save changes' : 'Raise invoice'}
+              {editing ? 'Save changes' : 'Save invoice'}
             </Button>
           </div>
         </div>
