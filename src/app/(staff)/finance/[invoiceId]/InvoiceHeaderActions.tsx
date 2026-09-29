@@ -7,7 +7,7 @@ import { IconButton, IconLink } from '@/components/ui/IconButton'
 import { Field, Textarea, TextInput } from '@/components/ui/form'
 import { Modal, modalBody } from '@/components/ui/Modal'
 import { sendInvoiceAction, type SendInvoiceState } from '../actions'
-import { deleteInvoiceAction, issueInvoiceAction, voidInvoiceAction } from '../../jobs/actions'
+import { deleteInvoiceAction, voidInvoiceAction } from '../../jobs/actions'
 
 const IDLE: SendInvoiceState = { status: 'idle' }
 
@@ -78,16 +78,6 @@ export function InvoiceHeaderActions(props: {
         onClick={() => window.print()}
         icon={<svg {...icon}><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>}
       />
-      {status === 'DRAFT' ? (
-        <form action={issueInvoiceAction}>
-          {hidden}
-          <IconButton
-            type="submit"
-            label="Issue without sending"
-            icon={<svg {...icon}><circle cx="12" cy="12" r="9" /><path d="m8.5 12 2.5 2.5 4.5-5" /></svg>}
-          />
-        </form>
-      ) : null}
       {canVoid ? (
         <form action={voidInvoiceAction} onSubmit={(e) => { if (!window.confirm('Void this invoice? It stays on record but is marked void.')) e.preventDefault() }}>
           {hidden}

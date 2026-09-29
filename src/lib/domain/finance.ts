@@ -74,7 +74,10 @@ export async function createInvoiceTx(
       projectId,
       invoiceNumber: await nextInvoiceNumber(tx, project.companyId, now),
       type: input.type,
-      status: 'DRAFT',
+      // Invoices are official the moment they are created - there is no draft stage (removed per owner
+      // decision). issuedAt is stamped now so due dates and financial reporting start immediately.
+      status: 'ISSUED',
+      issuedAt: now,
       subtotal,
       taxTotal,
       total,
@@ -203,7 +206,9 @@ export async function createInvoiceWithLines(
             invoiceNumber: wantedNumber || (await nextInvoiceNumber(tx, project.companyId, now)),
             accessToken,
             type: input.type,
-            status: 'DRAFT',
+            // Official on creation - no draft stage (removed per owner decision); stamp issuedAt now.
+            status: 'ISSUED',
+            issuedAt: now,
             subtotal,
             taxTotal,
             total,
