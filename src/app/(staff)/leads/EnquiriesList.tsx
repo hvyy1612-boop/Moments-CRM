@@ -76,7 +76,14 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
   const columns: DataColumn<EnquiryRowData>[] = [
     {
       key: 'number',
-      header: 'Lead ID',
+      // The value has a leading unread-dot (+gap); mirror that spacer here so the header label sits
+      // exactly above the Lead ID text instead of shifting left of it.
+      header: (
+        <span className="flex items-center gap-2">
+          <span className="h-1.5 w-1.5 shrink-0" aria-hidden="true" />
+          <span>Lead ID</span>
+        </span>
+      ),
       width: 'minmax(8em, 1fr)',
       cell: (r) => (
         <span className="flex items-center gap-2">
@@ -186,7 +193,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
         actions={<AddEnquiryButton csrf={csrf} />}
       />
 
-      <div className="mt-6">
+      <div className="mt-5">
         {/* Batch bar appears above the toolbar only when rows are selected (otherwise renders nothing). */}
         <ExportBar count={selectedIds.length} reportHref={`/leads/report?ids=${selectedIds.join(',')}`} className="mb-3" />
         <DataTable
