@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { ProjectLifecycle } from '@prisma/client'
-import Link from 'next/link'
 import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { cookies } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
@@ -15,6 +14,7 @@ import { titleCase } from '@/lib/text'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { InvoiceEditor } from '../../jobs/[id]/InvoiceEditor'
+import { NewInvoiceJobPicker } from './NewInvoiceJobPicker'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'New invoice - Moments' }
@@ -66,9 +66,7 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
     return (
       <AppShell user={user} csrf={csrf} active="finance">
       <PageContainer variant="standard">
-        {/* Intentional inner cap for a two-column form (like the import + printable-invoice caps): a
-            document-ish width that keeps fields readable rather than stretched across the workspace. */}
-        <div className="mx-auto w-full max-w-4xl">
+        {/* Full width like every page: the editor balances itself (editing column + sticky summary). */}
         <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Payments', href: '/finance' }, { label: 'New invoice' }]} />
         <h1 className="mt-2 text-xl font-semibold text-ink">New invoice</h1>
         {isClosed ? (
@@ -92,7 +90,6 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
             }}
           />
         )}
-        </div>
       </PageContainer>
     </AppShell>
     )
@@ -114,27 +111,20 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
 
   return (
     <AppShell user={user} csrf={csrf} active="finance">
-      <PageContainer variant="narrow">
+      <PageContainer variant="standard">
       <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Payments', href: '/finance' }, { label: 'New invoice' }]} />
-      <h1 className="mt-2 font-serif text-xl font-semibold text-ink">New invoice</h1>
-      <p className="mt-1 text-sm text-ink-muted">{clientName ? `Choose a job for ${clientName} to invoice.` : 'Choose a job to invoice.'}</p>
+      <h1 className="mt-2 text-xl font-semibold text-ink">New invoice</h1>
+      <p className="mt-1 max-w-prose text-sm text-ink-muted">{clientName ? `Choose a job for ${clientName} to invoice.` : 'Choose a job to invoice.'}</p>
       {jobs.length === 0 ? (
-        <p className="mt-4 rounded-md border border-dashed border-line bg-surface px-4 py-6 text-center text-sm text-ink-muted">
+        <p className="mt-6 rounded-md border border-dashed border-line bg-surface px-4 py-6 text-center text-sm text-ink-muted">
           {sp.client
             ? 'This client has no active jobs. Create a job (or convert an enquiry) first, then invoice it here.'
             : 'No jobs yet. Create a job (or convert an enquiry) first, then invoice it here.'}
         </p>
       ) : (
-        <ul className="mt-4 flex flex-col gap-2">
-          {jobs.map((j) => (
-            <li key={j.id}>
-              <Link href={`/finance/new?job=${j.id}`} className="flex items-center justify-between gap-2 rounded-md border border-line bg-surface px-4 py-3 shadow-sm hover:border-line-strong">
-                <span className="text-ink">{j.client.displayName} · {j.name}</span>
-                <span className="text-sm text-ink-muted">{j.code}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <div className="mt-7">
+          <NewInvoiceJobPicker rows={jobs.map((j) => ({ id: j.id, code: j.code, client: j.client.displayName, job: j.name }))} />
+        </div>
       )}
     </PageContainer>
     </AppShell>
