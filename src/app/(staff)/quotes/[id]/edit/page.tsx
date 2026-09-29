@@ -56,8 +56,7 @@ export default async function QuoteEditPage({ params }: { params: Promise<{ id: 
         title={`Edit ${quoteDisplayNumber(quote.reference, quote.seq)}`}
         description={`Quote for ${clientName}.`}
       />
-      <section className="rounded-md border border-line bg-surface p-5">
-        <QuoteBuilder
+      <QuoteBuilder
           csrf={csrf}
           projectId={quote.projectId ?? ''}
           quoteId={quote.id}
@@ -84,7 +83,6 @@ export default async function QuoteEditPage({ params }: { params: Promise<{ id: 
           sendAction={sendQuoteAction}
           sendLabel="Send quote to client"
         />
-      </section>
     </PageContainer>
     </AppShell>
   )

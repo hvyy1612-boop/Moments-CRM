@@ -1,9 +1,9 @@
 'use client'
 
-import { useActionState, useEffect, useRef, useState } from 'react'
+import { useActionState, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
-import { Field, FieldGrid, FormSection, Select, TextInput, Textarea } from '@/components/ui/form'
+import { Field, Select, TextInput, Textarea } from '@/components/ui/form'
 import { estimateTotals, estimateDeposit, toCents, formatCents } from '@/lib/pricing-estimate'
 import type { QuoteActionState } from '../actions'
 
@@ -12,15 +12,27 @@ type QuotePackage = { id: string; name: string; price: string; details?: string 
 
 /**
  * Studio-Ninja-style staff quote builder (docs/31). The quote is assembled by staff from the catalogue:
- * choose packages, add optional add-ons, write a covering note, then Save and Send. Grouped into sections
- * (Introduction, Packages, Add-ons, Notes) that mirror the client-facing quote it produces. Totals run
- * through the sourced pricing mirror (`@/lib/pricing-estimate`); the server recomputes on save.
+ * choose packages, add optional add-ons, write a covering note, then Save and Send. The quote CONTENT
+ * (details, introduction, packages, add-ons, deposit, notes) is unchanged - the form now shares the
+ * New-invoice layout (`InvoiceEditor`): one full-width column with no wrapping card, label:input rows,
+ * the line items, then a 12-column footer with the totals top-right and notes + actions beneath them.
+ * Totals run through the sourced pricing mirror (`@/lib/pricing-estimate`); the server recomputes on save.
  */
 
 type LineType = 'custom' | 'package' | 'addon'
 type Line = { description: string; quantity: number; unitPrice: string; lineType: LineType; referenceId?: string | null; details?: string | null }
 
 const IDLE: QuoteActionState = { status: 'idle' }
+
+/** One horizontal label:input row (matches the New-invoice form): label left, field fills the rest. */
+function FieldRow({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[7em_minmax(0,1fr)] items-center gap-4">
+      <label htmlFor={htmlFor} className="text-sm font-medium text-ink">{label}</label>
+      {children}
+    </div>
+  )
+}
 
 export function QuoteBuilder({
   csrf,
@@ -112,10 +124,9 @@ export function QuoteBuilder({
 
   return (
     <div className="mt-4 flex flex-col gap-5">
-      {saveState.status === 'error' ? <Alert tone="danger" title={saveState.message} /> : null}
-      {saveState.status === 'success' ? <Alert tone="success" title="Draft saved" /> : null}
-
-      <form ref={saveFormRef} action={save} className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20em] lg:items-start">
+      <form ref={saveFormRef} action={save} className="border-t border-line pt-6">
+        {saveState.status === 'error' ? <div className="mb-6"><Alert tone="danger" title={saveState.message} /></div> : null}
+        {saveState.status === 'success' ? <div className="mb-6"><Alert tone="success" title="Draft saved" /></div> : null}
         <input type="hidden" name="csrf" value={csrf} />
         <input type="hidden" name="versionId" value={versionId} />
         <input type="hidden" name="projectId" value={projectId} />
@@ -123,110 +134,119 @@ export function QuoteBuilder({
         <input type="hidden" name="depositPercent" value={depositPercent} />
         <input type="hidden" name="linesJson" value={JSON.stringify(lines)} />
 
-        {/* Main editing column: the quote is assembled here. */}
-        <div className="flex min-w-0 flex-col gap-8">
-          <FormSection title="Quote details" description="Reference and dates shown on the client's quote.">
-            <FieldGrid>
-              <Field label="Quote ID *" htmlFor="reference" hint="Required. Shown to the client.">
-                <TextInput id="reference" name="reference" required defaultValue={initialReference} placeholder="e.g. Q-0005" />
-              </Field>
-              <Field label="Issue date *" htmlFor="issueDate" hint="Required. The date the quote is issued.">
-                <TextInput id="issueDate" name="issueDate" type="date" required defaultValue={initialIssueDate} />
-              </Field>
-              <Field label="PO number (optional)" htmlFor="poNumber" hint="The client's reference, if they use one.">
-                <TextInput id="poNumber" name="poNumber" defaultValue={initialPoNumber} placeholder="e.g. PO-2026-014" />
-              </Field>
-              <Field label="Valid until" htmlFor="validUntil" hint="Optional. The quote expires after this date.">
-                <TextInput id="validUntil" name="validUntil" type="date" defaultValue={validUntil} />
-              </Field>
-            </FieldGrid>
-          </FormSection>
-
-          <FormSection title="Introduction" description="A short covering note shown at the top of the quote.">
-            <Textarea id="introduction" name="introduction" rows={3} defaultValue={initialIntroduction} placeholder="Thank you for considering Moments. Here is the quote for your shoot..." />
-          </FormSection>
-
-          <FormSection
-            title="Packages"
-            description="Fixed-price packages from your catalogue."
-            control={
-              packages.length > 0 ? (
-                <Select aria-label="Add a package" value="" onChange={(e) => { addPackage(e.target.value); e.currentTarget.value = '' }} className="max-w-xs">
-                  <option value="" disabled>Add a package...</option>
-                  {packages.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name} - {formatCents(toCents(p.price))}</option>
-                  ))}
-                </Select>
-              ) : null
-            }
-          >
-            {packageRows.length === 0 ? <EmptyLines /> : (
-              <div className="flex flex-col">
-                {packageRows.map(({ l, i }) => (
-                  <LineRow key={i} line={l} onChange={(patch) => update(i, patch)} onRemove={() => removeRow(i)} nameLabel="Package" />
-                ))}
-              </div>
-            )}
-          </FormSection>
-
-          <FormSection
-            title="Add-ons"
-            description="Optional extras - albums, prints, extra hours."
-            control={<Button type="button" variant="secondary" size="sm" onClick={() => addRow('addon')}>+ Add add-on</Button>}
-          >
-            {addonRows.length === 0 ? <EmptyLines /> : (
-              <div className="flex flex-col">
-                {addonRows.map(({ l, i }) => (
-                  <LineRow key={i} line={l} onChange={(patch) => update(i, patch)} onRemove={() => removeRow(i)} nameLabel="Add-on" />
-                ))}
-              </div>
-            )}
-          </FormSection>
-
-          {customRows.length > 0 ? (
-            <FormSection title="Other lines" description="Free-typed lines.">
-              <div className="flex flex-col">
-                {customRows.map(({ l, i }) => (
-                  <LineRow key={i} line={l} onChange={(patch) => update(i, patch)} onRemove={() => removeRow(i)} nameLabel="Item" />
-                ))}
-              </div>
-            </FormSection>
-          ) : null}
-          <div>
-            <Button type="button" variant="ghost" size="sm" onClick={() => addRow('custom')}>+ Add a custom line</Button>
-          </div>
-
-          <FormSection title="Notes" description="Any extra notes for the client (optional).">
-            <Textarea id="notes" name="notes" rows={2} defaultValue={initialNotes} />
-          </FormSection>
-        </div>
-
-        {/* Summary column: sticky totals + the primary save action. */}
-        <aside className="flex flex-col gap-4 lg:sticky lg:top-6">
-          <div className="rounded-md border border-line bg-paper p-4 text-sm">
-            <Row label="Subtotal (excl. GST)" value={formatCents(est.exGstCents)} muted />
-            <Row label="GST (incl., ÷ 11)" value={formatCents(est.gstCents)} muted />
-            <div className="my-1 border-t border-line" />
-            <Row label="Total (incl. GST)" value={formatCents(est.totalCents)} strong />
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <span className="flex items-center gap-2 text-ink">Deposit
-                <span className="inline-flex items-center gap-1">
-                  <TextInput value={depositPercent} onChange={(e) => setDepositPercent(e.target.value)} inputMode="numeric" className="w-14" aria-label="Deposit percent" />%
-                </span>
-              </span>
-              <span className="tabular-nums font-medium text-ink">{formatCents(dep.depositCents)}</span>
+        {/* One full-width column, mirroring the New-invoice form: details, then the line items, then the
+            totals (right) with notes on the left and the Save / Send actions under the totals. */}
+        <div className="flex flex-col gap-8">
+          {/* Quote details — two-column label:input form, the same shape as the invoice. */}
+          <div className="grid grid-cols-1 gap-x-12 gap-y-4 md:grid-cols-2">
+            <div className="flex flex-col gap-4">
+              <FieldRow label="Quote ID" htmlFor="reference"><TextInput id="reference" name="reference" required defaultValue={initialReference} placeholder="e.g. Q-0005" /></FieldRow>
+              <FieldRow label="Issue date" htmlFor="issueDate"><TextInput id="issueDate" name="issueDate" type="date" required defaultValue={initialIssueDate} /></FieldRow>
             </div>
-            <Row label="Balance due later" value={formatCents(dep.balanceCents)} muted />
+            <div className="flex flex-col gap-4">
+              <FieldRow label="PO number" htmlFor="poNumber"><TextInput id="poNumber" name="poNumber" defaultValue={initialPoNumber} placeholder="Optional" /></FieldRow>
+              <FieldRow label="Valid until" htmlFor="validUntil"><TextInput id="validUntil" name="validUntil" type="date" defaultValue={validUntil} /></FieldRow>
+            </div>
           </div>
-          <Button type="submit" loading={saving} className="w-full">Save draft</Button>
-          <p className="text-xs text-ink-muted">Prices include GST. Totals are recalculated when you save.</p>
-        </aside>
-      </form>
 
-      <div className="border-t border-line pt-4">
-        <p className="text-sm text-ink-muted">Sending saves your latest changes first, then opens the email to the client.</p>
-        <Button type="button" className="mt-3" loading={saving && pendingSendRef.current} onClick={startSend}>{sendLabel}</Button>
-      </div>
+          {/* Introduction — the covering note shown at the top of the client's quote. */}
+          <section className="min-w-0">
+            <label htmlFor="introduction" className="text-sm font-semibold text-ink">Introduction</label>
+            <p className="mt-0.5 text-sm text-ink-muted">A short covering note shown at the top of the quote.</p>
+            <Textarea id="introduction" name="introduction" rows={3} defaultValue={initialIntroduction} placeholder="Thank you for considering Moments. Here is the quote for your shoot..." className="mt-2" />
+          </section>
+
+          {/* Line items — packages, add-ons and any custom lines (the invoice's "Products & packages"). */}
+          <section className="flex min-w-0 flex-col gap-6">
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-ink">Packages</p>
+                {packages.length > 0 ? (
+                  <Select aria-label="Add a package" value="" onChange={(e) => { addPackage(e.target.value); e.currentTarget.value = '' }} className="h-8 max-w-xs">
+                    <option value="" disabled>Add a package...</option>
+                    {packages.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name} - {formatCents(toCents(p.price))}</option>
+                    ))}
+                  </Select>
+                ) : null}
+              </div>
+              <div className="mt-2">
+                {packageRows.length === 0 ? <EmptyLines /> : (
+                  <div className="flex flex-col">
+                    {packageRows.map(({ l, i }) => (
+                      <LineRow key={i} line={l} onChange={(patch) => update(i, patch)} onRemove={() => removeRow(i)} nameLabel="Package" />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-ink">Add-ons</p>
+                <Button type="button" variant="secondary" size="sm" onClick={() => addRow('addon')}>+ Add add-on</Button>
+              </div>
+              <div className="mt-2">
+                {addonRows.length === 0 ? <EmptyLines /> : (
+                  <div className="flex flex-col">
+                    {addonRows.map(({ l, i }) => (
+                      <LineRow key={i} line={l} onChange={(patch) => update(i, patch)} onRemove={() => removeRow(i)} nameLabel="Add-on" />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {customRows.length > 0 ? (
+              <div>
+                <p className="text-sm font-semibold text-ink">Other lines</p>
+                <div className="mt-2 flex flex-col">
+                  {customRows.map(({ l, i }) => (
+                    <LineRow key={i} line={l} onChange={(patch) => update(i, patch)} onRemove={() => removeRow(i)} nameLabel="Item" />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <div>
+              <Button type="button" variant="ghost" size="sm" onClick={() => addRow('custom')}>+ Add a custom line</Button>
+            </div>
+          </section>
+
+          {/* Footer: totals (right), notes (left), Save / Send under the totals — the invoice's 12-col base. */}
+          <div className="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-12">
+            <div className="text-sm lg:col-span-4 lg:col-start-9 lg:row-start-1">
+              <div className="flex justify-between py-1 text-ink"><span>Subtotal (excl. GST)</span><span className="tabular-nums">{formatCents(est.exGstCents)}</span></div>
+              <div className="flex justify-between py-1 text-ink"><span>GST (incl., ÷ 11)</span><span className="tabular-nums">{formatCents(est.gstCents)}</span></div>
+              <div className="mt-2 flex items-baseline justify-between border-t border-line pt-3 font-semibold text-ink">
+                <span className="text-lg">Total (incl. GST)</span>
+                <span className="tabular-nums text-xl">{formatCents(est.totalCents)}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-3 py-0.5 text-ink">
+                <span className="flex items-center gap-2">Deposit
+                  <span className="inline-flex items-center gap-1">
+                    <TextInput value={depositPercent} onChange={(e) => setDepositPercent(e.target.value)} inputMode="numeric" className="h-8 w-14 text-right" aria-label="Deposit percent" />%
+                  </span>
+                </span>
+                <span className="tabular-nums font-medium text-ink">{formatCents(dep.depositCents)}</span>
+              </div>
+              <div className="flex justify-between py-0.5 text-ink-muted"><span>Balance due later</span><span className="tabular-nums">{formatCents(dep.balanceCents)}</span></div>
+            </div>
+
+            <div className="lg:col-span-7 lg:row-start-2">
+              <label htmlFor="notes" className="text-sm font-semibold text-ink">Notes (optional)</label>
+              <Textarea id="notes" name="notes" rows={3} defaultValue={initialNotes} placeholder="Any extra notes for the client..." className="mt-2" />
+            </div>
+
+            <div className="flex flex-col gap-3 lg:col-span-4 lg:col-start-9 lg:row-start-2">
+              <p className="text-xs text-ink-muted">Prices include GST and are recalculated when you save. Sending saves your latest changes first, then opens the email to the client.</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="submit" variant="secondary" loading={saving && !pendingSendRef.current}>Save draft</Button>
+                <Button type="button" loading={saving && pendingSendRef.current} onClick={startSend}>{sendLabel}</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
 
       {sendOpen ? (
         <SendQuoteDialog
@@ -359,15 +379,6 @@ function LineRow({ line, onChange, onRemove, nameLabel }: { line: Line; onChange
         onChange={(e) => onChange({ details: e.target.value })}
         className="mt-2 text-sm"
       />
-    </div>
-  )
-}
-
-function Row({ label, value, strong, muted }: { label: string; value: string; strong?: boolean; muted?: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-0.5">
-      <span className={muted ? 'text-ink-muted' : 'text-ink'}>{label}</span>
-      <span className={`tabular-nums ${strong ? 'font-semibold text-ink' : muted ? 'text-ink-muted' : 'text-ink'}`}>{value}</span>
     </div>
   )
 }
