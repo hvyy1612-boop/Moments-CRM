@@ -105,7 +105,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
       // Size the column to the widest pill so a long label ("Awaiting booking confirmation") stays on ONE
       // line instead of wrapping to 3 and making the row tall/uneven.
       header: 'Stage',
-      width: 'minmax(10em, max-content)',
+      width: 'minmax(10em,max-content)',
       cell: (r) => (
         <StatusTag kind={ENQUIRY_STAGE_KIND[r.status] ?? 'enquiry'}>
           <span className="whitespace-nowrap">{ENQUIRY_STAGE_LABEL[r.status] ?? titleCase(r.status)}</span>

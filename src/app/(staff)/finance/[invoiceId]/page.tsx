@@ -20,9 +20,7 @@ import {
   instalmentStatus,
   INVOICE_STATUS_LABEL,
   INVOICE_STATUS_TONE,
-  lastPaymentPerInstalment,
 } from '@/features/finance/invoice-detail'
-import { formatScheduleDate } from '@/features/finance/payment-schedule'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { InvoiceHeaderActions } from './InvoiceHeaderActions'
@@ -39,9 +37,6 @@ function ymd(date: Date): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 const cents = (d: Prisma.Decimal) => Math.round(d.toNumber() * 100)
-
-/** Payments that actually moved money (a failed or pending attempt never counts). */
-const COUNTED_PAYMENT = new Set(['PAID', 'PARTIALLY_PAID', 'REFUNDED', 'PARTIALLY_REFUNDED'])
 
 /**
  * Invoice detail: one vertical document flow - header (number, status, client + job, actions), the
@@ -125,22 +120,15 @@ export default async function InvoiceDetailPage({
   // A draft owes nothing yet in the ledger (obligation starts when issued), so a draft with no stored
   // instalments shows the invoice total as its one payment.
   const rowCents = instalments.map((it) => (inv.instalments.length === 0 && status === 'DRAFT' ? cents(inv.total) : cents(it.amount)))
-  const paymentsOldestFirst = inv.payments
-    .filter((p) => COUNTED_PAYMENT.has(p.status))
-    .sort((a, b) => (a.receivedAt?.getTime() ?? 0) - (b.receivedAt?.getTime() ?? 0))
-    .map((p) => ({ ymd: p.receivedAt ? ymd(p.receivedAt) : null, netCents: cents(p.amount.sub(refundedOf(p))) }))
-  const lastPaid = lastPaymentPerInstalment(rowCents, paymentsOldestFirst)
   const scheduleRows = instalments.map((it, i) => {
     const due = it.dueAt ?? (single ? inv.dueAt ?? inv.invoiceDate : null)
     const dueYmd = due ? ymd(due) : null
-    const last = lastPaid[i]
     return {
       key: i,
       label: it.label ?? (single ? 'Full payment' : `Payment ${i + 1}`),
       status: instalmentStatus(it.state, dueYmd, todayYmd, status),
       dueLabel: due ? formatSydneyDate(due) : 'On issue',
       isToday: dueYmd === todayYmd,
-      lastAction: last ? `${it.state === 'PAID' ? 'Paid' : 'Part paid'} ${formatScheduleDate(last)}` : '-',
       amount: formatAud(new Prisma.Decimal(rowCents[i]! / 100)),
     }
   })
@@ -219,7 +207,7 @@ export default async function InvoiceDetailPage({
             <div className="mt-6 flex flex-col gap-6">
               {/* Payment schedule */}
               <section className="rounded-md border border-line bg-surface">
-                <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-4">
+                <div className="flex flex-wrap items-start justify-between gap-3 px-5 pb-3 pt-4">
                   <div>
                     <h2 className="text-base font-semibold text-ink">Payment schedule</h2>
                     <p className="mt-0.5 text-sm text-ink-muted">{scheduleName}</p>
@@ -235,37 +223,34 @@ export default async function InvoiceDetailPage({
                     />
                   ) : null}
                 </div>
-                <div className="overflow-x-auto px-5 pt-3">
+                <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
-                        <th scope="col" className="py-3 pr-4 font-medium">Status</th>
-                        {single ? null : <th scope="col" className="hidden py-3 pr-4 font-medium sm:table-cell">Payment</th>}
-                        <th scope="col" className="py-3 pr-4 font-medium">Due date</th>
-                        <th scope="col" className="hidden py-3 pr-4 font-medium md:table-cell">Last action</th>
-                        <th scope="col" className="py-3 text-right font-medium">Amount</th>
+                      <tr className="bg-sunk text-left text-ink">
+                        <th scope="col" className="px-5 py-3 font-semibold">Status</th>
+                        {single ? null : <th scope="col" className="hidden px-5 py-3 font-semibold sm:table-cell">Payment</th>}
+                        <th scope="col" className="px-5 py-3 font-semibold">Due date</th>
+                        <th scope="col" className="px-5 py-3 text-right font-semibold">Amount</th>
                       </tr>
                     </thead>
                     <tbody>
                       {scheduleRows.map((r) => (
-                        // Phone: the payment name and last action fold under the due date (no sideways scroll).
-                        <tr key={r.key} className="border-b border-line align-top">
-                          <td className="whitespace-nowrap py-4 pr-4"><StatusPill tone={r.status.tone}>{r.status.label}</StatusPill></td>
-                          {single ? null : <td className="hidden whitespace-nowrap py-4 pr-4 text-ink sm:table-cell">{r.label}</td>}
-                          <td className="tabular py-4 pr-4 text-ink">
+                        // Phone: the payment name folds under the due date (no sideways scroll).
+                        <tr key={r.key} className="border-t border-line align-top">
+                          <td className="whitespace-nowrap px-5 py-4"><StatusPill tone={r.status.tone}>{r.status.label}</StatusPill></td>
+                          {single ? null : <td className="hidden whitespace-nowrap px-5 py-4 text-ink sm:table-cell">{r.label}</td>}
+                          <td className="tabular px-5 py-4 text-ink">
                             <span className="whitespace-nowrap">{r.dueLabel}</span>
                             {r.isToday ? <>{' '}<span className="whitespace-nowrap text-ink-muted">(today)</span></> : null}
                             {single ? null : <span className="block text-xs text-ink-muted sm:hidden">{r.label}</span>}
-                            {r.lastAction !== '-' ? <span className="block text-xs text-ink-muted md:hidden">{r.lastAction}</span> : null}
                           </td>
-                          <td className="hidden whitespace-nowrap py-4 pr-4 text-ink-muted md:table-cell">{r.lastAction}</td>
-                          <td className="tabular whitespace-nowrap py-4 text-right text-ink">{r.amount}</td>
+                          <td className="tabular whitespace-nowrap px-5 py-4 text-right text-ink">{r.amount}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                <div className="flex items-baseline justify-end gap-8 px-5 py-4">
+                <div className="flex items-baseline justify-end gap-8 border-t border-line px-5 py-4">
                   <span className="text-sm text-ink-muted">Balance due</span>
                   <span className="tabular text-lg font-semibold text-ink">{formatAud(balanceDue)}</span>
                 </div>
