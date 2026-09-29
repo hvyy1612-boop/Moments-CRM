@@ -1,11 +1,11 @@
 'use client'
 
-import { useActionState, useEffect, useRef, useState, useTransition, type ReactNode } from 'react'
+import { useActionState, useEffect, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { Alert } from '@/components/ui/Alert'
 import { Button, secondaryLinkLg } from '@/components/ui/Button'
 import { Field, Select, Textarea, TextInput } from '@/components/ui/form'
-import { createInvoiceLinesAction, saveInvoiceTemplateAction, updateInvoiceLinesAction, type QuoteActionState } from '../actions'
+import { createInvoiceLinesAction, updateInvoiceLinesAction, type QuoteActionState } from '../actions'
 import { formatScheduleDate, presetRows, type ScheduleKey, type ScheduleRow } from '@/features/finance/payment-schedule'
 import { PaymentScheduleSelect } from './PaymentScheduleSelect'
 
@@ -109,7 +109,6 @@ export function InvoiceEditor({
   const [clientEmail, setClientEmail] = useState(contact?.clientEmail ?? '')
   const [clientPhone, setClientPhone] = useState(contact?.clientPhone ?? '')
   const [due, setDue] = useState<'ON_ISSUE' | 'NET7' | 'NET14'>(contact?.due ?? 'ON_ISSUE')
-  const [, startSave] = useTransition()
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [instalments, setInstalments] = useState<Instalment[]>(() => (initial?.instalments ?? []).map((it, i) => ({ id: i + 1, ...it })))
   // Payment schedule: a preset (recomputed live from the total + dates), hand-edited rows (CUSTOM), or none.
@@ -197,16 +196,6 @@ export function InvoiceEditor({
     let idc = nextId
     setLines(t.lines.map((l) => ({ id: idc++, name: l.itemName ?? '', description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: '' })))
     setNextId(idc)
-  }
-  function saveTemplate() {
-    const name = window.prompt('Save these items as a template. Template name:')
-    if (!name) return
-    const fd = new FormData()
-    fd.set('csrf', csrf)
-    fd.set('projectId', projectId)
-    fd.set('name', name)
-    fd.set('lines', JSON.stringify(lines.map((l) => ({ itemName: l.name, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice }))))
-    startSave(async () => { await saveInvoiceTemplateAction(fd) })
   }
 
   const gross = lines.reduce((sum, l) => sum + amountOf(l), 0)
@@ -387,21 +376,24 @@ export function InvoiceEditor({
         <section className="min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-semibold text-ink">Products &amp; packages</p>
-            {templates.length > 0 ? (
-              <Select aria-label="Apply a template" value="" onChange={(e) => { applyTemplate(e.target.value); e.currentTarget.value = '' }} className="h-8 max-w-xs">
-                <option value="" disabled>Apply a template...</option>
-                {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </Select>
-            ) : null}
-          </div>
-
-          {lines.length === 0 ? (
-            // Empty state: only the action, centred in a quiet white bordered area - no copy, no dark fill.
-            <div className="mt-2 flex items-center justify-center rounded border border-line-strong bg-surface px-3 py-8">
-              <Button type="button" variant="secondary" onClick={openAdd}>
+            <div className="flex flex-wrap items-center gap-2">
+              {templates.length > 0 ? (
+                <Select aria-label="Apply a template" value="" onChange={(e) => { applyTemplate(e.target.value); e.currentTarget.value = '' }} className="h-8 max-w-xs">
+                  <option value="" disabled>Apply a template...</option>
+                  {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </Select>
+              ) : null}
+              <Button type="button" variant="secondary" size="sm" onClick={openAdd}>
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
                 Add products &amp; packages
               </Button>
+            </div>
+          </div>
+
+          {lines.length === 0 ? (
+            // Empty state: a quiet hint - the add action now lives in the section header above.
+            <div className="mt-2 flex items-center justify-center rounded border border-line-strong bg-surface px-3 py-8">
+              <p className="text-sm text-muted">No products or packages added yet.</p>
             </div>
           ) : (
             <div className="mt-2 overflow-x-auto rounded-md border border-line">
@@ -463,17 +455,6 @@ export function InvoiceEditor({
             </div>
           )}
 
-          {/* With items, the (outlined, never dark) add button sits under the table; when empty it lives
-              inside the empty state above instead. */}
-          {lines.length > 0 ? (
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <Button type="button" variant="secondary" onClick={openAdd}>
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-                Add products &amp; packages
-              </Button>
-              <Button type="button" variant="secondary" size="sm" onClick={saveTemplate}>Save as template</Button>
-            </div>
-          ) : null}
         </section>
 
         {/* Totals (right) / payment schedule (left) / notes + action (right), per the approved mockup. */}
