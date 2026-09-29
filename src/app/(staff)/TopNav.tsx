@@ -9,17 +9,21 @@ import type { Alert } from '@/lib/domain/alerts'
 import { signOut } from './actions'
 
 /**
- * Global top navigation, shared by every authenticated page. Left: Moments wordmark. Centre: global
- * search (the command palette). Right: notification bell + account avatar. It shares the page background
- * and carries no bottom border. Primary navigation lives in the floating pill (FloatingNav).
+ * Global top navigation, shared by every authenticated page. Left: sidebar toggle + Moments wordmark.
+ * Centre: global search (the command palette). Right: notification bell + account avatar. It shares the
+ * page background and carries no bottom border, so it and the sidebar read as one continuous surface.
  */
 export function TopNav({
+  collapsed,
+  onToggle,
   initial,
   userName,
   userRole,
   csrf,
   alerts,
 }: {
+  collapsed: boolean
+  onToggle: () => void
   initial: string
   userName: string
   userRole: string
@@ -38,8 +42,22 @@ export function TopNav({
     return () => window.removeEventListener('mousedown', onDown)
   }, [menuOpen])
 
+  // The left region mirrors the sidebar grid: header pl-2 matches the sidebar nav's px-2, and the
+  // hamburger's px-3 matches a nav item's px-3 - so the hamburger icon lands on the same column as the
+  // Dashboard/Clients icons below, and the logo lines up with the nav labels.
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center bg-paper pl-4 pr-3 sm:pr-5">
+    <header className="sticky top-0 z-30 flex h-16 items-center bg-paper pl-2 pr-3 sm:pr-5">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        className="flex h-9 shrink-0 items-center justify-center rounded-md px-3 text-ink-muted transition-colors hover:bg-sunk hover:text-ink"
+      >
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+
       <Link href="/dashboard" aria-label="Moments home" className="flex shrink-0 items-center">
         <Image src="/landing/wordmark.png" alt="Moments" width={655} height={148} priority className="h-6 w-auto sm:h-7" />
       </Link>
