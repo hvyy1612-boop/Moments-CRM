@@ -118,7 +118,7 @@ export function LineItemsTable({
             <div className="tabular px-3 py-2 text-center text-ink-muted">{l.quantity}</div>
             <div className="tabular px-3 py-2 text-right text-ink-muted">{Number(l.discount) > 0 ? `-${money(Number(l.discount))}` : '-'}</div>
             <div className="tabular px-3 py-2 text-right font-medium text-ink">{money(amountOf(l))}</div>
-            <div className="flex items-center justify-end gap-1 px-3 py-2">
+            <div className="flex items-center justify-center gap-2 py-2">
               <button type="button" onClick={() => onEdit(l)} aria-label="Edit item" className="rounded p-1 text-ink-muted hover:bg-paper hover:text-ink">
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h4l10-10-4-4L4 16v4z" /><path d="m13.5 6.5 4 4" /></svg>
               </button>
