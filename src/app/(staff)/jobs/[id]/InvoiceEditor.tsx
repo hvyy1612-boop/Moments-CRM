@@ -558,19 +558,24 @@ export function InvoiceEditor({
           ) : null}
         </section>
 
-        {/* Right column under the totals: the $0 notice, notes, then the action. */}
+        {/* Right column under the totals: the $0 notice + notes. */}
         <div className="flex flex-col gap-6 lg:col-span-4 lg:col-start-9 lg:row-start-2">
           {total <= 0 ? <Alert tone="info" title="A payment schedule cannot be calculated because the total amount due is $0.00." /> : null}
           <Field label="Notes (optional)" htmlFor="inv-notes">
             <Textarea id="inv-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} placeholder="Notes shown on the invoice..." />
           </Field>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button type="submit" loading={pending} disabled={lines.length === 0 || scheduleMismatch}>
+        </div>
+
+        {/* Action group: bottom-LEFT, Carbon in-page pattern - primary first, secondary after, same
+            size/width, one adjacent group (not right-aligned). */}
+        <div className="lg:col-span-12 lg:row-start-3">
+          <div className="grid w-full max-w-sm grid-cols-2 gap-3">
+            <Button type="submit" size="lg" loading={pending} disabled={lines.length === 0 || scheduleMismatch} className="w-full rounded-lg">
               {editing ? 'Save changes' : 'Save invoice'}
             </Button>
-            {editing ? (
-              <Link href={`/finance/${invoiceId}`} className="inline-flex h-10 items-center rounded border border-line bg-surface px-4 text-base font-medium text-ink transition-colors hover:bg-paper">Cancel</Link>
-            ) : null}
+            <Link href={editing ? `/finance/${invoiceId}` : projectId ? `/jobs/${projectId}` : '/finance'} className="w-full">
+              <Button type="button" variant="secondary" size="lg" className="w-full rounded-lg">Cancel</Button>
+            </Link>
           </div>
         </div>
         </div>

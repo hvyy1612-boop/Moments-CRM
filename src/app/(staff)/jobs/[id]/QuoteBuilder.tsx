@@ -249,25 +249,25 @@ export function QuoteBuilder({
               <Textarea id="notes" name="notes" rows={3} defaultValue={initialNotes} placeholder="Any extra notes for the client..." className="mt-2" />
             </div>
 
-            <div className="flex flex-col gap-3 lg:col-span-4 lg:col-start-9 lg:row-start-2">
+            {/* Action group: bottom-LEFT, Carbon in-page pattern - primary first, secondary after, both
+                the same size/width, kept as one adjacent group (not right-aligned, no wide gap). */}
+            <div className="flex flex-col gap-3 lg:col-span-12 lg:row-start-3">
               <p className="text-xs text-ink-muted">
                 {cancelHref
                   ? 'Prices include GST and are recalculated when you save.'
                   : 'Prices include GST and are recalculated when you save. Sending saves your latest changes first, then opens the email to the client.'}
               </p>
-              <div className="flex flex-wrap items-center gap-2">
-                {cancelHref ? (
-                  <>
-                    <Button type="submit" loading={saving}>Save quote</Button>
-                    <Link href={cancelHref}><Button type="button" variant="secondary">Cancel</Button></Link>
-                  </>
-                ) : (
-                  <>
-                    <Button type="submit" variant="secondary" loading={saving && !pendingSendRef.current}>Save draft</Button>
-                    <Button type="button" loading={saving && pendingSendRef.current} onClick={startSend}>{sendLabel}</Button>
-                  </>
-                )}
-              </div>
+              {cancelHref ? (
+                <div className="grid w-full max-w-sm grid-cols-2 gap-3">
+                  <Button type="submit" size="lg" loading={saving} className="w-full rounded-lg">Save quote</Button>
+                  <Link href={cancelHref} className="w-full"><Button type="button" variant="secondary" size="lg" className="w-full rounded-lg">Cancel</Button></Link>
+                </div>
+              ) : (
+                <div className="grid w-full max-w-sm grid-cols-2 gap-3">
+                  <Button type="button" size="lg" loading={saving && pendingSendRef.current} onClick={startSend} className="w-full rounded-lg">{sendLabel}</Button>
+                  <Button type="submit" variant="secondary" size="lg" loading={saving && !pendingSendRef.current} className="w-full rounded-lg">Save draft</Button>
+                </div>
+              )}
             </div>
           </div>
         </div>
