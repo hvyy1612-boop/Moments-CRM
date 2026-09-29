@@ -37,7 +37,6 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
           <PageHeader
             breadcrumb={[DASHBOARD_CRUMB, { label: 'Activity' }]}
             title="Activity"
-            description="Security and account activity for this workspace. Read-only, admin-only."
           />
           <ActivityGate csrf={csrf} pinIsSet={pin.isSet} locked={pin.lockedUntil !== null} />
         </PageContainer>
@@ -98,7 +97,6 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
         <PageHeader
           breadcrumb={[DASHBOARD_CRUMB, { label: 'Activity' }]}
           title="Activity"
-          description="Security and account activity for this workspace - sign-ins and important actions. Times are Sydney local, emails are masked, and IP addresses are shown for security review. Read-only: records cannot be edited or deleted."
         />
 
         <div className="mt-7 border-b border-line pb-2">

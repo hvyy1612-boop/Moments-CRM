@@ -112,7 +112,6 @@ export default async function ClientsPage({
         <PageHeader
           breadcrumb={[DASHBOARD_CRUMB, { label: 'Clients' }]}
           title="Clients"
-          description="Manage client profiles and contact information."
           actions={
             <>
               {/* Import opens the bulk CSV page; Export is a plain anchor so the CSV attachment downloads in place. */}

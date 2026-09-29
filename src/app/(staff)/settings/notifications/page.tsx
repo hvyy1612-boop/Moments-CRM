@@ -75,7 +75,6 @@ export default async function NotificationsSettingsPage({
       <PageHeader
         breadcrumb={[DASHBOARD_CRUMB, { label: 'Settings', href: '/settings' }, { label: 'Notifications' }]}
         title="Notifications"
-        description="Automatic client reminders and internal follow-ups. Both settings below must be on before any client email is sent. Everything starts off, so nothing sends until you turn it on yourself."
       />
 
       {sp.saved ? (

@@ -43,7 +43,6 @@ export default async function QuotesPage() {
         <PageHeader
           breadcrumb={[DASHBOARD_CRUMB, { label: 'Quotes' }]}
           title="Quotes"
-          description="Quotations you have prepared. Create a quote from a lead; when the client accepts, it becomes a job."
           actions={
             <div className="flex gap-2">
               <Link href="/pricing"><Button variant="secondary" size="sm">Quick calculation</Button></Link>

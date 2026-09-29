@@ -30,7 +30,7 @@ export default async function SettingsPage() {
   return (
     <AppShell user={user} csrf={csrf} active="settings">
       <PageContainer variant="standard">
-      <PageHeader breadcrumb={[DASHBOARD_CRUMB, { label: 'Settings' }]} title="Settings" description="Studio configuration and account tools." />
+      <PageHeader breadcrumb={[DASHBOARD_CRUMB, { label: 'Settings' }]} title="Settings" />
       {can(user, 'USER_MANAGE') ? (
         <div className="mb-4">
           <ResetLinkGenerator csrf={csrf} />

@@ -57,7 +57,6 @@ export default async function UsersPage() {
         <PageHeader
           breadcrumb={[DASHBOARD_CRUMB, { label: 'Users' }]}
           title="Users"
-          description="Create staff accounts here. Each staff member gets a Staff ID and a one-time password, then sets their own password on first sign-in. There is no public sign-up."
         />
 
         <section className="mt-6 rounded-md border border-line bg-surface p-5">

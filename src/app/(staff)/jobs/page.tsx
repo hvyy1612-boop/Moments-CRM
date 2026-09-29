@@ -207,7 +207,6 @@ export default async function JobsPage({
         <PageHeader
           breadcrumb={[DASHBOARD_CRUMB, { label: 'Jobs' }]}
           title="Jobs"
-          description="Booked work from planning through the shoot, editing and delivery."
           actions={canEdit ? <AddJobButton csrf={csrf} /> : null}
         />
 

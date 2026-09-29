@@ -102,7 +102,6 @@ export default async function FinancePage() {
         <PageHeader
           breadcrumb={[DASHBOARD_CRUMB, { label: 'Payments' }]}
           title="Payments"
-          description="Track invoices, due dates and what each client has paid."
           actions={
             <Link
               href="/finance/new"

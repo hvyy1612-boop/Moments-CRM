@@ -75,7 +75,6 @@ export default async function CalendarPage({
       <PageHeader
         breadcrumb={[DASHBOARD_CRUMB, { label: 'Calendar' }]}
         title="Calendar"
-        description="Manage bookings, shoots and studio activity."
         actions={
           <>
             <SyncButton feedPath={feedPath} />

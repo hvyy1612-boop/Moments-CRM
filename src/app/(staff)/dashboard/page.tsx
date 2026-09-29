@@ -142,7 +142,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-xl">
             <h1 className="font-semibold text-3xl leading-none text-ink">Dashboard</h1>
-            <p className="mt-1.5 text-sm text-ink-muted">A snapshot of your studio&rsquo;s bookings, revenue and operations.</p>
           </div>
           <DashboardFilters period={period} service={service} services={d.services} from={from} to={to} />
         </div>

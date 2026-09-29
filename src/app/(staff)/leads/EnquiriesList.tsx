@@ -113,7 +113,6 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
       <PageHeader
         breadcrumb={[DASHBOARD_CRUMB, { label: 'Leads' }]}
         title="Leads"
-        description="Every potential booking, from the client's first enquiry until the deposit is paid. Booked leads stay here as a record; the work continues in Jobs."
         actions={<AddEnquiryButton csrf={csrf} />}
       />
 

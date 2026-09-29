@@ -29,7 +29,7 @@ export default async function CreateQuotePage() {
   return (
     <AppShell user={user} csrf={csrf} active="quotes">
       <PageContainer variant="standard">
-      <PageHeader breadcrumb={[DASHBOARD_CRUMB, { label: 'Quotes', href: '/quotes' }, { label: 'New quote' }]} title="Create quote" description="Choose the lead this quote is for." />
+      <PageHeader breadcrumb={[DASHBOARD_CRUMB, { label: 'Quotes', href: '/quotes' }, { label: 'New quote' }]} title="Create quote" />
 
       <div className="mt-7">
         <NewQuotePicker
