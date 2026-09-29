@@ -115,9 +115,7 @@ export default async function FinancePage() {
           }
         />
 
-        <div className="mt-5">
-          <PaymentsView rows={rows} csrf={csrf} />
-        </div>
+        <PaymentsView rows={rows} csrf={csrf} />
       </PageContainer>
     </AppShell>
   )

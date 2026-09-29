@@ -193,7 +193,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
         actions={<AddEnquiryButton csrf={csrf} />}
       />
 
-      <div className="mt-5">
+      <div>
         {/* Batch bar appears above the toolbar only when rows are selected (otherwise renders nothing). */}
         <ExportBar count={selectedIds.length} reportHref={`/leads/report?ids=${selectedIds.join(',')}`} className="mb-3" />
         <DataTable

@@ -25,12 +25,12 @@ export function PageHeader({
   actions?: ReactNode
   children?: ReactNode
 }) {
-  // Bottom gap to the page content is conditional: a page WITH a description keeps the roomier `mb-6`,
-  // but a description-less page tightens to `mb-5` so the removed paragraph does not leave an empty
-  // reserved band. (Pages whose first content block sets its own larger top margin own that gap via
-  // margin-collapsing; those few are aligned to the same `mt-5` rhythm at the call site.)
+  // This bottom gap is the ONE canonical title-to-content rule for every page: the roomier `mb-6` when
+  // a description is present, the tighter `mb-4` when it is not - no reserved band for the removed
+  // paragraph. Individual pages must NOT add their own top margin to their first content block;
+  // PageHeader owns this spacing so every list page stays on the same rhythm.
   return (
-    <div className={description ? 'mb-6' : 'mb-5'}>
+    <div className={description ? 'mb-6' : 'mb-4'}>
       {breadcrumb ? (
         <div className="mb-2">
           <Breadcrumb items={breadcrumb} />
