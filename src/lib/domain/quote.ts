@@ -13,7 +13,11 @@ const ROUND_HALF_UP = 4 // Decimal.js rounding mode; money rounds half up (BR-X0
 function computeTotals(lines: QuoteLineInput[]) {
   let total = new Prisma.Decimal(0)
   const computed = lines.map((line, index) => {
-    const lineTotal = new Prisma.Decimal(line.unitPrice).mul(line.quantity)
+    const gross = new Prisma.Decimal(line.unitPrice).mul(line.quantity)
+    const discount = new Prisma.Decimal(line.discount ?? '0')
+    // Line total is what the client pays for this line: gross minus the discount, never below zero.
+    const net = gross.sub(discount)
+    const lineTotal = net.lessThan(0) ? new Prisma.Decimal(0) : net
     total = total.add(lineTotal)
     return {
       lineType: line.lineType ?? 'custom',
@@ -22,6 +26,7 @@ function computeTotals(lines: QuoteLineInput[]) {
       details: line.details ?? null,
       quantity: line.quantity,
       unitPrice: new Prisma.Decimal(line.unitPrice),
+      discount,
       lineTotal,
       sortOrder: index,
     }

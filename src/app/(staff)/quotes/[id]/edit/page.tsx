@@ -69,6 +69,7 @@ export default async function QuoteEditPage({ params }: { params: Promise<{ id: 
             description: l.description,
             quantity: l.quantity,
             unitPrice: l.unitPrice.toString(),
+            discount: l.discount.toString(),
             lineType: (l.lineType === 'package' || l.lineType === 'addon' ? l.lineType : 'custom') as 'custom' | 'package' | 'addon',
             referenceId: l.referenceId,
             details: l.details,

@@ -5,8 +5,9 @@ import Link from 'next/link'
 import { Alert } from '@/components/ui/Alert'
 import { Button, secondaryLinkLg } from '@/components/ui/Button'
 import { MainAside } from '@/components/EditLayout'
-import { Field, Select, TextInput, Textarea } from '@/components/ui/form'
+import { Field, TextInput, Textarea } from '@/components/ui/form'
 import { estimateTotals, estimateDeposit, toCents, formatCents } from '@/lib/pricing-estimate'
+import { AddItemModal, LineItemsTable, EMPTY_DRAFT, draftDiscountOff, type CatalogueItem, type ItemDraft, type LineItem } from '@/components/LineItems'
 import type { QuoteActionState } from '../actions'
 
 type QuoteFormAction = (prev: QuoteActionState, formData: FormData) => Promise<QuoteActionState>
@@ -22,7 +23,9 @@ type QuotePackage = { id: string; name: string; price: string; details?: string 
  */
 
 type LineType = 'custom' | 'package' | 'addon'
-type Line = { description: string; quantity: number; unitPrice: string; lineType: LineType; referenceId?: string | null; details?: string | null }
+// The shape the server sends in / expects back (the DB naming: `description` is the item NAME, `details`
+// is its description). Inside the builder these become the shared canonical LineItem (name + description).
+type InitialLine = { description: string; quantity: number; unitPrice: string; lineType: LineType; referenceId?: string | null; details?: string | null; discount?: string }
 
 const IDLE: QuoteActionState = { status: 'idle' }
 
@@ -77,7 +80,7 @@ export function QuoteBuilder({
   quoteId: string
   versionId: string
   validUntil: string
-  initialLines: Line[]
+  initialLines: InitialLine[]
   initialIntroduction: string
   initialPoNumber: string
   initialNotes: string
@@ -95,7 +98,28 @@ export function QuoteBuilder({
   /** When set (Edit Quote), the footer shows "Save quote" + a "Cancel" link (no inline Send). */
   cancelHref?: string
 }) {
-  const [lines, setLines] = useState<Line[]>(initialLines)
+  // Canonical line items (shared with the invoice). Map the incoming DB-shaped lines: `description` is
+  // the NAME, `details` is the description; discount defaults to 0 for older quotes.
+  const [lines, setLines] = useState<LineItem[]>(() =>
+    initialLines.map((l, i) => ({
+      id: i + 1,
+      name: l.description,
+      description: l.details ?? '',
+      quantity: l.quantity,
+      unitPrice: l.unitPrice,
+      discount: l.discount ?? '0',
+      lineType: l.lineType,
+      referenceId: l.referenceId ?? null,
+    })),
+  )
+  const [nextId, setNextId] = useState(() => initialLines.length + 1)
+  // Add / Edit item modal (invoice-style). `addType` = which group we're adding to; chosenRef tracks a
+  // catalogue pick so the saved line keeps its referenceId.
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editId, setEditId] = useState<number | null>(null)
+  const [draft, setDraft] = useState<ItemDraft>(EMPTY_DRAFT)
+  const [addType, setAddType] = useState<LineType>('package')
+  const chosenRef = useRef<string | null>(null)
   const [depositPercent, setDepositPercent] = useState(initialDepositPercent || '30')
   const [sendOpen, setSendOpen] = useState(false)
   const [saveState, save, saving] = useActionState(saveAction, IDLE)
@@ -127,28 +151,90 @@ export function QuoteBuilder({
     saveFormRef.current?.requestSubmit()
   }
 
-  const est = estimateTotals(lines.map((l) => ({ unitPriceCents: toCents(l.unitPrice), quantity: l.quantity || 0 })))
+  // Totals net out each line's discount, so the displayed total matches what the server recomputes on save.
+  const est = estimateTotals(
+    lines.map((l) => ({ unitPriceCents: toCents(l.unitPrice), quantity: l.quantity || 0, discountCents: toCents(l.discount || '0') })),
+  )
   const pct = Math.min(100, Math.max(0, Number.parseInt(depositPercent || '0', 10) || 0))
   const dep = estimateDeposit(est.totalCents, pct)
 
-  // Catalogue split: regular packages vs add-on products, so each has its own "choose from the catalogue"
-  // dropdown (add-ons no longer start as a blank manual row).
+  // Catalogue split: regular packages vs add-on products, each its own group (kept separate per the
+  // spec). The Add-item modal picks from the group being added to.
   const packageOptions = packages.filter((p) => !p.isAddOn)
   const addonOptions = packages.filter((p) => p.isAddOn)
-  const addCatalogue = (id: string, lineType: 'package' | 'addon') => {
-    const pkg = packages.find((p) => p.id === id)
-    if (pkg) setLines((cur) => [...cur, { description: pkg.name, quantity: 1, unitPrice: pkg.price, lineType, referenceId: pkg.id, details: pkg.details ?? null }])
-  }
-  const addPackage = (id: string) => addCatalogue(id, 'package')
-  const addAddon = (id: string) => addCatalogue(id, 'addon')
-  const addRow = (lineType: LineType) => setLines((cur) => [...cur, { description: '', quantity: 1, unitPrice: '', lineType }])
-  const update = (index: number, patch: Partial<Line>) => setLines((cur) => cur.map((l, i) => (i === index ? { ...l, ...patch } : l)))
-  const removeRow = (index: number) => setLines((cur) => cur.filter((_, i) => i !== index))
+  const toCatalogue = (list: QuotePackage[], group: string): CatalogueItem[] =>
+    list.map((p) => ({ id: p.id, name: p.name, price: p.price, group, detail: p.details ?? null }))
+  const packageCatalogue = toCatalogue(packageOptions, 'Packages')
+  const addonCatalogue = toCatalogue(addonOptions, 'Add-ons')
+  const modalCatalogue = addType === 'package' ? packageCatalogue : addType === 'addon' ? addonCatalogue : []
 
-  const indexed = lines.map((l, i) => ({ l, i }))
-  const packageRows = indexed.filter((r) => r.l.lineType === 'package')
-  const addonRows = indexed.filter((r) => r.l.lineType === 'addon')
-  const customRows = indexed.filter((r) => r.l.lineType === 'custom')
+  function openAdd(type: LineType) {
+    setAddType(type)
+    setEditId(null)
+    setDraft(EMPTY_DRAFT)
+    chosenRef.current = null
+    setModalOpen(true)
+  }
+  function openEdit(l: LineItem) {
+    setAddType(l.lineType ?? 'custom')
+    setEditId(l.id)
+    setDraft({ name: l.name, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: l.discount, discountMode: 'fixed' })
+    chosenRef.current = l.referenceId ?? null
+    setModalOpen(true)
+  }
+  function choosePackage(id: string) {
+    const cat = [...packageCatalogue, ...addonCatalogue].find((c) => c.id === id)
+    if (!cat) return
+    chosenRef.current = id
+    setDraft((d) => ({ ...d, name: cat.name, description: cat.detail ?? '', unitPrice: cat.price }))
+  }
+  function saveItem() {
+    if (!draft.name.trim()) return
+    const base = {
+      name: draft.name,
+      description: draft.description,
+      quantity: draft.quantity,
+      unitPrice: draft.unitPrice,
+      discount: String(draftDiscountOff(draft)),
+      lineType: addType,
+      referenceId: chosenRef.current,
+    }
+    if (editId === null) {
+      setLines((ls) => [...ls, { id: nextId, ...base }])
+      setNextId((n) => n + 1)
+    } else {
+      setLines((ls) => ls.map((l) => (l.id === editId ? { ...l, ...base } : l)))
+    }
+    setModalOpen(false)
+  }
+  function duplicate(id: number) {
+    setLines((ls) => {
+      const idx = ls.findIndex((l) => l.id === id)
+      if (idx < 0) return ls
+      const copy = [...ls]
+      copy.splice(idx + 1, 0, { ...ls[idx]!, id: nextId })
+      return copy
+    })
+    setNextId((n) => n + 1)
+  }
+  function removeLine(id: number) {
+    setLines((ls) => ls.filter((l) => l.id !== id))
+  }
+  function reorder(draggedId: number, targetId: number) {
+    setLines((ls) => {
+      const copy = [...ls]
+      const from = copy.findIndex((l) => l.id === draggedId)
+      if (from < 0) return ls
+      const [moved] = copy.splice(from, 1)
+      const to = copy.findIndex((l) => l.id === targetId)
+      copy.splice(to < 0 ? from : to, 0, moved!)
+      return copy
+    })
+  }
+
+  const packageLines = lines.filter((l) => (l.lineType ?? 'custom') === 'package')
+  const addonLines = lines.filter((l) => (l.lineType ?? 'custom') === 'addon')
+  const customLines = lines.filter((l) => (l.lineType ?? 'custom') === 'custom')
 
   return (
     <div className="mt-4 flex flex-col gap-5">
@@ -160,7 +246,21 @@ export function QuoteBuilder({
         <input type="hidden" name="projectId" value={projectId} />
         <input type="hidden" name="quoteId" value={quoteId} />
         <input type="hidden" name="depositPercent" value={depositPercent} />
-        <input type="hidden" name="linesJson" value={JSON.stringify(lines)} />
+        <input
+          type="hidden"
+          name="linesJson"
+          value={JSON.stringify(
+            lines.map((l) => ({
+              description: l.name,
+              details: l.description || null,
+              quantity: l.quantity,
+              unitPrice: l.unitPrice,
+              discount: l.discount,
+              lineType: l.lineType ?? 'custom',
+              referenceId: l.referenceId ?? null,
+            })),
+          )}
+        />
 
         {/* One full-width column, mirroring the New-invoice form: details, then the line items, then the
             totals (right) with notes on the left and the Save / Send actions under the totals. */}
@@ -182,68 +282,43 @@ export function QuoteBuilder({
             </div>
           </div>
 
-          {/* Line items — packages, add-ons and any custom lines (the invoice's "Products & packages"). */}
+          {/* Line items — packages, add-ons and any custom lines. Each group adds via the shared
+              invoice-style "Add item" modal and shows the shared line-items table. */}
           <section className="flex min-w-0 flex-col gap-6">
             <div>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-ink">Packages</p>
-                {packageOptions.length > 0 ? (
-                  <Select aria-label="Add a package" value="" onChange={(e) => { addPackage(e.target.value); e.currentTarget.value = '' }} className="h-8 max-w-xs">
-                    <option value="" disabled>Add a package...</option>
-                    {packageOptions.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name} - {formatCents(toCents(p.price))}</option>
-                    ))}
-                  </Select>
-                ) : null}
+                <Button type="button" variant="secondary" size="sm" onClick={() => openAdd('package')}>
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                  Add a package
+                </Button>
               </div>
-              <div className="mt-2">
-                {packageRows.length === 0 ? <EmptyLines /> : (
-                  <div className="flex flex-col">
-                    {packageRows.map(({ l, i }) => (
-                      <LineRow key={i} line={l} onChange={(patch) => update(i, patch)} onRemove={() => removeRow(i)} nameLabel="Package" />
-                    ))}
-                  </div>
-                )}
-              </div>
+              {packageLines.length === 0 ? <EmptyLines /> : (
+                <LineItemsTable lines={packageLines} onEdit={openEdit} onDuplicate={duplicate} onRemove={removeLine} onReorder={reorder} />
+              )}
             </div>
 
             <div>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-ink">Add-ons</p>
-                {addonOptions.length > 0 ? (
-                  <Select aria-label="Add an add-on" value="" onChange={(e) => { addAddon(e.target.value); e.currentTarget.value = '' }} className="h-8 max-w-xs">
-                    <option value="" disabled>Add an add-on...</option>
-                    {addonOptions.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name} - {formatCents(toCents(p.price))}</option>
-                    ))}
-                  </Select>
-                ) : (
-                  <Button type="button" variant="secondary" size="sm" onClick={() => addRow('addon')}>+ Add add-on</Button>
-                )}
+                <Button type="button" variant="secondary" size="sm" onClick={() => openAdd('addon')}>
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                  Add an add-on
+                </Button>
               </div>
-              <div className="mt-2">
-                {addonRows.length === 0 ? <EmptyLines /> : (
-                  <div className="flex flex-col">
-                    {addonRows.map(({ l, i }) => (
-                      <LineRow key={i} line={l} onChange={(patch) => update(i, patch)} onRemove={() => removeRow(i)} nameLabel="Add-on" />
-                    ))}
-                  </div>
-                )}
-              </div>
+              {addonLines.length === 0 ? <EmptyLines /> : (
+                <LineItemsTable lines={addonLines} onEdit={openEdit} onDuplicate={duplicate} onRemove={removeLine} onReorder={reorder} />
+              )}
             </div>
 
-            {customRows.length > 0 ? (
+            {customLines.length > 0 ? (
               <div>
                 <p className="text-sm font-semibold text-ink">Other lines</p>
-                <div className="mt-2 flex flex-col">
-                  {customRows.map(({ l, i }) => (
-                    <LineRow key={i} line={l} onChange={(patch) => update(i, patch)} onRemove={() => removeRow(i)} nameLabel="Item" />
-                  ))}
-                </div>
+                <LineItemsTable lines={customLines} onEdit={openEdit} onDuplicate={duplicate} onRemove={removeLine} onReorder={reorder} />
               </div>
             ) : null}
             <div>
-              <Button type="button" variant="ghost" size="sm" onClick={() => addRow('custom')}>+ Add a custom line</Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => openAdd('custom')}>+ Add a custom line</Button>
             </div>
           </section>
 
@@ -297,6 +372,18 @@ export function QuoteBuilder({
           </div>
         </div>
       </form>
+
+      <AddItemModal
+        open={modalOpen}
+        editing={editId !== null}
+        noun="quote"
+        catalogue={modalCatalogue}
+        draft={draft}
+        setDraft={setDraft}
+        onChoose={choosePackage}
+        onSave={saveItem}
+        onClose={() => setModalOpen(false)}
+      />
 
       {sendOpen ? (
         <SendQuoteDialog
@@ -395,40 +482,5 @@ function SendQuoteDialog({
 }
 
 function EmptyLines() {
-  return <p className="rounded-md border border-dashed border-muted bg-paper px-4 py-5 text-center text-sm text-ink-muted">Nothing added yet.</p>
-}
-
-/**
- * One quote line as a structured line item (not a bordered card). Every row shares ONE content-aware
- * grid: name flexes to the widest track, quantity is compact, price is constrained, the remove action is
- * fixed - so package/add-on rows always line up. Rows are separated by a hairline, not nested cards.
- */
-function LineRow({ line, onChange, onRemove, nameLabel }: { line: Line; onChange: (patch: Partial<Line>) => void; onRemove: () => void; nameLabel: string }) {
-  return (
-    <div className="border-t border-line py-3 first:border-t-0 first:pt-0">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_5em_7em_2.5em] sm:items-center">
-        <TextInput aria-label={nameLabel} placeholder={nameLabel} value={line.description} onChange={(e) => onChange({ description: e.target.value })} />
-        <TextInput aria-label="Quantity" inputMode="numeric" className="sm:text-right" value={String(line.quantity)} onChange={(e) => onChange({ quantity: Number(e.target.value) || 0 })} />
-        <TextInput aria-label="Unit price" inputMode="decimal" placeholder="0.00" className="sm:text-right" value={line.unitPrice} onChange={(e) => onChange({ unitPrice: e.target.value })} />
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label="Remove line"
-          className="flex h-10 w-10 items-center justify-center justify-self-end rounded text-ink-muted transition-colors hover:bg-sunk hover:text-danger"
-        >
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M7 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" /></svg>
-        </button>
-      </div>
-      {/* What's included - editable (prefilled from the package), shown on the client quote. Kept compact
-          and secondary so a package reads as a line of structured content, not a stack of tall boxes. */}
-      <Textarea
-        aria-label="What's included"
-        placeholder="What's included (one per line) - shown on the client's quote"
-        rows={2}
-        value={line.details ?? ''}
-        onChange={(e) => onChange({ details: e.target.value })}
-        className="mt-2 text-sm"
-      />
-    </div>
-  )
+  return <p className="mt-2 rounded-md border border-dashed border-muted bg-paper px-4 py-5 text-center text-sm text-ink-muted">Nothing added yet.</p>
 }

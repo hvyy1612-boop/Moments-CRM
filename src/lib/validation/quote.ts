@@ -17,6 +17,10 @@ export const quoteLineSchema = z.object({
   referenceId: z.string().trim().max(30).optional().nullable(),
   // Immutable snapshot of a package's inclusions at quote time (one item per line). Presentation only.
   details: z.string().trim().max(4000).optional().nullable(),
+  // A per-line discount, already resolved to a DOLLAR amount off (the builder converts %/$ before saving).
+  // Optional so older payloads (and callers that never discount) still parse; computeTotals treats a
+  // missing discount as 0.
+  discount: z.string().trim().regex(/^\d+(\.\d{1,2})?$/, 'Enter a discount like 0 or 50.00.').optional(),
 })
 
 export const saveQuoteSchema = z.object({

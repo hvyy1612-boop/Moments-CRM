@@ -412,6 +412,7 @@ export async function CaseDetail({
                       description: line.description,
                       quantity: line.quantity,
                       unitPrice: line.unitPrice.toString(),
+                      discount: line.discount.toString(),
                       lineType: (line.lineType === 'package' || line.lineType === 'addon' ? line.lineType : 'custom') as 'custom' | 'package' | 'addon',
                       referenceId: line.referenceId,
                       details: line.details,
