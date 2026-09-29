@@ -636,6 +636,11 @@ body {
   stroke-dasharray: 75.4;
   animation: toast-ring-deplete 6s linear forwards;
 }
+/* Carbon toast structure: 3px status border-left + a faint hairline on the other sides. */
+.toast-card {
+  border: 1px solid color-mix(in srgb, var(--color-delivered-ink) 25%, transparent);
+  border-left: 3px solid var(--color-delivered-ink);
+}
 .toast-card:hover .toast-ring-progress {
   animation-play-state: paused;
 }
