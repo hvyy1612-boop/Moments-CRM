@@ -18,8 +18,8 @@ export type LeadNote = { id: string; body: string; at: string; by: string | null
 export function LeadNotes({ enquiryId, csrf, notes }: { enquiryId: string; csrf: string; notes: LeadNote[] }) {
   const [adding, setAdding] = useState(false)
   return (
-    <section className="rounded-md border border-line bg-surface p-5">
-      <div className="mb-3 flex items-center justify-between gap-2">
+    <section className="rounded-md border border-line bg-surface p-4">
+      <div className="mb-2 flex items-center justify-between gap-2">
         <h2 className="text-xs font-bold uppercase tracking-wide text-muted">Notes</h2>
         {!adding ? (
           <IconButton label="Add note" tone="accent" icon={PlusIcon} onClick={() => setAdding(true)} />

@@ -9,7 +9,7 @@ import { IconButton, IconLink } from '@/components/ui/IconButton'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { formatSydneyDate, formatSydneyDateTime, sydneyDateTimeParts } from '@/lib/time'
+import { formatSydneyDate, formatSydneyDateTime, formatSydneyTime, sydneyDateTimeParts } from '@/lib/time'
 import {
   ENQUIRY_STAGE_KIND,
   ENQUIRY_STAGE_LABEL,
@@ -24,6 +24,7 @@ import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { convertEnquiryAction, updateEnquiryAction } from '../actions'
 import { createQuoteForEnquiryAction } from '../../quotes/actions'
+import { HistoryLog, type HistoryRow } from '../../finance/[invoiceId]/HistoryLog'
 import { EnquiryWorkflow } from './EnquiryWorkflow'
 import { LeadNotes } from './LeadNotes'
 import { MarkEnquiryViewed } from './MarkEnquiryViewed'
@@ -87,8 +88,8 @@ export default async function EnquiryDetailPage({
   const [activity, quotes, invoices, noteComms] = await Promise.all([
     prisma.auditLog.findMany({
       where: { entityType: 'Enquiry', entityId: id },
-      orderBy: { createdAt: 'desc' },
-      take: 12,
+      orderBy: { createdAt: 'asc' }, // oldest first, like the invoice history log
+      take: 60,
       select: { id: true, action: true, createdAt: true, actor: { select: { name: true } } },
     }),
     // A quote belongs to its lead (docs/31), so the lead shows every quote made for it.
@@ -113,6 +114,14 @@ export default async function EnquiryDetailPage({
     }),
   ])
   const leadNotes = noteComms.map((n) => ({ id: n.id, body: n.body, at: formatSydneyDateTime(n.createdAt), by: n.by?.name ?? null }))
+  const historyRows: HistoryRow[] = activity.map((a) => ({
+    id: a.id,
+    date: formatSydneyDate(a.createdAt),
+    time: formatSydneyTime(a.createdAt),
+    user: a.actor?.name ?? 'System',
+    action: auditLabel(a.action),
+    details: '',
+  }))
 
   // A Job exists once the lead is accepted/converted (Awaiting or Confirmed). "open" = a live lead with
   // no Job yet, so only those stages offer Create quote / Create Job.
@@ -234,11 +243,21 @@ export default async function EnquiryDetailPage({
             </div>
           </div>
 
-          {/* RAIL: Quotes / Invoices / Notes, each with a + to add */}
-          <aside className="flex flex-col gap-4 lg:col-span-1">
+          {/* RAIL: Client / Quotes / Invoices / Notes - compact cards */}
+          <aside className="flex flex-col gap-3 lg:col-span-1">
+            {/* Client - basic contact, first */}
+            <section className="rounded-md border border-line bg-surface p-4">
+              <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Client</h2>
+              <dl className="flex flex-col gap-1 text-sm">
+                <div className="flex items-baseline justify-between gap-3"><dt className="text-muted">Name</dt><dd className="text-right text-ink">{enquiry.name}</dd></div>
+                <div className="flex items-baseline justify-between gap-3"><dt className="text-muted">Email</dt><dd className="break-all text-right text-ink">{enquiry.email}</dd></div>
+                <div className="flex items-baseline justify-between gap-3"><dt className="text-muted">Phone</dt><dd className="text-right text-ink">{enquiry.phone ?? '-'}</dd></div>
+              </dl>
+            </section>
+
             {/* Quotes */}
-            <section className="rounded-md border border-line bg-surface p-5">
-              <div className="mb-3 flex items-center justify-between gap-2">
+            <section className="rounded-md border border-line bg-surface p-4">
+              <div className="mb-2 flex items-center justify-between gap-2">
                 <h2 className="text-xs font-bold uppercase tracking-wide text-muted">Quotes</h2>
                 {open ? (
                   <form action={createQuoteForEnquiryAction}>
@@ -270,16 +289,19 @@ export default async function EnquiryDetailPage({
               )}
             </section>
 
-            {/* Invoices (exist once the lead is booked into a job) */}
-            <section className="rounded-md border border-line bg-surface p-5">
-              <div className="mb-3 flex items-center justify-between gap-2">
+            {/* Invoices (live on the booked job; the + opens the New-invoice flow) */}
+            <section className="rounded-md border border-line bg-surface p-4">
+              <div className="mb-2 flex items-center justify-between gap-2">
                 <h2 className="text-xs font-bold uppercase tracking-wide text-muted">Invoices</h2>
-                {hasJob && enquiry.convertedProjectId ? (
-                  <IconLink label="Create invoice" tone="accent" href={`/finance/new?job=${enquiry.convertedProjectId}`} icon={PLUS} />
-                ) : null}
+                <IconLink
+                  label="Create invoice"
+                  tone="accent"
+                  href={`/finance/new${enquiry.convertedProjectId ? `?job=${enquiry.convertedProjectId}` : ''}`}
+                  icon={PLUS}
+                />
               </div>
               {invoices.length === 0 ? (
-                <p className="text-sm text-ink-muted">{hasJob ? 'No invoices yet.' : 'Available once the lead is booked.'}</p>
+                <p className="text-sm text-ink-muted">No invoices yet.</p>
               ) : (
                 <ul>
                   {invoices.map((inv) => (
@@ -331,36 +353,9 @@ export default async function EnquiryDetailPage({
           )
         })()}
 
-        {/* Client + Activity */}
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="rounded-md border border-line bg-surface p-5">
-            <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Client</h2>
-            <div className="flex justify-between gap-4 border-t border-line py-2 first:border-t-0">
-              <span className="text-sm text-muted">Email</span>
-              <span className="text-base text-ink">{enquiry.email}</span>
-            </div>
-            <div className="flex justify-between gap-4 border-t border-line py-2">
-              <span className="text-sm text-muted">Phone</span>
-              <span className="text-base text-ink">{enquiry.phone ?? '-'}</span>
-            </div>
-          </div>
-
-          <div className="rounded-md border border-line bg-surface p-5">
-            <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Activity</h2>
-            {activity.length === 0 ? (
-              <p className="text-base text-ink-muted">No activity yet.</p>
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                {activity.map((a) => (
-                  <div key={a.id} className="text-sm text-ink-muted">
-                    <span className="tabular text-muted">{formatSydneyDateTime(a.createdAt)}</span>{' '}
-                    {auditLabel(a.action)}
-                    {a.actor?.name ? ` · ${a.actor.name}` : ''}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+        {/* History log (the lead's real audit trail, same component as the invoice/quote pages) */}
+        <div className="mt-4">
+          <HistoryLog rows={historyRows} />
         </div>
       </PageContainer>
     </AppShell>
