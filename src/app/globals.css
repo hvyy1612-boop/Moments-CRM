@@ -618,34 +618,38 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
-   SentToast countdown ring: a circle around the success tick that depletes over
-   the toast's lifetime, then the toast auto-dismisses (onAnimationEnd). Pauses on
-   hover so staff can finish reading. Colour literals live here (globals only).
-   Circle r=12 -> circumference ~75.4.
+   Toast countdown: a progress stroke that runs around the WHOLE notification
+   border and depletes over the toast's lifetime, then it auto-dismisses
+   (onAnimationEnd). `pathLength: 100` normalises the rounded-rect perimeter so
+   one keyframe works at any card size; the rect fills the card via CSS geometry.
+   Pauses on hover. Colour/size literals live here (globals only).
    --------------------------------------------------------------------------- */
-@keyframes toast-ring-deplete {
+@keyframes toast-border-deplete {
   from { stroke-dashoffset: 0; }
-  to { stroke-dashoffset: 75.4; }
+  to { stroke-dashoffset: 100; }
 }
-.toast-ring-track {
+.toast-border-progress {
+  x: 1px;
+  y: 1px;
+  width: calc(100% - 2px);
+  height: calc(100% - 2px);
+  rx: 6px;
+  fill: none;
   stroke: var(--color-delivered-ink);
-  opacity: 0.22;
-}
-.toast-ring-progress {
-  stroke: var(--color-delivered-ink);
-  stroke-dasharray: 75.4;
-  animation: toast-ring-deplete 6s linear forwards;
+  stroke-width: 2px;
+  stroke-dasharray: 100;
+  animation: toast-border-deplete 6s linear forwards;
 }
 /* Carbon toast structure: 3px status border-left + a faint hairline on the other sides. */
 .toast-card {
   border: 1px solid color-mix(in srgb, var(--color-delivered-ink) 25%, transparent);
   border-left: 3px solid var(--color-delivered-ink);
 }
-.toast-card:hover .toast-ring-progress {
+.toast-card:hover .toast-border-progress {
   animation-play-state: paused;
 }
 @media (prefers-reduced-motion: reduce) {
-  .toast-ring-progress {
+  .toast-border-progress {
     animation: none;
     stroke-dashoffset: 0;
   }

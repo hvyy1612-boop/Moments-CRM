@@ -85,16 +85,13 @@ function ToastCard({ title, subtitle, onDismiss }: { title: string; subtitle?: s
     <div
       role="status"
       aria-live="polite"
-      className={`toast-card pointer-events-auto flex w-72 items-start gap-3 rounded-md bg-delivered p-4 shadow-lg transition-all duration-300 ease-out motion-reduce:transition-none ${entered ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'}`}
+      className={`toast-card relative pointer-events-auto flex w-72 items-start gap-3 rounded-md bg-delivered p-4 shadow-lg transition-all duration-300 ease-out motion-reduce:transition-none ${entered ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'}`}
     >
-      <span className="relative mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center">
-        <svg viewBox="0 0 28 28" className="absolute inset-0 h-7 w-7 -rotate-90" fill="none" aria-hidden="true">
-          <circle className="toast-ring-track" cx="14" cy="14" r="12" strokeWidth={2} />
-          <circle className="toast-ring-progress" cx="14" cy="14" r="12" strokeWidth={2} strokeLinecap="round" onAnimationEnd={onDismiss} />
-        </svg>
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-delivered-ink text-white">
-          <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m8.4 12 2.4 2.4 4.8-5.2" /></svg>
-        </span>
+      <svg className="pointer-events-none absolute inset-0 h-full w-full" fill="none" aria-hidden="true">
+        <rect className="toast-border-progress" pathLength={100} onAnimationEnd={onDismiss} />
+      </svg>
+      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-delivered-ink text-white">
+        <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m8.4 12 2.4 2.4 4.8-5.2" /></svg>
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-ink">{title}</p>
