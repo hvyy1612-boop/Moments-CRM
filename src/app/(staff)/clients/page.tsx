@@ -142,7 +142,7 @@ export default async function ClientsPage({
         <ImportedBanner count={importedCount} />
 
         {/* Toolbar */}
-        <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
           <div className="text-sm text-ink">
             All clients <span className="text-ink-muted">· {rows.length}</span>
           </div>

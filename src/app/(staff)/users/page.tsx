@@ -59,7 +59,7 @@ export default async function UsersPage() {
           title="Users"
         />
 
-        <section className="mt-6 rounded-md border border-line bg-surface p-5">
+        <section className="mt-5 rounded-md border border-line bg-surface p-5">
           <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Add staff</h2>
           <AddStaffForm csrf={csrf} />
         </section>

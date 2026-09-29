@@ -99,7 +99,7 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
           title="Activity"
         />
 
-        <div className="mt-7 border-b border-line pb-2">
+        <div className="mt-5 border-b border-line pb-2">
           <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Activity view">
             {TABS.map(([key, label, count]) => {
               const on = view === key
