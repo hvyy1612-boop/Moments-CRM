@@ -13,10 +13,13 @@ import { cancelBooking, convertEnquiry, createEnquiry, markEnquiryLost, reopenEn
 import { enquirySchema } from '@/lib/validation/enquiry'
 import {
   addEnquiryNote,
+  addEnquiryStage,
   addEnquiryTask,
+  deleteEnquiryStage,
   deleteEnquiryTask,
   logClientReply,
   moveEnquiryTask,
+  renameEnquiryStage,
   sendStaffReply,
   toggleEnquiryTask,
   updateEnquiryTask,
@@ -219,6 +222,52 @@ export async function deleteEnquiryTaskAction(formData: FormData): Promise<void>
     await deleteEnquiryTask(workItemId, user.id)
   } catch {
     // no-op on stale id
+  }
+  revalidateEnquiry(enquiryId)
+}
+
+/** Add a per-lead custom stage (seeded with a starter task so the group persists). */
+export async function addEnquiryStageAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  const name = String(formData.get('stageName') ?? '')
+  if (!enquiryId || !name.trim()) return
+  try {
+    await addEnquiryStage(enquiryId, name, user.id)
+  } catch {
+    // no-op on empty / duplicate / core-name stage
+  }
+  revalidateEnquiry(enquiryId)
+}
+
+/** Rename a custom stage (re-keys its tasks). Core stages are rejected in the domain. */
+export async function renameEnquiryStageAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  const fromStage = String(formData.get('fromStage') ?? '')
+  const toStage = String(formData.get('toStage') ?? '')
+  if (!enquiryId || !fromStage || !toStage.trim()) return
+  try {
+    await renameEnquiryStage(enquiryId, fromStage, toStage, user.id)
+  } catch {
+    // no-op on core stage / invalid name
+  }
+  revalidateEnquiry(enquiryId)
+}
+
+/** Delete a custom stage and its tasks. Core stages are rejected in the domain. */
+export async function deleteEnquiryStageAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  const stage = String(formData.get('stage') ?? '')
+  if (!enquiryId || !stage) return
+  try {
+    await deleteEnquiryStage(enquiryId, stage, user.id)
+  } catch {
+    // no-op on core stage
   }
   revalidateEnquiry(enquiryId)
 }

@@ -173,12 +173,14 @@ export async function addEnquiryTask(
 ) {
   const clean = title.trim()
   if (!clean) throw new Error('A task needs a title.')
-  if (!ENQUIRY_STAGE_KEYS.has(stage)) throw new Error('Unknown stage.')
+  // A core stage key, or a per-lead custom stage (a free group name, e.g. "Album design").
+  const stageKey = stage.trim()
+  if (!stageKey || stageKey.length > 50) throw new Error('Please enter a valid stage.')
   const taskType = ADDABLE.has(type) ? type : 'TODO'
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUniqueOrThrow({ where: { id: enquiryId }, select: { companyId: true } })
     const last = await tx.workItem.findFirst({
-      where: { enquiryId, stage },
+      where: { enquiryId, stage: stageKey },
       orderBy: { order: 'desc' },
       select: { order: true },
     })
@@ -187,7 +189,7 @@ export async function addEnquiryTask(
         companyId: enquiry.companyId,
         enquiryId,
         kind: 'CUSTOM',
-        stage,
+        stage: stageKey,
         type: taskType,
         title: clean,
         status: 'PENDING',
@@ -202,9 +204,67 @@ export async function addEnquiryTask(
         action: 'enquiry.task_added',
         entityType: 'Enquiry',
         entityId: enquiryId,
-        afterData: { stage: enquiryStageLabel(stage), title: clean },
+        afterData: { stage: enquiryStageLabel(stageKey), title: clean },
       },
     })
+  })
+}
+
+/**
+ * Per-lead custom stages (extra workflow groups beyond the fixed core three). A stage exists as long as
+ * it has at least one task, so "add" seeds a starter task, "rename" re-keys the group, and "delete"
+ * removes the group's tasks. The three core stages drive the lead's status and are never touched here.
+ */
+export async function addEnquiryStage(enquiryId: string, stageName: string, actorUserId: string) {
+  const key = stageName.trim()
+  if (!key || key.length > 50) throw new Error('Please enter a stage name.')
+  if (ENQUIRY_STAGE_KEYS.has(key)) throw new Error('That stage already exists.')
+  return prisma.$transaction(async (tx) => {
+    const enquiry = await tx.enquiry.findUniqueOrThrow({ where: { id: enquiryId }, select: { companyId: true } })
+    await tx.workItem.create({
+      data: {
+        companyId: enquiry.companyId,
+        enquiryId,
+        kind: 'CUSTOM',
+        stage: key,
+        type: 'TODO',
+        title: 'New task',
+        status: 'PENDING',
+        order: 1,
+        dueAt: null,
+      },
+    })
+    await tx.auditLog.create({
+      data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.stage_added', entityType: 'Enquiry', entityId: enquiryId, afterData: { stage: key } },
+    })
+  })
+}
+
+export async function renameEnquiryStage(enquiryId: string, fromStage: string, toStage: string, actorUserId: string) {
+  const to = toStage.trim()
+  if (!to || to.length > 50) throw new Error('Please enter a stage name.')
+  if (ENQUIRY_STAGE_KEYS.has(fromStage) || ENQUIRY_STAGE_KEYS.has(to)) throw new Error('The core stages cannot be renamed.')
+  return prisma.$transaction(async (tx) => {
+    const enquiry = await tx.enquiry.findUniqueOrThrow({ where: { id: enquiryId }, select: { companyId: true } })
+    const res = await tx.workItem.updateMany({ where: { enquiryId, stage: fromStage }, data: { stage: to } })
+    if (res.count > 0) {
+      await tx.auditLog.create({
+        data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.stage_renamed', entityType: 'Enquiry', entityId: enquiryId, afterData: { from: fromStage, to } },
+      })
+    }
+  })
+}
+
+export async function deleteEnquiryStage(enquiryId: string, stage: string, actorUserId: string) {
+  if (ENQUIRY_STAGE_KEYS.has(stage)) throw new Error('The core stages cannot be deleted.')
+  return prisma.$transaction(async (tx) => {
+    const enquiry = await tx.enquiry.findUniqueOrThrow({ where: { id: enquiryId }, select: { companyId: true } })
+    const res = await tx.workItem.deleteMany({ where: { enquiryId, stage } })
+    if (res.count > 0) {
+      await tx.auditLog.create({
+        data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.stage_deleted', entityType: 'Enquiry', entityId: enquiryId, afterData: { stage } },
+      })
+    }
   })
 }
 

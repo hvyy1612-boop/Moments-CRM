@@ -147,6 +147,8 @@ export type EnqStage = {
   label: string
   color: string
   active: boolean
+  /** A per-lead custom stage (staff-added), so the UI can offer rename/delete on it. Core stages are false. */
+  custom: boolean
   done: number
   total: number
   tasks: EnqTaskRow[]
@@ -165,10 +167,10 @@ export function buildEnquiryBoard(
   forceAllDone = false,
 ): EnquiryBoard {
   const doneTitles = new Set(tasks.filter((t) => t.status === 'COMPLETED').map((t) => t.title))
-  let activeKey: string | null = null
-  const stages: EnqStage[] = ENQUIRY_STAGES.map((stage) => {
-    const stageTasks: EnqTaskRow[] = tasks
-      .filter((t) => t.stage === stage.key)
+
+  const rowsFor = (stageKey: string): EnqTaskRow[] =>
+    tasks
+      .filter((t) => t.stage === stageKey)
       .sort((a, b) => a.order - b.order)
       .map((t) => {
         const type = (t.type as TaskType) ?? 'TODO'
@@ -201,17 +203,39 @@ export function buildEnquiryBoard(
           completedAt: t.completedAt,
         }
       })
-    if (stageTasks.some((t) => !t.done) && activeKey === null) activeKey = stage.key
+
+  const toStage = (key: string, label: string, color: string, custom: boolean): EnqStage => {
+    const stageTasks = rowsFor(key)
     return {
-      key: stage.key,
-      label: stage.label,
-      color: stage.color,
+      key,
+      label,
+      color,
       active: false,
+      custom,
       done: stageTasks.filter((t) => t.done).length,
       total: stageTasks.length,
       tasks: stageTasks,
     }
-  })
-  for (const s of stages) s.active = s.key === activeKey
-  return { stages, allDone: activeKey === null }
+  }
+
+  const coreStages = ENQUIRY_STAGES.map((s) => toStage(s.key, s.label, s.color, false))
+  // The "Now" stage is the earliest CORE stage with an unfinished task; custom stages never claim it.
+  let activeKey: string | null = null
+  for (const s of coreStages) {
+    if (activeKey === null && s.tasks.some((t) => !t.done)) activeKey = s.key
+  }
+  for (const s of coreStages) s.active = s.key === activeKey
+
+  // Per-lead custom stages: any non-core group present, appended after the core three (by first order).
+  const firstOrder = new Map<string, number>()
+  for (const t of tasks) {
+    if (!t.stage || ENQUIRY_STAGE_KEYS.has(t.stage)) continue
+    const prev = firstOrder.get(t.stage)
+    if (prev === undefined || t.order < prev) firstOrder.set(t.stage, t.order)
+  }
+  const customStages = [...firstOrder.keys()]
+    .sort((a, b) => firstOrder.get(a)! - firstOrder.get(b)!)
+    .map((key) => toStage(key, key, 'enquiry', true))
+
+  return { stages: [...coreStages, ...customStages], allDone: activeKey === null }
 }

@@ -10,7 +10,13 @@ import {
   taskInputClass,
   type TaskFormErrors,
 } from '@/components/ui/TaskDateTimeFields'
-import { addEnquiryTaskAction, updateEnquiryTaskAction } from '../actions'
+import {
+  addEnquiryStageAction,
+  addEnquiryTaskAction,
+  deleteEnquiryStageAction,
+  renameEnquiryStageAction,
+  updateEnquiryTaskAction,
+} from '../actions'
 import { EnquiryTaskRow, LEADS_PHASE_GRID, LEADS_ROW } from './EnquiryTaskRow'
 import { AttentionDot, CheckBox, StatusBadge } from '../../jobs/[id]/EditableTaskRow'
 import { IconChevron } from '../../jobs/[id]/icons'
@@ -41,6 +47,8 @@ export function EnquiryWorkflow({
 }) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [addingStage, setAddingStage] = useState<string | null>(null)
+  const [addingStageNew, setAddingStageNew] = useState(false)
+  const [renamingStage, setRenamingStage] = useState<string | null>(null)
   const [editErrors, setEditErrors] = useState<TaskFormErrors>({})
   const [addErrors, setAddErrors] = useState<TaskFormErrors>({})
   const [filter, setFilter] = useState<Filter>('all')
@@ -113,24 +121,68 @@ export function EnquiryWorkflow({
         const rows = stage.tasks.filter((t) => rowVisible(t.done, t.dueTone !== null && !t.done))
         return (
           <section key={stage.key} className="rounded-md border border-line">
-            <button
-              type="button"
-              onClick={() => toggleCollapsed(stage.key)}
-              aria-expanded={!isCollapsed}
-              className="flex w-full items-center gap-3 rounded-t-md px-3 py-3 text-left hover:bg-paper"
-            >
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-surface">
-                {i + 1}
-              </span>
-              <span className="text-sm font-bold text-ink">{stage.label}</span>
-              {stage.active && !allDone ? (
-                <span className="rounded bg-accent px-1.5 py-0.5 text-xs font-bold text-accent-ink">Now</span>
-              ) : null}
-              {stage.total > 0 ? (
-                <span className="text-sm text-muted">{stage.done} / {stage.total} completed</span>
-              ) : null}
-              <IconChevron className={`ml-auto h-4 w-4 text-muted transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
-            </button>
+            {renamingStage === stage.key && !readOnly ? (
+              <form
+                action={renameEnquiryStageAction}
+                onSubmit={(e) => {
+                  if (!String(new FormData(e.currentTarget).get('toStage') ?? '').trim()) { e.preventDefault(); return }
+                  setRenamingStage(null)
+                }}
+                className="flex flex-wrap items-center gap-2 px-3 py-2.5"
+              >
+                <input type="hidden" name="csrf" value={csrf} />
+                <input type="hidden" name="enquiryId" value={enquiryId} />
+                <input type="hidden" name="fromStage" value={stage.key} />
+                <input
+                  name="toStage"
+                  defaultValue={stage.label}
+                  autoFocus
+                  maxLength={50}
+                  aria-label="Stage name"
+                  className={`${taskInputBase} ${taskBorderFor(false)} min-w-0 flex-1`}
+                />
+                <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface">Save</button>
+                <button type="button" onClick={() => setRenamingStage(null)} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">Cancel</button>
+              </form>
+            ) : (
+              <div className="flex w-full items-center gap-2 rounded-t-md px-3 py-3 hover:bg-paper">
+                <button
+                  type="button"
+                  onClick={() => toggleCollapsed(stage.key)}
+                  aria-expanded={!isCollapsed}
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-surface">
+                    {i + 1}
+                  </span>
+                  <span className="truncate text-sm font-bold text-ink">{stage.label}</span>
+                  {stage.active && !allDone ? (
+                    <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs font-bold text-accent-ink">Now</span>
+                  ) : null}
+                  {stage.total > 0 ? (
+                    <span className="shrink-0 whitespace-nowrap text-sm text-muted">{stage.done} / {stage.total} completed</span>
+                  ) : null}
+                </button>
+                {stage.custom && !readOnly ? (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button type="button" onClick={() => setRenamingStage(stage.key)} aria-label="Rename stage" className="rounded p-1 text-ink-muted transition-colors hover:bg-sunk hover:text-ink">
+                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h4l10-10-4-4L4 16v4z" /><path d="m13.5 6.5 4 4" /></svg>
+                    </button>
+                    <form action={deleteEnquiryStageAction} onSubmit={(e) => { if (!window.confirm(`Delete the "${stage.label}" stage and its tasks?`)) e.preventDefault() }}>
+                      <input type="hidden" name="csrf" value={csrf} />
+                      <input type="hidden" name="enquiryId" value={enquiryId} />
+                      <input type="hidden" name="stage" value={stage.key} />
+                      <button type="submit" aria-label="Delete stage" className="rounded p-1 text-ink-muted transition-colors hover:bg-danger/10 hover:text-danger">
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
+                      </button>
+                    </form>
+                  </div>
+                ) : null}
+                <button type="button" onClick={() => toggleCollapsed(stage.key)} aria-label={isCollapsed ? 'Expand stage' : 'Collapse stage'} className="shrink-0 rounded p-1 text-muted hover:text-ink">
+                  <IconChevron className={`h-4 w-4 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+                </button>
+              </div>
+            )}
 
             {!isCollapsed ? (
               <div className="border-t border-line">
@@ -285,6 +337,39 @@ export function EnquiryWorkflow({
           </section>
         )
       })}
+
+      {/* Add a per-lead custom stage (an extra workflow group). The core three stages stay fixed. */}
+      {readOnly ? null : addingStageNew ? (
+        <form
+          action={addEnquiryStageAction}
+          onSubmit={(e) => {
+            if (!String(new FormData(e.currentTarget).get('stageName') ?? '').trim()) { e.preventDefault(); return }
+            setAddingStageNew(false)
+          }}
+          className="flex flex-wrap items-center gap-2 rounded-md border border-accent bg-paper p-3"
+        >
+          <input type="hidden" name="csrf" value={csrf} />
+          <input type="hidden" name="enquiryId" value={enquiryId} />
+          <input
+            name="stageName"
+            placeholder="Stage name (e.g. Album design)"
+            autoFocus
+            maxLength={50}
+            aria-label="Stage name"
+            className={`${taskInputBase} ${taskBorderFor(false)} min-w-0 flex-1`}
+          />
+          <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface">Add stage</button>
+          <button type="button" onClick={() => setAddingStageNew(false)} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">Cancel</button>
+        </form>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAddingStageNew(true)}
+          className="self-start rounded py-1 text-sm font-bold text-accent-ink hover:underline"
+        >
+          + Add stage
+        </button>
+      )}
     </div>
   )
 }
