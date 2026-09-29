@@ -162,9 +162,9 @@ export default async function EnquiryDetailPage({
         </p>
 
         {/* Workflow (left, like the Jobs workflow) + a rail of Quote / Invoice / Notes (right). */}
-        <div className="mt-6 grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
-          {/* MAIN: workflow + the lead outcome actions */}
-          <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
+        <div className="mt-6 grid grid-cols-1 items-start gap-5 lg:grid-cols-8">
+          {/* MAIN: workflow + the lead outcome actions - 5/8 (= 10/16) of the row */}
+          <div className="flex min-w-0 flex-col gap-4 lg:col-span-5">
             {hasJob ? (
               <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">
                 {confirmed
@@ -243,10 +243,10 @@ export default async function EnquiryDetailPage({
             </div>
           </div>
 
-          {/* RAIL: Client / Quotes / Invoices / Notes - compact cards */}
-          <aside className="flex flex-col gap-3 lg:col-span-1">
+          {/* RAIL: Client / Quotes / Invoices / Notes - compact cards; 3/8 (= 6/16) of the row */}
+          <aside className="flex flex-col gap-3 lg:col-span-3">
             {/* Client - basic contact, first */}
-            <section className="rounded-md border border-line bg-surface p-4">
+            <section className="rounded-md border border-line-strong bg-surface p-4">
               <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Client</h2>
               <dl className="flex flex-col gap-1 text-sm">
                 <div className="flex items-baseline justify-between gap-3"><dt className="text-muted">Name</dt><dd className="text-right text-ink">{enquiry.name}</dd></div>
@@ -256,7 +256,7 @@ export default async function EnquiryDetailPage({
             </section>
 
             {/* Quotes */}
-            <section className="rounded-md border border-line bg-surface p-4">
+            <section className="rounded-md border border-line-strong bg-surface p-4">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <h2 className="text-xs font-bold uppercase tracking-wide text-muted">Quotes</h2>
                 {open ? (
@@ -290,7 +290,7 @@ export default async function EnquiryDetailPage({
             </section>
 
             {/* Invoices (live on the booked job; the + opens the New-invoice flow) */}
-            <section className="rounded-md border border-line bg-surface p-4">
+            <section className="rounded-md border border-line-strong bg-surface p-4">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <h2 className="text-xs font-bold uppercase tracking-wide text-muted">Invoices</h2>
                 <IconLink
