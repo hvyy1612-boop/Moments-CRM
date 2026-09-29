@@ -84,6 +84,12 @@ export async function saveQuoteAction(_prev: QuoteActionState, formData: FormDat
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not save.' }
   }
   if (quoteId) revalidatePath(`/quotes/${quoteId}`)
+  // The Edit-quote page asks (via redirectToDetail) to return to the read-only detail after saving,
+  // matching the invoice editor. The job-detail inline builder omits the flag and stays put (its own
+  // client toast confirms the save). The target is built from quoteId, never a client-supplied path.
+  if (quoteId && str(formData, 'redirectToDetail') === '1') {
+    redirect(`/quotes/${quoteId}?toast=quote-updated`)
+  }
   return { status: 'success' }
 }
 

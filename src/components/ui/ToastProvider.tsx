@@ -29,6 +29,7 @@ const CODE_MAP: Record<string, ToastInput> = {
   'payment-recorded': { title: 'Payment recorded' },
   'invoice-created': { title: 'Invoice created' },
   'invoice-updated': { title: 'Invoice saved' },
+  'quote-updated': { title: 'Quote saved' },
 }
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {

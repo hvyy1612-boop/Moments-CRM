@@ -252,6 +252,9 @@ export function QuoteBuilder({
         <input type="hidden" name="projectId" value={projectId} />
         <input type="hidden" name="quoteId" value={quoteId} />
         <input type="hidden" name="depositPercent" value={depositPercent} />
+        {/* Edit-quote page (cancelHref set): return to the read-only detail after saving, like the
+            invoice editor. The job-detail inline builder omits this and stays put. */}
+        {cancelHref ? <input type="hidden" name="redirectToDetail" value="1" /> : null}
         <input
           type="hidden"
           name="linesJson"
