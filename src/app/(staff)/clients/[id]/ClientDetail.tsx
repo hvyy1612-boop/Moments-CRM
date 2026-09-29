@@ -245,7 +245,7 @@ export function ClientDetail({
                 {editing ? <Textarea name="styleReason" rows={3} defaultValue={enquiry.styleReason ?? ''} /> : <ViewBox value={enquiry.styleReason} multiline />}
               </Slot>
               <Slot label="How did you hear about us?">
-                {editing ? <TextInput name="heardAbout" defaultValue={enquiry.heardAbout ?? ''} autoComplete="off" /> : <ViewBox value={enquiry.heardAbout} />}
+                {editing ? <Textarea name="heardAbout" rows={3} maxLength={120} defaultValue={enquiry.heardAbout ?? ''} /> : <ViewBox value={enquiry.heardAbout} multiline />}
               </Slot>
               <Slot label="Additional notes">
                 {editing ? <Textarea name="additionalNotes" rows={3} defaultValue={enquiry.message ?? ''} /> : <ViewBox value={enquiry.message} multiline />}
