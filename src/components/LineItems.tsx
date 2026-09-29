@@ -78,74 +78,60 @@ export function LineItemsTable({
 }) {
   const dragId = useRef<number | null>(null)
   return (
-    <div className="mt-2 overflow-x-auto rounded-md border border-muted">
-      {/* Fixed layout + a shared colgroup so every instance of this table (e.g. Packages and Add-ons on
-          the quote) uses the SAME column widths and lines up column-for-column. Description takes the
-          remaining width; the numeric + actions columns are compact and identical across instances. */}
-      <table className="w-full table-fixed text-sm">
-        <colgroup>
-          <col className="w-56" />
-          <col />
-          <col className="w-28" />
-          <col className="w-16" />
-          <col className="w-24" />
-          <col className="w-28" />
-          <col className="w-24" />
-        </colgroup>
-        <thead>
-          <tr className="border-b border-line-strong text-left text-xs uppercase tracking-wide text-muted">
-            <th className="px-3 py-2">Item</th>
-            <th className="px-3 py-2">Description</th>
-            <th className="px-3 py-2 text-right">Unit price</th>
-            <th className="px-3 py-2 text-center">Qty</th>
-            <th className="px-3 py-2 text-right">Discount</th>
-            <th className="px-3 py-2 text-right">Amount</th>
-            <th className="px-3 py-2"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {lines.map((l) => (
-            <tr
-              key={l.id}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => { if (dragId.current !== null) onReorder(dragId.current, l.id); dragId.current = null }}
-              className="border-b border-line align-top last:border-b-0"
-            >
-              <td className="px-3 py-2">
-                <div className="flex items-start gap-1.5">
-                  <span
-                    draggable
-                    onDragStart={() => { dragId.current = l.id }}
-                    aria-label="Drag to reorder"
-                    className="mt-0.5 shrink-0 cursor-grab text-muted hover:text-ink"
-                  >
-                    <DragDots />
-                  </span>
-                  <span className="min-w-0 break-words font-medium text-ink">{l.name || <span className="text-ink-muted">Untitled item</span>}</span>
-                </div>
-              </td>
-              <td className="whitespace-pre-line break-words px-3 py-2 text-ink-muted">{l.description || '-'}</td>
-              <td className="tabular px-3 py-2 text-right text-ink-muted">{money(Number(l.unitPrice) || 0)}</td>
-              <td className="tabular px-3 py-2 text-center text-ink-muted">{l.quantity}</td>
-              <td className="tabular px-3 py-2 text-right text-ink-muted">{Number(l.discount) > 0 ? `-${money(Number(l.discount))}` : '-'}</td>
-              <td className="tabular px-3 py-2 text-right font-medium text-ink">{money(amountOf(l))}</td>
-              <td className="px-3 py-2">
-                <div className="flex items-center justify-end gap-1">
-                  <button type="button" onClick={() => onEdit(l)} aria-label="Edit item" className="rounded p-1 text-ink-muted hover:bg-paper hover:text-ink">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h4l10-10-4-4L4 16v4z" /><path d="m13.5 6.5 4 4" /></svg>
-                  </button>
-                  <button type="button" onClick={() => onDuplicate(l.id)} aria-label="Duplicate item" className="rounded p-1 text-ink-muted hover:bg-paper hover:text-ink">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
-                  </button>
-                  <button type="button" onClick={() => onRemove(l.id)} aria-label="Remove item" className="rounded p-1 text-ink-muted hover:bg-paper hover:text-danger">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="mt-2 overflow-x-auto rounded-md border border-muted text-sm">
+      {/* CSS grid (`.line-items-row` in globals.css) instead of a table, so the header and every row
+          share ONE column template and line up column-for-column across both Packages and Add-ons.
+          The item + description columns flex; the drag / numeric / actions columns are fixed, which
+          keeps the figures compact and stops them drifting to the far right. min-w-min keeps the row
+          borders spanning the full width when the grid has to scroll on a narrow screen. */}
+      <div className="min-w-min">
+        <div className="line-items-row border-b border-line-strong text-left text-xs uppercase tracking-wide text-muted">
+          <div className="py-2" />
+          <div className="px-3 py-2">Item</div>
+          <div className="px-3 py-2">Description</div>
+          <div className="px-3 py-2 text-right">Unit price</div>
+          <div className="px-3 py-2 text-center">Qty</div>
+          <div className="px-3 py-2 text-right">Discount</div>
+          <div className="px-3 py-2 text-right">Amount</div>
+          <div className="py-2" />
+        </div>
+        {lines.map((l) => (
+          <div
+            key={l.id}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => { if (dragId.current !== null) onReorder(dragId.current, l.id); dragId.current = null }}
+            className="line-items-row items-start border-b border-line last:border-b-0"
+          >
+            <div className="flex items-start justify-center px-1 py-2">
+              <span
+                draggable
+                onDragStart={() => { dragId.current = l.id }}
+                aria-label="Drag to reorder"
+                className="mt-0.5 shrink-0 cursor-grab text-muted hover:text-ink"
+              >
+                <DragDots />
+              </span>
+            </div>
+            <div className="min-w-0 break-words px-3 py-2 font-medium text-ink">{l.name || <span className="text-ink-muted">Untitled item</span>}</div>
+            <div className="min-w-0 whitespace-pre-line break-words px-3 py-2 text-ink-muted">{l.description || '-'}</div>
+            <div className="tabular px-3 py-2 text-right text-ink-muted">{money(Number(l.unitPrice) || 0)}</div>
+            <div className="tabular px-3 py-2 text-center text-ink-muted">{l.quantity}</div>
+            <div className="tabular px-3 py-2 text-right text-ink-muted">{Number(l.discount) > 0 ? `-${money(Number(l.discount))}` : '-'}</div>
+            <div className="tabular px-3 py-2 text-right font-medium text-ink">{money(amountOf(l))}</div>
+            <div className="flex items-center justify-end gap-1 px-3 py-2">
+              <button type="button" onClick={() => onEdit(l)} aria-label="Edit item" className="rounded p-1 text-ink-muted hover:bg-paper hover:text-ink">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h4l10-10-4-4L4 16v4z" /><path d="m13.5 6.5 4 4" /></svg>
+              </button>
+              <button type="button" onClick={() => onDuplicate(l.id)} aria-label="Duplicate item" className="rounded p-1 text-ink-muted hover:bg-paper hover:text-ink">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
+              </button>
+              <button type="button" onClick={() => onRemove(l.id)} aria-label="Remove item" className="rounded p-1 text-ink-muted hover:bg-paper hover:text-danger">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

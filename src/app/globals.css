@@ -163,6 +163,16 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Shared column template for the quote line-items table (Packages and Add-ons). One grid, reused by
+   the header row and every item row and by both sections, so every column lines up edge-to-edge. The
+   item + description columns flex (min widths keep them readable); the drag handle, numeric, and
+   actions columns are fixed so figures stay compact and never drift to the far right. */
+.line-items-row {
+  display: grid;
+  grid-template-columns:
+    24px minmax(180px, 1.2fr) minmax(260px, 2fr) 110px 64px 90px 110px 72px;
+}
+
 /* Editorial display face (Cormorant Garamond, self-hosted via next/font on <html>). Used only as a
    small decorative brand glyph (the collapsed-sidebar "m"); app UI - including the dashboard - uses
    the system sans so headings and data stay easy to read and consistent with Clients/Jobs/etc. */
