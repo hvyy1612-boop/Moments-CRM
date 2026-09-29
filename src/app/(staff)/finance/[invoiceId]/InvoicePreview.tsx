@@ -12,7 +12,7 @@ const TOOL_BTN = 'flex h-8 w-8 items-center justify-center rounded text-ink-mute
  * printed invoice is always fitted to one A4 page (InvoiceFit), so a "1 / 2" control would be fake.
  * Narrow screens start zoomed to fit instead of scrolling sideways.
  */
-export function InvoicePreview({ children }: { children: ReactNode }) {
+export function InvoicePreview({ children, title = 'Invoice preview' }: { children: ReactNode; title?: string }) {
   const section = useRef<HTMLElement>(null)
   const canvas = useRef<HTMLDivElement>(null)
   const sheet = useRef<HTMLDivElement>(null)
@@ -52,7 +52,7 @@ export function InvoicePreview({ children }: { children: ReactNode }) {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3">
         <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
           <svg {...icon} className="h-5 w-5 text-ink-muted"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h4" /></svg>
-          Invoice preview
+          {title}
         </h2>
         <div className="flex items-center gap-1" role="toolbar" aria-label="Preview controls">
           <button type="button" onClick={zoomOut} disabled={zoom <= STEPS[0]! + 0.001} aria-label="Zoom out" className={TOOL_BTN}>
