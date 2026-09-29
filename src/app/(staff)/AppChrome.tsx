@@ -38,6 +38,15 @@ export function AppChrome({
 }) {
   const [collapsed, setCollapsed] = useState(false)
 
+  // Real notification dots: map recent alerts to their nav section (never hard-coded).
+  const notifKeys = Array.from(
+    new Set(
+      alerts
+        .map((a) => (a.kind === 'enquiry' ? 'enquiries' : a.kind === 'payment' ? 'finance' : ''))
+        .filter(Boolean),
+    ),
+  )
+
   useEffect(() => {
     try {
       setCollapsed(localStorage.getItem(COLLAPSE_KEY) === '1')
@@ -89,7 +98,7 @@ export function AppChrome({
       </nav>
 
       <div className="flex">
-        <Sidebar items={items} groups={groups} active={active} collapsed={collapsed} />
+        <Sidebar items={items} groups={groups} active={active} collapsed={collapsed} notifKeys={notifKeys} />
         {/* Workspace only: `main` provides the remaining width + vertical padding. The horizontal page
             gutter and the content measure are owned by PageContainer, so every page shares one gutter and
             no content can end up flush against the sidebar. */}
