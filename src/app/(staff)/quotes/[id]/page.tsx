@@ -138,7 +138,7 @@ export default async function QuoteDetailPage({
         <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-xl font-semibold leading-tight text-ink">{quoteDisplayNumber(quote.reference, quote.seq)} · {clientName}</h1>
+              <h1 className="text-2xl font-semibold leading-tight text-ink">{quoteDisplayNumber(quote.reference, quote.seq)} · {clientName}</h1>
               <StatusPill tone={view.tone}>{view.label}</StatusPill>
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-muted">

@@ -5,9 +5,10 @@ import { Breadcrumb, type Crumb } from '@/components/Breadcrumb'
  * The one page-header pattern every authenticated page uses, so the shell stays stable and only the
  * content changes between pages. A breadcrumb (location in the hierarchy) sits above the title; the
  * description sits below it; page-specific actions align to the right. Optional `children` render a
- * controls row (search / filters / sort) beneath the title block. The title uses Carbon heading-03
- * (text-xl) so it reads as a heading without dominating the page. `eyebrow` is the legacy section label,
- * kept only for pages not yet migrated to `breadcrumb`.
+ * controls row (search / filters / sort) beneath the title block. The title uses Carbon heading-04
+ * (text-2xl): now that the page descriptions are gone, a slightly larger title carries the header on
+ * its own without leaving dead space. `eyebrow` is the legacy section label, kept only for pages not
+ * yet migrated to `breadcrumb`.
  */
 export function PageHeader({
   breadcrumb,
@@ -36,7 +37,7 @@ export function PageHeader({
           {!breadcrumb && eyebrow ? (
             <div className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted">{eyebrow}</div>
           ) : null}
-          <h1 className="text-xl font-semibold text-ink">{title}</h1>
+          <h1 className="text-2xl font-semibold text-ink">{title}</h1>
           {/* Pages fill the workspace, but running text keeps a readable measure (~65 characters). */}
           {description ? <p className="mt-1 max-w-prose text-sm text-ink-muted">{description}</p> : null}
         </div>

@@ -145,7 +145,7 @@ export default async function EnquiryDetailPage({
         <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Leads', href: backHref }, { label: enquiry.name }]} />
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-semibold text-ink">{enquiry.name}</h1>
+          <h1 className="text-2xl font-semibold text-ink">{enquiry.name}</h1>
           {enquiry.enquiryNumber ? <span className="tabular text-sm text-ink-muted">{enquiry.enquiryNumber}</span> : null}
           <StatusTag kind={ENQUIRY_STAGE_KIND[enquiry.status] ?? 'hold'}>
             {ENQUIRY_STAGE_LABEL[enquiry.status] ?? titleCase(enquiry.status)}

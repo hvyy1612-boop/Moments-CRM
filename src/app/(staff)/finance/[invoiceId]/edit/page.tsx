@@ -74,7 +74,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ in
             { label: 'Edit' },
           ]}
         />
-        <h1 className="mt-2 text-xl font-semibold text-ink">Edit invoice #{inv.invoiceNumber}</h1>
+        <h1 className="mt-2 text-2xl font-semibold text-ink">Edit invoice #{inv.invoiceNumber}</h1>
         <InvoiceEditor
           csrf={csrf}
           projectId={inv.project.id}

@@ -144,7 +144,7 @@ export function ClientDetail({
             {initials(client.displayName)}
           </span>
           <div className="min-w-0">
-            <h1 className="truncate text-xl font-semibold leading-tight text-ink">{client.displayName}</h1>
+            <h1 className="truncate text-2xl font-semibold leading-tight text-ink">{client.displayName}</h1>
             <p className="mt-0.5 truncate text-sm text-ink-muted">
               {client.clientNumber ? <span className="tabular text-ink-muted">{client.clientNumber} · </span> : null}
               <a href={`mailto:${client.email}`} className="hover:text-ink">{client.email}</a>

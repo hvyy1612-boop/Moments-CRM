@@ -44,7 +44,7 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
       <PageContainer variant="standard">
         <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Clients', href: '/clients' }, { label: client.displayName, href: `/clients/${client.id}` }, { label: 'Edit' }]} />
-        <h1 className="mt-3 text-xl font-semibold text-ink">Edit {client.displayName}</h1>
+        <h1 className="mt-3 text-2xl font-semibold text-ink">Edit {client.displayName}</h1>
         <ClientForm
           action={updateClientAction}
           csrf={csrf}

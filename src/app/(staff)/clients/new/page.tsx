@@ -20,7 +20,7 @@ export default async function NewClientPage() {
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
       <PageContainer variant="standard">
         <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Clients', href: '/clients' }, { label: 'New client' }]} />
-        <h1 className="mt-3 text-xl font-semibold text-ink">Add a client</h1>
+        <h1 className="mt-3 text-2xl font-semibold text-ink">Add a client</h1>
         <p className="mt-1 max-w-prose text-base text-ink-muted">
           Record the client and their enquiry. This opens a lead in Enquiries with a workflow you can
           work through, and becomes a job once you convert it.

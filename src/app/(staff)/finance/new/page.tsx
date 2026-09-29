@@ -73,7 +73,7 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
       <PageContainer variant="standard">
         {/* Full width like every page: fields, products, then totals + notes (right) beside the payment schedule (left). */}
         <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Payments', href: '/finance' }, { label: 'New invoice' }]} />
-        <h1 className="mt-2 text-xl font-semibold text-ink">New invoice</h1>
+        <h1 className="mt-2 text-2xl font-semibold text-ink">New invoice</h1>
         {isClosed ? (
           <p className="mt-4 rounded-md border border-dashed border-line bg-surface px-4 py-6 text-sm text-ink-muted">
             This job is closed ({titleCase(project.lifecycleStatus.replace(/_/g, ' '))}). Reopen it before invoicing.
@@ -119,7 +119,7 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
     <AppShell user={user} csrf={csrf} active="finance">
       <PageContainer variant="standard">
       <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Payments', href: '/finance' }, { label: 'New invoice' }]} />
-      <h1 className="mt-2 text-xl font-semibold text-ink">New invoice</h1>
+      <h1 className="mt-2 text-2xl font-semibold text-ink">New invoice</h1>
       <p className="mt-1 max-w-prose text-sm text-ink-muted">{clientName ? `Choose a job for ${clientName} to invoice.` : 'Choose a job to invoice.'}</p>
       {jobs.length === 0 ? (
         <p className="mt-6 rounded-md border border-dashed border-line bg-surface px-4 py-6 text-center text-sm text-ink-muted">
