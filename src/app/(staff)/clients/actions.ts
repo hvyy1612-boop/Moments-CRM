@@ -13,6 +13,7 @@ import {
   createClient,
   deleteClient,
   deleteClientNote,
+  deleteEmptyClients,
   restoreClient,
   setClientConsent,
   updateClient,
@@ -224,6 +225,24 @@ export async function deleteClientAction(formData: FormData): Promise<void> {
   await deleteClient(clientId, user.id)
   revalidatePath('/clients')
   redirect('/clients')
+}
+
+/**
+ * Bulk-remove redundant clients from the list's multi-select. Deliberately SAFE: it only ever deletes
+ * clients that hold no real work (no jobs, no enquiries, no merged-in duplicate) via `deleteEmptyClients`;
+ * any selected client that still has records is silently kept, so this control cannot cascade-delete
+ * invoices or job history the way the single admin hard-delete can. Staff-level, CSRF-guarded.
+ */
+export async function deleteClientsAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const ids = String(formData.get('ids') ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (ids.length === 0) return
+  await deleteEmptyClients(ids, user.id)
+  revalidatePath('/clients')
 }
 
 /** Add a titled note to a client's notes list. */

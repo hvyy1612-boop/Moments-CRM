@@ -186,6 +186,80 @@ export async function deleteClient(clientId: string, actorUserId: string) {
   })
 }
 
+/**
+ * Result of a bulk "remove redundant clients" action: how many rows were deleted and how many were
+ * kept back because they still hold real work.
+ */
+export type DeleteEmptyClientsResult = { deleted: number; skipped: number }
+
+/**
+ * Bulk-delete ONLY empty clients - the safe counterpart to {@link deleteClient} for the multi-select
+ * "Delete" on the Clients list. A client is deletable only when it has NO jobs, NO enquiries (neither a
+ * current lead nor one that already converted), and NO other duplicate merged into it; any client that
+ * fails the test is left untouched (counted in `skipped`), never cascade-deleted. This is deliberately
+ * strict so the bulk control can never wipe out invoices, payments or job history the way the single
+ * hard-delete can - staff use it to clear rows created by mistake, and must archive or open a real
+ * client individually to remove it. The client's own trivial leftovers (contacts, notes, logged comms,
+ * calendar holds) are cleared first so nothing is orphaned, then the row is removed - all per client in
+ * one transaction, so a failure on one leaves the others (and that one) intact.
+ */
+export async function deleteEmptyClients(
+  clientIds: string[],
+  actorUserId: string,
+): Promise<DeleteEmptyClientsResult> {
+  const ids = Array.from(new Set(clientIds.map((id) => id.trim()).filter(Boolean)))
+  if (ids.length === 0) return { deleted: 0, skipped: 0 }
+
+  const candidates = await prisma.client.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      companyId: true,
+      _count: {
+        select: {
+          projects: true, // any job (Project FK is Restrict - deleting would fail anyway)
+          enquiries: true, // a lead currently pointing at this client
+          convertedFromEnquiries: true, // an enquiry that already converted to this client
+          mergedFrom: true, // another duplicate was merged into this one
+        },
+      },
+    },
+  })
+
+  const deletable = candidates.filter(
+    (c) =>
+      c._count.projects === 0 &&
+      c._count.enquiries === 0 &&
+      c._count.convertedFromEnquiries === 0 &&
+      c._count.mergedFrom === 0,
+  )
+
+  let deleted = 0
+  for (const client of deletable) {
+    await prisma.$transaction(async (tx) => {
+      // Clear the client's own records first so SetNull FKs don't leave orphans behind.
+      await tx.calendarEvent.deleteMany({ where: { clientId: client.id } })
+      await tx.communication.deleteMany({ where: { clientId: client.id } })
+      await tx.contact.deleteMany({ where: { clientId: client.id } })
+      await tx.clientNote.deleteMany({ where: { clientId: client.id } })
+      await tx.client.delete({ where: { id: client.id } })
+      await tx.auditLog.create({
+        data: {
+          companyId: client.companyId,
+          actorUserId,
+          action: 'client.deleted',
+          entityType: 'Client',
+          entityId: client.id,
+        },
+      })
+    })
+    deleted++
+  }
+
+  // Anything not deleted - failed the safety test or was not found - is reported as skipped.
+  return { deleted, skipped: ids.length - deleted }
+}
+
 /** Update the free-text note on a client (staff-controlled, inline on the client page). */
 export async function updateClientNotes(clientId: string, notes: string, actorUserId: string) {
   const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, companyId: true } })
