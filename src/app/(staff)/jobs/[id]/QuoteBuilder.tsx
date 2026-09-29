@@ -36,6 +36,19 @@ function FieldRow({ label, htmlFor, children }: { label: string; htmlFor: string
   )
 }
 
+// Read-only counterpart to FieldRow: the client/job details come from the linked enquiry/client, so
+// they are shown (not edited) here. The muted fill + no input signals "managed on the client record".
+function ReadField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[7em_minmax(0,1fr)] items-center gap-4">
+      <span className="text-sm font-medium text-ink">{label}</span>
+      <div className="flex min-h-10 min-w-0 items-center rounded-md border border-line bg-paper px-3 text-sm text-ink">
+        <span className="truncate" title={value || undefined}>{value || '-'}</span>
+      </div>
+    </div>
+  )
+}
+
 export function QuoteBuilder({
   csrf,
   projectId,
@@ -52,6 +65,8 @@ export function QuoteBuilder({
   packages,
   clientName,
   clientEmail,
+  clientPhone = '',
+  jobName = '',
   saveAction,
   sendAction,
   sendLabel = 'Send to client',
@@ -72,6 +87,8 @@ export function QuoteBuilder({
   packages: QuotePackage[]
   clientName: string
   clientEmail: string
+  clientPhone?: string
+  jobName?: string
   saveAction: QuoteFormAction
   sendAction: QuoteFormAction
   sendLabel?: string
@@ -148,15 +165,20 @@ export function QuoteBuilder({
         {/* One full-width column, mirroring the New-invoice form: details, then the line items, then the
             totals (right) with notes on the left and the Save / Send actions under the totals. */}
         <div className="flex flex-col gap-8">
-          {/* Quote details — two-column label:input form, the same shape as the invoice. */}
+          {/* Quote details — the same two-column shape as the invoice: editable quote fields on the
+              left, read-only client/job info (from the linked enquiry/client) on the right. */}
           <div className="grid grid-cols-1 gap-x-12 gap-y-4 md:grid-cols-2">
             <div className="flex flex-col gap-4">
               <FieldRow label="Quote ID" htmlFor="reference"><TextInput id="reference" name="reference" required defaultValue={initialReference} placeholder="e.g. Q-0005" /></FieldRow>
+              <FieldRow label="PO number" htmlFor="poNumber"><TextInput id="poNumber" name="poNumber" defaultValue={initialPoNumber} placeholder="Optional" /></FieldRow>
               <FieldRow label="Issue date" htmlFor="issueDate"><TextInput id="issueDate" name="issueDate" type="date" required defaultValue={initialIssueDate} /></FieldRow>
+              <FieldRow label="Valid until" htmlFor="validUntil"><TextInput id="validUntil" name="validUntil" type="date" defaultValue={validUntil} /></FieldRow>
             </div>
             <div className="flex flex-col gap-4">
-              <FieldRow label="PO number" htmlFor="poNumber"><TextInput id="poNumber" name="poNumber" defaultValue={initialPoNumber} placeholder="Optional" /></FieldRow>
-              <FieldRow label="Valid until" htmlFor="validUntil"><TextInput id="validUntil" name="validUntil" type="date" defaultValue={validUntil} /></FieldRow>
+              <ReadField label="Job name" value={jobName} />
+              <ReadField label="Client name" value={clientName} />
+              <ReadField label="Email" value={clientEmail} />
+              <ReadField label="Phone" value={clientPhone} />
             </div>
           </div>
 

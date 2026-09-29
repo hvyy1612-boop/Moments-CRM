@@ -448,6 +448,8 @@ export async function CaseDetail({
                     packages={packageOptions}
                     clientName={project.client.displayName}
                     clientEmail={project.client.email ?? ''}
+                    clientPhone={project.client.phone ?? ''}
+                    jobName={project.name}
                     saveAction={saveQuoteAction}
                     sendAction={sendQuoteAction}
                   />

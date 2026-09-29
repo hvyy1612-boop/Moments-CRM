@@ -31,8 +31,8 @@ export default async function QuoteEditPage({ params }: { params: Promise<{ id: 
     where: { id },
     include: {
       currentVersion: { include: { lines: { orderBy: { sortOrder: 'asc' } } } },
-      enquiry: { select: { name: true, email: true, client: { select: { displayName: true, email: true } } } },
-      project: { select: { client: { select: { displayName: true, email: true } } } },
+      enquiry: { select: { name: true, email: true, phone: true, eventType: true, client: { select: { displayName: true, email: true, phone: true } } } },
+      project: { select: { name: true, client: { select: { displayName: true, email: true, phone: true } } } },
     },
   })
   if (!quote || !quote.currentVersion) notFound()
@@ -41,6 +41,8 @@ export default async function QuoteEditPage({ params }: { params: Promise<{ id: 
 
   const clientName = quote.enquiry?.client?.displayName ?? quote.enquiry?.name ?? quote.project?.client?.displayName ?? 'Unknown'
   const clientEmail = quote.enquiry?.client?.email ?? quote.enquiry?.email ?? quote.project?.client?.email ?? ''
+  const clientPhone = quote.enquiry?.client?.phone ?? quote.enquiry?.phone ?? quote.project?.client?.phone ?? ''
+  const jobName = quote.project?.name ?? quote.enquiry?.eventType ?? ''
   const packages = (await listActivePackages()).map((p) => ({
     id: p.id,
     name: p.name,
@@ -80,6 +82,8 @@ export default async function QuoteEditPage({ params }: { params: Promise<{ id: 
           packages={packages}
           clientName={clientName}
           clientEmail={clientEmail}
+          clientPhone={clientPhone}
+          jobName={jobName}
           saveAction={saveQuoteAction}
           sendAction={sendQuoteAction}
           sendLabel="Send quote to client"
