@@ -273,6 +273,8 @@ export type BoardStage = {
   label: string
   color: string
   optional: boolean
+  /** A per-project custom stage (staff-added), so the UI can offer rename/delete on it. Core stages are false. */
+  custom: boolean
   active: boolean
   done: number
   total: number
@@ -309,15 +311,11 @@ export function buildProjectBoard(
   ownerName: string | null = null,
 ): ProjectBoard {
   const doneTitles = new Set(tasks.filter((t) => t.status === 'COMPLETED').map((t) => t.title))
-  let activeKey: string | null = null
-  let attentionCount = 0
-  let manualDone = 0
-  let manualTotal = 0
 
-  const stages: BoardStage[] = PROJECT_STAGES.map((stage) => {
-    // Manual staff tasks for this stage (every seeded/added WorkItem is a manual task).
-    const manualRows: BoardTaskRow[] = tasks
-      .filter((t) => t.stage === stage.key)
+  // Manual staff tasks for a stage (every seeded/added WorkItem is a manual task).
+  const manualRowsFor = (stageKey: string): BoardTaskRow[] =>
+    tasks
+      .filter((t) => t.stage === stageKey)
       .sort((a, b) => a.order - b.order)
       .map((t) => {
         const type = (t.type as TaskType) ?? 'TODO'
@@ -333,7 +331,6 @@ export function buildProjectBoard(
         // needsAttention is a DERIVED urgency flag, NEVER a status: a pending manual task due within
         // ATTENTION_DAYS calendar days (or already past). Status stays Done/Pending.
         const needsAttention = !done && dueDate !== null && daysUntil(dueDate) <= ATTENTION_DAYS
-        if (needsAttention) attentionCount++
         return {
           id: t.id,
           key,
@@ -359,9 +356,11 @@ export function buildProjectBoard(
           canDelete: isCustom, // core tasks are protected from deletion; only custom tasks can be removed
         }
       })
-    // Read-only SYSTEM milestones for this stage (virtual - not WorkItems); done-state from real facts.
-    const autoRows: BoardTaskRow[] = AUTO_MILESTONES.filter((m) => m.stage === stage.key).map((m) => ({
-      id: `auto:${stage.key}:${m.key}`,
+
+  // Read-only SYSTEM milestones for a stage (virtual - not WorkItems); done-state from real facts.
+  const autoRowsFor = (stageKey: string): BoardTaskRow[] =>
+    AUTO_MILESTONES.filter((m) => m.stage === stageKey).map((m) => ({
+      id: `auto:${stageKey}:${m.key}`,
       key: m.key,
       title: m.title,
       type: 'AUTO' as TaskType,
@@ -384,24 +383,56 @@ export function buildProjectBoard(
       canEdit: false,
       canDelete: false,
     }))
-    // Count + active phase use MANUAL tasks only: an auto milestone must not move the phase forward or
-    // inflate the staff-work count (a shoot may be scheduled while pre-shoot work is still pending).
-    const done = manualRows.filter((t) => t.done).length
-    const total = manualRows.length
-    manualDone += done
-    manualTotal += total
-    if (total > 0 && done < total && activeKey === null) activeKey = stage.key
+
+  const coreStages: BoardStage[] = PROJECT_STAGES.map((stage) => {
+    const manualRows = manualRowsFor(stage.key)
     return {
       key: stage.key,
       label: stage.label,
       color: stage.color,
       optional: stage.optional ?? false,
+      custom: false,
       active: false,
-      done,
-      total,
-      tasks: [...manualRows, ...autoRows],
+      done: manualRows.filter((t) => t.done).length,
+      total: manualRows.length,
+      tasks: [...manualRows, ...autoRowsFor(stage.key)],
     }
   })
+
+  // Per-project custom stages: any non-core task group, appended after the fixed stages (by first order).
+  const firstOrder = new Map<string, number>()
+  for (const t of tasks) {
+    if (!t.stage || PROJECT_STAGE_KEYS.has(t.stage)) continue
+    const prev = firstOrder.get(t.stage)
+    if (prev === undefined || t.order < prev) firstOrder.set(t.stage, t.order)
+  }
+  const customStages: BoardStage[] = [...firstOrder.keys()]
+    .sort((a, b) => firstOrder.get(a)! - firstOrder.get(b)!)
+    .map((key) => {
+      const manualRows = manualRowsFor(key)
+      return {
+        key,
+        label: key,
+        color: 'editing',
+        optional: false,
+        custom: true,
+        active: false,
+        done: manualRows.filter((t) => t.done).length,
+        total: manualRows.length,
+        tasks: manualRows,
+      }
+    })
+
+  const stages = [...coreStages, ...customStages]
+  // Progress + active phase use MANUAL tasks only, and only the CORE stages drive the job's phase and
+  // progress; custom stages are extra groups (they never claim the active phase or inflate progress).
+  const manualDone = coreStages.reduce((n, s) => n + s.done, 0)
+  const manualTotal = coreStages.reduce((n, s) => n + s.total, 0)
+  const attentionCount = stages.reduce((n, s) => n + s.tasks.filter((t) => t.needsAttention).length, 0)
+  let activeKey: string | null = null
+  for (const s of coreStages) {
+    if (activeKey === null && s.total > 0 && s.done < s.total) activeKey = s.key
+  }
   for (const s of stages) s.active = s.key === activeKey
 
   const activeStage = stages.find((s) => s.key === activeKey) ?? null

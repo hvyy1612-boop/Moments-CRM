@@ -216,12 +216,14 @@ export async function addProjectTask(
 ) {
   const clean = title.trim()
   if (!clean) throw new Error('A task needs a title.')
-  if (!PROJECT_STAGE_KEYS.has(stage)) throw new Error('Unknown stage.')
+  // A core stage key, or a per-project custom stage (a free group name, e.g. "Second shooter").
+  const stageKey = stage.trim()
+  if (!stageKey || stageKey.length > 50) throw new Error('Please enter a valid stage.')
   const taskType = ADDABLE.has(type) ? type : 'TODO'
   return prisma.$transaction(async (tx) => {
     const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { companyId: true } })
     const last = await tx.workItem.findFirst({
-      where: { projectId, stage },
+      where: { projectId, stage: stageKey },
       orderBy: { order: 'desc' },
       select: { order: true },
     })
@@ -230,7 +232,7 @@ export async function addProjectTask(
         companyId: project.companyId,
         projectId,
         kind: 'CUSTOM',
-        stage,
+        stage: stageKey,
         type: taskType,
         title: clean,
         status: 'PENDING',
@@ -246,9 +248,57 @@ export async function addProjectTask(
         action: 'project.task_added',
         entityType: 'Project',
         entityId: projectId,
-        afterData: { stage: stageLabel(stage), title: clean },
+        afterData: { stage: stageLabel(stageKey), title: clean },
       },
     })
+  })
+}
+
+/**
+ * Per-project custom stages (extra workflow groups beyond the fixed production stages). A stage exists
+ * while it has a task, so "add" seeds a starter task, "rename" re-keys the group, "delete" removes it.
+ * The core production stages drive the job's phase/progress and are never touched here.
+ */
+export async function addProjectStage(projectId: string, stageName: string, actorUserId: string) {
+  const key = stageName.trim()
+  if (!key || key.length > 50) throw new Error('Please enter a stage name.')
+  if (PROJECT_STAGE_KEYS.has(key)) throw new Error('That stage already exists.')
+  return prisma.$transaction(async (tx) => {
+    const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { companyId: true } })
+    await tx.workItem.create({
+      data: { companyId: project.companyId, projectId, kind: 'CUSTOM', stage: key, type: 'TODO', title: 'New task', status: 'PENDING', order: 1, dueOverrideAt: null },
+    })
+    await tx.auditLog.create({
+      data: { companyId: project.companyId, actorUserId, action: 'project.stage_added', entityType: 'Project', entityId: projectId, afterData: { stage: key } },
+    })
+  })
+}
+
+export async function renameProjectStage(projectId: string, fromStage: string, toStage: string, actorUserId: string) {
+  const to = toStage.trim()
+  if (!to || to.length > 50) throw new Error('Please enter a stage name.')
+  if (PROJECT_STAGE_KEYS.has(fromStage) || PROJECT_STAGE_KEYS.has(to)) throw new Error('The core stages cannot be renamed.')
+  return prisma.$transaction(async (tx) => {
+    const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { companyId: true } })
+    const res = await tx.workItem.updateMany({ where: { projectId, stage: fromStage }, data: { stage: to } })
+    if (res.count > 0) {
+      await tx.auditLog.create({
+        data: { companyId: project.companyId, actorUserId, action: 'project.stage_renamed', entityType: 'Project', entityId: projectId, afterData: { from: fromStage, to } },
+      })
+    }
+  })
+}
+
+export async function deleteProjectStage(projectId: string, stage: string, actorUserId: string) {
+  if (PROJECT_STAGE_KEYS.has(stage)) throw new Error('The core stages cannot be deleted.')
+  return prisma.$transaction(async (tx) => {
+    const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { companyId: true } })
+    const res = await tx.workItem.deleteMany({ where: { projectId, stage } })
+    if (res.count > 0) {
+      await tx.auditLog.create({
+        data: { companyId: project.companyId, actorUserId, action: 'project.stage_deleted', entityType: 'Project', entityId: projectId, afterData: { stage } },
+      })
+    }
   })
 }
 

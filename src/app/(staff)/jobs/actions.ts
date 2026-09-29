@@ -11,10 +11,13 @@ import { assignResource, createBooking } from '@/lib/domain/booking'
 import { logCommunication } from '@/lib/domain/communication'
 import { closeJob, createProjectFromEnquiry } from '@/lib/domain/project'
 import {
+  addProjectStage,
   addProjectStageBlock,
   addProjectTask,
+  deleteProjectStage,
   deleteProjectTask,
   moveProjectTask,
+  renameProjectStage,
   toggleProjectTask,
   updateProjectTask,
 } from '@/lib/domain/project-workflow'
@@ -731,6 +734,55 @@ export async function addProjectStageBlockAction(formData: FormData): Promise<vo
     await addProjectStageBlock(projectId, stage, user.id)
   } catch {
     // not an optional stage / already populated: no-op
+  }
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+/** Add a per-project custom stage (seeded with a starter task so the group persists). */
+export async function addProjectStageAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const name = String(formData.get('stageName') ?? '')
+  if (!projectId || !name.trim()) return
+  try {
+    await addProjectStage(projectId, name, user.id)
+  } catch {
+    // no-op on empty / duplicate / core-name stage
+  }
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+/** Rename a custom stage (re-keys its tasks). Core stages are rejected in the domain. */
+export async function renameProjectStageAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const fromStage = String(formData.get('fromStage') ?? '')
+  const toStage = String(formData.get('toStage') ?? '')
+  if (!projectId || !fromStage || !toStage.trim()) return
+  try {
+    await renameProjectStage(projectId, fromStage, toStage, user.id)
+  } catch {
+    // no-op on core stage / invalid name
+  }
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+/** Delete a custom stage and its tasks. Core stages are rejected in the domain. */
+export async function deleteProjectStageAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const stage = String(formData.get('stage') ?? '')
+  if (!projectId || !stage) return
+  try {
+    await deleteProjectStage(projectId, stage, user.id)
+  } catch {
+    // no-op on core stage
   }
   revalidatePath(`/jobs/${projectId}`)
 }
