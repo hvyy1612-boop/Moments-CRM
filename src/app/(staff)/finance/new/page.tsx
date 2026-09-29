@@ -71,7 +71,7 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
     return (
       <AppShell user={user} csrf={csrf} active="finance">
       <PageContainer variant="standard">
-        {/* Full width like every page: the editor balances itself (editing column + sticky summary). */}
+        {/* Full width like every page: fields, products, then totals + notes (right) beside the payment schedule (left). */}
         <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Payments', href: '/finance' }, { label: 'New invoice' }]} />
         <h1 className="mt-2 text-xl font-semibold text-ink">New invoice</h1>
         {isClosed ? (
