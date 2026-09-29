@@ -36,8 +36,23 @@ const SPECIAL: Record<string, string> = {
   'client.deleted': 'Client deleted',
   'client.merged': 'Clients merged',
   'client.restored': 'Client restored',
+  // Leads (DB `Enquiry`; the codes are kept as recorded, only the wording is staff-facing).
+  'enquiry.created': 'Lead created',
+  'enquiry.replied': 'Reply sent to client',
+  'enquiry.client_replied': 'Client message logged',
+  'enquiry.stage_auto': 'Lead stage moved on',
+  'enquiry.status': 'Lead stage changed',
+  'enquiry.moved_to_quote': 'Lead moved to consultation',
   'enquiry.converted': 'Lead converted to job',
   'enquiry.lost': 'Lead declined',
+  'enquiry.reopened': 'Lead reopened',
+  'enquiry.booking_confirmed': 'Booking confirmed (deposit paid)',
+  'enquiry.booking_cancelled': 'Booking cancelled',
+  // `booking.*` from booking.ts is a SHOOT session; direct-booking's request/confirm is the client's booking.
+  'booking.created': 'Shoot scheduled',
+  'booking.rescheduled': 'Shoot rescheduled',
+  'booking.requested': 'Booking requested',
+  'booking.confirmed': 'Booking confirmed',
 }
 
 const cap = (s: string): string => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
@@ -47,7 +62,7 @@ export function auditCategory(action: string): string {
   return DOMAIN[action.split('.')[0] ?? '']?.category ?? 'Other'
 }
 
-/** Human label, e.g. "client.created" -> "Client created", "enquiry.moved_to_quote" -> "Enquiry moved to quote". */
+/** Human label, e.g. "client.created" -> "Client created", "enquiry.task_added" -> "Lead task added". */
 export function auditLabel(action: string): string {
   const special = SPECIAL[action]
   if (special) return special

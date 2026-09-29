@@ -12,11 +12,11 @@ import {
 import { cancelOpenWorkItems, seedEnquiryWorkflow } from './enquiry-workflow'
 
 /**
- * Acquisition layer (B2). A website enquiry - or a staff-logged lead - lives as an Enquiry and does
- * NOT create a Client/Project until it converts. Convert upserts the Client by email (dedup) and
- * creates a BOOKING_REQUESTED Project (a booked job pending confirmation, per the frozen operating
- * model); the enquiry is marked CONVERTED and linked, never deleted. LOST leads
- * are kept and can be reopened. See docs/14 §0 and docs/15 F-ENQ-*.
+ * Leads (the `Enquiry` model; staff-facing name "Lead", like Job = `Project`). A website enquiry or a
+ * staff-added lead lives here until it is booked. Converting (accept quote / Create Job) upserts the
+ * Client by email and creates a provisional BOOKING_REQUESTED Job; the lead moves to
+ * AWAITING_BOOKING_CONFIRMATION, then BOOKING_CONFIRMED when the deposit is paid. A lead is never
+ * deleted: DECLINED leads are kept and can be reopened. Stage rules: docs/23 §4, docs/33.
  */
 
 export type CreateEnquiryInput = {
@@ -117,39 +117,6 @@ async function runCreateEnquiry(input: CreateEnquiryInput, actorUserId: string |
     // Store the client's first message as a Communication and open the first work item.
     await seedEnquiryWorkflow(tx, enquiry)
     return enquiry
-  })
-}
-
-// Only the three EARLY stages may be set by hand. Quote sent / Awaiting booking confirmation / Booking
-// confirmed are driven by real events (send quote, accept quote, deposit paid), never a manual dropdown.
-const OPEN_STAGES = ['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION'] as const
-type OpenStage = (typeof OPEN_STAGES)[number]
-
-/** Move a lead forward within the early stages (New enquiry → Contacted → Consultation). Not for quote/convert/decline. */
-export async function advanceEnquiry(
-  enquiryId: string,
-  to: OpenStage,
-  actorUserId: string | null = null,
-) {
-  return prisma.$transaction(async (tx) => {
-    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Lead not found.')
-    if (!OPEN_STAGES.includes(enquiry.status as OpenStage)) {
-      throw new Error('This lead is already closed.')
-    }
-    const updated = await tx.enquiry.update({ where: { id: enquiryId }, data: { status: to } })
-    await tx.auditLog.create({
-      data: {
-        companyId: enquiry.companyId,
-        action: 'enquiry.status',
-        entityType: 'Enquiry',
-        entityId: enquiryId,
-        actorUserId,
-        beforeData: { status: enquiry.status },
-        afterData: { status: to },
-      },
-    })
-    return updated
   })
 }
 
@@ -345,10 +312,9 @@ export async function convertEnquiryCore(
 }
 
 /**
- * The client cancelled a booking. Cancels the linked Job (kept as a CANCELLED record, never deleted),
- * moves the enquiry to the closed "Cancelled" state (status LOST) and unlinks the client/project - the
- * case is kept in full, so if the client returns staff Reopen it (which restores the checklist) and can
- * re-book (a fresh Job). Guarded to CONVERTED leads.
+ * The client cancelled a CONFIRMED booking. Cancels the linked Job (kept as a CANCELLED record, never
+ * deleted). The lead itself stays BOOKING_CONFIRMED and keeps its Job link - it was a real conversion,
+ * so it is never rewritten to DECLINED. Guarded to BOOKING_CONFIRMED leads.
  */
 export async function cancelBooking(enquiryId: string, actorUserId: string | null = null) {
   return prisma.$transaction(async (tx) => {

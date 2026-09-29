@@ -9,7 +9,7 @@ import { getSessionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { sydneyLocalToUtc } from '@/lib/time'
 import { findOrCreateClient } from '@/lib/domain/client'
-import { advanceEnquiry, cancelBooking, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
+import { cancelBooking, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
 import { enquirySchema } from '@/lib/validation/enquiry'
 import {
   addEnquiryTask,
@@ -17,7 +17,6 @@ import {
   logClientReply,
   moveEnquiryTask,
   sendStaffReply,
-  startQuoting,
   toggleEnquiryTask,
   updateEnquiryTask,
 } from '@/lib/domain/enquiry-workflow'
@@ -144,78 +143,6 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
   revalidatePath('/jobs')
 }
 
-/**
- * Set an enquiry's stage from the list (persists). Open stages advance directly; Booked converts and
- * creates the Job (the caller confirms first); Lost needs a reason; reopen brings a closed lead back.
- * This is the manual override to the workflow-derived stage (docs/24).
- */
-export async function setEnquiryStageAction(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const enquiryId = String(formData.get('enquiryId') ?? '')
-  const target = String(formData.get('target') ?? '')
-  if (!enquiryId) return
-
-  // The client cancelled a booking: cancel the Job, move the lead to the closed "Cancelled" state.
-  if (target === 'CANCEL_JOB') {
-    await cancelBooking(enquiryId, user.id)
-    revalidatePath('/enquiries')
-    revalidatePath(`/enquiries/${enquiryId}`)
-    revalidatePath('/jobs')
-    return
-  }
-
-  const current = await prisma.enquiry.findUnique({ where: { id: enquiryId }, select: { status: true } })
-  const cur = current?.status
-  // Only the three EARLY stages may be set by hand. Quote sent / Awaiting booking / Booking confirmed are
-  // reached by real events (send quote, accept, deposit paid), never a manual jump (spec §4, §14).
-  const openTarget = target === 'NEW_ENQUIRY' || target === 'CONTACTED' || target === 'CONSULTATION'
-
-  // A declined lead moved back into the pipeline: reopen (restores the checklist), then advance / convert.
-  if (cur === 'DECLINED' && (openTarget || target === 'CONVERT')) {
-    await reopenEnquiry(enquiryId, user.id) // -> CONTACTED
-    if (openTarget && target !== 'CONTACTED') {
-      await advanceEnquiry(enquiryId, target as 'NEW_ENQUIRY' | 'CONTACTED' | 'CONSULTATION', user.id)
-    }
-    // Convert creates the (provisional) Job and moves the lead to Awaiting booking confirmation. It does
-    // NOT start production - that waits for the deposit (finance -> confirmBookingByDepositTx).
-    if (target === 'CONVERT') await convertEnquiry(enquiryId, user.id)
-    revalidatePath('/enquiries')
-    revalidatePath(`/enquiries/${enquiryId}`)
-    revalidatePath('/jobs')
-    return
-  }
-
-  switch (target) {
-    case 'NEW_ENQUIRY':
-      await advanceEnquiry(enquiryId, 'NEW_ENQUIRY', user.id)
-      break
-    case 'CONTACTED':
-      await advanceEnquiry(enquiryId, 'CONTACTED', user.id)
-      break
-    case 'CONSULTATION':
-      await advanceEnquiry(enquiryId, 'CONSULTATION', user.id)
-      break
-    case 'CONVERT': {
-      // Provisional Job only; no production workflow until the deposit confirms the booking.
-      await convertEnquiry(enquiryId, user.id)
-      break
-    }
-    case 'DECLINE': {
-      const reason = String(formData.get('reason') ?? '').trim() || 'Declined'
-      await markEnquiryLost(enquiryId, reason, user.id)
-      break
-    }
-    case 'REOPEN':
-      await reopenEnquiry(enquiryId, user.id)
-      break
-    default:
-      return
-  }
-  revalidatePath('/enquiries')
-  revalidatePath(`/enquiries/${enquiryId}`)
-}
-
 /** Combine the form's date (yyyy-mm-dd) and time (HH:mm[:ss]) into a UTC instant, read as Sydney
  *  wall-clock so the calendar can place the task in the right slot. Null when no date was given; a
  *  missing time falls back to 9am. */
@@ -331,17 +258,6 @@ export async function logClientReplyAction(formData: FormData): Promise<void> {
   const body = String(formData.get('body') ?? '')
   if (!enquiryId || !body.trim()) return
   await logClientReply(enquiryId, body, user.id)
-  revalidatePath('/enquiries')
-  revalidatePath(`/enquiries/${enquiryId}`)
-}
-
-/** Staff moves a settled discussion into the quoting stage. */
-export async function startQuotingAction(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const enquiryId = String(formData.get('enquiryId') ?? '')
-  if (!enquiryId) return
-  await startQuoting(enquiryId, user.id)
   revalidatePath('/enquiries')
   revalidatePath(`/enquiries/${enquiryId}`)
 }

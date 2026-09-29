@@ -137,20 +137,6 @@ export async function logClientReply(enquiryId: string, body: string, actorUserI
   })
 }
 
-/** Staff decides the discussion is settled and moves the case into quoting. */
-export async function startQuoting(enquiryId: string, actorUserId: string) {
-  return prisma.$transaction(async (tx) => {
-    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Lead not found.')
-    if (enquiry.status !== 'CONTACTED') throw new Error('This lead is not in the Contacted stage.')
-    await tx.enquiry.update({ where: { id: enquiryId }, data: { status: 'CONSULTATION', waitingOn: 'STUDIO' } })
-    await tx.auditLog.create({
-      data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.moved_to_quote', entityType: 'Enquiry', entityId: enquiryId },
-    })
-    return enquiry
-  })
-}
-
 async function loadTask(taskId: string) {
   const task = await prisma.workItem.findUnique({
     where: { id: taskId },

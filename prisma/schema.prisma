@@ -605,10 +605,11 @@ model Package {
   @@map("packages")
 }
 
-// ---------- Acquisition: Enquiry (lead, B2) ----------
-// Khách gửi enquiry chưa cam kết sống ở đây — CHƯA tạo Client/Project. Staff lọc; convert khi khách
-// chọn mình → upsert Client theo email + tạo Project, set CONVERTED + link ngược. Không xoá khi LOST;
-// email KHÔNG unique (một người có thể hỏi nhiều lần). Xem docs/18-crm-flow-reference.md.
+// ---------- Acquisition: Enquiry = "Lead" in the UI (like Project = "Job") ----------
+// A potential booking from first enquiry to a paid deposit. Convert (accept quote / Create Job) upserts
+// the Client by email + creates a provisional Job and links it (convertedProjectId); the lead then moves
+// AWAITING_BOOKING_CONFIRMATION -> BOOKING_CONFIRMED on the deposit. Never deleted: DECLINED is kept and
+// can be reopened. Email is NOT unique (one person can enquire several times). See docs/GLOSSARY.md.
 model Enquiry {
   id                   String        @id @default(cuid()) @db.VarChar(30)
   companyId            String        @map("company_id") @db.VarChar(30)

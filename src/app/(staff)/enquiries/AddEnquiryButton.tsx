@@ -22,7 +22,7 @@ function validateContact(fd: FormData): ClientErrors {
   if (String(fd.get('clientId') ?? '').trim()) return {}
   // Search mode with nothing chosen: the new-client fields are not even on screen.
   if (!fd.has('name')) {
-    return { contact: 'Please add a client for this enquiry. Search for an existing one, or fill in the new client details.' }
+    return { contact: 'Please add a client for this lead. Search for an existing one, or fill in the new client details.' }
   }
   const name = String(fd.get('name') ?? '').trim()
   const email = String(fd.get('email') ?? '').trim()
@@ -42,7 +42,7 @@ const IconEnquiryPlus = () => (
 )
 
 /**
- * "Add enquiry" opens a compact sheet that creates a REAL Enquiry (a lead) and opens it.
+ * "Add lead" opens a compact sheet that creates a REAL lead (an `Enquiry` row) and opens it.
  *
  * Two entry points: the plain list button (no client) opens the search-or-add client picker; passing
  * `clientId` pre-binds the enquiry to THAT existing client (a repeat booking - anniversary, family
@@ -85,7 +85,7 @@ export function AddEnquiryButton({
   return (
     <>
       {trigger === 'icon' ? (
-        <IconButton label="Add enquiry" tone="accent" icon={<IconEnquiryPlus />} onClick={openModal} />
+        <IconButton label="Add lead" tone="accent" icon={<IconEnquiryPlus />} onClick={openModal} />
       ) : (
         <button
           type="button"
@@ -93,7 +93,7 @@ export function AddEnquiryButton({
           className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-          Add enquiry
+          Add lead
         </button>
       )}
 
@@ -102,12 +102,12 @@ export function AddEnquiryButton({
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/40 p-4 sm:items-center"
           role="dialog"
           aria-modal="true"
-          aria-label="Add enquiry"
+          aria-label="Add lead"
           onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false) }}
         >
           <div className="w-full max-w-md rounded-xl border border-line bg-surface p-6 shadow-lg">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-ink">{boundToClient ? `New enquiry for ${clientName ?? 'this client'}` : 'Add enquiry'}</h2>
+              <h2 className="text-lg font-semibold text-ink">{boundToClient ? `New lead for ${clientName ?? 'this client'}` : 'Add lead'}</h2>
               <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="rounded p-1 text-ink-muted hover:bg-sunk hover:text-ink">
                 <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
               </button>
@@ -135,7 +135,7 @@ export function AddEnquiryButton({
                 <>
                   <input type="hidden" name="clientId" value={clientId} />
                   <p className="rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink-muted">
-                    This enquiry is added to <span className="font-medium text-ink">{clientName ?? 'this client'}</span>. It will not create a new client.
+                    This lead is added to <span className="font-medium text-ink">{clientName ?? 'this client'}</span>. It will not create a new client.
                   </p>
                 </>
               ) : (
@@ -152,7 +152,7 @@ export function AddEnquiryButton({
               </Field>
               <div className="mt-1 flex justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
-                <Button type="submit" loading={pending}>Add enquiry</Button>
+                <Button type="submit" loading={pending}>Add lead</Button>
               </div>
             </form>
           </div>

@@ -207,7 +207,7 @@ export default async function ClientDetailPage({
           action={
             enquiry ? (
               <Link href={`/enquiries/${enquiry.id}`} className="text-sm font-medium text-accent-ink hover:underline">
-                {enquiryCount > 1 ? `View enquiry (${enquiryCount})` : 'View enquiry'}
+                {enquiryCount > 1 ? `Open lead (${enquiryCount})` : 'Open lead'}
               </Link>
             ) : null
           }
@@ -222,7 +222,7 @@ export default async function ClientDetailPage({
               <DocField label="Additional notes" value={enquiry.message} multiline />
             </>
           ) : (
-            <p className="text-base text-ink-muted md:col-span-2">No enquiry on file yet. Use the Add enquiry action above to record one for this client.</p>
+            <p className="text-base text-ink-muted md:col-span-2">No enquiry on file yet. Use the Add lead action above to record one for this client.</p>
           )}
         </DocSection>
       </PageContainer>

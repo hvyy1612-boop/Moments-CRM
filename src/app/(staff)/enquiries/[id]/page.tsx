@@ -4,6 +4,7 @@ import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { StatusTag } from '@/components/ui/StatusTag'
+import { StatusPill } from '@/components/ui/StatusPill'
 import { Button } from '@/components/ui/Button'
 import { Textarea } from '@/components/ui/form'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
@@ -17,6 +18,9 @@ import {
   waitingLabel,
 } from '@/features/enquiries/status'
 import { getEnquiryBoard } from '@/lib/domain/enquiry-workflow'
+import { formatAud } from '@/lib/money'
+import { quoteView } from '@/features/quotes/status'
+import { auditLabel } from '../../activity/audit'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import {
@@ -84,12 +88,20 @@ export default async function EnquiryDetailPage({
   // /enquiries/[id] loads the Enquiry entity ONLY - it never guesses a Project id (docs/24 FIX 11).
   if (!enquiry) notFound()
 
-  const activity = await prisma.auditLog.findMany({
-    where: { entityType: 'Enquiry', entityId: id },
-    orderBy: { createdAt: 'desc' },
-    take: 12,
-    select: { id: true, action: true, createdAt: true, actor: { select: { name: true } } },
-  })
+  const [activity, quotes] = await Promise.all([
+    prisma.auditLog.findMany({
+      where: { entityType: 'Enquiry', entityId: id },
+      orderBy: { createdAt: 'desc' },
+      take: 12,
+      select: { id: true, action: true, createdAt: true, actor: { select: { name: true } } },
+    }),
+    // A quote belongs to its lead (docs/31), so the lead shows every quote made for it.
+    prisma.quote.findMany({
+      where: { enquiryId: id },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, reference: true, status: true, createdAt: true, currentVersion: { select: { total: true, sentToClientAt: true } } },
+    }),
+  ])
 
   // A Job exists once the lead is accepted/converted (Awaiting or Confirmed). "open" = a live lead with
   // no Job yet, so only those stages offer Create quote / Create Job.
@@ -297,6 +309,31 @@ export default async function EnquiryDetailPage({
           </div>
         </div>
 
+        {/* Quotes made for this lead */}
+        <div className="mt-4 rounded-md border border-line bg-surface p-5">
+          <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Quotes</h2>
+          {quotes.length === 0 ? (
+            <p className="text-base text-ink-muted">No quotes yet.{open ? ' Use Create quote above to send one.' : ''}</p>
+          ) : (
+            <ul>
+              {quotes.map((q) => {
+                const view = quoteView(q.status)
+                const sent = q.currentVersion?.sentToClientAt
+                return (
+                  <li key={q.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line py-2.5 first:border-t-0">
+                    <Link href={`/quotes/${q.id}`} className="tabular font-semibold text-ink hover:text-accent-ink hover:underline">
+                      {q.reference ?? 'Quote'}
+                    </Link>
+                    <StatusPill tone={view.tone}>{view.label}</StatusPill>
+                    <span className="text-sm text-ink-muted">{sent ? `Sent ${formatSydneyDate(sent)}` : `Created ${formatSydneyDate(q.createdAt)}`}</span>
+                    <span className="tabular ml-auto text-sm font-medium text-ink">{q.currentVersion ? formatAud(q.currentVersion.total) : '-'}</span>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+
         {/* Enquiry details (wedding-enquiry fields captured on the add-client / website form) */}
         {(() => {
           const details: { label: string; value: string }[] = []
@@ -351,7 +388,7 @@ export default async function EnquiryDetailPage({
                 {activity.map((a) => (
                   <div key={a.id} className="text-sm text-ink-muted">
                     <span className="tabular text-muted">{formatSydneyDateTime(a.createdAt)}</span>{' '}
-                    {a.action.replace(/^enquiry\./, '').replace(/_/g, ' ')}
+                    {auditLabel(a.action)}
                     {a.actor?.name ? ` · ${a.actor.name}` : ''}
                   </div>
                 ))}
