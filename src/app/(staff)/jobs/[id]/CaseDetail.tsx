@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
+import { IconLink } from '@/components/ui/IconButton'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { SentToast } from '@/components/ui/SentToast'
 import { requireRole } from '@/lib/auth/guard'
@@ -81,6 +82,13 @@ const TABS = [
 type TabKey = (typeof TABS)[number]['key']
 const menuLink = 'block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper'
 
+// Pencil for the per-section Edit icon buttons on the Finance tab (shared IconLink).
+const EDIT_ICON = (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 20h4l10-10-4-4L4 16v4z" /><path d="m13.5 6.5 4 4" />
+  </svg>
+)
+
 /**
  * Shared case detail for a booked Job, laid out as a tabbed workspace: one job header (name, key facts
  * and production progress) over Overview / Workflow / Shoot details / Files-Delivery / Finance tabs.
@@ -127,7 +135,7 @@ export async function CaseDetail({
           },
         },
       },
-      invoices: { select: INVOICE_MONEY_SELECT },
+      invoices: { select: { ...INVOICE_MONEY_SELECT, id: true } },
       galleries: {
         orderBy: { createdAt: 'desc' },
         include: { items: { orderBy: { sortOrder: 'asc' } } },
@@ -409,9 +417,14 @@ export async function CaseDetail({
           {activeTab === 'finance' ? (
             <div className="flex flex-col gap-4">
               <section className="rounded border border-line bg-surface p-5">
-                <div className="flex flex-wrap items-baseline justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-lg font-semibold text-ink">Quote</h2>
-                  {version ? <StatusPill tone={QUOTE_TONE[version.status] ?? 'neutral'}>{label(version.status)}</StatusPill> : null}
+                  <div className="flex items-center gap-2">
+                    {version ? <StatusPill tone={QUOTE_TONE[version.status] ?? 'neutral'}>{label(version.status)}</StatusPill> : null}
+                    {quote && version && version.status !== 'DRAFT' ? (
+                      <IconLink label="Edit quote" tone="accent" href={`/quotes/${quote.id}`} icon={EDIT_ICON} />
+                    ) : null}
+                  </div>
                 </div>
                 {!quote || !version ? (
                   <form action={createQuoteAction} className="mt-4">
@@ -474,9 +487,12 @@ export async function CaseDetail({
 
               {quoteAccepted ? (
                 <section className="rounded border border-line bg-surface p-5">
-                  <div className="flex flex-wrap items-baseline justify-between gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <h2 className="text-lg font-semibold text-ink">Contract</h2>
-                    {contractVersion ? <StatusPill tone={CONTRACT_TONE[contractVersion.status] ?? 'neutral'}>{label(contractVersion.status)}</StatusPill> : null}
+                    <div className="flex items-center gap-2">
+                      {contractVersion ? <StatusPill tone={CONTRACT_TONE[contractVersion.status] ?? 'neutral'}>{label(contractVersion.status)}</StatusPill> : null}
+                      {quote ? <IconLink label="Edit quote" tone="accent" href={`/quotes/${quote.id}`} icon={EDIT_ICON} /> : null}
+                    </div>
                   </div>
                   {!contract || !contractVersion ? (
                     <form action={createContractAction} className="mt-4">
@@ -506,7 +522,15 @@ export async function CaseDetail({
                         {invoiceCount} invoice{invoiceCount === 1 ? '' : 's'} · {formatAud(invoiceOutstanding)} outstanding · managed in Payments.
                       </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2">
+                      {invoiceCount > 0 ? (
+                        <IconLink
+                          label={invoiceCount === 1 ? 'Edit invoice' : 'Edit invoices'}
+                          tone="accent"
+                          href={invoiceCount === 1 ? `/finance/${project.invoices[0]!.id}/edit` : '/finance'}
+                          icon={EDIT_ICON}
+                        />
+                      ) : null}
                       <Link href="/finance"><Button variant="secondary" size="sm">Open Payments</Button></Link>
                       <Link href={`/finance/new?job=${project.id}`}><Button size="sm">New invoice</Button></Link>
                     </div>
