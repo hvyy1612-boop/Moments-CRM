@@ -158,7 +158,7 @@ export default async function ClientsPage({
         <div className="mt-4">
           {rows.length === 0 ? (
             <p className="py-16 text-center text-sm text-ink-muted">
-              {q ? `No clients match "${q}".` : 'No clients yet. Add your first client above, or convert an enquiry.'}
+              {q ? `No clients match "${q}".` : 'No clients yet. Add your first client above, or convert a lead.'}
             </p>
           ) : (
             <ClientsTable rows={rows} csrf={csrf} canDelete={user.role === 'ADMIN'} backParam={backParam} />

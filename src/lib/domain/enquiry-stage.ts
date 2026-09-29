@@ -1,9 +1,10 @@
 import { prisma } from '@/lib/db'
 
 /**
- * Stage <-> workflow sync (docs/24). The enquiry's open stage is DERIVED from its checklist so "how far
- * the workflow has gone" auto-reflects on the list, while staff can still override the stage by hand.
- * Only the three open stages are derived; CONVERTED (Booked) and LOST are explicit outcomes, never auto.
+ * Stage <-> workflow sync (docs/24). A lead's (Enquiry's) early stage is DERIVED from its checklist so
+ * "how far the workflow has gone" auto-reflects on the list. Only New enquiry / Contacted / Consultation
+ * are derived; Quote sent, Awaiting booking confirmation, Booking confirmed and Declined come from real
+ * events (send quote, accept, deposit paid, decline), never from ticking tasks.
  */
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
@@ -25,8 +26,8 @@ const GROUP_TO_STAGE: [string, OpenStage][] = [
 
 /**
  * Derive the open stage from the checklist: it is the group of the earliest incomplete task, walking
- * New -> In discussion -> Quoting. Empty groups are skipped, so it works for any per-case task set. When
- * everything is done the lead sits at Quoting until a Create Job (Booked) - that milestone is explicit.
+ * New enquiry -> Contacted -> Consultation. Empty groups are skipped, so it works for any per-case task
+ * set. When everything is done the lead sits at Consultation until a real event moves it on.
  */
 export function deriveOpenStage(tasks: DeriveTask[]): OpenStage {
   const real = tasks.filter((t) => t.type !== 'AUTO')

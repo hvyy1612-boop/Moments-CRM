@@ -442,12 +442,12 @@ function EventPeek({ peek, onEnter, onLeave }: { peek: { item: CalItem; x: numbe
           {it.timeLabel ? <span>{it.timeLabel}</span> : <span>All day</span>}
         </div>
         {it.location ? <div className="mt-1.5 text-xs text-ink-muted">{it.location}</div> : null}
-        {it.status ? <div className="mt-1.5 text-xs capitalize text-ink-muted">Booking: {it.status.toLowerCase()}</div> : null}
+        {it.status ? <div className="mt-1.5 text-xs capitalize text-ink-muted">Status: {it.status.toLowerCase()}</div> : null}
         {it.conflict ? <div className="mt-1.5 text-xs font-bold text-lost-ink">Clashes with another shoot</div> : null}
       </div>
       {it.href ? (
         <div className="border-t border-line px-3 py-2">
-          <Link href={it.href} className="text-xs font-bold text-accent hover:underline">Open {it.category === 'lead' ? 'enquiry' : it.category === 'job' ? 'job' : 'client'} →</Link>
+          <Link href={it.href} className="text-xs font-bold text-accent hover:underline">Open {it.category === 'lead' ? 'lead' : it.category === 'job' ? 'job' : 'client'} →</Link>
         </div>
       ) : null}
     </div>

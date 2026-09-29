@@ -24,7 +24,7 @@ export const metadata: Metadata = { title: 'Calendar - Moments' }
 
 const FILTERS: { key: CalendarFilter; label: string }[] = [
   { key: 'all', label: 'All' },
-  { key: 'lead', label: 'Enquiries' },
+  { key: 'lead', label: 'Leads' },
   { key: 'job', label: 'Jobs' },
   { key: 'payment', label: 'Payments' },
   { key: 'event', label: 'Events' },

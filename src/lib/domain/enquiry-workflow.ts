@@ -100,8 +100,8 @@ export async function sendStaffReply(enquiryId: string, body: string, actorUserI
   if (!text) throw new Error('A reply cannot be empty.')
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Enquiry not found.')
-    if (!OPEN.has(enquiry.status)) throw new Error('This enquiry is already closed.')
+    if (!enquiry) throw new Error('Lead not found.')
+    if (!OPEN.has(enquiry.status)) throw new Error('This lead is already closed.')
 
     await tx.communication.create({
       data: { enquiryId, type: 'CLIENT_MESSAGE', direction: 'outbound', body: text, byUserId: actorUserId },
@@ -123,8 +123,8 @@ export async function logClientReply(enquiryId: string, body: string, actorUserI
   if (!text) throw new Error('The client message cannot be empty.')
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Enquiry not found.')
-    if (!OPEN.has(enquiry.status)) throw new Error('This enquiry is already closed.')
+    if (!enquiry) throw new Error('Lead not found.')
+    if (!OPEN.has(enquiry.status)) throw new Error('This lead is already closed.')
 
     await tx.communication.create({
       data: { enquiryId, type: 'CLIENT_MESSAGE', direction: 'inbound', body: text, byUserId: null },
@@ -141,8 +141,8 @@ export async function logClientReply(enquiryId: string, body: string, actorUserI
 export async function startQuoting(enquiryId: string, actorUserId: string) {
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Enquiry not found.')
-    if (enquiry.status !== 'CONTACTED') throw new Error('This enquiry is not in the Contacted stage.')
+    if (!enquiry) throw new Error('Lead not found.')
+    if (enquiry.status !== 'CONTACTED') throw new Error('This lead is not in the Contacted stage.')
     await tx.enquiry.update({ where: { id: enquiryId }, data: { status: 'CONSULTATION', waitingOn: 'STUDIO' } })
     await tx.auditLog.create({
       data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.moved_to_quote', entityType: 'Enquiry', entityId: enquiryId },

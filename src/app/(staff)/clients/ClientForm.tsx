@@ -275,7 +275,7 @@ export function ClientForm({
         </FormBlock>
 
         {showEnquiryFields ? (
-          <FormBlock title="Enquiry" description="Adding the client also opens an enquiry with these details.">
+          <FormBlock title="Enquiry" description="Adding the client also opens a lead with these details.">
             <FormCell span={6}>{partnerName}</FormCell>
             <FormCell span={6}>{coverage}</FormCell>
             <FormCell span={4}>{eventType}</FormCell>

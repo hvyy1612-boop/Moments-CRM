@@ -229,7 +229,7 @@ export async function removeClientAction(formData: FormData): Promise<void> {
   if (!clientId) return
   if (await clientHasHistory(clientId)) {
     if (user.role !== 'ADMIN') {
-      throw new Error('Only an admin can archive a client that already has jobs or enquiries.')
+      throw new Error('Only an admin can archive a client that already has jobs or leads.')
     }
     await archiveClient(clientId, user.id)
   } else {

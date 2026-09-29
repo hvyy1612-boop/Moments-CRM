@@ -24,7 +24,7 @@ export const useToast = () => useContext(ToastCtx)
 // Messages for redirect-driven toasts. Keep titles short (no full stop), Carbon style.
 const CODE_MAP: Record<string, ToastInput> = {
   'client-added': { title: 'Client added' },
-  'enquiry-added': { title: 'Enquiry added' },
+  'enquiry-added': { title: 'Lead added' },
   'job-created': { title: 'Converted to job' },
   'payment-recorded': { title: 'Payment recorded' },
   'invoice-created': { title: 'Invoice created' },

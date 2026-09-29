@@ -199,7 +199,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
     { label: 'Contacted', s: 'CONTACTED' },
     { label: 'Consultation', s: 'CONSULTATION' },
     { label: 'Quote sent', s: 'QUOTE_SENT' },
-    { label: 'Awaiting confirmation', s: 'AWAITING_BOOKING_CONFIRMATION' },
+    { label: 'Awaiting booking confirmation', s: 'AWAITING_BOOKING_CONFIRMATION' },
     { label: 'Booking confirmed', s: 'BOOKING_CONFIRMED' },
   ]
   const pipeline: Bar[] = PIPE.map((p) => ({ label: p.label, value: inPeriodEnq.filter((e) => e.status === p.s).length }))

@@ -60,7 +60,7 @@ export function AddClientButton({ csrf }: { csrf: string }) {
         open={open}
         onClose={close}
         title="Add a client"
-        description="Record the client and their enquiry. This opens a lead in Enquiries you can work through, and becomes a job once you convert it."
+        description="Record the client and their enquiry. This opens a lead you can work through in Leads, and becomes a job once it is booked."
         size="lg"
         headerBorder={false}
       >

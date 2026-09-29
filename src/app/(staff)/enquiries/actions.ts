@@ -78,7 +78,7 @@ export async function addEnquiryAction(_prev: AddEnquiryState, formData: FormDat
     const email = String(formData.get('email') ?? '').trim()
     const phone = String(formData.get('phone') ?? '').trim()
     if (!name && !email) {
-      return { status: 'error', message: 'Add a client for this enquiry. Search for an existing one, or fill in the new client details.' }
+      return { status: 'error', message: 'Add a client for this lead. Search for an existing one, or fill in the new client details.' }
     }
     const parsed = enquirySchema.safeParse({ name, email, phone })
     if (!parsed.success) {

@@ -40,7 +40,7 @@ const QUOTE_EVENT: Record<string, { action: string; details: string }> = {
   'quote.created': { action: 'Created', details: 'Quote created.' },
   'quote.revised': { action: 'Revised', details: 'A new version of the quote was created.' },
   'quote.sent': { action: 'Shared', details: 'Quote shared with the client.' },
-  'quote.accepted': { action: 'Accepted', details: 'Quote accepted; the enquiry was converted to a job.' },
+  'quote.accepted': { action: 'Accepted', details: 'Quote accepted; the lead was converted to a job.' },
   'quote.declined': { action: 'Declined', details: 'Quote marked as declined.' },
   'quote.duplicated': { action: 'Duplicated', details: 'Quote duplicated.' },
 }

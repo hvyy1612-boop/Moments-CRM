@@ -11,7 +11,7 @@ const DOMAIN: Record<string, Domain> = {
   auth: { category: 'Authentication & users', noun: 'Account' },
   client: { category: 'Clients', noun: 'Client' },
   contact: { category: 'Clients', noun: 'Contact' },
-  enquiry: { category: 'Enquiries', noun: 'Enquiry' },
+  enquiry: { category: 'Leads', noun: 'Lead' },
   quote: { category: 'Quotes', noun: 'Quote' },
   booking: { category: 'Bookings', noun: 'Booking' },
   contract: { category: 'Contracts', noun: 'Contract' },
@@ -36,8 +36,8 @@ const SPECIAL: Record<string, string> = {
   'client.deleted': 'Client deleted',
   'client.merged': 'Clients merged',
   'client.restored': 'Client restored',
-  'enquiry.converted': 'Enquiry converted to job',
-  'enquiry.lost': 'Enquiry marked lost',
+  'enquiry.converted': 'Lead converted to job',
+  'enquiry.lost': 'Lead declined',
 }
 
 const cap = (s: string): string => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)

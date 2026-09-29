@@ -69,7 +69,7 @@ function historyDetails(action: string, after: unknown): string {
   const title = (after && typeof after === 'object' && 'title' in after ? String((after as { title?: unknown }).title ?? '') : '') || 'a task'
   if (action === 'project.task_completed') return `${title} was completed.`
   if (action === 'project.task_reopened') return `${title} was reopened.`
-  if (action === 'enquiry.converted') return 'Job was created from an enquiry.'
+  if (action === 'enquiry.converted') return 'Job was created from a lead.'
   return historyActionType(action)
 }
 
@@ -104,7 +104,7 @@ export async function CaseDetail({
   tab?: string
 }) {
   const backHref = back ? `/${section}?${back}` : `/${section}`
-  const backLabel = section === 'jobs' ? 'Jobs' : 'Enquiries'
+  const backLabel = section === 'jobs' ? 'Jobs' : 'Leads'
 
   const project = await prisma.project.findUnique({
     where: { id },

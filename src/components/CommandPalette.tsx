@@ -8,10 +8,10 @@ import { searchEntitiesAction, type SearchHit } from '@/app/(staff)/calendar/act
 /**
  * Global search, inline in the top nav. It is the `global` variant of the shared SearchField (same
  * anatomy/tokens as every in-table local search, differing only in scope) with a results panel dropped
- * below it. Searches clients, enquiries, jobs and invoices; results are grouped by entity and the field
+ * below it. Searches clients, leads, jobs and invoices; results are grouped by entity and the field
  * navigates to the chosen record. `/` or Cmd/Ctrl-K focuses it; Arrow/Enter/Esc drive the panel.
  */
-const GROUP_LABEL: Record<SearchHit['type'], string> = { Client: 'Clients', Enquiry: 'Enquiries', Job: 'Jobs', Invoice: 'Invoices' }
+const GROUP_LABEL: Record<SearchHit['type'], string> = { Client: 'Clients', Lead: 'Leads', Job: 'Jobs', Invoice: 'Invoices' }
 
 export function CommandPalette() {
   const router = useRouter()
@@ -88,7 +88,7 @@ export function CommandPalette() {
           setOpen(true)
         }}
         variant="global"
-        placeholder="Search clients, enquiries, jobs, invoices..."
+        placeholder="Search clients, leads, jobs, invoices..."
         ariaLabel="Search"
         onFocus={() => setOpen(true)}
         onKeyDown={(e) => {

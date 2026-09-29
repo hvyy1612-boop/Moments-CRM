@@ -334,8 +334,8 @@ export function quoteDisplayNumber(reference: string | null | undefined, seq: nu
 export async function createQuoteForEnquiry(enquiryId: string, createdByUserId: string | null) {
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId }, select: { id: true, status: true, companyId: true } })
-    if (!enquiry) throw new Error('Enquiry not found.')
-    if (enquiry.status === 'DECLINED') throw new Error('Reopen the enquiry before quoting it.')
+    if (!enquiry) throw new Error('Lead not found.')
+    if (enquiry.status === 'DECLINED') throw new Error('Reopen the lead before quoting it.')
     const agg = await tx.quote.aggregate({ _max: { seq: true } })
     const seq = (agg._max.seq ?? 0) + 1
     const quote = await tx.quote.create({
@@ -378,10 +378,10 @@ export async function acceptQuote(quoteId: string, actorUserId: string | null = 
         if (quote.status !== 'SENT' && quote.status !== 'VIEWED') throw new Error('Only a sent quote can be accepted.')
         if (version.total.lessThanOrEqualTo(0)) throw new Error('Add at least one line before accepting.')
         if (version.validUntil && version.validUntil.getTime() < now.getTime()) throw new Error('This quote has expired; revise it before accepting.')
-        if (quote.enquiry.status === 'DECLINED') throw new Error('Reopen the enquiry before accepting a quote.')
+        if (quote.enquiry.status === 'DECLINED') throw new Error('Reopen the lead before accepting a quote.')
 
         const otherAccepted = await tx.quote.findFirst({ where: { enquiryId: quote.enquiryId, status: 'ACCEPTED', NOT: { id: quote.id } }, select: { id: true } })
-        if (otherAccepted) throw new Error('Another quote on this enquiry has already been accepted.')
+        if (otherAccepted) throw new Error('Another quote on this lead has already been accepted.')
 
         // Accept + freeze this quote/version.
         await tx.quoteVersion.update({ where: { id: version.id }, data: { status: 'ACCEPTED', acceptedByClientAt: now } })
@@ -395,7 +395,7 @@ export async function acceptQuote(quoteId: string, actorUserId: string | null = 
 
         // Convert the enquiry into a Job (idempotent) and link both ways.
         const conv = await convertEnquiryCore(tx, quote.enquiryId, actorUserId, now)
-        if (!conv.projectId) throw new Error('Converting the enquiry did not produce a job.')
+        if (!conv.projectId) throw new Error('Converting the lead did not produce a job.')
         await tx.project.update({ where: { id: conv.projectId }, data: { sourceQuoteId: quote.id, commercialStatus: 'ACCEPTED' } })
         await tx.quote.update({ where: { id: quote.id }, data: { projectId: conv.projectId } })
 

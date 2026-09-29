@@ -13,7 +13,7 @@ export type QuotePickerRow = { id: string; number: string | null; client: string
  */
 export function NewQuotePicker({ rows, csrf }: { rows: QuotePickerRow[]; csrf: string }) {
   const columns: DataColumn<QuotePickerRow>[] = [
-    { key: 'number', header: 'Enquiry ID', width: COL.constrained, cell: (r) => <span className="tabular whitespace-nowrap text-ink">{r.number ?? '-'}</span> },
+    { key: 'number', header: 'Lead ID', width: COL.constrained, cell: (r) => <span className="tabular whitespace-nowrap text-ink">{r.number ?? '-'}</span> },
     { key: 'client', header: 'Client', width: COL.flexHigh, cell: (r) => <span className="block truncate font-medium text-ink">{r.client}</span> },
     { key: 'event', header: 'Event', width: COL.flexMedium, cell: (r) => <span className="block truncate text-ink-muted">{r.event}</span> },
     { key: 'received', header: 'Received', width: COL.constrained, cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{r.received}</span> },
@@ -34,14 +34,14 @@ export function NewQuotePicker({ rows, csrf }: { rows: QuotePickerRow[]; csrf: s
 
   return (
     <DataTable
-      ariaLabel="Open enquiries"
+      ariaLabel="Open leads"
       columns={columns}
       rows={rows}
       rowKey={(r) => r.id}
       pageSize={30}
       search={(r) => `${r.number ?? ''} ${r.client} ${r.event}`}
-      searchPlaceholder="Search enquiries"
-      emptyMessage="No open enquiries to quote. Quotes are created from an enquiry."
+      searchPlaceholder="Search leads"
+      emptyMessage="No open leads to quote. Quotes are created from a lead."
     />
   )
 }

@@ -146,7 +146,7 @@ export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) 
           selection={selection}
           search={(r) => `${r.number} ${r.client}`}
           searchPlaceholder="Search quotes"
-          emptyMessage={tab === 'active' ? 'No active quotes. Create one from an enquiry to get started.' : tab === 'accepted' ? 'No accepted quotes yet.' : 'No declined quotes.'}
+          emptyMessage={tab === 'active' ? 'No active quotes. Create one from a lead to get started.' : tab === 'accepted' ? 'No accepted quotes yet.' : 'No declined quotes.'}
         />
       </div>
     </>

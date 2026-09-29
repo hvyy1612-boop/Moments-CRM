@@ -10,7 +10,7 @@ import { EnquiriesList } from './EnquiriesList'
 import type { EnquiryRowData } from './EnquiryRow'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Enquiries - Moments' }
+export const metadata: Metadata = { title: 'Leads - Moments' }
 
 export default async function EnquiriesPage() {
   const user = await requireRole('/enquiries')

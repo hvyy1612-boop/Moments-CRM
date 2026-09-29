@@ -124,8 +124,8 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
       {jobs.length === 0 ? (
         <p className="mt-6 rounded-md border border-dashed border-line bg-surface px-4 py-6 text-center text-sm text-ink-muted">
           {sp.client
-            ? 'This client has no active jobs. Create a job (or convert an enquiry) first, then invoice it here.'
-            : 'No jobs yet. Create a job (or convert an enquiry) first, then invoice it here.'}
+            ? 'This client has no active jobs. Create a job (or convert a lead) first, then invoice it here.'
+            : 'No jobs yet. Create a job (or convert a lead) first, then invoice it here.'}
         </p>
       ) : (
         <div className="mt-7">

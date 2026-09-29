@@ -30,7 +30,7 @@ import { EnquiryWorkflow } from './EnquiryWorkflow'
 import { MarkEnquiryViewed } from './MarkEnquiryViewed'
 
 export const runtime = 'nodejs'
-export const metadata: Metadata = { title: 'Enquiry - Moments' }
+export const metadata: Metadata = { title: 'Lead - Moments' }
 
 function titleCase(value: string): string {
   return value
@@ -110,7 +110,7 @@ export default async function EnquiryDetailPage({
     <AppShell user={user} csrf={csrf} active="enquiries" bareHeader>
       <MarkEnquiryViewed id={enquiry.id} />
       <PageContainer variant="standard">
-        <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Enquiries', href: backHref }, { label: enquiry.name }]} />
+        <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Leads', href: backHref }, { label: enquiry.name }]} />
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <h1 className="text-xl font-semibold text-ink">{enquiry.name}</h1>
@@ -120,7 +120,7 @@ export default async function EnquiryDetailPage({
           </StatusTag>
         </div>
         <p className="mt-1 text-base text-ink-muted">
-          {enquiry.eventType ? titleCase(enquiry.eventType) : 'Enquiry'}
+          {enquiry.eventType ? titleCase(enquiry.eventType) : 'Lead'}
           {open ? (
             <>
               {' · Waiting for: '}
@@ -139,7 +139,7 @@ export default async function EnquiryDetailPage({
                 <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">
                   {confirmed
                     ? 'Booking confirmed - the deposit is paid and the job is active. Open the job below to continue the work.'
-                    : 'Awaiting booking confirmation - a job is held for this enquiry, but production starts once the booking deposit is paid.'}
+                    : 'Awaiting booking confirmation - a job is held for this lead, but production starts once the booking deposit is paid.'}
                 </div>
                 <EnquiryWorkflow
                   stages={board.stages}

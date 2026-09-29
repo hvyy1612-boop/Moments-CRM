@@ -1,8 +1,10 @@
 /**
- * Enquiry workflow - editable per case. Its three task groups are named exactly like the three open
- * stages so they line up 1:1: "New" (first response), "In discussion" (qualify), "Quoting" (quote,
- * contract, deposit). Working through a group's tasks moves the outside stage to that group; Booked is
- * the Create Job outcome (a milestone, not a group). Tasks carry a type; plain To-do shows no tag.
+ * Lead workflow (the `Enquiry` record; staff call it a Lead) - editable per case. Its three task groups
+ * carry the names of the three early stages they drive, so the board and the stage pill read alike:
+ * "New enquiry" (first response), "Contacted" (discuss the shoot), "Consultation" (quote, contract,
+ * deposit). The stage is the group of the earliest unfinished task (enquiry-stage.ts); Quote sent /
+ * Awaiting booking confirmation / Booking confirmed come from real events, never from ticking tasks.
+ * Tasks carry a type; plain To-do shows no tag.
  */
 
 export function currentActionText(waitingOn: string | null, pendingTitle: string | null): string {
@@ -33,9 +35,9 @@ export const ADDABLE_TASK_TYPES: { value: TaskType; label: string }[] = [
 type StageDef = { key: string; label: string; color: string }
 
 export const ENQUIRY_STAGES: StageDef[] = [
-  { key: 'new', label: 'New', color: 'enquiry' },
-  { key: 'discussion', label: 'In discussion', color: 'quote' },
-  { key: 'quote', label: 'Quoting', color: 'booked' },
+  { key: 'new', label: 'New enquiry', color: 'enquiry' },
+  { key: 'discussion', label: 'Contacted', color: 'quote' },
+  { key: 'quote', label: 'Consultation', color: 'booked' },
 ]
 
 export const ENQUIRY_STAGE_KEYS: ReadonlySet<string> = new Set(ENQUIRY_STAGES.map((s) => s.key))

@@ -99,7 +99,7 @@ export async function markTaskDoneAction(formData: FormData): Promise<void> {
   revalidatePath('/calendar')
 }
 
-export type SearchHit = { type: 'Client' | 'Enquiry' | 'Job' | 'Invoice'; label: string; sub: string | null; href: string }
+export type SearchHit = { type: 'Client' | 'Lead' | 'Job' | 'Invoice'; label: string; sub: string | null; href: string }
 
 /** Global search - clients, enquiries, jobs and invoices by name/number, grouped in that order. */
 export async function searchEntitiesAction(query: string): Promise<SearchHit[]> {
@@ -127,7 +127,7 @@ export async function searchEntitiesAction(query: string): Promise<SearchHit[]> 
   // Order defines the group order in the results panel: Clients, Enquiries, Jobs, Invoices.
   return [
     ...clients.map((c): SearchHit => ({ type: 'Client', label: c.displayName, sub: c.email, href: `/clients/${c.id}` })),
-    ...enquiries.map((e): SearchHit => ({ type: 'Enquiry', label: e.name, sub: e.eventType, href: `/enquiries/${e.id}` })),
+    ...enquiries.map((e): SearchHit => ({ type: 'Lead', label: e.name, sub: e.eventType, href: `/enquiries/${e.id}` })),
     ...projects.map((p): SearchHit => ({ type: 'Job', label: p.client.displayName, sub: `${p.name} - ${p.code}`, href: `/jobs/${p.id}` })),
     ...invoices.map((inv): SearchHit => ({ type: 'Invoice', label: inv.project.client.displayName, sub: inv.invoiceNumber, href: `/finance/${inv.id}` })),
   ]

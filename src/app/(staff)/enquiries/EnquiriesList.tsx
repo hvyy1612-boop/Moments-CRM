@@ -71,7 +71,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
   const columns: DataColumn<EnquiryRowData>[] = [
     {
       key: 'number',
-      header: 'Enquiry ID',
+      header: 'Lead ID',
       width: COL.constrained,
       cell: (r) => (
         <span className="flex items-center gap-2">
@@ -111,9 +111,9 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
   return (
     <PageContainer variant="full">
       <PageHeader
-        breadcrumb={[DASHBOARD_CRUMB, { label: 'Enquiries' }]}
-        title="Enquiries"
-        description="Your sales pipeline - from first enquiry to a confirmed booking. Confirmed leads stay here as a record and open as a Job."
+        breadcrumb={[DASHBOARD_CRUMB, { label: 'Leads' }]}
+        title="Leads"
+        description="Every potential booking, from the client's first enquiry until the deposit is paid. Booked leads stay here as a record; the work continues in Jobs."
         actions={<AddEnquiryButton csrf={csrf} />}
       />
 
@@ -179,7 +179,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
       <ExportBar count={selectedIds.length} reportHref={`/enquiries/report?ids=${selectedIds.join(',')}`} className="mt-4" />
       <div className="mt-4">
         <DataTable
-          ariaLabel="Enquiries"
+          ariaLabel="Leads"
           columns={columns}
           rows={visible}
           rowKey={(r) => r.id}
@@ -187,8 +187,8 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
           pageSize={30}
           selection={selection}
           search={(r) => `${r.number ?? ''} ${r.name} ${r.event}`}
-          searchPlaceholder="Search enquiries"
-          emptyMessage="No enquiries in this view yet."
+          searchPlaceholder="Search leads"
+          emptyMessage="No leads in this view yet."
         />
       </div>
     </PageContainer>
