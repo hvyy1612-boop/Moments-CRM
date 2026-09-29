@@ -82,8 +82,9 @@ export function AddClientButton({ csrf }: { csrf: string }) {
             }
           }}
           footer={
-            <div className="flex gap-3">
-              <Button type="submit" size="lg">Save client</Button>
+            // Save is the prominent primary (xl); Cancel stays a modest secondary (lg), vertically centred.
+            <div className="flex items-center gap-3">
+              <Button type="submit" size="xl">Save client</Button>
               <Button type="button" variant="secondary" size="lg" onClick={close}>Cancel</Button>
             </div>
           }

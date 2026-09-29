@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { Spinner } from './Spinner'
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost'
-type Size = 'sm' | 'md' | 'lg'
+type Size = 'sm' | 'md' | 'lg' | 'xl'
 
 const base =
   'inline-flex items-center justify-center gap-2 rounded font-medium whitespace-nowrap ' +
@@ -23,6 +23,8 @@ const sizes: Record<Size, string> = {
   sm: 'h-8 px-3 text-sm',
   md: 'h-10 px-4 text-base',
   lg: 'h-12 px-6 text-base',
+  // Prominent primary CTA (e.g. a modal's Save): taller + wider than Large so it clearly draws the eye.
+  xl: 'h-14 px-8 text-base',
 }
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
