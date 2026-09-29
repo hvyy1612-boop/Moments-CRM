@@ -6,11 +6,14 @@ import type { ReactNode } from 'react'
  * and centring only - the uniform workspace gutter (horizontal padding) is owned once by `<main>` in
  * AppChrome, so there is never double padding and no page can end up flush against the sidebar.
  *
- * Carbon-inspired adaptive container model (fluid -> bounded -> centred), NOT "everything centred":
- *  - narrow   readable/form measure, centred          (focused forms, single-task screens)
- *  - standard list/table & general app pages, centred (the default)
- *  - wide     dense dashboards / detail views, centred
- *  - full     fills the remaining workspace           (interfaces that benefit from width, e.g. Calendar)
+ * Studio decision (2026-09-29): every working page fills the workspace like the Calendar - no empty side
+ * gutters on wide screens. Only focused single-column forms keep a readable measure.
+ *  - narrow   readable/form measure, centred   (focused single-column forms)
+ *  - standard fills the workspace              (lists, detail pages, the default)
+ *  - wide     fills the workspace              (dashboards, job workspace)
+ *  - full     fills the workspace              (Calendar)
+ * standard/wide/full are kept as separate names so a page still states its intent, and a bounded measure
+ * can be reintroduced here in one place without touching every page.
  *
  * Pages must NOT set their own max-w / mx-auto / horizontal padding / viewport calc - they use a variant.
  */
@@ -21,8 +24,8 @@ const GUTTER = 'px-4 sm:px-6 lg:px-8'
 
 const MEASURE: Record<PageVariant, string> = {
   narrow: 'mx-auto w-full max-w-page-narrow',
-  standard: 'mx-auto w-full max-w-page-standard',
-  wide: 'mx-auto w-full max-w-page-wide',
+  standard: 'w-full',
+  wide: 'w-full',
   full: 'w-full',
 }
 
