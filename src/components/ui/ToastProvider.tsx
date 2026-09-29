@@ -88,6 +88,7 @@ function ToastCard({ title, subtitle, onDismiss }: { title: string; subtitle?: s
       className={`toast-card relative pointer-events-auto flex w-72 items-start gap-3 rounded-md bg-delivered p-4 shadow-lg transition-all duration-300 ease-out motion-reduce:transition-none ${entered ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'}`}
     >
       <svg className="pointer-events-none absolute inset-0 h-full w-full" fill="none" aria-hidden="true">
+        <rect className="toast-border-track" />
         <rect className="toast-border-progress" pathLength={100} onAnimationEnd={onDismiss} />
       </svg>
       <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-delivered-ink text-white">

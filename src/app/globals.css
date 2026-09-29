@@ -628,22 +628,28 @@ body {
   from { stroke-dashoffset: 0; }
   to { stroke-dashoffset: 100; }
 }
+/* One crisp border, drawn entirely in SVG so nothing doubles up: the card itself
+   carries NO CSS border. A faint full-perimeter `track` sits underneath and the
+   coloured countdown `progress` rides exactly on top of it (same geometry), then
+   depletes over the toast's life. rx is 1px smaller than the card's rounded-md
+   (6px) so, inset 1px, the stroke stays concentric with the corner — no fuzz. */
+.toast-border-track,
 .toast-border-progress {
   x: 1px;
   y: 1px;
   width: calc(100% - 2px);
   height: calc(100% - 2px);
-  rx: 6px;
+  rx: 5px;
   fill: none;
-  stroke: var(--color-delivered-ink);
   stroke-width: 2px;
+}
+.toast-border-track {
+  stroke: color-mix(in srgb, var(--color-delivered-ink) 20%, transparent);
+}
+.toast-border-progress {
+  stroke: var(--color-delivered-ink);
   stroke-dasharray: 100;
   animation: toast-border-deplete 6s linear forwards;
-}
-/* Carbon toast structure: 3px status border-left + a faint hairline on the other sides. */
-.toast-card {
-  border: 1px solid color-mix(in srgb, var(--color-delivered-ink) 25%, transparent);
-  border-left: 3px solid var(--color-delivered-ink);
 }
 .toast-card:hover .toast-border-progress {
   animation-play-state: paused;
