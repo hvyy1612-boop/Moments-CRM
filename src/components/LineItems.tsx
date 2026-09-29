@@ -79,7 +79,19 @@ export function LineItemsTable({
   const dragId = useRef<number | null>(null)
   return (
     <div className="mt-2 overflow-x-auto rounded-md border border-muted">
-      <table className="w-full text-sm">
+      {/* Fixed layout + a shared colgroup so every instance of this table (e.g. Packages and Add-ons on
+          the quote) uses the SAME column widths and lines up column-for-column. Description takes the
+          remaining width; the numeric + actions columns are compact and identical across instances. */}
+      <table className="w-full table-fixed text-sm">
+        <colgroup>
+          <col className="w-56" />
+          <col />
+          <col className="w-28" />
+          <col className="w-16" />
+          <col className="w-24" />
+          <col className="w-28" />
+          <col className="w-24" />
+        </colgroup>
         <thead>
           <tr className="border-b border-line-strong text-left text-xs uppercase tracking-wide text-muted">
             <th className="px-3 py-2">Item</th>
@@ -109,10 +121,10 @@ export function LineItemsTable({
                   >
                     <DragDots />
                   </span>
-                  <span className="font-medium text-ink">{l.name || <span className="text-ink-muted">Untitled item</span>}</span>
+                  <span className="min-w-0 break-words font-medium text-ink">{l.name || <span className="text-ink-muted">Untitled item</span>}</span>
                 </div>
               </td>
-              <td className="max-w-sm whitespace-pre-line px-3 py-2 text-ink-muted">{l.description || '-'}</td>
+              <td className="whitespace-pre-line break-words px-3 py-2 text-ink-muted">{l.description || '-'}</td>
               <td className="tabular px-3 py-2 text-right text-ink-muted">{money(Number(l.unitPrice) || 0)}</td>
               <td className="tabular px-3 py-2 text-center text-ink-muted">{l.quantity}</td>
               <td className="tabular px-3 py-2 text-right text-ink-muted">{Number(l.discount) > 0 ? `-${money(Number(l.discount))}` : '-'}</td>
