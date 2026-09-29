@@ -42,16 +42,16 @@ describe('payment schedule presets', () => {
     expect(presetRows('DUE7', 0, '2026-09-29', null)).toBeNull()
   })
 
-  it('still lets a shoot-based preset be chosen with no shoot date, leaving the balance date blank', () => {
-    // The deposit is dated on issue; the shoot-relative balance is left blank (stored as null, set later),
-    // and the two still add up to the total exactly.
+  it('gives a shoot-based preset a complete schedule with no shoot date (30-day net fallback)', () => {
+    // The deposit is dated on issue; with no shoot date the shoot-relative balance falls back to a 30-day
+    // net date so amounts AND dates are all filled, and the two still add up to the total exactly.
     expect(presetRows('D50_B50_SHOOT', 500, '2026-09-29', null)).toEqual([
       { label: 'Deposit (50%)', dueAt: '2026-09-29', amount: '250.00' },
-      { label: 'Balance (50%)', dueAt: '', amount: '250.00' },
+      { label: 'Balance (50%)', dueAt: '2026-10-29', amount: '250.00' },
     ])
     expect(presetRows('D25_B75_SHOOT14', 500, '2026-09-29', null)).toEqual([
       { label: 'Deposit (25%)', dueAt: '2026-09-29', amount: '125.00' },
-      { label: 'Balance (75%)', dueAt: '', amount: '375.00' },
+      { label: 'Balance (75%)', dueAt: '2026-10-29', amount: '375.00' },
     ])
   })
 })

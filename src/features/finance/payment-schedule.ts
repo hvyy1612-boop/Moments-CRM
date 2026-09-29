@@ -44,21 +44,24 @@ const later = (a: string, b: string) => (a > b ? a : b)
  * A preset's instalments for the invoice total. Worked in whole cents and the last instalment takes the
  * remainder, so the schedule always adds up exactly to the total the server recomputes (it rejects any
  * mismatch). Returns null only when it cannot be calculated at all: a $0 total or no issue date. A
- * shoot-based preset on a job with no shoot date yet still returns rows - the shoot-relative instalment's
- * due date is left blank (staff set it later or via "Customise"), so any preset can be chosen.
+ * shoot-based preset on a job with no shoot date yet still returns a COMPLETE schedule - the shoot-relative
+ * instalment falls back to a 30-day net date so the amounts and dates are all filled like every other
+ * preset; it recomputes to the real shoot-relative date once the job has a shoot date.
  */
 export function presetRows(key: SchedulePreset, total: number, issueDate: string, shootDate: string | null): ScheduleRow[] | null {
   const cents = Math.round(total * 100)
   if (cents <= 0 || !issueDate) return null
   const amt = (c: number) => (c / 100).toFixed(2)
   const deposit = (pct: number) => Math.round(cents * pct)
+  // Fallback for a shoot-relative due date when the job has no shoot date yet: a 30-day net date, so the
+  // schedule is fully calculated like the non-shoot presets (staff can still adjust it via "Customise").
+  const shootDue = (offsetDays: number) => (shootDate ? later(addDays(shootDate, offsetDays), issueDate) : addDays(issueDate, 30))
   switch (key) {
     case 'D25_B75_SHOOT14': {
       const d = deposit(0.25)
       return [
         { label: 'Deposit (25%)', dueAt: issueDate, amount: amt(d) },
-        // No shoot date yet: leave the balance due date blank (server stores it as null, set it later).
-        { label: 'Balance (75%)', dueAt: shootDate ? later(addDays(shootDate, -14), issueDate) : '', amount: amt(cents - d) },
+        { label: 'Balance (75%)', dueAt: shootDue(-14), amount: amt(cents - d) },
       ]
     }
     case 'D50_B50_30D': {
@@ -72,7 +75,7 @@ export function presetRows(key: SchedulePreset, total: number, issueDate: string
       const d = deposit(0.5)
       return [
         { label: 'Deposit (50%)', dueAt: issueDate, amount: amt(d) },
-        { label: 'Balance (50%)', dueAt: shootDate ? later(shootDate, issueDate) : '', amount: amt(cents - d) },
+        { label: 'Balance (50%)', dueAt: shootDue(0), amount: amt(cents - d) },
       ]
     }
     case 'DUE7':
