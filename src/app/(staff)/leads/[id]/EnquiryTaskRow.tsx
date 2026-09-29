@@ -8,10 +8,12 @@ import { IconMore } from '../../jobs/[id]/icons'
 
 // One shared column grid so the phase header and every row line up in true columns
 // (checkbox | Task | Due date | Status | actions), mirroring the Jobs workflow. Leads have no task owner,
-// so that column is dropped. Each row re-uses the tracks with subgrid.
+// so that column is dropped. Task flexes (widest); Due date + Status get defined em widths (not
+// max-content) so they read as one compact, evenly-spaced metadata cluster instead of drifting apart.
+// Each row re-uses the tracks with subgrid.
 export const LEADS_PHASE_GRID =
-  'grid grid-cols-[max-content_minmax(0,1fr)_max-content_max-content_max-content] items-center'
-export const LEADS_ROW = 'col-span-full grid grid-cols-subgrid items-center gap-x-4 border-l-2 px-3 py-2.5'
+  'grid grid-cols-[max-content_minmax(0,1fr)_6.5em_5.75em_2.75em] items-center'
+export const LEADS_ROW = 'col-span-full grid grid-cols-subgrid items-center gap-x-6 border-l-2 px-3 py-2.5'
 
 const menuItem = 'block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper'
 
