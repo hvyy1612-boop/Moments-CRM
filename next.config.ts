@@ -24,6 +24,14 @@ const nextConfig: NextConfig = {
   // the build overwrites the chunks the dev server is serving and both break, so the suite gets
   // its own output directory via NEXT_DIST_DIR (playwright.config.ts sets it).
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
+  // The staff "Enquiries" module was renamed "Leads" (UI + route; the DB model is still Enquiry). Old
+  // bookmarks, emails and notification links keep working.
+  async redirects() {
+    return [
+      { source: '/enquiries', destination: '/leads', permanent: true },
+      { source: '/enquiries/:path*', destination: '/leads/:path*', permanent: true },
+    ]
+  },
   eslint: {
     // The verify pipeline runs ESLint as its own dedicated step (§12.2), so `next build` does not
     // re-run it. This also avoids a flat-config plugin-detection warning during the build.

@@ -20,7 +20,7 @@ const COLUMNS: ReportColumn[] = [
 ]
 
 export default async function EnquiriesReportPage({ searchParams }: { searchParams: Promise<{ ids?: string }> }) {
-  const user = await requireRole('/enquiries/report')
+  const user = await requireRole('/leads/report')
   const { ids: idsParam } = await searchParams
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
@@ -63,7 +63,7 @@ export default async function EnquiriesReportPage({ searchParams }: { searchPara
       <div className="print:hidden">
         <AppShell user={user} csrf={csrf} active="enquiries">
           <PageContainer variant="narrow">
-            <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Leads', href: '/enquiries' }, { label: 'Report' }]} />
+            <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Leads', href: '/leads' }, { label: 'Report' }]} />
             <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
               <h1 className="font-serif text-xl font-semibold text-ink">Leads report</h1>
               <PrintButton label="Download PDF" />

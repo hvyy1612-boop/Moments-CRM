@@ -32,11 +32,11 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/reset/[token]': { public: true },
   // Forced first-login password change: any signed-in staff member, before any role-gated area.
   '/change-password': { roles: ['ADMIN', 'STUDIO', 'EDITOR'] },
-  // Staff workspace: the dashboard, enquiries, projects, and the project detail.
+  // Staff workspace: the dashboard, leads (DB Enquiry), jobs (DB Project) and their detail pages.
   '/dashboard': { roles: ['ADMIN', 'STUDIO'] },
-  '/enquiries': { roles: ['ADMIN', 'STUDIO'] },
-  '/enquiries/report': { roles: ['ADMIN', 'STUDIO'] },
-  '/enquiries/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  '/leads': { roles: ['ADMIN', 'STUDIO'] },
+  '/leads/report': { roles: ['ADMIN', 'STUDIO'] },
+  '/leads/[id]': { roles: ['ADMIN', 'STUDIO'] },
   '/jobs': { roles: ['ADMIN', 'STUDIO'] },
   '/jobs/report': { roles: ['ADMIN', 'STUDIO'] },
   '/jobs/[id]': { roles: ['ADMIN', 'STUDIO'] },

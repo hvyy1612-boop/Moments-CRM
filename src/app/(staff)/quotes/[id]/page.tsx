@@ -145,7 +145,7 @@ export default async function QuoteDetailPage({
               {quote.project ? (
                 <Link href={`/jobs/${quote.project.id}`} className="text-ink hover:text-accent">{jobName}</Link>
               ) : quote.enquiry ? (
-                <Link href={`/enquiries/${quote.enquiry.id}`} className="text-ink hover:text-accent">{jobName}</Link>
+                <Link href={`/leads/${quote.enquiry.id}`} className="text-ink hover:text-accent">{jobName}</Link>
               ) : <span className="text-ink">{jobName}</span>}
               {shootDate ? <><span aria-hidden>·</span><span>Shoot {formatSydneyDate(shootDate)}</span></> : null}
               {v.issueDate ? <><span aria-hidden>·</span><span>Issued {formatSydneyDate(v.issueDate)}</span></> : null}

@@ -12,7 +12,7 @@ import { titleCase } from '@/lib/text'
 import { formatSydneyDate } from '@/lib/time'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
-import { AddEnquiryButton } from '../../enquiries/AddEnquiryButton'
+import { AddEnquiryButton } from '../../leads/AddEnquiryButton'
 import { DeleteClientButton } from './DeleteClientButton'
 
 export const runtime = 'nodejs'
@@ -206,7 +206,7 @@ export default async function ClientDetailPage({
           icon={<IconDoc />}
           action={
             enquiry ? (
-              <Link href={`/enquiries/${enquiry.id}`} className="text-sm font-medium text-accent-ink hover:underline">
+              <Link href={`/leads/${enquiry.id}`} className="text-sm font-medium text-accent-ink hover:underline">
                 {enquiryCount > 1 ? `Open lead (${enquiryCount})` : 'Open lead'}
               </Link>
             ) : null

@@ -12,7 +12,8 @@ export function HBars({ bars, colors, format }: { bars: Bar[]; colors: string[];
     <div className="flex w-full flex-col gap-3">
       {bars.map((b, i) => (
         <div key={b.label} className="flex items-center gap-3">
-          <span className="w-28 shrink-0 truncate text-sm text-ink-muted">{b.label}</span>
+          {/* Wraps instead of truncating, so a long stage name (e.g. "Awaiting booking confirmation") reads in full. */}
+          <span className="w-36 shrink-0 text-sm leading-snug text-ink-muted">{b.label}</span>
           <div className="h-2 flex-1 overflow-hidden rounded-full bg-sunk">
             <div
               className="h-full rounded-full"

@@ -74,7 +74,7 @@ export function AddEnquiryButton({
   const topMessage = clientErrors.contact ?? (state.status === 'error' ? state.message : undefined)
 
   useEffect(() => {
-    if (state.status === 'created') router.push(`/enquiries/${state.enquiryId}`)
+    if (state.status === 'created') router.push(`/leads/${state.enquiryId}`)
   }, [state, router])
 
   const openModal = () => {

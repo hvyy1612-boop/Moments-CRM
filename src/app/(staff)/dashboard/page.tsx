@@ -246,7 +246,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                   <h2 className="font-semibold text-lg leading-tight text-ink">Recent leads</h2>
                   <p className="mt-0.5 text-xs text-ink-muted">Latest leads across all channels.</p>
                 </div>
-                <Link href="/enquiries" className="shrink-0 text-sm font-medium text-accent-ink hover:underline">View all →</Link>
+                <Link href="/leads" className="shrink-0 text-sm font-medium text-accent-ink hover:underline">View all →</Link>
               </div>
               {d.recentEnquiries.length === 0 ? (
                 <Empty>No leads yet</Empty>
@@ -266,7 +266,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                       {d.recentEnquiries.map((e) => (
                         <tr key={e.id} className="border-b border-line last:border-0">
                           <td className="py-2.5 pr-3 font-medium text-ink">
-                            <Link href={`/enquiries/${e.id}`} className="hover:text-accent-ink">{e.name}</Link>
+                            <Link href={`/leads/${e.id}`} className="hover:text-accent-ink">{e.name}</Link>
                           </td>
                           <td className="py-2.5 pr-3 text-ink-muted">{fmtDate(e.createdAt)}</td>
                           <td className="py-2.5 pr-3 text-ink-muted">{e.service ?? '-'}</td>

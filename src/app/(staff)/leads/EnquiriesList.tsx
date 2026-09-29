@@ -76,7 +76,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
       cell: (r) => (
         <span className="flex items-center gap-2">
           <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${r.unread ? 'bg-warn' : 'bg-transparent'}`} />
-          <Link href={`/enquiries/${r.id}`} className={`tabular block whitespace-nowrap text-ink transition-colors group-hover:text-accent-ink ${r.unread ? 'font-semibold' : 'font-medium'}`}>
+          <Link href={`/leads/${r.id}`} className={`tabular block whitespace-nowrap text-ink transition-colors group-hover:text-accent-ink ${r.unread ? 'font-semibold' : 'font-medium'}`}>
             {r.number ?? '-'}
           </Link>
         </span>
@@ -88,7 +88,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
       header: 'Client',
       width: COL.flexHigh,
       cell: (r) => (
-        <Link href={`/enquiries/${r.id}`} className={`block truncate text-ink transition-colors hover:text-accent-ink ${r.unread ? 'font-semibold' : ''}`}>
+        <Link href={`/leads/${r.id}`} className={`block truncate text-ink transition-colors hover:text-accent-ink ${r.unread ? 'font-semibold' : ''}`}>
           {r.name}
         </Link>
       ),
@@ -176,7 +176,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
       </div>
 
       {/* Table */}
-      <ExportBar count={selectedIds.length} reportHref={`/enquiries/report?ids=${selectedIds.join(',')}`} className="mt-4" />
+      <ExportBar count={selectedIds.length} reportHref={`/leads/report?ids=${selectedIds.join(',')}`} className="mt-4" />
       <div className="mt-4">
         <DataTable
           ariaLabel="Leads"

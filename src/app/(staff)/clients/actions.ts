@@ -104,8 +104,8 @@ export async function createClientAction(formData: FormData): Promise<void> {
   )
 
   revalidatePath('/clients')
-  revalidatePath('/enquiries')
-  redirect(`/enquiries/${enquiry.id}?toast=enquiry-added`)
+  revalidatePath('/leads')
+  redirect(`/leads/${enquiry.id}?toast=enquiry-added`)
 }
 
 export type ImportState =

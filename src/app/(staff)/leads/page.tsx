@@ -13,7 +13,7 @@ export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Leads - Moments' }
 
 export default async function EnquiriesPage() {
-  const user = await requireRole('/enquiries')
+  const user = await requireRole('/leads')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 

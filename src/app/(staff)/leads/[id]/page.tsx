@@ -51,10 +51,10 @@ export default async function EnquiryDetailPage({
   params: Promise<{ id: string }>
   searchParams: Promise<{ back?: string }>
 }) {
-  const user = await requireRole('/enquiries/[id]')
+  const user = await requireRole('/leads/[id]')
   const { id } = await params
   const { back } = await searchParams
-  const backHref = back ? `/enquiries?${back}` : '/enquiries'
+  const backHref = back ? `/leads?${back}` : '/leads'
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
@@ -85,7 +85,7 @@ export default async function EnquiryDetailPage({
       },
     },
   })
-  // /enquiries/[id] loads the Enquiry entity ONLY - it never guesses a Project id (docs/24 FIX 11).
+  // /leads/[id] loads the Enquiry (lead) entity ONLY - it never guesses a Project id (docs/24 FIX 11).
   if (!enquiry) notFound()
 
   const [activity, quotes] = await Promise.all([

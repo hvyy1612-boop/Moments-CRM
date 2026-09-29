@@ -40,7 +40,7 @@ export type AddEnquiryState =
   | { status: 'error'; message?: string; errors?: { name?: string; email?: string } }
   | { status: 'created'; enquiryId: string }
 
-/** Staff adds a REAL Enquiry (a lead). It appears immediately in /enquiries with its seeded workflow. */
+/** Staff adds a REAL Enquiry (a lead). It appears immediately in /leads with its seeded workflow. */
 export type ClientMatch = { id: string; displayName: string; email: string }
 
 /** Type-ahead search for the "Primary Client Contact" picker (name or email). */
@@ -111,7 +111,7 @@ export async function addEnquiryAction(_prev: AddEnquiryState, formData: FormDat
     },
     user.id,
   )
-  revalidatePath('/enquiries')
+  revalidatePath('/leads')
   revalidatePath('/clients')
   return { status: 'created', enquiryId: enquiry.id }
 }
@@ -138,8 +138,8 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
     default:
       return
   }
-  revalidatePath('/enquiries')
-  revalidatePath(`/enquiries/${enquiryId}`)
+  revalidatePath('/leads')
+  revalidatePath(`/leads/${enquiryId}`)
   revalidatePath('/jobs')
 }
 
@@ -155,8 +155,8 @@ function parseDue(formData: FormData): Date | null {
 }
 
 function revalidateEnquiry(enquiryId: string) {
-  revalidatePath('/enquiries')
-  if (enquiryId) revalidatePath(`/enquiries/${enquiryId}`)
+  revalidatePath('/leads')
+  if (enquiryId) revalidatePath(`/leads/${enquiryId}`)
 }
 
 /** Toggle a workflow task (tick to complete, tick again to reopen). */
@@ -246,8 +246,8 @@ export async function sendReplyAction(formData: FormData): Promise<void> {
   const body = String(formData.get('body') ?? '')
   if (!enquiryId || !body.trim()) return
   await sendStaffReply(enquiryId, body, user.id)
-  revalidatePath('/enquiries')
-  revalidatePath(`/enquiries/${enquiryId}`)
+  revalidatePath('/leads')
+  revalidatePath(`/leads/${enquiryId}`)
 }
 
 /** Record a message received from the client (moves the ball back to the studio). */
@@ -258,8 +258,8 @@ export async function logClientReplyAction(formData: FormData): Promise<void> {
   const body = String(formData.get('body') ?? '')
   if (!enquiryId || !body.trim()) return
   await logClientReply(enquiryId, body, user.id)
-  revalidatePath('/enquiries')
-  revalidatePath(`/enquiries/${enquiryId}`)
+  revalidatePath('/leads')
+  revalidatePath(`/leads/${enquiryId}`)
 }
 
 /** Convert an enquiry into a client + project, then open the new project. */
@@ -270,7 +270,7 @@ export async function convertEnquiryAction(formData: FormData): Promise<void> {
   if (!enquiryId) throw new Error('Missing enquiry.')
   const result = await convertEnquiry(enquiryId, user.id)
   if (result.projectId) await seedProjectWorkflow(result.projectId)
-  revalidatePath('/enquiries')
+  revalidatePath('/leads')
   redirect(`/jobs/${result.projectId}?toast=job-created`)
 }
 
@@ -282,7 +282,7 @@ export async function markEnquiryLostAction(formData: FormData): Promise<void> {
   if (!enquiryId) throw new Error('Missing enquiry.')
   const reason = String(formData.get('reason') ?? '').trim() || 'Cancelled'
   await markEnquiryLost(enquiryId, reason, user.id)
-  revalidatePath('/enquiries')
+  revalidatePath('/leads')
 }
 
 
@@ -296,5 +296,5 @@ export async function markEnquiryViewedAction(id: string): Promise<void> {
   if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDIO')) return
   if (!id) return
   await prisma.enquiry.updateMany({ where: { id, viewedAt: null }, data: { viewedAt: new Date() } })
-  revalidatePath('/enquiries')
+  revalidatePath('/leads')
 }

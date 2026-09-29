@@ -104,7 +104,7 @@ export async function getTodayCockpit(): Promise<TodayCockpit> {
       id: w.id, title: w.title,
       client: isLead ? w.enquiry!.name : (w.project?.client.displayName ?? 'Job'),
       category: isLead ? 'lead' : 'job',
-      href: isLead ? `/enquiries/${w.enquiry!.id}` : `/jobs/${w.project!.id}`,
+      href: isLead ? `/leads/${w.enquiry!.id}` : `/jobs/${w.project!.id}`,
       dueLabel: formatSydneyDate(date),
       overdue: ms < dayStart.getTime(),
     }
@@ -121,7 +121,7 @@ export async function getTodayCockpit(): Promise<TodayCockpit> {
     timeLabel: formatSydneyTime(b.startsAt), href: `/jobs/${b.project.id}`,
   }))
   const waitingLeads: WaitingLead[] = waiting.map((e) => ({
-    id: e.id, name: e.name, sinceLabel: formatSydneyDate(e.updatedAt), href: `/enquiries/${e.id}`,
+    id: e.id, name: e.name, sinceLabel: formatSydneyDate(e.updatedAt), href: `/leads/${e.id}`,
   }))
 
   return {

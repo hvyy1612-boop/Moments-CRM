@@ -39,7 +39,7 @@ export async function createQuoteForEnquiryAction(formData: FormData): Promise<v
     const res = await createQuoteForEnquiry(enquiryId, user.id)
     quoteId = res.quoteId
   } catch {
-    redirect(`/enquiries/${enquiryId}?quoteError=1`)
+    redirect(`/leads/${enquiryId}?quoteError=1`)
   }
   redirect(`/quotes/${quoteId}/edit`)
 }
