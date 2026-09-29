@@ -61,21 +61,21 @@ export function presetRows(key: SchedulePreset, total: number, issueDate: string
       const d = deposit(0.25)
       return [
         { label: 'Deposit (25%)', dueAt: issueDate, amount: amt(d) },
-        { label: 'Balance (75%)', dueAt: shootDue(-14), amount: amt(cents - d) },
+        { label: 'Final payment (75%)', dueAt: shootDue(-14), amount: amt(cents - d) },
       ]
     }
     case 'D50_B50_30D': {
       const d = deposit(0.5)
       return [
         { label: 'Deposit (50%)', dueAt: issueDate, amount: amt(d) },
-        { label: 'Balance (50%)', dueAt: addDays(issueDate, 30), amount: amt(cents - d) },
+        { label: 'Final payment (50%)', dueAt: addDays(issueDate, 30), amount: amt(cents - d) },
       ]
     }
     case 'D50_B50_SHOOT': {
       const d = deposit(0.5)
       return [
         { label: 'Deposit (50%)', dueAt: issueDate, amount: amt(d) },
-        { label: 'Balance (50%)', dueAt: shootDue(0), amount: amt(cents - d) },
+        { label: 'Final payment (50%)', dueAt: shootDue(0), amount: amt(cents - d) },
       ]
     }
     case 'DUE7':

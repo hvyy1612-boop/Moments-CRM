@@ -498,7 +498,7 @@ export function InvoiceEditor({
                 </div>
               ))}
               <div className="flex flex-wrap items-center gap-3">
-                <Button type="button" variant="secondary" size="sm" onClick={addInst}>Add instalment</Button>
+                <Button type="button" variant="secondary" size="sm" onClick={addInst}>Add payment stage</Button>
                 <p className={`text-xs ${scheduleMismatch ? 'font-bold text-danger' : 'text-ink-muted'}`}>
                   Scheduled {money(scheduled)} of {money(total)}{scheduleMismatch ? ' - must match the total' : ''}
                 </p>
