@@ -1,7 +1,7 @@
 'use client'
 
 import { Button } from '@/components/ui/Button'
-import { deleteClientAction } from '../actions'
+import { removeClientAction } from '../actions'
 
 function IconTrash() {
   return (
@@ -19,19 +19,23 @@ function IconTrash() {
   )
 }
 
-/** Permanent delete with a confirm step (ADMIN only). Cascades the client and all their history. */
+/**
+ * Remove a client, with a confirm step. No hard cascade: an empty client is deleted for good, while a
+ * client with jobs or enquiries is archived instead (reversible), so their financial history is never
+ * destroyed. Archiving a client with history is ADMIN-only (enforced server-side).
+ */
 export function DeleteClientButton({ clientId, name, csrf }: { clientId: string; name: string; csrf: string }) {
   return (
     <form
-      action={deleteClientAction}
+      action={removeClientAction}
       onSubmit={(e) => {
-        if (!window.confirm(`Permanently delete ${name} and ALL their jobs, quotes, invoices and history? This cannot be undone.`)) e.preventDefault()
+        if (!window.confirm(`Remove ${name}? If they have no jobs or enquiries they are deleted for good; otherwise they are archived and you can restore them later.`)) e.preventDefault()
       }}
     >
       <input type="hidden" name="csrf" value={csrf} />
       <input type="hidden" name="clientId" value={clientId} />
       <Button variant="secondary" size="sm" type="submit" className="text-ink-muted hover:text-danger">
-        <IconTrash /> Delete client
+        <IconTrash /> Remove client
       </Button>
     </form>
   )

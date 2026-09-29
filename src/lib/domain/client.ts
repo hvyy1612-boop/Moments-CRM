@@ -148,42 +148,25 @@ export async function restoreClient(clientId: string, actorUserId: string) {
 }
 
 /**
- * Delete a client for good. Only when nothing references them (no projects) - a client with real work
- * must be archived instead, so business records are never orphaned. The caller decides which to offer.
+ * True when a client carries real history - any job, any enquiry (a current lead or one that already
+ * converted), or another duplicate merged into them. Such a client is NEVER hard-deleted: the "Remove"
+ * flow archives them instead (reversible), so business records and the payment ledger are never
+ * orphaned or destroyed. Only a truly empty client (all counts zero) is safe to delete outright, via
+ * {@link deleteEmptyClients}. This replaces the old cascade delete, which wiped a client's paid
+ * invoices and payments and so broke the ledger-integrity invariant.
  */
-/**
- * Permanently delete a client AND everything under them - jobs, bookings, quotes, contracts,
- * invoices, payments, galleries, tasks, communications and contacts (Studio-Ninja style hard delete).
- * Runs in one transaction; the FK-restricted children are removed before their project, so a failure
- * rolls back and the client is left untouched. This is irreversible - the UI confirms first and it is
- * ADMIN-only.
- */
-export async function deleteClient(clientId: string, actorUserId: string) {
-  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, companyId: true } })
-  if (!client) throw new Error('Client not found.')
-  const projects = await prisma.project.findMany({ where: { clientId }, select: { id: true } })
-  const projectIds = projects.map((p) => p.id)
-
-  return prisma.$transaction(async (tx) => {
-    if (projectIds.length > 0) {
-      const inP = { projectId: { in: projectIds } }
-      // Restrict children first (must go before the project itself)...
-      await tx.payment.deleteMany({ where: inP })
-      await tx.invoice.deleteMany({ where: inP })
-      await tx.quote.deleteMany({ where: inP })
-      await tx.contract.deleteMany({ where: inP })
-      await tx.booking.deleteMany({ where: inP })
-      await tx.gallery.deleteMany({ where: inP })
-      // ...then the projects (cascades work items, communications, files, questionnaires, change requests).
-      await tx.project.deleteMany({ where: { id: { in: projectIds } } })
-    }
-    await tx.communication.deleteMany({ where: { clientId } })
-    await tx.contact.deleteMany({ where: { clientId } })
-    await tx.client.delete({ where: { id: clientId } })
-    await tx.auditLog.create({
-      data: { companyId: client.companyId, actorUserId, action: 'client.deleted', entityType: 'Client', entityId: clientId },
-    })
+export async function clientHasHistory(clientId: string): Promise<boolean> {
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: {
+      _count: {
+        select: { projects: true, enquiries: true, convertedFromEnquiries: true, mergedFrom: true },
+      },
+    },
   })
+  if (!client) return false
+  const n = client._count
+  return n.projects > 0 || n.enquiries > 0 || n.convertedFromEnquiries > 0 || n.mergedFrom > 0
 }
 
 /**
@@ -193,8 +176,9 @@ export async function deleteClient(clientId: string, actorUserId: string) {
 export type DeleteEmptyClientsResult = { deleted: number; skipped: number }
 
 /**
- * Bulk-delete ONLY empty clients - the safe counterpart to {@link deleteClient} for the multi-select
- * "Delete" on the Clients list. A client is deletable only when it has NO jobs, NO enquiries (neither a
+ * Bulk-delete ONLY empty clients - the single safe delete path (there is no hard cascade any more) for
+ * the multi-select "Delete" on the Clients list and the single-row Remove. A client is deletable only
+ * when it has NO jobs, NO enquiries (neither a
  * current lead nor one that already converted), and NO other duplicate merged into it; any client that
  * fails the test is left untouched (counted in `skipped`), never cascade-deleted. This is deliberately
  * strict so the bulk control can never wipe out invoices, payments or job history the way the single

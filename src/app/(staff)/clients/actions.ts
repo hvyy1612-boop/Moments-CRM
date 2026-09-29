@@ -10,8 +10,8 @@ import { prisma } from '@/lib/db'
 import {
   addClientNote,
   archiveClient,
+  clientHasHistory,
   createClient,
-  deleteClient,
   deleteClientNote,
   deleteEmptyClients,
   restoreClient,
@@ -215,14 +215,27 @@ export async function restoreClientAction(formData: FormData): Promise<void> {
   revalidatePath(`/clients/${clientId}`)
 }
 
-/** Permanently delete a client and all their jobs/history (ADMIN only; the UI confirms first). */
-export async function deleteClientAction(formData: FormData): Promise<void> {
+/**
+ * Remove a single client safely. There is no hard cascade any more: an EMPTY client (no jobs, no
+ * enquiries, no merged-in duplicate) is deleted outright; a client WITH history is ARCHIVED instead
+ * (reversible via restore), so their jobs, invoices and payment ledger are never destroyed. Archiving a
+ * client that has history is ADMIN-only (deleting an empty one is open to any staff); the UI confirms
+ * first. Never deletes paid financial records - that closes the old cascade loophole.
+ */
+export async function removeClientAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
-  if (user.role !== 'ADMIN') throw new Error('Only an admin can permanently delete a client.')
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
   const clientId = String(formData.get('clientId') ?? '')
   if (!clientId) return
-  await deleteClient(clientId, user.id)
+  if (await clientHasHistory(clientId)) {
+    if (user.role !== 'ADMIN') {
+      throw new Error('Only an admin can archive a client that already has jobs or enquiries.')
+    }
+    await archiveClient(clientId, user.id)
+  } else {
+    // Empty client: safe to delete for good (deleteEmptyClients re-checks emptiness atomically).
+    await deleteEmptyClients([clientId], user.id)
+  }
   revalidatePath('/clients')
   redirect('/clients')
 }
