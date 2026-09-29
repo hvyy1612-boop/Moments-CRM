@@ -8,8 +8,10 @@ import { IconMore, IconSystem, IconUser } from './icons'
 // One shared column grid so the phase header and every row line up in true columns
 // (checkbox | Task | Due date | Owner | Status | actions). The parent owns the track sizes; each
 // row re-uses them with subgrid, which keeps a per-row box for hover and attention tint.
+// Task flexes (widest); the metadata columns get defined widths (em, so they scale with text size)
+// instead of max-content, so they read as evenly-spaced columns rather than a cluster hugging the right.
 export const PHASE_GRID =
-  'grid grid-cols-[max-content_minmax(0,1fr)_max-content_max-content_max-content_max-content] items-center'
+  'grid grid-cols-[max-content_minmax(0,1fr)_7em_9em_6em_max-content] items-center'
 export const ROW = 'col-span-full grid grid-cols-subgrid items-center gap-x-4 border-l-2 px-3 py-2.5'
 
 /** Done / Pending only. Attention is NEVER a status - it is shown on the due date, not here.
