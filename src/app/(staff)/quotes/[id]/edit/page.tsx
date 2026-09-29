@@ -46,6 +46,7 @@ export default async function QuoteEditPage({ params }: { params: Promise<{ id: 
     name: p.name,
     price: p.basePriceInclGst.toFixed(2),
     details: p.inclusions ?? p.description,
+    isAddOn: p.isAddOn,
   }))
 
   return (
@@ -82,6 +83,7 @@ export default async function QuoteEditPage({ params }: { params: Promise<{ id: 
           saveAction={saveQuoteAction}
           sendAction={sendQuoteAction}
           sendLabel="Send quote to client"
+          cancelHref={`/quotes/${id}`}
         />
     </PageContainer>
     </AppShell>

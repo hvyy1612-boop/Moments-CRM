@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState, useEffect, useRef, useState, type ReactNode } from 'react'
+import Link from 'next/link'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Field, Select, TextInput, Textarea } from '@/components/ui/form'
@@ -8,7 +9,7 @@ import { estimateTotals, estimateDeposit, toCents, formatCents } from '@/lib/pri
 import type { QuoteActionState } from '../actions'
 
 type QuoteFormAction = (prev: QuoteActionState, formData: FormData) => Promise<QuoteActionState>
-type QuotePackage = { id: string; name: string; price: string; details?: string | null }
+type QuotePackage = { id: string; name: string; price: string; details?: string | null; isAddOn?: boolean }
 
 /**
  * Studio-Ninja-style staff quote builder (docs/31). The quote is assembled by staff from the catalogue:
@@ -53,6 +54,7 @@ export function QuoteBuilder({
   saveAction,
   sendAction,
   sendLabel = 'Send to client',
+  cancelHref,
 }: {
   csrf: string
   projectId: string
@@ -72,6 +74,8 @@ export function QuoteBuilder({
   saveAction: QuoteFormAction
   sendAction: QuoteFormAction
   sendLabel?: string
+  /** When set (Edit Quote), the footer shows "Save quote" + a "Cancel" link (no inline Send). */
+  cancelHref?: string
 }) {
   const [lines, setLines] = useState<Line[]>(initialLines)
   const [depositPercent, setDepositPercent] = useState(initialDepositPercent || '30')
@@ -109,10 +113,16 @@ export function QuoteBuilder({
   const pct = Math.min(100, Math.max(0, Number.parseInt(depositPercent || '0', 10) || 0))
   const dep = estimateDeposit(est.totalCents, pct)
 
-  const addPackage = (id: string) => {
+  // Catalogue split: regular packages vs add-on products, so each has its own "choose from the catalogue"
+  // dropdown (add-ons no longer start as a blank manual row).
+  const packageOptions = packages.filter((p) => !p.isAddOn)
+  const addonOptions = packages.filter((p) => p.isAddOn)
+  const addCatalogue = (id: string, lineType: 'package' | 'addon') => {
     const pkg = packages.find((p) => p.id === id)
-    if (pkg) setLines((cur) => [...cur, { description: pkg.name, quantity: 1, unitPrice: pkg.price, lineType: 'package', referenceId: pkg.id, details: pkg.details ?? null }])
+    if (pkg) setLines((cur) => [...cur, { description: pkg.name, quantity: 1, unitPrice: pkg.price, lineType, referenceId: pkg.id, details: pkg.details ?? null }])
   }
+  const addPackage = (id: string) => addCatalogue(id, 'package')
+  const addAddon = (id: string) => addCatalogue(id, 'addon')
   const addRow = (lineType: LineType) => setLines((cur) => [...cur, { description: '', quantity: 1, unitPrice: '', lineType }])
   const update = (index: number, patch: Partial<Line>) => setLines((cur) => cur.map((l, i) => (i === index ? { ...l, ...patch } : l)))
   const removeRow = (index: number) => setLines((cur) => cur.filter((_, i) => i !== index))
@@ -126,7 +136,7 @@ export function QuoteBuilder({
     <div className="mt-4 flex flex-col gap-5">
       <form ref={saveFormRef} action={save} className="border-t border-line pt-6">
         {saveState.status === 'error' ? <div className="mb-6"><Alert tone="danger" title={saveState.message} /></div> : null}
-        {saveState.status === 'success' ? <div className="mb-6"><Alert tone="success" title="Draft saved" /></div> : null}
+        {saveState.status === 'success' ? <div className="mb-6"><Alert tone="success" title={cancelHref ? 'Quote saved' : 'Draft saved'} /></div> : null}
         <input type="hidden" name="csrf" value={csrf} />
         <input type="hidden" name="versionId" value={versionId} />
         <input type="hidden" name="projectId" value={projectId} />
@@ -149,22 +159,15 @@ export function QuoteBuilder({
             </div>
           </div>
 
-          {/* Introduction — the covering note shown at the top of the client's quote. */}
-          <section className="min-w-0">
-            <label htmlFor="introduction" className="text-sm font-semibold text-ink">Introduction</label>
-            <p className="mt-0.5 text-sm text-ink-muted">A short covering note shown at the top of the quote.</p>
-            <Textarea id="introduction" name="introduction" rows={3} defaultValue={initialIntroduction} placeholder="Thank you for considering Moments. Here is the quote for your shoot..." className="mt-2" />
-          </section>
-
           {/* Line items — packages, add-ons and any custom lines (the invoice's "Products & packages"). */}
           <section className="flex min-w-0 flex-col gap-6">
             <div>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-ink">Packages</p>
-                {packages.length > 0 ? (
+                {packageOptions.length > 0 ? (
                   <Select aria-label="Add a package" value="" onChange={(e) => { addPackage(e.target.value); e.currentTarget.value = '' }} className="h-8 max-w-xs">
                     <option value="" disabled>Add a package...</option>
-                    {packages.map((p) => (
+                    {packageOptions.map((p) => (
                       <option key={p.id} value={p.id}>{p.name} - {formatCents(toCents(p.price))}</option>
                     ))}
                   </Select>
@@ -184,7 +187,16 @@ export function QuoteBuilder({
             <div>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-ink">Add-ons</p>
-                <Button type="button" variant="secondary" size="sm" onClick={() => addRow('addon')}>+ Add add-on</Button>
+                {addonOptions.length > 0 ? (
+                  <Select aria-label="Add an add-on" value="" onChange={(e) => { addAddon(e.target.value); e.currentTarget.value = '' }} className="h-8 max-w-xs">
+                    <option value="" disabled>Add an add-on...</option>
+                    {addonOptions.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name} - {formatCents(toCents(p.price))}</option>
+                    ))}
+                  </Select>
+                ) : (
+                  <Button type="button" variant="secondary" size="sm" onClick={() => addRow('addon')}>+ Add add-on</Button>
+                )}
               </div>
               <div className="mt-2">
                 {addonRows.length === 0 ? <EmptyLines /> : (
@@ -238,10 +250,23 @@ export function QuoteBuilder({
             </div>
 
             <div className="flex flex-col gap-3 lg:col-span-4 lg:col-start-9 lg:row-start-2">
-              <p className="text-xs text-ink-muted">Prices include GST and are recalculated when you save. Sending saves your latest changes first, then opens the email to the client.</p>
+              <p className="text-xs text-ink-muted">
+                {cancelHref
+                  ? 'Prices include GST and are recalculated when you save.'
+                  : 'Prices include GST and are recalculated when you save. Sending saves your latest changes first, then opens the email to the client.'}
+              </p>
               <div className="flex flex-wrap items-center gap-2">
-                <Button type="submit" variant="secondary" loading={saving && !pendingSendRef.current}>Save draft</Button>
-                <Button type="button" loading={saving && pendingSendRef.current} onClick={startSend}>{sendLabel}</Button>
+                {cancelHref ? (
+                  <>
+                    <Button type="submit" loading={saving}>Save quote</Button>
+                    <Link href={cancelHref}><Button type="button" variant="secondary">Cancel</Button></Link>
+                  </>
+                ) : (
+                  <>
+                    <Button type="submit" variant="secondary" loading={saving && !pendingSendRef.current}>Save draft</Button>
+                    <Button type="button" loading={saving && pendingSendRef.current} onClick={startSend}>{sendLabel}</Button>
+                  </>
+                )}
               </div>
             </div>
           </div>
