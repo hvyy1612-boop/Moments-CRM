@@ -10,8 +10,8 @@ import { signOut } from './actions'
 
 /**
  * Global top navigation, shared by every authenticated page. Left: sidebar toggle + Moments wordmark.
- * Centre: global search (the command palette). Right: notification bell + account avatar. It shares the
- * page background and carries no bottom border, so it and the sidebar read as one continuous surface.
+ * Right: a compact search icon (opens the command palette), the notification bell + account avatar. It
+ * shares the page background and carries no bottom border, so it and the sidebar read as one surface.
  */
 export function TopNav({
   collapsed,
@@ -62,13 +62,10 @@ export function TopNav({
         <Image src="/landing/wordmark.png" alt="Moments" width={655} height={148} priority className="h-6 w-auto sm:h-7" />
       </Link>
 
-      <div className="flex min-w-0 flex-1 justify-center px-3 sm:px-6">
-        <div className="w-full max-w-xl">
-          <CommandPalette />
-        </div>
-      </div>
+      <div className="flex-1" />
 
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+      <CommandPalette />
       <NotificationBell alerts={alerts} />
 
       <div ref={menuRef} className="relative shrink-0">
