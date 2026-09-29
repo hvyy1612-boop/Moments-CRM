@@ -18,8 +18,7 @@ import { titleCase } from '@/lib/text'
 import {
   describeInvoiceEvent,
   instalmentStatus,
-  INVOICE_STATUS_LABEL,
-  INVOICE_STATUS_TONE,
+  invoiceStatusView,
 } from '@/features/finance/invoice-detail'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
@@ -164,7 +163,10 @@ export default async function InvoiceDetailPage({
       : []
   })
 
-  const statusCode = status as keyof typeof INVOICE_STATUS_LABEL
+  // Unpaid + past its due date still reads "Unpaid" but turns red - overdue is a colour, not a 4th status.
+  const isOverdue =
+    status !== 'PAID' && status !== 'VOID' && balanceDue.greaterThan(0) && inv.dueAt != null && ymd(inv.dueAt) < todayYmd
+  const statusView = invoiceStatusView(status, { overdue: isOverdue })
   const doc = <InvoiceDocument invoice={{ ...inv, creditsTotal: docCredits }} />
 
   return (
@@ -180,7 +182,7 @@ export default async function InvoiceDetailPage({
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-3">
                   <h1 className="text-xl font-semibold leading-tight text-ink">Invoice #{inv.invoiceNumber}</h1>
-                  <StatusPill tone={INVOICE_STATUS_TONE[statusCode]}>{INVOICE_STATUS_LABEL[statusCode]}</StatusPill>
+                  <StatusPill tone={statusView.tone}>{statusView.label}</StatusPill>
                 </div>
                 <p className="mt-1 text-sm text-ink-muted">
                   <Link href={`/clients/${c.id}`} className="hover:text-ink hover:underline">{clientName}</Link>

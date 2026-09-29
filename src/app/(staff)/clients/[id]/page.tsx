@@ -21,7 +21,8 @@ import { statusKind, statusLabel } from '@/features/projects/lifecycle'
 import { ENQUIRY_STAGE_LABEL, ENQUIRY_STAGE_KIND, OPEN_STATUSES } from '@/features/enquiries/status'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
-import { StatusPill, type Tone } from '@/components/ui/StatusPill'
+import { StatusPill } from '@/components/ui/StatusPill'
+import { invoiceStatusView } from '@/features/finance/invoice-detail'
 import { DeleteClientButton } from './DeleteClientButton'
 import { InvoiceActions } from './InvoiceActions'
 
@@ -74,10 +75,6 @@ function initials(name: string): string {
 // One labelled primary (ink) carries the row; Edit/Delete are round icon buttons beside it.
 const PRIMARY_BTN =
   'inline-flex h-9 items-center gap-1.5 rounded-md bg-ink px-3.5 text-sm font-medium text-surface transition-opacity hover:opacity-90'
-
-const INVOICE_TONE: Record<string, Tone> = {
-  DRAFT: 'neutral', ISSUED: 'info', SENT: 'info', PARTIALLY_PAID: 'warn', PAID: 'good', OVERDUE: 'bad', VOID: 'neutral',
-}
 
 function SectionCard({
   title,
@@ -434,8 +431,8 @@ export default async function ClientDetailPage({
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="truncate text-sm font-semibold text-ink">{row.number}</p>
-                            <StatusPill tone={INVOICE_TONE[row.status] ?? 'neutral'}>
-                              {row.status.toLowerCase().replace(/_/g, ' ')}
+                            <StatusPill tone={invoiceStatusView(row.status, { overdue: row.overdue }).tone}>
+                              {invoiceStatusView(row.status, { overdue: row.overdue }).label}
                             </StatusPill>
                           </div>
                           <p className={`mt-1 text-xs ${row.overdue ? 'font-semibold text-danger' : 'text-ink-muted'}`}>

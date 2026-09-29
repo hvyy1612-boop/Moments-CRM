@@ -6,27 +6,22 @@
 
 export type InvoiceStatusCode = 'DRAFT' | 'ISSUED' | 'SENT' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'VOID'
 
-export const INVOICE_STATUS_LABEL: Record<InvoiceStatusCode, string> = {
-  DRAFT: 'Draft',
-  ISSUED: 'Issued',
-  SENT: 'Sent',
-  PARTIALLY_PAID: 'Partially paid',
-  PAID: 'Paid',
-  OVERDUE: 'Overdue',
-  VOID: 'Voided',
-}
-
 /** Tone for the shared StatusPill (ui/StatusPill): neutral unless the state carries meaning. */
 export type Tone = 'neutral' | 'info' | 'good' | 'warn' | 'bad'
 
-export const INVOICE_STATUS_TONE: Record<InvoiceStatusCode, Tone> = {
-  DRAFT: 'warn',
-  ISSUED: 'neutral',
-  SENT: 'info',
-  PARTIALLY_PAID: 'warn',
-  PAID: 'good',
-  OVERDUE: 'bad',
-  VOID: 'neutral',
+/**
+ * The invoice status the whole UI shows is folded to just THREE plain-English states (owner decision):
+ *   - Unpaid        - money is still owed (covers issued / sent / partially paid / overdue)
+ *   - Paid          - settled in full
+ *   - Uncollectible - written off; a debt that won't be recovered (the underlying VOID state)
+ * The finer InvoiceStatus enum stays in the database for correctness; this only decides the words + tone.
+ * Overdue is no longer a separate status - an unpaid invoice past its due date is still "Unpaid" but turns
+ * red (tone `bad`) via the `overdue` flag, so the urgency shows without adding a fourth label.
+ */
+export function invoiceStatusView(status: string, opts?: { overdue?: boolean }): { label: string; tone: Tone } {
+  if (status === 'PAID') return { label: 'Paid', tone: 'good' }
+  if (status === 'VOID') return { label: 'Uncollectible', tone: 'neutral' }
+  return { label: 'Unpaid', tone: opts?.overdue ? 'bad' : 'warn' }
 }
 
 export type InstalmentState = 'PAID' | 'PARTIAL' | 'UNPAID'

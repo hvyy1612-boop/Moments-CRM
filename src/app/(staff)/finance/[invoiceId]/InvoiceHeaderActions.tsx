@@ -79,11 +79,11 @@ export function InvoiceHeaderActions(props: {
         icon={<svg {...icon}><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>}
       />
       {canVoid ? (
-        <form action={voidInvoiceAction} onSubmit={(e) => { if (!window.confirm('Void this invoice? It stays on record but is marked void.')) e.preventDefault() }}>
+        <form action={voidInvoiceAction} onSubmit={(e) => { if (!window.confirm('Mark this invoice as uncollectible? It stays on record but is written off as a debt that will not be recovered.')) e.preventDefault() }}>
           {hidden}
           <IconButton
             type="submit"
-            label="Void invoice"
+            label="Mark uncollectible"
             tone="warn"
             icon={<svg {...icon}><circle cx="12" cy="12" r="9" /><path d="m6 6 12 12" /></svg>}
           />
