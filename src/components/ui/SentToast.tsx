@@ -34,12 +34,13 @@ export function SentToast({ email, label = 'Quote sent' }: { email: string; labe
       // history/URL unavailable (very old browser) - the toast still shows; refresh may repeat it.
     }
     const raf = requestAnimationFrame(() => setEntered(true))
-    // Stays ~5 minutes (like Gmail's "message sent" bar): the staffer dismisses it with the close button,
-    // or it clears on its own so it never lingers forever if they walk away.
-    const timer = setTimeout(() => setShow(false), 5 * 60 * 1000)
+    // The countdown ring drives auto-dismiss (onAnimationEnd fires when the ring empties, ~6s; it pauses
+    // while hovered). Reduced-motion users get no ring animation, so fall back to a plain timer.
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    const timer = reduce ? window.setTimeout(() => setShow(false), 6000) : undefined
     return () => {
       cancelAnimationFrame(raf)
-      clearTimeout(timer)
+      if (timer) clearTimeout(timer)
     }
   }, [])
 
@@ -49,10 +50,16 @@ export function SentToast({ email, label = 'Quote sent' }: { email: string; labe
     <div
       role="status"
       aria-live="polite"
-      className={`fixed left-4 right-4 top-20 z-50 ml-auto flex max-w-sm items-start gap-3 rounded-md border border-delivered-ink/25 border-l-4 border-l-delivered-ink bg-delivered p-4 shadow-lg transition-all duration-300 ease-out motion-reduce:transition-none ${entered ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'}`}
+      className={`toast-card fixed left-4 right-4 top-20 z-50 ml-auto flex max-w-sm items-start gap-3 rounded-md border border-delivered-ink/25 border-l-4 border-l-delivered-ink bg-delivered p-4 shadow-lg transition-all duration-300 ease-out motion-reduce:transition-none ${entered ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0'}`}
     >
-      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-delivered-ink text-white">
-        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m8.4 12 2.4 2.4 4.8-5.2" /></svg>
+      <span className="relative mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center">
+        <svg viewBox="0 0 28 28" className="absolute inset-0 h-7 w-7 -rotate-90" fill="none" aria-hidden="true">
+          <circle className="toast-ring-track" cx="14" cy="14" r="12" strokeWidth={2} />
+          <circle className="toast-ring-progress" cx="14" cy="14" r="12" strokeWidth={2} strokeLinecap="round" onAnimationEnd={() => setShow(false)} />
+        </svg>
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-delivered-ink text-white">
+          <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m8.4 12 2.4 2.4 4.8-5.2" /></svg>
+        </span>
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-ink">{label}</p>

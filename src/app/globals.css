@@ -616,3 +616,32 @@ body {
     padding: 26px 22px;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   SentToast countdown ring: a circle around the success tick that depletes over
+   the toast's lifetime, then the toast auto-dismisses (onAnimationEnd). Pauses on
+   hover so staff can finish reading. Colour literals live here (globals only).
+   Circle r=12 -> circumference ~75.4.
+   --------------------------------------------------------------------------- */
+@keyframes toast-ring-deplete {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: 75.4; }
+}
+.toast-ring-track {
+  stroke: var(--color-delivered-ink);
+  opacity: 0.22;
+}
+.toast-ring-progress {
+  stroke: var(--color-delivered-ink);
+  stroke-dasharray: 75.4;
+  animation: toast-ring-deplete 6s linear forwards;
+}
+.toast-card:hover .toast-ring-progress {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast-ring-progress {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
