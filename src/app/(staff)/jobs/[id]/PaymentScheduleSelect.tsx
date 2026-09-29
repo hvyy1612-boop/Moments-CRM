@@ -99,20 +99,20 @@ export function PaymentScheduleSelect({
             ) : null}
             {presets.length > 0 ? <p className="px-3 pb-1 pt-2 text-xs text-muted">Custom</p> : null}
             {presets.map((p) => {
-              const disabled = p.needsShoot && !shootDate
+              // Every preset is selectable. A shoot-based one on a job with no shoot date yet still works -
+              // its balance due date is just left blank for now (hint below) and can be set later.
+              const noShootYet = p.needsShoot && !shootDate
               return (
                 <button
                   key={p.key}
                   type="button"
                   role="option"
                   aria-selected={value === p.key}
-                  aria-disabled={disabled}
-                  disabled={disabled}
                   onClick={() => pick(p.key)}
-                  className={optionClass(value === p.key, disabled)}
+                  className={optionClass(value === p.key, false)}
                 >
                   <span>{p.label}</span>
-                  {disabled ? <span className="ml-auto shrink-0 text-xs">No shoot date yet</span> : null}
+                  {noShootYet ? <span className="ml-auto shrink-0 text-xs text-muted">No shoot date yet</span> : null}
                 </button>
               )
             })}

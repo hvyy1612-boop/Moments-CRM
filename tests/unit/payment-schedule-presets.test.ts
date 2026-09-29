@@ -37,9 +37,21 @@ describe('payment schedule presets', () => {
     expect(formatScheduleDate('2027-01-01')).toBe('01 Jan 2027')
   })
 
-  it('cannot be calculated for a $0 total or a shoot-based preset without a shoot date', () => {
+  it('cannot be calculated for a $0 total (no issue-less or zero schedules)', () => {
     expect(presetRows('D50_B50_30D', 0, '2026-09-29', null)).toBeNull()
-    expect(presetRows('D50_B50_SHOOT', 500, '2026-09-29', null)).toBeNull()
-    expect(presetRows('D25_B75_SHOOT14', 500, '2026-09-29', null)).toBeNull()
+    expect(presetRows('DUE7', 0, '2026-09-29', null)).toBeNull()
+  })
+
+  it('still lets a shoot-based preset be chosen with no shoot date, leaving the balance date blank', () => {
+    // The deposit is dated on issue; the shoot-relative balance is left blank (stored as null, set later),
+    // and the two still add up to the total exactly.
+    expect(presetRows('D50_B50_SHOOT', 500, '2026-09-29', null)).toEqual([
+      { label: 'Deposit (50%)', dueAt: '2026-09-29', amount: '250.00' },
+      { label: 'Balance (50%)', dueAt: '', amount: '250.00' },
+    ])
+    expect(presetRows('D25_B75_SHOOT14', 500, '2026-09-29', null)).toEqual([
+      { label: 'Deposit (25%)', dueAt: '2026-09-29', amount: '125.00' },
+      { label: 'Balance (75%)', dueAt: '', amount: '375.00' },
+    ])
   })
 })

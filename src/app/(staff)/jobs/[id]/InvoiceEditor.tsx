@@ -524,7 +524,7 @@ export function InvoiceEditor({
                   // Phone: label + amount on one line, the due date under the label. Wider: three aligned columns.
                   <div key={r.label} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-2 text-sm sm:grid-cols-[minmax(0,1fr)_9em_8em]">
                     <span className="text-ink">{r.label}</span>
-                    <span className="tabular whitespace-nowrap text-ink-muted max-sm:col-start-1 max-sm:row-start-2">Due {formatScheduleDate(r.dueAt)}</span>
+                    <span className="tabular whitespace-nowrap text-ink-muted max-sm:col-start-1 max-sm:row-start-2">{r.dueAt ? `Due ${formatScheduleDate(r.dueAt)}` : 'Due date set later'}</span>
                     <span className="tabular text-right font-medium text-ink max-sm:col-start-2 max-sm:row-start-1">{money(Number(r.amount))}</span>
                   </div>
                 ))}
