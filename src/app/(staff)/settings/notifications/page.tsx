@@ -91,7 +91,7 @@ export default async function NotificationsSettingsPage({
         <PageForm>
           <FormBlock
             title="Automation switches"
-            description="Separate from the email setup below. These switches decide whether reminders are created and attempted at all."
+            description="These switches decide whether reminders and follow-ups run at all. Client emails also need the email provider (below) to be ready before anything is actually sent."
           >
             <FormCell>
               <Checkbox id="clientEmailsEnabled" name="clientEmailsEnabled" defaultChecked={clientOn} label="Send client payment reminders automatically" />
@@ -119,7 +119,7 @@ export default async function NotificationsSettingsPage({
 
       <PageForm className="mt-8 border-t border-line pt-8">
         {/* Gate 2 - provider readiness (read-only; set by environment, not here). */}
-        <FormBlock title="Email provider" description="The service that sends your emails (Resend). It is set up in the server configuration, not on this page.">
+        <FormBlock title="Email provider" description="The service that actually sends your emails (Resend). It is set up behind the scenes, not on this page.">
           <FormCell span={8}>
             <div className="flex items-center justify-between gap-3 border-y border-line py-3">
               <span className="text-sm text-ink">Provider configured</span>
@@ -134,7 +134,7 @@ export default async function NotificationsSettingsPage({
         {/* The impact preview: exactly what a live run would do right now, computed without writing anything. */}
         <FormBlock
           title="Impact preview"
-          description="A preview of what the reminder run would do against today's unpaid instalments. Nothing here is sent or created; it only shows what would happen with the settings above."
+          description="A preview of which reminders would go out today, based on the unpaid instalments. Nothing is sent or created here; it only shows what would happen with the settings above."
         >
           <FormCell>
         <p className="mb-3 text-sm text-muted">{reminders.length} reminder{reminders.length === 1 ? '' : 's'} · {followups.length} follow-up{followups.length === 1 ? '' : 's'}</p>
