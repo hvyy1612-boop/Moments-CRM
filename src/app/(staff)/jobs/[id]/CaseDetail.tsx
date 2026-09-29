@@ -14,6 +14,7 @@ import { getJobBalance } from '@/lib/domain/money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
 import { listActivePackages } from '@/lib/domain/package'
 import { quoteDisplayNumber } from '@/lib/domain/quote'
+import { quoteView } from '@/features/quotes/status'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import {
@@ -38,16 +39,6 @@ import {
   IconReceipt,
   IconUsers,
 } from './icons'
-
-const QUOTE_TONE: Record<string, Tone> = {
-  DRAFT: 'neutral',
-  SENT: 'info',
-  VIEWED: 'info',
-  ACCEPTED: 'good',
-  DECLINED: 'bad',
-  EXPIRED: 'warn',
-  SUPERSEDED: 'neutral',
-}
 
 const CONTRACT_TONE: Record<string, Tone> = {
   DRAFT: 'neutral',
@@ -420,7 +411,7 @@ export async function CaseDetail({
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-lg font-semibold text-ink">Quote</h2>
                   <div className="flex items-center gap-2">
-                    {version ? <StatusPill tone={QUOTE_TONE[version.status] ?? 'neutral'}>{label(version.status)}</StatusPill> : null}
+                    {version ? <StatusPill tone={quoteView(version.status).tone}>{quoteView(version.status).label}</StatusPill> : null}
                     {quote && version && version.status !== 'DRAFT' ? (
                       <IconLink label="Edit quote" tone="accent" href={`/quotes/${quote.id}`} icon={EDIT_ICON} />
                     ) : null}
