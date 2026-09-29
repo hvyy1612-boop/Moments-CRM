@@ -16,11 +16,13 @@ function validateContact(fd: FormData): ContactErrors {
   const email = String(fd.get('email') ?? '').trim()
   const phone = String(fd.get('phone') ?? '').trim()
   const errors: ContactErrors = {}
-  if (!first) errors.firstName = 'Please enter a first name.'
-  if (!last) errors.lastName = 'Please enter a last name.'
-  if (!email) errors.email = 'Please enter an email address.'
-  else if (!EMAIL_RE.test(email)) errors.email = 'Please enter a valid email address.'
-  if (!phone) errors.phone = 'Please enter a phone number.'
+  // Formal, label-referenced copy (GOV.UK / large-site convention: no "Please"/"Sorry", state the
+  // requirement plainly). Presence uses "<Field> is required."; a bad email states the format rule.
+  if (!first) errors.firstName = 'First name is required.'
+  if (!last) errors.lastName = 'Last name is required.'
+  if (!email) errors.email = 'Email is required.'
+  else if (!EMAIL_RE.test(email)) errors.email = 'Enter a valid email address.'
+  if (!phone) errors.phone = 'Phone number is required.'
   return errors
 }
 
