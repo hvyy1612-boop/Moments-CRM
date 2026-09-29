@@ -7,6 +7,7 @@ import { cookies } from 'next/headers'
 import { Prisma, type EnquiryStatus } from '@prisma/client'
 import { StatusTag } from '@/components/ui/StatusTag'
 import { Button } from '@/components/ui/Button'
+import { IconLink } from '@/components/ui/IconButton'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { getInvoiceBalance } from '@/lib/domain/money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
@@ -70,9 +71,9 @@ function initials(name: string): string {
   return parts.map((p) => p.charAt(0).toUpperCase()).join('') || '?'
 }
 
-// Quiet product action (not a marketing CTA): subtle neutral fill, no heavy black pill.
-const QUIET_BTN =
-  'inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk'
+// One labelled primary (ink) carries the row; Edit/Delete are round icon buttons beside it.
+const PRIMARY_BTN =
+  'inline-flex h-9 items-center gap-1.5 rounded-md bg-ink px-3.5 text-sm font-medium text-surface transition-opacity hover:opacity-90'
 
 const INVOICE_TONE: Record<string, Tone> = {
   DRAFT: 'neutral', ISSUED: 'info', SENT: 'info', PARTIALLY_PAID: 'warn', PAID: 'good', OVERDUE: 'bad', VOID: 'neutral',
@@ -287,8 +288,8 @@ export default async function ClientDetailPage({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <a href={`mailto:${client.email}`} className={QUIET_BTN}><IconMail /> Send email</a>
-            <Link href={`/clients/${client.id}/edit`} className={QUIET_BTN}><IconPencil /> Edit</Link>
+            <a href={`mailto:${client.email}`} className={PRIMARY_BTN}><IconMail /> Send email</a>
+            <IconLink label="Edit" tone="accent" href={`/clients/${client.id}/edit`} icon={<IconPencil />} />
             {user.role === 'ADMIN' ? (
               <DeleteClientButton clientId={client.id} name={client.displayName} csrf={csrf} />
             ) : null}
