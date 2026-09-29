@@ -9,7 +9,6 @@ import { ExportBar } from '@/components/ui/ExportBar'
 import { PageContainer } from '@/components/PageContainer'
 import { PageHeader } from '@/components/PageHeader'
 import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
-import { COL } from '@/components/ui/tableColumns'
 import { Popover } from '@/components/ui/Popover'
 import { StatusTag } from '@/components/ui/StatusTag'
 import { ENQUIRY_STAGE_KIND, ENQUIRY_STAGE_LABEL, ENQUIRY_STAGE_TABS } from '@/features/enquiries/status'
@@ -67,12 +66,19 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
   const sortLabel = SORTS.find((s) => s.key === sort)!.label
   const TABS: { key: TabKey; label: string }[] = [{ key: 'all', label: 'All' }, ...ENQUIRY_STAGE_TABS]
 
-  // Exactly six information columns (spec §9): Enquiry ID | Created Date | Client | Event | Type | Stage.
+  // Exactly six information columns (spec §9): Lead ID | Created | Client | Event | Type | Stage.
+  // Column sizing follows Carbon data-table theory: size to the content's ROLE. The metadata columns
+  // (Lead ID, Created, Type, Stage) are BOUNDED to fixed `em` tracks so they take exactly what their
+  // content needs and never stretch into dead space; Client is the one dominant flexible column and
+  // Event a secondary flexible one, so all remaining width pools into the identity columns that use it.
+  // (Fixed `em` and `fr` both resolve identically across the shared header/row grids, so keylines line
+  // up.) Stage is fixed wide enough for its longest label ("Awaiting booking confirmation") and its tag
+  // never wraps; at very narrow widths the whole table scrolls (DataTable's min width) rather than wrap.
   const columns: DataColumn<EnquiryRowData>[] = [
     {
       key: 'number',
       header: 'Lead ID',
-      width: COL.constrained,
+      width: '9.5em',
       cell: (r) => (
         <span className="flex items-center gap-2">
           <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${r.unread ? 'bg-warn' : 'bg-transparent'}`} />
@@ -82,31 +88,96 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
         </span>
       ),
     },
-    { key: 'created', header: 'Created', width: COL.constrained, cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{createdLabel(r.createdMs)}</span> },
+    { key: 'created', header: 'Created', width: '9.5em', cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{createdLabel(r.createdMs)}</span> },
     {
       key: 'client',
       header: 'Client',
-      width: COL.flexHigh,
+      width: 'minmax(13em, 2fr)',
       cell: (r) => (
         <Link href={`/leads/${r.id}`} className={`block truncate text-ink transition-colors hover:text-accent-ink ${r.unread ? 'font-semibold' : ''}`}>
           {r.name}
         </Link>
       ),
     },
-    { key: 'event', header: 'Event', width: COL.flexMedium, cell: (r) => <span className="block truncate text-ink-muted">{r.event}</span> },
+    { key: 'event', header: 'Event', width: 'minmax(10em, 1fr)', cell: (r) => <span className="block truncate text-ink-muted">{r.event}</span> },
     {
       key: 'type',
       header: 'Type',
-      width: COL.content,
-      cell: (r) => <span className="inline-flex items-center rounded-full bg-sunk px-2 py-0.5 text-xs text-ink-muted">{broadType(r.event)}</span>,
+      width: '9em',
+      cell: (r) => <span className="inline-flex items-center whitespace-nowrap rounded-full bg-sunk px-2 py-0.5 text-xs text-ink-muted">{broadType(r.event)}</span>,
     },
     {
       key: 'stage',
       header: 'Stage',
-      width: COL.content,
-      cell: (r) => <StatusTag kind={ENQUIRY_STAGE_KIND[r.status] ?? 'enquiry'}>{ENQUIRY_STAGE_LABEL[r.status] ?? titleCase(r.status)}</StatusTag>,
+      width: '17.5em',
+      cell: (r) => (
+        <StatusTag kind={ENQUIRY_STAGE_KIND[r.status] ?? 'enquiry'}>
+          <span className="whitespace-nowrap">{ENQUIRY_STAGE_LABEL[r.status] ?? titleCase(r.status)}</span>
+        </StatusTag>
+      ),
     },
   ]
+
+  // Stage filter as a compact structured-list dropdown (not a wide tab strip); rendered as the toolbar's
+  // leading control so filter + search sit together on one row.
+  const filterControl = (
+    <Popover
+      width={280}
+      align="left"
+      renderTrigger={({ ref, onClick }) => (
+        <button ref={ref} type="button" onClick={onClick} className="inline-flex items-center gap-2 rounded-md border border-line-strong px-3 py-1.5 text-sm text-ink transition-colors hover:bg-sunk">
+          <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 5h18M6 12h12M10 19h4" /></svg>
+          <span className="font-medium">{TABS.find((t) => t.key === tab)?.label ?? 'All'}</span>
+          <span className="tabular rounded-full bg-sunk px-1.5 py-0.5 text-xs leading-none text-ink-muted">{counts[tab] ?? 0}</span>
+          <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+        </button>
+      )}
+    >
+      {({ close }) => (
+        <div className="flex flex-col">
+          {TABS.map((t) => {
+            const active = t.key === tab
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => { setTab(t.key); close() }}
+                className={`flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-paper ${active ? 'font-medium text-ink' : 'text-ink-muted'}`}
+              >
+                <span>{t.label}</span>
+                <span className={`tabular rounded-full px-1.5 py-0.5 text-xs leading-none ${active ? 'bg-line text-ink-muted' : 'bg-sunk text-ink-muted'}`}>{counts[t.key] ?? 0}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </Popover>
+  )
+
+  const sortControl = (
+    <Popover
+      width={200}
+      align="right"
+      renderTrigger={({ ref, onClick }) => (
+        <button ref={ref} type="button" onClick={onClick} className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-ink-muted transition-colors hover:bg-sunk hover:text-ink">
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 4v16m0 0-3-3m3 3 3-3M17 20V4m0 0-3 3m3-3 3 3" /></svg>
+          {sortLabel}
+        </button>
+      )}
+    >
+      {({ close }) => (
+        <div className="flex flex-col">
+          {SORTS.map((s) => (
+            <button key={s.key} type="button" onClick={() => { setSort(s.key); close() }}
+              className={`flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-ink transition-colors hover:bg-paper ${sort === s.key ? 'font-medium' : ''}`}>
+              <span>{s.label}</span>
+              {sort === s.key ? <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true" /> : null}
+            </button>
+          ))}
+        </div>
+      )}
+    </Popover>
+  )
 
   return (
     <PageContainer variant="full">
@@ -116,67 +187,9 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
         actions={<AddEnquiryButton csrf={csrf} />}
       />
 
-      {/* Stage tabs + sort */}
-      <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
-        {/* Stage filter as a compact structured-list dropdown (not a wide tab strip). */}
-        <Popover
-          width={280}
-          align="left"
-          renderTrigger={({ ref, onClick }) => (
-            <button ref={ref} type="button" onClick={onClick} className="inline-flex items-center gap-2 rounded-md border border-line-strong px-3 py-1.5 text-sm text-ink transition-colors hover:bg-sunk">
-              <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 5h18M6 12h12M10 19h4" /></svg>
-              <span className="font-medium">{TABS.find((t) => t.key === tab)?.label ?? 'All'}</span>
-              <span className="tabular rounded-full bg-sunk px-1.5 py-0.5 text-xs leading-none text-ink-muted">{counts[tab] ?? 0}</span>
-              <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
-            </button>
-          )}
-        >
-          {({ close }) => (
-            <div className="flex flex-col">
-              {TABS.map((t) => {
-                const active = t.key === tab
-                return (
-                  <button
-                    key={t.key}
-                    type="button"
-                    onClick={() => { setTab(t.key); close() }}
-                    className={`flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-paper ${active ? 'font-medium text-ink' : 'text-ink-muted'}`}
-                  >
-                    <span>{t.label}</span>
-                    <span className={`tabular rounded-full px-1.5 py-0.5 text-xs leading-none ${active ? 'bg-line text-ink-muted' : 'bg-sunk text-ink-muted'}`}>{counts[t.key] ?? 0}</span>
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </Popover>
-        <Popover
-          width={200}
-          align="right"
-          renderTrigger={({ ref, onClick }) => (
-            <button ref={ref} type="button" onClick={onClick} className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm text-ink-muted transition-colors hover:bg-sunk hover:text-ink">
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 4v16m0 0-3-3m3 3 3-3M17 20V4m0 0-3 3m3-3 3 3" /></svg>
-              {sortLabel}
-            </button>
-          )}
-        >
-          {({ close }) => (
-            <div className="flex flex-col">
-              {SORTS.map((s) => (
-                <button key={s.key} type="button" onClick={() => { setSort(s.key); close() }}
-                  className={`flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-ink transition-colors hover:bg-paper ${sort === s.key ? 'font-medium' : ''}`}>
-                  <span>{s.label}</span>
-                  {sort === s.key ? <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true" /> : null}
-                </button>
-              ))}
-            </div>
-          )}
-        </Popover>
-      </div>
-
-      {/* Table */}
-      <ExportBar count={selectedIds.length} reportHref={`/leads/report?ids=${selectedIds.join(',')}`} className="mt-4" />
-      <div className="mt-4">
+      <div className="mt-6">
+        {/* Batch bar appears above the toolbar only when rows are selected (otherwise renders nothing). */}
+        <ExportBar count={selectedIds.length} reportHref={`/leads/report?ids=${selectedIds.join(',')}`} className="mb-3" />
         <DataTable
           ariaLabel="Leads"
           columns={columns}
@@ -187,6 +200,8 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
           selection={selection}
           search={(r) => `${r.number ?? ''} ${r.name} ${r.event}`}
           searchPlaceholder="Search leads"
+          toolbarStart={filterControl}
+          toolbarEnd={sortControl}
           emptyMessage="No leads in this view yet."
         />
       </div>

@@ -77,6 +77,8 @@ export function DataTable<T>({
   searchPlaceholder = 'Search',
   rowClassName,
   selection,
+  toolbarStart,
+  toolbarEnd,
 }: {
   columns: DataColumn<T>[]
   rows: T[]
@@ -85,6 +87,10 @@ export function DataTable<T>({
   ariaLabel?: string
   /** When set, a leading checkbox column + select-all header appear; the parent owns the selection state. */
   selection?: Selection<T>
+  /** Optional controls shown at the START of the one toolbar row (left of the search) - e.g. a filter. */
+  toolbarStart?: ReactNode
+  /** Optional controls shown at the END of the toolbar row (pushed right) - e.g. a sort control. */
+  toolbarEnd?: ReactNode
   /** When set, column keys listed in localStorage[storageKey] are hidden (per-viewer show/hide). The
    *  control writing that key must dispatch `datatable:<storageKey>` so the table re-reads. */
   storageKey?: string
@@ -147,7 +153,19 @@ export function DataTable<T>({
 
   return (
     <div>
-      {search ? (
+      {toolbarStart || toolbarEnd ? (
+        // One unified toolbar row: filter + search on the left, sort pushed to the right. The search keeps
+        // an intentional (bounded) width instead of stretching, so the row reads as a single control group.
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          {toolbarStart}
+          {search ? (
+            <div className="min-w-0 flex-1 sm:max-w-xs">
+              <ActiveSearchField value={query} onChange={setQuery} placeholder={searchPlaceholder} resultCount={total} />
+            </div>
+          ) : null}
+          {toolbarEnd ? <div className="ml-auto flex items-center gap-2">{toolbarEnd}</div> : null}
+        </div>
+      ) : search ? (
         <div className="mb-3">
           <ActiveSearchField value={query} onChange={setQuery} placeholder={searchPlaceholder} resultCount={total} />
         </div>
