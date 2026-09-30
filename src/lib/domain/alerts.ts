@@ -37,7 +37,7 @@ export async function getRecentAlerts(limit = 8): Promise<Alert[]> {
       kind: 'enquiry' as const,
       title: 'New enquiry',
       detail: e.name,
-      href: `/enquiries/${e.id}`,
+      href: `/leads/${e.id}`,
       at: e.createdAt,
     })),
     ...payments.map((p) => ({

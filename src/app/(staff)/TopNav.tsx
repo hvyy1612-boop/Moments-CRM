@@ -54,13 +54,10 @@ export function TopNav({
         <Image src="/landing/wordmark.png" alt="Moments" width={655} height={148} priority className="h-6 w-auto sm:h-7" />
       </Link>
 
-      <div className="flex min-w-0 flex-1 justify-center px-3 sm:px-6">
-        <div className="w-full max-w-xl">
-          <CommandPalette />
-        </div>
-      </div>
+      <div className="flex-1" />
 
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+      <CommandPalette />
       <NotificationBell alerts={alerts} />
 
       <div ref={menuRef} className="relative shrink-0">

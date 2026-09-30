@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export const quoteLineSchema = z.object({
-  description: z.string().trim().min(1, 'Describe this line.').max(300),
+  description: z.string().trim().min(1, 'Please describe this line.').max(300),
   quantity: z.coerce.number().int('Whole numbers only.').min(1).max(999),
   unitPrice: z
     .string()
@@ -12,13 +12,15 @@ export const quoteLineSchema = z.object({
   referenceId: z.string().trim().max(30).optional().nullable(),
 
   details: z.string().trim().max(4000).optional().nullable(),
+
+  discount: z.string().trim().regex(/^\d+(\.\d{1,2})?$/, 'Enter a discount like 0 or 50.00.').optional(),
 })
 
 export const saveQuoteSchema = z.object({
-  lines: z.array(quoteLineSchema).min(1, 'Add at least one line.').max(50),
+  lines: z.array(quoteLineSchema).min(1, 'Please add at least one line.').max(50),
 
-  reference: z.string({ invalid_type_error: 'Enter a quote ID.' }).trim().min(1, 'Enter a quote ID.').max(60),
-  issueDate: z.string({ invalid_type_error: 'Enter the issue date.' }).trim().min(1, 'Enter the issue date.'),
+  reference: z.string({ invalid_type_error: 'Please enter a quote ID.' }).trim().min(1, 'Please enter a quote ID.').max(60),
+  issueDate: z.string({ invalid_type_error: 'Please enter the issue date.' }).trim().min(1, 'Please enter the issue date.'),
   validUntil: z
     .string()
     .trim()
@@ -37,7 +39,7 @@ export const saveQuoteSchema = z.object({
 })
 
 export const acceptQuoteSchema = z.object({
-  acceptedName: z.string().trim().min(1, 'Type your name to accept.').max(120),
+  acceptedName: z.string().trim().min(1, 'Please type your name to accept.').max(120),
 })
 
 export type QuoteLineInput = z.infer<typeof quoteLineSchema>

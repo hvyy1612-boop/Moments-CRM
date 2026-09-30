@@ -93,7 +93,7 @@ test('full lifecycle: quote, contract, booking (no double-booking), deposit paid
 
   await page.getByLabel('Amount (incl. GST)').fill('700')
   await page.getByLabel('Description').fill('Booking deposit')
-  await page.getByRole('button', { name: 'Raise invoice' }).click()
+  await page.getByRole('button', { name: 'Save invoice' }).click()
   await page.getByRole('button', { name: 'Issue invoice' }).click()
 
   await page.getByLabel('Payment amount').fill('700')

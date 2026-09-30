@@ -22,11 +22,10 @@ export default async function PricingPage() {
 
   return (
     <AppShell user={user} csrf={csrf} active="pricing">
-      <PageContainer variant="narrow">
+      <PageContainer variant="standard">
       <PageHeader
         breadcrumb={[DASHBOARD_CRUMB, { label: 'Price calculator' }]}
         title="Price calculator"
-        description="Build a quote from the catalogue and see the total, GST and deposit update as you go. Package prices are fixed catalogue values; this screen only totals them."
       />
       <PricingCalculator packages={catalog} />
       </PageContainer>

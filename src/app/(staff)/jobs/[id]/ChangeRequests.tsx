@@ -64,7 +64,7 @@ export function ChangeRequests({
           {open ? 'Cancel' : 'New change request'}
         </Button>
       </div>
-      <p className="mb-3 text-sm text-ink-muted">A change is proposed, assessed, approved, then applied — never edited in place.</p>
+      <p className="mb-3 text-sm text-ink-muted">Each change is proposed, assessed, approved, and then applied. Records are never edited in place.</p>
 
       {error ? (
         <div className="mb-3 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{error}</div>

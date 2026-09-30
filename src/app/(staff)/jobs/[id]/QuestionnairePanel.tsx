@@ -3,7 +3,6 @@
 import { useActionState } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
-import { CopyLinkField } from '@/components/ui/CopyLinkField'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { Field, Textarea, TextInput } from '@/components/ui/form'
 import { createQuestionnaireAction, type QuoteActionState } from '../actions'
@@ -47,11 +46,6 @@ export function QuestionnairePanel({ csrf, projectId, questionnaires }: { csrf: 
                 </li>
               ))}
             </ul>
-          ) : q.accessToken ? (
-            <div className="mt-2">
-              <p className="text-xs text-ink-muted">Send this link to the client to fill in:</p>
-              <CopyLinkField path={`/questionnaire/${q.accessToken}`} />
-            </div>
           ) : null}
         </div>
       ))}

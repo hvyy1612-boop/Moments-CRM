@@ -5,20 +5,18 @@ import type { DueAnchor } from '@/lib/domain/deadline'
 export { ADDABLE_TASK_TYPES } from '@/features/enquiries/workflow'
 export type { TaskType } from '@/features/enquiries/workflow'
 
-export type ProjectFacts = { gallerySent: boolean; finalPaid: boolean }
+export type ProjectFacts = { shootScheduled: boolean; gallerySent: boolean; finalPaid: boolean; deliveryComplete: boolean }
 
 type StageDef = { key: string; label: string; color: string; optional?: boolean }
 
 export const PROJECT_STAGES: StageDef[] = [
-  { key: 'planning', label: 'Planning', color: 'enquiry' },
-  { key: 'preshoot', label: 'Pre-wedding shoot', color: 'booked', optional: true },
-  { key: 'finalprep', label: 'Pre-wedding preparation', color: 'quote' },
-  { key: 'shootday', label: 'Wedding day', color: 'booked' },
-  { key: 'editing', label: 'Editing and post-production', color: 'editing' },
+  { key: 'preshoot', label: 'Pre-shoot', color: 'quote' },
+  { key: 'shoot', label: 'Shoot', color: 'booked' },
+  { key: 'editing', label: 'Editing', color: 'editing' },
+  { key: 'delivery', label: 'Delivery', color: 'delivered' },
   { key: 'video', label: 'Video editing', color: 'editing', optional: true },
   { key: 'film', label: 'Film processing', color: 'editing', optional: true },
   { key: 'album', label: 'Album and prints', color: 'editing', optional: true },
-  { key: 'delivery', label: 'Delivery and close', color: 'delivered' },
 ]
 
 export const PROJECT_STAGE_KEYS: ReadonlySet<string> = new Set(PROJECT_STAGES.map((s) => s.key))
@@ -27,40 +25,33 @@ export function stageLabel(key: string): string {
   return PROJECT_STAGES.find((s) => s.key === key)?.label ?? key
 }
 
-export const AUTO_FACT_BY_TITLE: Record<string, keyof ProjectFacts> = {
-  'Gallery delivered': 'gallerySent',
-  'Confirm final payment received': 'finalPaid',
-}
-
-export const DEFAULT_PROJECT_TASKS: { stage: string; title: string; type: TaskType }[] = [
-  { stage: 'planning', title: 'Collect wedding and shoot details', type: 'TODO' },
-  { stage: 'planning', title: 'Confirm timeline and venue details', type: 'TODO' },
-  { stage: 'planning', title: 'Confirm photography and video coverage', type: 'TODO' },
-
-  { stage: 'finalprep', title: 'Review final shoot information', type: 'TODO' },
-  { stage: 'finalprep', title: 'Schedule final planning call', type: 'APPOINTMENT' },
-  { stage: 'finalprep', title: 'Confirm final timeline and shoot details', type: 'TODO' },
-
-  { stage: 'shootday', title: 'Photograph and film the wedding day', type: 'SHOOT' },
-  { stage: 'shootday', title: 'Back up all captured files', type: 'TODO' },
-
-  { stage: 'editing', title: 'Cull wedding images', type: 'TODO' },
-  { stage: 'editing', title: 'Edit wedding images', type: 'TODO' },
-  { stage: 'editing', title: 'Finalise wedding gallery', type: 'TODO' },
-
-  { stage: 'delivery', title: 'Send final gallery to client', type: 'TODO' },
-  { stage: 'delivery', title: 'Confirm client received deliverables', type: 'TODO' },
-  { stage: 'delivery', title: 'Close project', type: 'TODO' },
+export const AUTO_MILESTONES: { stage: string; key: string; title: string; fact: keyof ProjectFacts; note: string }[] = [
+  { stage: 'delivery', key: 'final_payment_received', title: 'Final payment received', fact: 'finalPaid', note: 'Confirmed automatically when the balance is paid in full.' },
+  { stage: 'delivery', key: 'delivery_complete', title: 'Delivery complete', fact: 'deliveryComplete', note: 'Confirmed automatically once the gallery is delivered and paid.' },
 ]
 
+export const DEFAULT_PROJECT_TASKS: { stage: string; key: string; title: string; type: TaskType }[] = [
+  { stage: 'preshoot', key: 'confirm_shoot_details', title: 'Confirm shoot details', type: 'TODO' },
+  { stage: 'preshoot', key: 'send_pre_shoot_reminder', title: 'Send pre-shoot reminder', type: 'TODO' },
+
+  { stage: 'shoot', key: 'shoot_scheduled', title: 'Shoot scheduled', type: 'TODO' },
+  { stage: 'shoot', key: 'mark_shoot_completed', title: 'Mark shoot completed', type: 'SHOOT' },
+
+  { stage: 'editing', key: 'send_files_to_editor', title: 'Send files to editor', type: 'TODO' },
+  { stage: 'editing', key: 'confirm_editing_completed', title: 'Confirm editing completed', type: 'TODO' },
+  { stage: 'editing', key: 'review_final_edits', title: 'Review final edits', type: 'TODO' },
+
+  { stage: 'delivery', key: 'prepare_client_gallery', title: 'Prepare client gallery', type: 'TODO' },
+  { stage: 'delivery', key: 'send_client_gallery', title: 'Send client gallery', type: 'TODO' },
+  { stage: 'delivery', key: 'issue_final_invoice', title: 'Issue final invoice', type: 'TODO' },
+]
+
+export const CORE_TASK_KEY_BY_TITLE: Record<string, string> = Object.fromEntries(
+  DEFAULT_PROJECT_TASKS.map((t) => [t.title, t.key]),
+)
+export const CUSTOM_TASK_KIND = 'CUSTOM'
+
 export const OPTIONAL_STAGE_TASKS: Record<string, { title: string; type: TaskType }[]> = {
-  preshoot: [
-    { title: 'Schedule pre-wedding shoot', type: 'APPOINTMENT' },
-    { title: 'Confirm pre-wedding shoot details', type: 'TODO' },
-    { title: 'Conduct pre-wedding shoot', type: 'SHOOT' },
-    { title: 'Back up pre-wedding images', type: 'TODO' },
-    { title: 'Edit and send pre-wedding photos', type: 'TODO' },
-  ],
   video: [
     { title: 'Prepare video footage for editing', type: 'TODO' },
     { title: 'Edit wedding film', type: 'TODO' },
@@ -85,6 +76,16 @@ export const OPTIONAL_STAGE_TASKS: Record<string, { title: string; type: TaskTyp
 }
 
 export const PROJECT_TASK_NOTE: Record<string, string> = {
+  'Shoot scheduled': 'Tick once a shoot date is booked with the client.',
+  'Confirm shoot details': 'Lock the date, timeline, locations, and key people with the client.',
+  'Send pre-shoot reminder': 'Remind the client of the details shortly before the shoot.',
+  'Mark shoot completed': 'Tick once the shoot has been photographed and filmed.',
+  'Send files to editor': 'Hand the selected files to the editor.',
+  'Confirm editing completed': 'Tick once the editor has returned the edited images.',
+  'Review final edits': 'Quality-check the full gallery before delivery.',
+  'Prepare client gallery': 'Assemble the gallery and any files for delivery.',
+  'Send client gallery': 'Deliver the gallery to the client.',
+  'Issue final invoice': 'Raise the final invoice for the remaining balance.',
   'Send client welcome email': 'Sent automatically once the booking is confirmed.',
   'Collect wedding and shoot details': 'Gather the timeline, venues, and key people.',
   'Confirm timeline and venue details': 'Confirm the run sheet and locations.',
@@ -135,6 +136,16 @@ export const PROJECT_TASK_NOTE: Record<string, string> = {
 }
 
 export const PROJECT_TASK_SCHEDULE: Record<string, number> = {
+
+  'Confirm shoot details': -14,
+  'Send pre-shoot reminder': -7,
+  'Mark shoot completed': 0,
+  'Send files to editor': 2,
+  'Confirm editing completed': 21,
+  'Review final edits': 28,
+  'Prepare client gallery': 35,
+  'Send client gallery': 42,
+  'Issue final invoice': 42,
   'Send client welcome email': -60,
   'Collect wedding and shoot details': -45,
   'Confirm timeline and venue details': -30,
@@ -197,6 +208,7 @@ export type TaskInput = {
   status: string
   stage: string | null
   type: string
+  kind: string
 
   resolvedDueAt: Date | null
 
@@ -208,12 +220,16 @@ export type TaskInput = {
 
 export type BoardTaskRow = {
   id: string
+  key: string | null
   title: string
   type: TaskType
   typeLabel: string
   note: string | null
   editable: boolean
+  isSystem: boolean
   done: boolean
+  needsAttention: boolean
+  owner: string | null
   dueLabel: string | null
   dueValue: string | null
   noDate: boolean
@@ -222,18 +238,37 @@ export type BoardTaskRow = {
   blockedBy: string | null
   completedByName: string | null
   completedAt: Date | null
+  canComplete: boolean
+  canEdit: boolean
+  canDelete: boolean
 }
 export type BoardStage = {
   key: string
   label: string
   color: string
   optional: boolean
+
+  custom: boolean
   active: boolean
   done: number
   total: number
   tasks: BoardTaskRow[]
 }
-export type ProjectBoard = { stages: BoardStage[]; allDone: boolean }
+export type NextAction =
+  | { kind: 'task'; taskId: string; title: string; dueLabel: string | null; owner: string | null; needsAttention: boolean }
+  | { kind: 'waiting'; label: string }
+  | null
+export type ProjectBoard = {
+  stages: BoardStage[]
+  allDone: boolean
+  currentPhaseKey: string | null
+  currentPhaseLabel: string | null
+  progressPercent: number
+  attentionCount: number
+  nextAction: NextAction
+}
+
+export const ATTENTION_DAYS = 3
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10)
@@ -244,56 +279,150 @@ export function buildProjectBoard(
   tasks: TaskInput[],
   formatDate: (d: Date) => string,
   now: Date | null = null,
+  daysUntil: (d: Date) => number = () => Number.POSITIVE_INFINITY,
+  ownerName: string | null = null,
 ): ProjectBoard {
-  const isDone = (t: TaskInput): boolean => {
-    const isAuto = t.type === 'AUTO'
-    const fact = isAuto ? AUTO_FACT_BY_TITLE[t.title] : undefined
-    return isAuto ? (fact ? facts[fact] : false) : t.status === 'COMPLETED'
-  }
-  const doneTitles = new Set(tasks.filter(isDone).map((t) => t.title))
-  let activeKey: string | null = null
-  const stages: BoardStage[] = PROJECT_STAGES.map((stage) => {
-    const stageTasks: BoardTaskRow[] = tasks
-      .filter((t) => t.stage === stage.key)
+  const doneTitles = new Set(tasks.filter((t) => t.status === 'COMPLETED').map((t) => t.title))
+
+  const manualRowsFor = (stageKey: string): BoardTaskRow[] =>
+    tasks
+      .filter((t) => t.stage === stageKey)
       .sort((a, b) => a.order - b.order)
       .map((t) => {
         const type = (t.type as TaskType) ?? 'TODO'
-        const isAuto = type === 'AUTO'
-        const done = isDone(t)
+        const done = t.status === 'COMPLETED'
 
         const dueDate: Date | null = t.resolvedDueAt
         const noDate = dueDate === null && t.dueAnchor === 'SHOOT'
         const blockedBy = PROJECT_TASK_BLOCKED_BY[t.title] ?? null
+
+        const key = t.kind && t.kind !== CUSTOM_TASK_KIND && t.kind !== 'TASK' ? t.kind : (CORE_TASK_KEY_BY_TITLE[t.title] ?? null)
+        const isCustom = key === null
+
+        const needsAttention = !done && dueDate !== null && daysUntil(dueDate) <= ATTENTION_DAYS
         return {
           id: t.id,
+          key,
           title: t.title,
           type,
           typeLabel: TASK_TYPE_LABEL[type] ?? '',
           note: PROJECT_TASK_NOTE[t.title] ?? null,
-          editable: !isAuto,
+          editable: true,
+          isSystem: false,
           done,
+          needsAttention,
+          owner: ownerName,
           dueLabel: dueDate ? formatDate(dueDate) : null,
           dueValue: dueDate ? isoDate(dueDate) : null,
           noDate,
           dueTone: dueToneFor(dueDate, done, now),
-          blocked: !done && !isAuto && blockedBy ? !doneTitles.has(blockedBy) : false,
+          blocked: !done && blockedBy ? !doneTitles.has(blockedBy) : false,
           blockedBy,
           completedByName: t.completedByName,
           completedAt: t.completedAt,
+          canComplete: true,
+          canEdit: true,
+          canDelete: isCustom, // core tasks are protected from deletion; only custom tasks can be removed
         }
       })
-    if (stageTasks.some((t) => !t.done) && activeKey === null) activeKey = stage.key
+
+  const autoRowsFor = (stageKey: string): BoardTaskRow[] =>
+    AUTO_MILESTONES.filter((m) => m.stage === stageKey).map((m) => ({
+      id: `auto:${stageKey}:${m.key}`,
+      key: m.key,
+      title: m.title,
+      type: 'AUTO' as TaskType,
+      typeLabel: TASK_TYPE_LABEL.AUTO ?? 'Auto',
+      note: m.note,
+      editable: false,
+      isSystem: true,
+      done: facts[m.fact],
+      needsAttention: false,
+      owner: 'System',
+      dueLabel: null,
+      dueValue: null,
+      noDate: false,
+      dueTone: dueToneFor(null, facts[m.fact], now),
+      blocked: false,
+      blockedBy: null,
+      completedByName: facts[m.fact] ? 'System' : null,
+      completedAt: null,
+      canComplete: false,
+      canEdit: false,
+      canDelete: false,
+    }))
+
+  const coreStages: BoardStage[] = PROJECT_STAGES.map((stage) => {
+    const manualRows = manualRowsFor(stage.key)
     return {
       key: stage.key,
       label: stage.label,
       color: stage.color,
       optional: stage.optional ?? false,
+      custom: false,
       active: false,
-      done: stageTasks.filter((t) => t.done).length,
-      total: stageTasks.length,
-      tasks: stageTasks,
+      done: manualRows.filter((t) => t.done).length,
+      total: manualRows.length,
+      tasks: [...manualRows, ...autoRowsFor(stage.key)],
     }
   })
+
+  const firstOrder = new Map<string, number>()
+  for (const t of tasks) {
+    if (!t.stage || PROJECT_STAGE_KEYS.has(t.stage)) continue
+    const prev = firstOrder.get(t.stage)
+    if (prev === undefined || t.order < prev) firstOrder.set(t.stage, t.order)
+  }
+  const customStages: BoardStage[] = [...firstOrder.keys()]
+    .sort((a, b) => firstOrder.get(a)! - firstOrder.get(b)!)
+    .map((key) => {
+      const manualRows = manualRowsFor(key)
+      return {
+        key,
+        label: key,
+        color: 'editing',
+        optional: false,
+        custom: true,
+        active: false,
+        done: manualRows.filter((t) => t.done).length,
+        total: manualRows.length,
+        tasks: manualRows,
+      }
+    })
+
+  const stages = [...coreStages, ...customStages]
+
+  const manualDone = coreStages.reduce((n, s) => n + s.done, 0)
+  const manualTotal = coreStages.reduce((n, s) => n + s.total, 0)
+  const attentionCount = stages.reduce((n, s) => n + s.tasks.filter((t) => t.needsAttention).length, 0)
+  let activeKey: string | null = null
+  for (const s of coreStages) {
+    if (activeKey === null && s.total > 0 && s.done < s.total) activeKey = s.key
+  }
   for (const s of stages) s.active = s.key === activeKey
-  return { stages, allDone: activeKey === null }
+
+  const activeStage = stages.find((s) => s.key === activeKey) ?? null
+  const progressPercent = manualTotal > 0 ? Math.round((manualDone / manualTotal) * 100) : 0
+
+  let nextAction: NextAction = null
+  if (activeStage) {
+    const pendingManual = activeStage.tasks.filter((t) => t.editable && !t.done)
+    const pick = pendingManual.find((t) => t.needsAttention) ?? pendingManual[0] ?? null
+    if (pick) {
+      nextAction = { kind: 'task', taskId: pick.id, title: pick.title, dueLabel: pick.dueLabel, owner: pick.owner, needsAttention: pick.needsAttention }
+    } else {
+      const pendingAuto = activeStage.tasks.find((t) => t.isSystem && !t.done)
+      if (pendingAuto) nextAction = { kind: 'waiting', label: pendingAuto.title }
+    }
+  }
+
+  return {
+    stages,
+    allDone: activeKey === null,
+    currentPhaseKey: activeKey,
+    currentPhaseLabel: activeStage?.label ?? null,
+    progressPercent,
+    attentionCount,
+    nextAction,
+  }
 }

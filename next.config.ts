@@ -11,6 +11,13 @@ const nextConfig: NextConfig = {
   },
 
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
+
+  async redirects() {
+    return [
+      { source: '/enquiries', destination: '/leads', permanent: true },
+      { source: '/enquiries/:path*', destination: '/leads/:path*', permanent: true },
+    ]
+  },
   eslint: {
     // The verify pipeline runs ESLint as its own dedicated step (§12.2), so `next build` does not
 

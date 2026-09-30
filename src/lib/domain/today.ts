@@ -25,7 +25,7 @@ export type TodayCockpit = {
   counts: { overdue: number; today: number; shoots: number; waiting: number }
 }
 
-const OPEN_ENQUIRY = ['NEW', 'CONTACTED', 'QUALIFIED'] as const
+const OPEN_ENQUIRY = ['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION', 'QUOTE_SENT', 'AWAITING_BOOKING_CONFIRMATION'] as const
 const CLOSED_PROJECT = ['LOST', 'COMPLETED', 'CANCELLED', 'ARCHIVED', 'CLOSED'] as const
 
 function pad(n: number): string { return String(n).padStart(2, '0') }
@@ -95,7 +95,7 @@ export async function getTodayCockpit(): Promise<TodayCockpit> {
       id: w.id, title: w.title,
       client: isLead ? w.enquiry!.name : (w.project?.client.displayName ?? 'Job'),
       category: isLead ? 'lead' : 'job',
-      href: isLead ? `/enquiries/${w.enquiry!.id}` : `/jobs/${w.project!.id}`,
+      href: isLead ? `/leads/${w.enquiry!.id}` : `/jobs/${w.project!.id}`,
       dueLabel: formatSydneyDate(date),
       overdue: ms < dayStart.getTime(),
     }
@@ -112,7 +112,7 @@ export async function getTodayCockpit(): Promise<TodayCockpit> {
     timeLabel: formatSydneyTime(b.startsAt), href: `/jobs/${b.project.id}`,
   }))
   const waitingLeads: WaitingLead[] = waiting.map((e) => ({
-    id: e.id, name: e.name, sinceLabel: formatSydneyDate(e.updatedAt), href: `/enquiries/${e.id}`,
+    id: e.id, name: e.name, sinceLabel: formatSydneyDate(e.updatedAt), href: `/leads/${e.id}`,
   }))
 
   return {

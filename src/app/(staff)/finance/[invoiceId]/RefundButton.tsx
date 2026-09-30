@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { TextInput } from '@/components/ui/form'
@@ -23,6 +23,10 @@ export function RefundButton({
   const [amount, setAmount] = useState(refundable)
   const [reason, setReason] = useState('')
   const [state, action, pending] = useActionState(refundPaymentAction, IDLE)
+
+  useEffect(() => {
+    if (state.status === 'success') setOpen(false)
+  }, [state])
 
   if (!open) {
     return (

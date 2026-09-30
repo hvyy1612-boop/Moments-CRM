@@ -138,32 +138,76 @@ export async function restoreClient(clientId: string, actorUserId: string) {
   })
 }
 
-export async function deleteClient(clientId: string, actorUserId: string) {
-  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, companyId: true } })
-  if (!client) throw new Error('Client not found.')
-  const projects = await prisma.project.findMany({ where: { clientId }, select: { id: true } })
-  const projectIds = projects.map((p) => p.id)
-
-  return prisma.$transaction(async (tx) => {
-    if (projectIds.length > 0) {
-      const inP = { projectId: { in: projectIds } }
-
-      await tx.payment.deleteMany({ where: inP })
-      await tx.invoice.deleteMany({ where: inP })
-      await tx.quote.deleteMany({ where: inP })
-      await tx.contract.deleteMany({ where: inP })
-      await tx.booking.deleteMany({ where: inP })
-      await tx.gallery.deleteMany({ where: inP })
-
-      await tx.project.deleteMany({ where: { id: { in: projectIds } } })
-    }
-    await tx.communication.deleteMany({ where: { clientId } })
-    await tx.contact.deleteMany({ where: { clientId } })
-    await tx.client.delete({ where: { id: clientId } })
-    await tx.auditLog.create({
-      data: { companyId: client.companyId, actorUserId, action: 'client.deleted', entityType: 'Client', entityId: clientId },
-    })
+export async function clientHasHistory(clientId: string): Promise<boolean> {
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: {
+      _count: {
+        select: { projects: true, enquiries: true, convertedFromEnquiries: true, mergedFrom: true },
+      },
+    },
   })
+  if (!client) return false
+  const n = client._count
+  return n.projects > 0 || n.enquiries > 0 || n.convertedFromEnquiries > 0 || n.mergedFrom > 0
+}
+
+export type DeleteEmptyClientsResult = { deleted: number; skipped: number }
+
+export async function deleteEmptyClients(
+  clientIds: string[],
+  actorUserId: string,
+): Promise<DeleteEmptyClientsResult> {
+  const ids = Array.from(new Set(clientIds.map((id) => id.trim()).filter(Boolean)))
+  if (ids.length === 0) return { deleted: 0, skipped: 0 }
+
+  const candidates = await prisma.client.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      companyId: true,
+      _count: {
+        select: {
+          projects: true, // any job (Project FK is Restrict - deleting would fail anyway)
+          enquiries: true, // a lead currently pointing at this client
+          convertedFromEnquiries: true, // an enquiry that already converted to this client
+          mergedFrom: true, // another duplicate was merged into this one
+        },
+      },
+    },
+  })
+
+  const deletable = candidates.filter(
+    (c) =>
+      c._count.projects === 0 &&
+      c._count.enquiries === 0 &&
+      c._count.convertedFromEnquiries === 0 &&
+      c._count.mergedFrom === 0,
+  )
+
+  let deleted = 0
+  for (const client of deletable) {
+    await prisma.$transaction(async (tx) => {
+
+      await tx.calendarEvent.deleteMany({ where: { clientId: client.id } })
+      await tx.communication.deleteMany({ where: { clientId: client.id } })
+      await tx.contact.deleteMany({ where: { clientId: client.id } })
+      await tx.clientNote.deleteMany({ where: { clientId: client.id } })
+      await tx.client.delete({ where: { id: client.id } })
+      await tx.auditLog.create({
+        data: {
+          companyId: client.companyId,
+          actorUserId,
+          action: 'client.deleted',
+          entityType: 'Client',
+          entityId: client.id,
+        },
+      })
+    })
+    deleted++
+  }
+
+  return { deleted, skipped: ids.length - deleted }
 }
 
 export async function updateClientNotes(clientId: string, notes: string, actorUserId: string) {

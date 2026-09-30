@@ -11,10 +11,13 @@ import { assignResource, createBooking } from '@/lib/domain/booking'
 import { logCommunication } from '@/lib/domain/communication'
 import { closeJob, createProjectFromEnquiry } from '@/lib/domain/project'
 import {
+  addProjectStage,
   addProjectStageBlock,
   addProjectTask,
+  deleteProjectStage,
   deleteProjectTask,
   moveProjectTask,
+  renameProjectStage,
   toggleProjectTask,
   updateProjectTask,
 } from '@/lib/domain/project-workflow'
@@ -297,6 +300,12 @@ export async function createInvoiceLinesAction(
     discountReason: formData.get('discountReason') ?? '',
     lines,
     instalments,
+
+    billingName: formData.get('billingName') ?? '',
+    billingEmail: formData.get('billingEmail') ?? '',
+    billingPhone: formData.get('billingPhone') ?? '',
+    jobName: formData.get('jobName') ?? '',
+    due: formData.get('due') || undefined,
   })
   if (!parsed.success) {
     return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the invoice.' }
@@ -310,7 +319,7 @@ export async function createInvoiceLinesAction(
   revalidatePath(`/jobs/${projectId}`)
   revalidatePath('/finance')
 
-  redirect(`/finance/${created.id}`)
+  redirect(`/finance/${created.id}?toast=invoice-created`)
 }
 
 export async function updateInvoiceLinesAction(
@@ -343,6 +352,12 @@ export async function updateInvoiceLinesAction(
     discountReason: formData.get('discountReason') ?? '',
     lines,
     instalments,
+
+    billingName: formData.get('billingName') ?? undefined,
+    billingEmail: formData.get('billingEmail') ?? undefined,
+    billingPhone: formData.get('billingPhone') ?? undefined,
+    jobName: formData.get('jobName') ?? undefined,
+    due: formData.get('due') || undefined,
   })
   if (!parsed.success) {
     return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the invoice.' }
@@ -354,51 +369,7 @@ export async function updateInvoiceLinesAction(
   }
   revalidatePath('/finance')
   revalidatePath(`/finance/${invoiceId}`)
-  redirect(`/finance/${invoiceId}`)
-}
-
-export async function saveInvoiceContentAction(
-  _prev: QuoteActionState,
-  formData: FormData,
-): Promise<QuoteActionState> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
-    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  }
-  const user = await requireStaff()
-  const invoiceId = String(formData.get('invoiceId') ?? '')
-  if (!invoiceId) return { status: 'error', message: 'Missing invoice.' }
-
-  let lines: unknown = []
-  let instalments: unknown = []
-  try {
-    lines = JSON.parse(String(formData.get('lines') ?? '[]'))
-    instalments = JSON.parse(String(formData.get('instalments') ?? '[]'))
-  } catch {
-    return { status: 'error', message: 'Could not read the invoice items.' }
-  }
-  const parsed = createInvoiceLinesSchema.safeParse({
-    type: formData.get('type') ?? '',
-    invoiceNumber: formData.get('invoiceNumber') ?? '',
-    invoiceDate: formData.get('invoiceDate') ?? '',
-    poNumber: formData.get('poNumber') ?? '',
-    notes: formData.get('notes') ?? '',
-    discount: formData.get('discount') ?? '',
-    discountReason: formData.get('discountReason') ?? '',
-    lines,
-    instalments,
-  })
-  if (!parsed.success) {
-    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the invoice.' }
-  }
-  try {
-    await updateInvoiceWithLines(invoiceId, parsed.data, user.id)
-  } catch (error) {
-    return { status: 'error', message: error instanceof Error ? error.message : 'Could not save the invoice.' }
-  }
-  revalidatePath('/finance')
-  revalidatePath(`/finance/${invoiceId}`)
-  return { status: 'success' }
+  redirect(`/finance/${invoiceId}?toast=invoice-updated`)
 }
 
 export async function refundPaymentAction(
@@ -736,6 +707,52 @@ export async function addProjectStageBlockAction(formData: FormData): Promise<vo
   revalidatePath(`/jobs/${projectId}`)
 }
 
+export async function addProjectStageAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const name = String(formData.get('stageName') ?? '')
+  if (!projectId || !name.trim()) return
+  try {
+    await addProjectStage(projectId, name, user.id)
+  } catch {
+    // no-op on empty / duplicate / core-name stage
+  }
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+export async function renameProjectStageAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const fromStage = String(formData.get('fromStage') ?? '')
+  const toStage = String(formData.get('toStage') ?? '')
+  if (!projectId || !fromStage || !toStage.trim()) return
+  try {
+    await renameProjectStage(projectId, fromStage, toStage, user.id)
+  } catch {
+    // no-op on core stage / invalid name
+  }
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+export async function deleteProjectStageAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const stage = String(formData.get('stage') ?? '')
+  if (!projectId || !stage) return
+  try {
+    await deleteProjectStage(projectId, stage, user.id)
+  } catch {
+    // no-op on core stage
+  }
+  revalidatePath(`/jobs/${projectId}`)
+}
+
 export async function moveProjectTaskAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
   if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
@@ -830,4 +847,159 @@ export async function createStaffEnquiryAction(
     return { status: 'error', message: 'Could not create the job. Please try again.' }
   }
   redirect(`/jobs/${projectId}`)
+}
+
+export async function addRequirementAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const label = String(formData.get('label') ?? '').trim()
+  const detail = String(formData.get('detail') ?? '').trim()
+  if (!projectId || !label || !detail) return
+  const sortOrder = await prisma.projectRequirement.count({ where: { projectId } })
+  await prisma.projectRequirement.create({ data: { projectId, label, detail, sortOrder } })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+export async function deleteRequirementAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const id = String(formData.get('requirementId') ?? '')
+  if (!projectId || !id) return
+  await prisma.projectRequirement.deleteMany({ where: { id, projectId } })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+export async function addMessageToRequirementsAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const communicationId = String(formData.get('communicationId') ?? '')
+  if (!projectId || !communicationId) return
+  const message = await prisma.communication.findFirst({ where: { id: communicationId, projectId }, select: { body: true } })
+  if (!message) return
+  const sortOrder = await prisma.projectRequirement.count({ where: { projectId } })
+  await prisma.projectRequirement.create({ data: { projectId, label: 'Client request', detail: message.body, sortOrder } })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+export async function addMoodboardItemAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const url = String(formData.get('url') ?? '').trim()
+  const caption = String(formData.get('caption') ?? '').trim() || null
+  const kind = String(formData.get('kind') ?? 'image') === 'link' ? 'link' : 'image'
+  if (!projectId || !url) return
+  const sortOrder = await prisma.moodboardItem.count({ where: { projectId } })
+  await prisma.moodboardItem.create({ data: { projectId, url, caption, kind, sortOrder } })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+export async function deleteMoodboardItemAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const id = String(formData.get('itemId') ?? '')
+  if (!projectId || !id) return
+  await prisma.moodboardItem.deleteMany({ where: { id, projectId } })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+export async function addTeamMemberAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const role = String(formData.get('role') ?? '').trim()
+  const resourceId = String(formData.get('resourceId') ?? '').trim() || null
+  let name = String(formData.get('name') ?? '').trim()
+  if (!projectId || !role) return
+  if (resourceId && !name) {
+    const resource = await prisma.resource.findFirst({ where: { id: resourceId }, select: { name: true } })
+    name = resource?.name ?? ''
+  }
+  if (!name) return
+  const sortOrder = await prisma.projectTeamMember.count({ where: { projectId } })
+  await prisma.projectTeamMember.create({ data: { projectId, resourceId, name, role, sortOrder } })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+export async function removeTeamMemberAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const id = String(formData.get('memberId') ?? '')
+  if (!projectId || !id) return
+  await prisma.projectTeamMember.deleteMany({ where: { id, projectId } })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+export async function addInternalNoteAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const body = String(formData.get('body') ?? '').trim()
+  if (!projectId || !body) return
+  await prisma.communication.create({
+    data: { projectId, type: 'NOTE', direction: 'internal', internal: true, body, byUserId: user.id },
+  })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+export async function updateClientContactAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const clientId = String(formData.get('clientId') ?? '')
+  if (!projectId || !clientId) return
+  const str = (k: string) => {
+    const v = String(formData.get(k) ?? '').trim()
+    return v.length > 0 ? v : null
+  }
+  await prisma.client.update({
+    where: { id: clientId },
+    data: {
+      partnerName: str('partnerName'),
+      preferredContact: str('preferredContact'),
+      instagram: str('instagram'),
+      phone: str('phone'),
+    },
+  })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+export async function editInternalNoteAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const communicationId = String(formData.get('communicationId') ?? '')
+  const body = String(formData.get('body') ?? '').trim()
+  if (!projectId || !communicationId || !body) return
+  await prisma.communication.updateMany({
+    where: { id: communicationId, projectId, internal: true },
+    data: { body, editedByUserId: user.id, editedAt: new Date() },
+  })
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+export async function deleteInternalNoteAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const communicationId = String(formData.get('communicationId') ?? '')
+  if (!projectId || !communicationId) return
+  await prisma.communication.deleteMany({ where: { id: communicationId, projectId, internal: true } })
+  revalidatePath(`/jobs/${projectId}`)
 }

@@ -14,6 +14,7 @@ import { ImportedBanner } from './ImportedBanner'
 import { SortSelect, DEFAULT_SORT, type SortValue } from './SortSelect'
 import { FilterMenu } from './FilterMenu'
 import { ColumnsMenu } from './ColumnsMenu'
+import { AddClientButton } from './AddClientButton'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Clients - Moments' }
@@ -105,11 +106,10 @@ export default async function ClientsPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
-      <PageContainer variant="standard">
+      <PageContainer variant="full">
         <PageHeader
           breadcrumb={[DASHBOARD_CRUMB, { label: 'Clients' }]}
           title="Clients"
-          description="Manage client profiles and contact information."
           actions={
             <>
               {/* Import opens the bulk CSV page; Export is a plain anchor so the CSV attachment downloads in place. */}
@@ -131,15 +131,8 @@ export default async function ClientsPage({
                 </svg>
                 Export
               </a>
-              <Link
-                href="/clients/new"
-                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
-              >
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-                Add client
-              </Link>
+              {/* Opens the intake in a Modal (no full-page navigation). */}
+              <AddClientButton csrf={csrf} />
             </>
           }
         />
@@ -147,7 +140,7 @@ export default async function ClientsPage({
         <ImportedBanner count={importedCount} />
 
         {/* Toolbar */}
-        <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
           <div className="text-sm text-ink">
             All clients <span className="text-ink-muted">· {rows.length}</span>
           </div>
@@ -162,7 +155,7 @@ export default async function ClientsPage({
         <div className="mt-4">
           {rows.length === 0 ? (
             <p className="py-16 text-center text-sm text-ink-muted">
-              {q ? `No clients match "${q}".` : 'No clients yet. Add your first client above, or convert an enquiry.'}
+              {q ? `No clients match "${q}".` : 'No clients yet. Add your first client above, or convert a lead.'}
             </p>
           ) : (
             <ClientsTable rows={rows} csrf={csrf} canDelete={user.role === 'ADMIN'} backParam={backParam} />

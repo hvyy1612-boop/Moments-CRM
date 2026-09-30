@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useActionState, useState, type ChangeEvent } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
+import { FormActions, FormBlock, FormCell, PageForm, Textarea } from '@/components/ui/form'
 import { importClientsAction, type ImportState } from './actions'
 
 const INITIAL: ImportState = { status: 'idle' }
@@ -27,33 +28,33 @@ function ImportSession({ csrf, onReset }: { csrf: string; onReset: () => void })
   if (state.status === 'done') return <ImportResult result={state} onReset={onReset} />
 
   return (
-    <form action={action} className="flex max-w-2xl flex-col gap-4">
+    <form action={action}>
       <input type="hidden" name="csrf" value={csrf} />
 
-      {state.status === 'error' ? <Alert tone="danger" title={state.message} /> : null}
+      {state.status === 'error' ? <div className="mb-6"><Alert tone="danger" title={state.message} /></div> : null}
 
-      <div>
-        <label htmlFor="csv-file" className="mb-1 block text-sm font-medium text-ink">Upload a CSV file (optional)</label>
-        <input id="csv-file" type="file" accept=".csv,text/csv" onChange={onFile} className="block text-sm text-ink-muted file:mr-3 file:rounded-md file:border file:border-line-strong file:bg-surface file:px-3 file:py-1.5 file:text-sm file:text-ink hover:file:bg-sunk" />
-      </div>
+      <PageForm>
+        <FormBlock title="Upload a file" description="A .csv exported from a spreadsheet. Optional - you can paste the rows below instead.">
+          <FormCell>
+            <label htmlFor="csv-file" className="mb-1 block text-sm font-medium text-ink">CSV file</label>
+            <input id="csv-file" type="file" accept=".csv,text/csv" onChange={onFile} className="block text-sm text-ink-muted file:mr-3 file:rounded-md file:border file:border-line-strong file:bg-surface file:px-3 file:py-1.5 file:text-sm file:text-ink hover:file:bg-sunk" />
+          </FormCell>
+        </FormBlock>
 
-      <div>
-        <label htmlFor="csv" className="mb-1 block text-sm font-medium text-ink">Or paste rows</label>
-        <p className="mb-1.5 text-xs text-ink-muted">One client per line: <span className="tabular">name, email, phone</span>. Separated by commas or tabs, so you can paste straight from a spreadsheet. A header row is optional. Rows whose email already exists are skipped.</p>
-        <textarea
-          id="csv"
-          name="csv"
-          value={csv}
-          onChange={(e) => setCsv(e.target.value)}
-          rows={10}
-          placeholder="name, email, phone"
-          className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink outline-none transition-colors placeholder:text-ink-muted focus:border-accent focus:ring-1 focus:ring-accent"
-        />
-      </div>
+        <FormBlock
+          title="Or paste rows"
+          description="One client per line: name, email, phone. Commas or tabs both work, so you can paste straight from a spreadsheet. A header row is optional. Rows whose email already exists are skipped."
+        >
+          <FormCell>
+            <label htmlFor="csv" className="mb-1 block text-sm font-medium text-ink">Client rows</label>
+            <Textarea id="csv" name="csv" value={csv} onChange={(e) => setCsv(e.target.value)} rows={12} placeholder="name, email, phone" />
+          </FormCell>
+        </FormBlock>
 
-      <div>
-        <Button type="submit" loading={pending}>Import clients</Button>
-      </div>
+        <FormActions>
+          <Button type="submit" loading={pending}>Import clients</Button>
+        </FormActions>
+      </PageForm>
     </form>
   )
 }
@@ -69,7 +70,9 @@ function ImportResult({ result, onReset }: { result: Extract<ImportState, { stat
       : 'Every row was already a client (matched by email), so nothing new was added.'
 
   return (
-    <div className="max-w-2xl rounded-md border border-line bg-surface p-6">
+
+    <div className="grid grid-cols-1 lg:grid-cols-12">
+    <div className="rounded-md border border-line bg-surface p-6 lg:col-span-8">
       <div className="flex items-start gap-4">
         <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${success ? 'bg-accent-tint text-accent-ink' : 'bg-sunk text-ink-muted'}`}>
           {success ? (
@@ -100,6 +103,7 @@ function ImportResult({ result, onReset }: { result: Extract<ImportState, { stat
           </div>
         </div>
       </div>
+    </div>
     </div>
   )
 }

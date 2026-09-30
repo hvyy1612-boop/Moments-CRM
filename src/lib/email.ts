@@ -163,6 +163,24 @@ export async function sendComposedQuoteEmail(email: ComposedQuoteEmail): Promise
   await deliver({ to: email.to, subject, html, event: 'email.quote_sent', devLink: email.quoteLink })
 }
 
+export type ComposedInvoiceEmail = { to: string; subject: string; body: string; invoiceLink: string; idempotencyKey: string }
+
+export async function sendComposedInvoiceEmail(email: ComposedInvoiceEmail): Promise<SendResult> {
+  const paragraphs = email.body
+    .trim()
+    .split(/\n{2,}/)
+    .filter(Boolean)
+    .map((p) => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
+    .join('')
+  const html = shell('Your invoice', `${paragraphs}<p>${link(email.invoiceLink, 'View invoice')}</p>`)
+  return sendEmailWithResult({
+    to: email.to,
+    subject: email.subject.trim() || 'Your invoice from Moments Photography & Film',
+    html,
+    idempotencyKey: email.idempotencyKey,
+  })
+}
+
 export type ContractEmail = { to: string; clientName: string; contractLink: string }
 
 export async function sendContractEmail(email: ContractEmail): Promise<void> {

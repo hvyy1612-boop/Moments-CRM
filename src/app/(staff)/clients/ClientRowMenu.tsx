@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRef, useState } from 'react'
-import { deleteClientAction } from './actions'
+import { removeClientAction } from './actions'
 
 const MENU_H = 172
 
@@ -74,16 +74,16 @@ export function ClientRowMenu({
 
             {canDelete ? (
               <form
-                action={deleteClientAction}
+                action={removeClientAction}
                 onSubmit={(e) => {
-                  if (!window.confirm(`Permanently delete ${name} and ALL their jobs, quotes, invoices and history? This cannot be undone.`)) e.preventDefault()
+                  if (!window.confirm(`Remove ${name}? If they have no jobs or enquiries they are deleted for good; otherwise they are archived and you can restore them later.`)) e.preventDefault()
                 }}
                 className="mt-1 border-t border-line pt-1"
               >
                 <input type="hidden" name="csrf" value={csrf} />
                 <input type="hidden" name="clientId" value={clientId} />
                 <button type="submit" role="menuitem" className="block w-full px-4 py-2 text-left text-sm text-lost-ink hover:bg-paper">
-                  Delete permanently
+                  Remove client
                 </button>
               </form>
             ) : null}

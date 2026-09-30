@@ -161,7 +161,8 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
 
   const inPeriodEnq = enquiries.filter((e) => e.createdAt >= start && e.createdAt < end)
   const bookingDenom = inPeriodEnq.length
-  const bookingNum = inPeriodEnq.filter((e) => e.status === 'CONVERTED').length
+
+  const bookingNum = inPeriodEnq.filter((e) => e.status === 'BOOKING_CONFIRMED').length
   const bookingRatePct = bookingDenom ? Math.round((bookingNum / bookingDenom) * 100) : 0
 
   const sourceMap = new Map<string, { converted: number; total: number }>()
@@ -169,7 +170,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
     const key = e.source
     const rec = sourceMap.get(key) ?? { converted: 0, total: 0 }
     rec.total += 1
-    if (e.status === 'CONVERTED') rec.converted += 1
+    if (e.status === 'BOOKING_CONFIRMED') rec.converted += 1
     sourceMap.set(key, rec)
   }
   const leadSources: Bar[] = [...sourceMap.entries()]
@@ -177,10 +178,12 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
     .sort((a, b) => b.value - a.value)
 
   const PIPE = [
-    { label: 'New', s: 'NEW' },
-    { label: 'In discussion', s: 'CONTACTED' },
-    { label: 'Quoting', s: 'QUALIFIED' },
-    { label: 'Booked', s: 'CONVERTED' },
+    { label: 'New enquiry', s: 'NEW_ENQUIRY' },
+    { label: 'Contacted', s: 'CONTACTED' },
+    { label: 'Consultation', s: 'CONSULTATION' },
+    { label: 'Quote sent', s: 'QUOTE_SENT' },
+    { label: 'Awaiting booking confirmation', s: 'AWAITING_BOOKING_CONFIRMATION' },
+    { label: 'Booking confirmed', s: 'BOOKING_CONFIRMED' },
   ]
   const pipeline: Bar[] = PIPE.map((p) => ({ label: p.label, value: inPeriodEnq.filter((e) => e.status === p.s).length }))
 

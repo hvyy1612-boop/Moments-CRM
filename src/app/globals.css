@@ -124,6 +124,12 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.line-items-row {
+  display: grid;
+  grid-template-columns:
+    24px minmax(180px, 1.2fr) minmax(260px, 2fr) 110px 64px 90px 110px 104px;
+}
+
 .font-display {
   font-family: var(--font-cormorant), Georgia, 'Times New Roman', serif;
 }
@@ -541,5 +547,38 @@ body {
   }
   .login-card {
     padding: 26px 22px;
+  }
+}
+
+@keyframes toast-border-deplete {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: 100; }
+}
+
+.toast-border-track,
+.toast-border-progress {
+  x: 1px;
+  y: 1px;
+  width: calc(100% - 2px);
+  height: calc(100% - 2px);
+  rx: 5px;
+  fill: none;
+  stroke-width: 2px;
+}
+.toast-border-track {
+  stroke: color-mix(in srgb, var(--color-delivered-ink) 20%, transparent);
+}
+.toast-border-progress {
+  stroke: var(--color-delivered-ink);
+  stroke-dasharray: 100;
+  animation: toast-border-deplete 6s linear forwards;
+}
+.toast-card:hover .toast-border-progress {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast-border-progress {
+    animation: none;
+    stroke-dashoffset: 0;
   }
 }

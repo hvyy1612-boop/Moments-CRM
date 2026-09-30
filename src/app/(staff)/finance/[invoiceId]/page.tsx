@@ -6,19 +6,27 @@ import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { InvoiceDocument } from '@/components/InvoiceDocument'
 import { InvoiceFit } from '@/components/InvoiceFit'
-import { PrintButton } from '@/components/PrintButton'
+import { SentToast } from '@/components/ui/SentToast'
+import { StatusPill } from '@/components/ui/StatusPill'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { listActivePackages } from '@/lib/domain/package'
+import { getInvoiceBalanceById } from '@/lib/domain/invoice-money'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyTime, sydneyYmd } from '@/lib/time'
 import { titleCase } from '@/lib/text'
+import {
+  describeInvoiceEvent,
+  instalmentStatus,
+  invoiceStatusView,
+} from '@/features/finance/invoice-detail'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
-import { InvoiceWorkspace } from './InvoiceWorkspace'
-import { CollapsiblePreview } from './CollapsiblePreview'
-import { InvoiceMoreMenu } from './InvoiceMoreMenu'
+import { InvoiceHeaderActions } from './InvoiceHeaderActions'
+import { InvoicePreview } from './InvoicePreview'
+import { HistoryLog, type HistoryRow } from './HistoryLog'
+import { RecordPaymentDialog } from './RecordPaymentDialog'
+import { RefundButton } from './RefundButton'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Invoice - Moments' }
@@ -27,13 +35,18 @@ function ymd(date: Date): string {
   const { year, month, day } = sydneyYmd(date)
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
+const cents = (d: Prisma.Decimal) => Math.round(d.toNumber() * 100)
 
-const QUIET_BTN =
-  'inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk'
-
-export default async function InvoiceWorkspacePage({ params }: { params: Promise<{ invoiceId: string }> }) {
+export default async function InvoiceDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ invoiceId: string }>
+  searchParams: Promise<{ sent?: string }>
+}) {
   const user = await requireRole('/finance/[invoiceId]')
   const { invoiceId } = await params
+  const sp = await searchParams
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
@@ -42,7 +55,7 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
     select: {
       id: true, invoiceNumber: true, type: true, status: true, subtotal: true, taxTotal: true, total: true,
       amountPaid: true, invoiceDate: true, dueAt: true, poNumber: true, notes: true, accessToken: true,
-      billingNameSnapshot: true, billingEmailSnapshot: true,
+      billingNameSnapshot: true, billingEmailSnapshot: true, billingJobNameSnapshot: true,
       creditNotes: { where: { NOT: { status: 'VOIDED' } }, select: { amount: true } },
       lines: { orderBy: { sortOrder: 'asc' }, select: { itemName: true, description: true, quantity: true, unitPrice: true, discount: true, lineTotal: true } },
       instalments: { orderBy: { sortOrder: 'asc' }, select: { label: true, dueAt: true, amount: true, status: true } },
@@ -57,7 +70,7 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
       project: {
         select: {
           id: true, name: true, code: true,
-          client: { select: { displayName: true, email: true, phone: true, street: true, suburb: true, state: true, postcode: true, country: true } },
+          client: { select: { id: true, displayName: true, email: true, phone: true, street: true, suburb: true, state: true, postcode: true, country: true } },
           company: { select: { name: true, abn: true, settings: true } },
           bookings: { orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true, endsAt: true, location: true, title: true } },
         },
@@ -66,128 +79,216 @@ export default async function InvoiceWorkspacePage({ params }: { params: Promise
   })
   if (!inv) notFound()
 
-  const docCredits = inv.creditNotes.reduce((s, cn) => s.add(cn.amount), new Prisma.Decimal(0))
-  const isDraft = inv.status === 'DRAFT'
-  const canPay = inv.status !== 'DRAFT' && inv.status !== 'PAID' && inv.status !== 'VOID'
-  const unpaid = inv.amountPaid.lte(0)
-  const isEditable = unpaid && inv.status !== 'VOID' && inv.status !== 'PAID' && inv.status !== 'PARTIALLY_PAID'
-  const canVoid = unpaid && inv.status !== 'VOID' && inv.status !== 'DRAFT'
+  const paymentIds = inv.payments.map((p) => p.id)
+  const [balance, audits] = await Promise.all([
+    getInvoiceBalanceById(inv.id),
+    prisma.auditLog.findMany({
+      where: {
+        OR: [
+          { entityType: 'Invoice', entityId: inv.id },
+          ...(paymentIds.length > 0 ? [{ entityType: 'Payment', entityId: { in: paymentIds } }] : []),
+        ],
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 200,
+      select: { id: true, action: true, afterData: true, createdAt: true, entityId: true, actor: { select: { name: true } } },
+    }),
+  ])
 
+  const docCredits = inv.creditNotes.reduce((s, cn) => s.add(cn.amount), new Prisma.Decimal(0))
+  const status = inv.status
+  const unpaid = inv.amountPaid.lte(0)
+  const isEditable = unpaid && status !== 'VOID' && status !== 'PAID' && status !== 'PARTIALLY_PAID'
+  const canVoid = unpaid && status !== 'VOID' && status !== 'DRAFT'
   const c = inv.project.client
-  const booking = inv.project.bookings[0]
-  const shootLabel = booking
-    ? `${formatSydneyDate(booking.startsAt)} · ${formatSydneyTime(booking.startsAt)}-${formatSydneyTime(booking.endsAt)}`
-    : null
-  const clientAddress = [c.street, [c.suburb, c.state, c.postcode].filter(Boolean).join(' '), c.country].filter(Boolean).join('\n') || null
+  const clientName = inv.billingNameSnapshot ?? c.displayName
+  const jobName = inv.billingJobNameSnapshot ?? inv.project.name
+
+  const todayYmd = ymd(new Date())
+  const refundedOf = (p: (typeof inv.payments)[number]) => p.refunds.reduce((s, r) => s.add(r.amount), new Prisma.Decimal(0))
+  const instalments = balance?.instalments ?? []
+  const single = instalments.length <= 1
+
+  const rowCents = instalments.map((it) => (inv.instalments.length === 0 && status === 'DRAFT' ? cents(inv.total) : cents(it.amount)))
+  const scheduleRows = instalments.map((it, i) => {
+    const due = it.dueAt ?? (single ? inv.dueAt ?? inv.invoiceDate : null)
+    const dueYmd = due ? ymd(due) : null
+    return {
+      key: i,
+      label: it.label ?? (single ? 'Full payment' : `Payment ${i + 1}`),
+      status: instalmentStatus(it.state, dueYmd, todayYmd, status),
+      dueLabel: due ? formatSydneyDate(due) : 'On issue',
+      isToday: dueYmd === todayYmd,
+      amount: formatAud(new Prisma.Decimal(rowCents[i]! / 100)),
+    }
+  })
+  const scheduleName = single ? 'No split payments' : `Split into ${instalments.length} payments`
+  const balanceDue =
+    status === 'VOID' ? new Prisma.Decimal(0)
+    : status === 'DRAFT' ? Prisma.Decimal.max(inv.total.sub(docCredits), 0)
+    : balance?.owed ?? new Prisma.Decimal(0)
+  const canPay = status !== 'DRAFT' && status !== 'PAID' && status !== 'VOID' && balanceDue.greaterThan(0)
 
   const paymentRows = inv.payments.map((p) => {
-    const refunded = p.refunds.reduce((s, r) => s.add(r.amount), new Prisma.Decimal(0))
+    const refunded = refundedOf(p)
     const refundable = p.amount.sub(refunded)
     const meta = p.transactions[0]?.metadata as Record<string, unknown> | null | undefined
-    const reference = meta && typeof meta.reference === 'string' ? meta.reference : null
     return {
       id: p.id,
-      dateLabel: p.receivedAt ? formatSydneyDate(p.receivedAt) : '-',
-      amountLabel: formatAud(p.amount),
-      refundedLabel: refunded.greaterThan(0) ? formatAud(refunded) : null,
+      date: p.receivedAt ? formatSydneyDate(p.receivedAt) : '-',
       method: titleCase(p.paymentMethod.toLowerCase().replace(/_/g, ' ')),
-      reference,
-      statusLabel: p.status.toLowerCase().replace(/_/g, ' '),
+      reference: meta && typeof meta.reference === 'string' ? meta.reference : null,
+      amount: formatAud(p.amount),
+      refunded: refunded.greaterThan(0) ? formatAud(refunded) : null,
       refundable: refundable.toString(),
-      canRefund: refundable.greaterThan(0) && inv.status !== 'VOID',
+      canRefund: refundable.greaterThan(0) && status !== 'VOID',
     }
   })
 
-  const discountLine = inv.lines.find((l) => l.itemName === 'Discount' && l.unitPrice.lessThan(0))
-  const realLines = inv.lines.filter((l) => l !== discountLine)
-  const wsInitial = {
-    type: inv.type,
-    invoiceNumber: inv.invoiceNumber,
-    invoiceDate: inv.invoiceDate ? ymd(inv.invoiceDate) : '',
-    poNumber: inv.poNumber ?? '',
-    notes: inv.notes ?? '',
-    discount: discountLine ? discountLine.unitPrice.abs().toString() : '',
-    discountReason: discountLine?.description ?? '',
-    lines: realLines.map((l) => ({
-      name: l.itemName ?? '',
-      description: l.description,
-      quantity: l.quantity,
-      unitPrice: l.unitPrice.toString(),
-      discount: l.discount.greaterThan(0) ? l.discount.toString() : '',
-    })),
-    instalments: inv.instalments.length > 1
-      ? inv.instalments.map((it) => ({ label: it.label ?? '', dueAt: it.dueAt ? ymd(it.dueAt) : '', amount: it.amount.toString() }))
-      : [],
-  }
-  const shootDate = booking ? ymd(booking.startsAt) : null
-  const jobContext = { id: inv.project.id, name: inv.project.name, subtype: booking?.title ?? null, shootLabel, location: booking?.location ?? null }
-  const clientContext = { name: c.displayName, email: inv.billingEmailSnapshot ?? c.email, phone: c.phone, address: clientAddress }
+  const methodOf = new Map(inv.payments.map((p) => [p.id, p.paymentMethod as string]))
+  const historyRows: HistoryRow[] = audits.flatMap((a) => {
+    const d = describeInvoiceEvent({ action: a.action, afterData: a.afterData, invoiceNumber: inv.invoiceNumber, paymentMethod: methodOf.get(a.entityId) ?? null })
+    return d
+      ? [{ id: a.id, date: formatSydneyDate(a.createdAt), time: formatSydneyTime(a.createdAt), user: a.actor?.name ?? 'System', action: d.action, details: d.details }]
+      : []
+  })
 
-  const packages = isEditable
-    ? (await listActivePackages()).map((p) => ({ id: p.id, name: p.name, price: p.basePriceInclGst.toString(), description: p.description, inclusions: p.inclusions, isAddOn: p.isAddOn }))
-    : []
+  const isOverdue =
+    status !== 'PAID' && status !== 'VOID' && balanceDue.greaterThan(0) && inv.dueAt != null && ymd(inv.dueAt) < todayYmd
+  const statusView = invoiceStatusView(status, { overdue: isOverdue })
+  const doc = <InvoiceDocument invoice={{ ...inv, creditsTotal: docCredits }} />
 
   return (
     <>
       <div className="print:hidden">
-      <AppShell user={user} csrf={csrf} active="finance">
-      <PageContainer variant="standard">
-      <div>
-        {/* Header (matches the Clients detail page: chevron back-link, ruled title, quiet actions). */}
-        <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Payments', href: '/finance' }, { label: `Invoice #${inv.invoiceNumber}` }]} />
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-4 border-b border-line pb-5">
-          <div className="min-w-0">
-            <h1 className="truncate text-xl font-semibold leading-tight text-ink">Invoice #{inv.invoiceNumber}</h1>
-            <p className="mt-0.5 text-sm text-ink-muted">
-              Status: <span className="font-semibold capitalize text-ink">{inv.status.toLowerCase().replace(/_/g, ' ')}</span>
-              {' · '}{c.displayName} · <Link href={`/jobs/${inv.project.id}`} className="text-accent-ink hover:underline">{inv.project.name}</Link>
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <PrintButton
-              label="Download PDF"
-              className={QUIET_BTN}
-              icon={<svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>}
-            />
-            {inv.accessToken ? (
-              <Link href={`/invoice/${inv.accessToken}`} target="_blank" className={QUIET_BTN}>
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-8 8M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" /></svg>
-                Client view
-              </Link>
-            ) : null}
-            <InvoiceMoreMenu csrf={csrf} invoiceId={inv.id} projectId={inv.project.id} isDraft={isDraft} canVoid={canVoid} canDelete={unpaid} />
-          </div>
-        </div>
+        <AppShell user={user} csrf={csrf} active="finance">
+          <PageContainer variant="standard">
+            {sp.sent !== undefined ? <SentToast email={sp.sent} label="Invoice sent" /> : null}
+            <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Payments', href: '/finance' }, { label: `Invoice #${inv.invoiceNumber}` }]} />
 
-        <div className="mt-5">
-          <InvoiceWorkspace
-            csrf={csrf}
-            invoiceId={inv.id}
-            projectId={inv.project.id}
-            editable={isEditable}
-            canPay={canPay}
-            amountPaid={inv.amountPaid.toNumber()}
-            initial={wsInitial}
-            shootDate={shootDate}
-            job={jobContext}
-            client={clientContext}
-            packages={packages}
-            paymentRows={paymentRows}
-          />
-        </div>
+            {/* Header: number + status, client and job, then the actions in one row. */}
+            <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-2xl font-semibold leading-tight text-ink">Invoice #{inv.invoiceNumber}</h1>
+                  <StatusPill tone={statusView.tone}>{statusView.label}</StatusPill>
+                </div>
+                <p className="mt-1 text-sm text-ink-muted">
+                  <Link href={`/clients/${c.id}`} className="hover:text-ink hover:underline">{clientName}</Link>
+                  {' · '}
+                  <Link href={`/jobs/${inv.project.id}`} className="hover:text-ink hover:underline">{jobName}</Link>
+                </p>
+              </div>
+              <InvoiceHeaderActions
+                csrf={csrf}
+                invoiceId={inv.id}
+                projectId={inv.project.id}
+                invoiceNumber={inv.invoiceNumber}
+                status={status}
+                everSent={audits.some((a) => a.action === 'invoice.sent')}
+                clientName={clientName}
+                clientEmail={inv.billingEmailSnapshot ?? c.email ?? ''}
+                clientViewHref={inv.accessToken ? `/invoice/${inv.accessToken}` : null}
+                editHref={isEditable ? `/finance/${inv.id}/edit` : null}
+                canVoid={canVoid}
+                canDelete={unpaid}
+              />
+            </div>
 
-        {/* Invoice preview (demoted, screen only) */}
-        <div className="mt-8">
-          <CollapsiblePreview>
-            <InvoiceDocument invoice={{ ...inv, creditsTotal: docCredits }} />
-          </CollapsiblePreview>
-        </div>
+            <div className="mt-6 flex flex-col gap-6">
+              {/* Payment schedule */}
+              <section className="rounded-md border border-line bg-surface">
+                <div className="flex flex-wrap items-start justify-between gap-3 px-5 pb-3 pt-4">
+                  <div>
+                    <h2 className="text-base font-semibold text-ink">Payment schedule</h2>
+                    <p className="mt-0.5 text-sm text-ink-muted">{scheduleName}</p>
+                  </div>
+                  {canPay ? (
+                    <RecordPaymentDialog
+                      csrf={csrf}
+                      projectId={inv.project.id}
+                      invoiceId={inv.id}
+                      balance={balanceDue.toFixed(2)}
+                      balanceLabel={formatAud(balanceDue)}
+                      primary={status !== 'ISSUED'}
+                    />
+                  ) : null}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full table-fixed text-sm">
+                    <thead>
+                      <tr className="bg-sunk text-left text-ink">
+                        <th scope="col" className="border-r border-line px-5 py-3 font-semibold">Status</th>
+                        {single ? null : <th scope="col" className="hidden border-r border-line px-5 py-3 font-semibold sm:table-cell">Payment</th>}
+                        <th scope="col" className="border-r border-line px-5 py-3 font-semibold">Due date</th>
+                        <th scope="col" className="px-5 py-3 text-right font-semibold">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {scheduleRows.map((r) => (
+
+                        <tr key={r.key} className="border-t border-line align-top">
+                          <td className="border-r border-line px-5 py-4"><StatusPill tone={r.status.tone}>{r.status.label}</StatusPill></td>
+                          {single ? null : <td className="hidden border-r border-line px-5 py-4 text-ink sm:table-cell">{r.label}</td>}
+                          <td className="border-r border-line px-5 py-4 tabular text-ink">
+                            <span className="whitespace-nowrap">{r.dueLabel}</span>
+                            {r.isToday ? <>{' '}<span className="whitespace-nowrap text-ink-muted">(today)</span></> : null}
+                            {single ? null : <span className="block text-xs text-ink-muted sm:hidden">{r.label}</span>}
+                          </td>
+                          <td className="tabular whitespace-nowrap px-5 py-4 text-right text-ink">{r.amount}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex items-baseline justify-end gap-8 border-t border-line px-5 py-4">
+                  <span className="text-sm text-ink-muted">Balance due</span>
+                  <span className="tabular text-lg font-semibold text-ink">{formatAud(balanceDue)}</span>
+                </div>
+
+                {paymentRows.length > 0 ? (
+
+                  <div className="border-t border-line px-5 pb-2 pt-4">
+                    <h3 className="text-sm font-semibold text-ink">Payments received</h3>
+                    <div className="overflow-x-auto">
+                      <table className="mt-1 w-full text-sm">
+                        <tbody>
+                          {paymentRows.map((p) => (
+                            <tr key={p.id} className="border-b border-line align-top last:border-b-0">
+                              <td className="tabular whitespace-nowrap py-3 pr-4 text-ink">
+                                {p.date}
+                                <span className="block text-xs text-ink-muted sm:hidden">{p.method}</span>
+                              </td>
+                              <td className="hidden py-3 pr-4 text-ink-muted sm:table-cell">
+                                {p.method}
+                                {p.reference ? <span className="block text-xs">{p.reference}</span> : null}
+                              </td>
+                              <td className="tabular whitespace-nowrap py-3 pr-4 text-right text-ink">
+                                {p.amount}
+                                {p.refunded ? <span className="block text-xs text-danger">-{p.refunded} refunded</span> : null}
+                              </td>
+                              <td className="py-3 text-right">
+                                {p.canRefund ? <RefundButton csrf={csrf} paymentId={p.id} invoiceId={inv.id} refundable={p.refundable} /> : null}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+
+              {/* The invoice exactly as the client receives it. */}
+              <InvoicePreview>{doc}</InvoicePreview>
+
+              <HistoryLog rows={historyRows} />
+            </div>
+          </PageContainer>
+        </AppShell>
       </div>
-      </PageContainer>
-    </AppShell>
-      </div>
 
-      {/* Print target: only the invoice sheet prints, so the PDF is the invoice alone — one page for a
+      {/* Print target: only the invoice sheet prints, so the PDF is the invoice alone - one page for a
           short invoice, with no app chrome and no blank trailing pages. */}
       <InvoiceFit />
       <div className="hidden print:block">

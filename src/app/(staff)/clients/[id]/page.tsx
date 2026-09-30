@@ -1,122 +1,17 @@
 import type { Metadata } from 'next'
-import type { ReactNode } from 'react'
-import Link from 'next/link'
 import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
-import { Prisma, type EnquiryStatus } from '@prisma/client'
-import { StatusTag } from '@/components/ui/StatusTag'
-import { Button } from '@/components/ui/Button'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
-import { ensureClientPortalToken } from '@/lib/domain/client'
-import { getInvoiceBalance } from '@/lib/domain/money'
-import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
-import { CopyLinkField } from '@/components/ui/CopyLinkField'
-import { ClientNotesList } from './ClientNotesList'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { formatAud } from '@/lib/money'
-import { titleCase } from '@/lib/text'
-import { formatSydneyDate, formatSydneyDateTime } from '@/lib/time'
-import { statusKind, statusLabel } from '@/features/projects/lifecycle'
-import { ENQUIRY_STAGE_LABEL, ENQUIRY_STAGE_KIND, OPEN_STATUSES, waitingLabel } from '@/features/enquiries/status'
-import { currentActionText } from '@/features/enquiries/workflow'
+import { formatSydneyDate } from '@/lib/time'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
-import { setClientConsentAction } from '../actions'
-import { StatusPill, type Tone } from '@/components/ui/StatusPill'
-import { DeleteClientButton } from './DeleteClientButton'
-import { InvoiceActions } from './InvoiceActions'
+import { ClientDetail, type EnquiryDetailData } from './ClientDetail'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Client - Moments' }
-
-const svg = {
-  fill: 'none' as const,
-  stroke: 'currentColor',
-  strokeWidth: 1.6,
-  strokeLinecap: 'round' as const,
-  strokeLinejoin: 'round' as const,
-  viewBox: '0 0 24 24',
-}
-const IconLeads = () => (
-  <svg className="h-4 w-4" {...svg}>
-    <path d="M4 5h16v11H14l-2 3-2-3H4z" />
-  </svg>
-)
-const IconJobs = () => (
-  <svg className="h-4 w-4" {...svg}>
-    <rect x="3" y="7" width="18" height="13" rx="2" />
-    <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-  </svg>
-)
-const IconInvoice = () => (
-  <svg className="h-4 w-4" {...svg}>
-    <path d="M6 3h9l3 3v15l-3-2-3 2-3-2-3 2V3z" />
-    <path d="M9 8h6M9 12h6" />
-  </svg>
-)
-const IconMail = () => (
-  <svg className="h-4 w-4" {...svg}>
-    <rect x="3" y="5" width="18" height="14" rx="2" />
-    <path d="m4 7 8 6 8-6" />
-  </svg>
-)
-const IconPencil = () => (
-  <svg className="h-4 w-4" {...svg}>
-    <path d="M4 20h4l10-10-4-4L4 16v4z" />
-    <path d="m13.5 6.5 4 4" />
-  </svg>
-)
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).slice(0, 2)
-  return parts.map((p) => p.charAt(0).toUpperCase()).join('') || '?'
-}
-
-const QUIET_BTN =
-  'inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk'
-
-const INVOICE_TONE: Record<string, Tone> = {
-  DRAFT: 'neutral', ISSUED: 'info', SENT: 'info', PARTIALLY_PAID: 'warn', PAID: 'good', OVERDUE: 'bad', VOID: 'neutral',
-}
-
-function SectionCard({
-  title,
-  icon,
-  count,
-  action,
-  children,
-}: {
-  title: string
-  icon: ReactNode
-  count?: number
-  action?: ReactNode
-  children: ReactNode
-}) {
-  return (
-    <section className="rounded-lg border border-line bg-surface p-5">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
-          <span className="text-accent-ink">{icon}</span>
-          {title}
-          {count != null ? <span className="font-normal text-muted">· {count}</span> : null}
-        </h2>
-        {action}
-      </div>
-      {children}
-    </section>
-  )
-}
-
-function Fact({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="flex gap-2 text-sm">
-      <span className="w-24 shrink-0 text-muted">{label}</span>
-      <span className="min-w-0 text-ink">{value}</span>
-    </div>
-  )
-}
 
 export default async function ClientDetailPage({
   params,
@@ -139,8 +34,6 @@ export default async function ClientDetailPage({
       id: true,
       clientNumber: true,
       displayName: true,
-      legalName: true,
-      type: true,
       status: true,
       source: true,
       email: true,
@@ -150,373 +43,75 @@ export default async function ClientDetailPage({
       state: true,
       postcode: true,
       country: true,
-      notes: true,
-      marketingConsent: true,
-      consentUpdatedAt: true,
+      partnerName: true,
+      preferredContact: true,
       createdAt: true,
-      noteEntries: {
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-        select: { id: true, title: true, body: true, createdAt: true, createdBy: { select: { name: true } } },
-      },
-      projects: {
-        orderBy: { enquiryReceivedAt: 'desc' },
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          lifecycleStatus: true,
-          bookings: { orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true } },
-          workItems: {
-            where: { status: 'PENDING' },
-            orderBy: { order: 'asc' },
-            take: 1,
-            select: { title: true },
-          },
-        },
-      },
     },
   })
   if (!client) notFound()
-  const portalToken = await ensureClientPortalToken(client.id)
 
-  const [enquiries, communications, invoiceList] = await Promise.all([
-    prisma.enquiry.findMany({
-
-      where: {
-        status: { in: Array.from(OPEN_STATUSES) as EnquiryStatus[] },
-        OR: [{ convertedClientId: id }, { email: client.email }],
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-      select: {
-        id: true,
-        eventType: true,
-        status: true,
-        waitingOn: true,
-        createdAt: true,
-        workItems: {
-          where: { status: 'PENDING' },
-          orderBy: { order: 'asc' },
-          take: 1,
-          select: { title: true },
-        },
-      },
-    }),
-    prisma.communication.findMany({
-      where: { OR: [{ clientId: id }, { project: { clientId: id } }] },
-      orderBy: { createdAt: 'desc' },
-      take: 8,
-      select: { id: true, direction: true, body: true, createdAt: true, subject: true },
-    }),
-    prisma.invoice.findMany({
-      where: { project: { clientId: id } },
+  const enquiryWhere = { OR: [{ clientId: id }, { convertedClientId: id }, { email: client.email }] }
+  const [enquiry, enquiryCount] = await Promise.all([
+    prisma.enquiry.findFirst({
+      where: enquiryWhere,
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
-        invoiceNumber: true,
-        accessToken: true,
-        project: { select: { id: true, code: true } },
-        ...INVOICE_MONEY_SELECT, // status, total, dueAt, instalments, payments, creditNotes
+        eventDate: true,
+        coverage: true,
+        gettingReadyLocation: true,
+        ceremonyLocation: true,
+        weddingDetails: true,
+        styleReason: true,
+        heardAbout: true,
+        message: true,
       },
     }),
+    prisma.enquiry.count({ where: enquiryWhere }),
   ])
 
-  const cityLine = [client.suburb, client.state, client.postcode].filter(Boolean).join(' ')
-  const addressLines = [client.street, cityLine, client.country].filter(Boolean)
+  const addressLine = [client.street, [client.suburb, client.state, client.postcode].filter(Boolean).join(' '), client.country]
+    .filter((part) => part && part.trim() !== '')
+    .join(', ')
 
-  const invoiceBalances = invoiceList.map((inv) => ({ inv, bal: getInvoiceBalance(toInvoiceMoneyInput(inv)) }))
-  const invoiced = invoiceBalances.reduce((s, { bal }) => s.add(bal.obligation), new Prisma.Decimal(0))
-  const paid = invoiceBalances.reduce((s, { bal }) => s.add(bal.paidNet), new Prisma.Decimal(0))
-  const due = invoiceBalances.reduce((s, { bal }) => s.add(bal.owed), new Prisma.Decimal(0))
-
-  const nowMs = Date.now()
-  const invoiceRows = invoiceBalances.map(({ inv, bal }) => {
-    const balance = bal.owed
-    const paidInFull = bal.obligation.greaterThan(0) && bal.owed.lte(0)
-
-    const nextDueAt = bal.instalments.find((i) => i.state !== 'PAID')?.dueAt ?? inv.dueAt ?? null
-    let dueLabel: string
-    let overdue = false
-    if (paidInFull) {
-      dueLabel = 'Paid in full'
-    } else if (nextDueAt) {
-      const days = Math.round((nextDueAt.getTime() - nowMs) / 86_400_000)
-      const rel =
-        days < 0
-          ? `(${-days} day${days === -1 ? '' : 's'} ago)`
-          : days === 0
-            ? '(due today)'
-            : `(in ${days} day${days === 1 ? '' : 's'})`
-      dueLabel = `Next payment due ${formatSydneyDate(nextDueAt)} ${rel}`
-      overdue = days < 0
-    } else {
-      dueLabel = 'No due date set'
-    }
-    return {
-      id: inv.id,
-      number: inv.invoiceNumber,
-      code: inv.project.code,
-      projectId: inv.project.id,
-      status: inv.status,
-      totalLabel: formatAud(inv.total),
-      balanceLabel: formatAud(balance),
-      dueLabel,
-      overdue,
-      portalPath: inv.accessToken ? `/invoice/${inv.accessToken}` : null,
-      canDelete: bal.paidNet.lte(0),
-    }
-  })
+  const enquiryData: EnquiryDetailData | null = enquiry
+    ? {
+        id: enquiry.id,
+        eventDateISO: enquiry.eventDate ? enquiry.eventDate.toISOString().slice(0, 10) : '',
+        eventDateLabel: enquiry.eventDate ? formatSydneyDate(enquiry.eventDate) : '',
+        coverage: enquiry.coverage,
+        gettingReadyLocation: enquiry.gettingReadyLocation,
+        ceremonyLocation: enquiry.ceremonyLocation,
+        weddingDetails: enquiry.weddingDetails,
+        styleReason: enquiry.styleReason,
+        heardAbout: enquiry.heardAbout,
+        message: enquiry.message,
+      }
+    : null
 
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
-      <PageContainer variant="standard">
+      <PageContainer variant="wide">
         <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Clients', href: backHref }, { label: client.displayName }]} />
-
-        {/* Header: identity + quiet actions. */}
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-4 border-b border-line pb-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent-tint text-base font-semibold text-accent-ink">
-              {initials(client.displayName)}
-            </span>
-            <div className="min-w-0">
-              <h1 className="truncate text-xl font-semibold leading-tight text-ink">{client.displayName}</h1>
-              <p className="mt-0.5 truncate text-sm text-ink-muted">
-                {client.clientNumber ? <span className="tabular text-ink-muted">{client.clientNumber} · </span> : null}
-                <a href={`mailto:${client.email}`} className="hover:text-ink">{client.email}</a>
-                {client.phone ? ` · ${client.phone}` : ''}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <a href={`mailto:${client.email}`} className={QUIET_BTN}><IconMail /> Send email</a>
-            <Link href={`/clients/${client.id}/edit`} className={QUIET_BTN}><IconPencil /> Edit</Link>
-            {user.role === 'ADMIN' ? (
-              <DeleteClientButton clientId={client.id} name={client.displayName} csrf={csrf} />
-            ) : null}
-          </div>
-        </div>
-
-        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-          {/* Left: profile */}
-          <div className="flex flex-col gap-4">
-            <SectionCard title="Contact" icon={<IconMail />}>
-              <dl className="flex flex-col gap-2">
-                <Fact label="Email" value={<a href={`mailto:${client.email}`} className="text-accent-ink hover:underline">{client.email}</a>} />
-                <Fact label="Phone" value={client.phone ?? '-'} />
-              </dl>
-            </SectionCard>
-
-            <SectionCard title="Client details" icon={<IconJobs />}>
-              <dl className="flex flex-col gap-2">
-                <Fact label="Type" value={client.type === 'BUSINESS' ? 'Company' : 'Individual'} />
-                {client.type === 'BUSINESS' ? <Fact label="Company" value={client.legalName ?? '-'} /> : null}
-                <Fact label="Address" value={addressLines.length > 0 ? <div className="flex flex-col">{addressLines.map((line) => <span key={line}>{line}</span>)}</div> : '-'} />
-                <Fact label="Source" value={titleCase(client.source)} />
-                <Fact label="Status" value={titleCase(client.status)} />
-                <Fact label="Client since" value={formatSydneyDate(client.createdAt)} />
-              </dl>
-            </SectionCard>
-
-            <SectionCard title="Notes" icon={<IconMail />}>
-              <ClientNotesList
-                clientId={client.id}
-                csrf={csrf}
-                notes={client.noteEntries.map((n) => ({
-                  id: n.id,
-                  title: n.title,
-                  body: n.body,
-                  dateLabel: formatSydneyDateTime(n.createdAt),
-                  author: n.createdBy?.name ?? null,
-                }))}
-              />
-            </SectionCard>
-
-            <SectionCard title="Consent" icon={<IconMail />}>
-              <p className="text-sm text-ink">
-                Marketing consent: <span className="font-semibold">{client.marketingConsent ? 'Given' : 'Not given'}</span>
-              </p>
-              {client.consentUpdatedAt ? (
-                <p className="text-xs text-muted">Updated {formatSydneyDate(client.consentUpdatedAt)}</p>
-              ) : null}
-              <form action={setClientConsentAction} className="mt-3">
-                <input type="hidden" name="csrf" value={csrf} />
-                <input type="hidden" name="clientId" value={client.id} />
-                <input type="hidden" name="consent" value={client.marketingConsent ? 'false' : 'true'} />
-                <Button type="submit" variant="secondary" size="sm">
-                  {client.marketingConsent ? 'Withdraw consent' : 'Mark consented'}
-                </Button>
-              </form>
-            </SectionCard>
-
-            <SectionCard title="Client portal" icon={<IconMail />}>
-              <p className="text-sm text-ink-muted">One link for the client to see all their jobs, invoices, galleries and questionnaires.</p>
-              <CopyLinkField path={`/portal/${portalToken}`} />
-            </SectionCard>
-          </div>
-
-          {/* Right: activity */}
-          <div className="flex flex-col gap-4 lg:col-span-2">
-            <SectionCard title="Enquiries" icon={<IconLeads />} count={enquiries.length}>
-              {enquiries.length === 0 ? (
-                <p className="text-base text-ink-muted">No enquiries.</p>
-              ) : (
-                <div className="flex flex-col gap-2.5">
-                  {enquiries.map((e) => (
-                    <div key={e.id} className="rounded-md border border-line p-3.5">
-                      <div className="mb-2 flex items-center justify-between gap-3">
-                        <span className="font-serif text-lg font-semibold text-ink">
-                          {e.eventType ? titleCase(e.eventType) : 'Enquiry'}
-                        </span>
-                        <StatusTag kind={ENQUIRY_STAGE_KIND[e.status] ?? 'hold'} solid>
-                          {ENQUIRY_STAGE_LABEL[e.status] ?? titleCase(e.status)}
-                        </StatusTag>
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <Fact label="Received" value={formatSydneyDate(e.createdAt)} />
-                        <Fact label="Waiting on" value={waitingLabel(e.waitingOn)} />
-                        <Fact
-                          label="Next task"
-                          value={currentActionText(e.waitingOn, e.workItems[0]?.title ?? null)}
-                        />
-                      </div>
-                      <div className="mt-2.5">
-                        <Link href={`/enquiries/${e.id}`} className="text-sm font-bold text-accent-ink hover:underline">
-                          View enquiry
-                        </Link>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </SectionCard>
-
-            <SectionCard title="Jobs" icon={<IconJobs />} count={client.projects.length}>
-              {client.projects.length === 0 ? (
-                <p className="text-base text-ink-muted">No jobs yet.</p>
-              ) : (
-                <div className="flex flex-col gap-2.5">
-                  {client.projects.map((p) => (
-                    <div key={p.id} className="rounded-md border border-line p-3.5">
-                      <div className="mb-2 flex items-center justify-between gap-3">
-                        <span className="font-serif text-lg font-semibold text-ink">
-                          {p.name} <span className="tabular text-sm font-normal text-muted">· {p.code}</span>
-                        </span>
-                        <StatusTag kind={statusKind(p.lifecycleStatus)} solid>
-                          {statusLabel(p.lifecycleStatus)}
-                        </StatusTag>
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <Fact
-                          label="Main shoot"
-                          value={p.bookings[0] ? formatSydneyDate(p.bookings[0].startsAt) : 'Not scheduled'}
-                        />
-                        <Fact label="Next task" value={p.workItems[0]?.title ?? '-'} />
-                      </div>
-                      <div className="mt-2.5">
-                        <Link href={`/jobs/${p.id}`} className="text-sm font-bold text-accent-ink hover:underline">
-                          View job
-                        </Link>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </SectionCard>
-
-            <SectionCard
-              title="Invoices"
-              icon={<IconInvoice />}
-              action={
-                <Link href={`/finance/new?client=${client.id}`}>
-                  <Button size="sm">+ New invoice</Button>
-                </Link>
-              }
-            >
-              <div className="grid grid-cols-3 gap-3">
-                <div className="rounded-md bg-paper p-3">
-                  <div className="text-sm text-muted">Invoiced</div>
-                  <div className="tabular text-lg font-semibold text-ink">{formatAud(invoiced)}</div>
-                </div>
-                <div className="rounded-md bg-paper p-3">
-                  <div className="text-sm text-muted">Paid</div>
-                  <div className="tabular text-lg font-semibold text-delivered-ink">{formatAud(paid)}</div>
-                </div>
-                <div className="rounded-md bg-paper p-3">
-                  <div className="text-sm text-muted">Outstanding</div>
-                  <div className="tabular text-lg font-semibold text-ink">{formatAud(due)}</div>
-                </div>
-              </div>
-
-              {invoiceRows.length > 0 ? (
-                <ul className="mt-3 flex flex-col gap-2">
-                  {invoiceRows.map((row) => (
-                    <li key={row.id} className="flex flex-col gap-2 rounded-md border border-line px-3.5 py-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="truncate text-sm font-semibold text-ink">{row.number}</p>
-                            <StatusPill tone={INVOICE_TONE[row.status] ?? 'neutral'}>
-                              {row.status.toLowerCase().replace(/_/g, ' ')}
-                            </StatusPill>
-                          </div>
-                          <p className={`mt-1 text-xs ${row.overdue ? 'font-semibold text-danger' : 'text-ink-muted'}`}>
-                            {row.dueLabel}
-                          </p>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <p className="tabular text-sm font-semibold text-ink">Total {row.totalLabel}</p>
-                          <p className="tabular text-xs text-ink-muted">Balance {row.balanceLabel}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-ink-muted">{row.code}</span>
-                        <InvoiceActions
-                          csrf={csrf}
-                          invoiceId={row.id}
-                          projectId={row.projectId}
-                          clientId={client.id}
-                          viewHref={`/jobs/${row.projectId}/invoice/${row.id}`}
-                          manageHref={`/finance/${row.id}`}
-                          portalPath={row.portalPath}
-                          canDelete={row.canDelete}
-                        />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-3 text-sm text-ink-muted">No invoices yet. Use + New invoice to raise one in Payments.</p>
-              )}
-            </SectionCard>
-
-            <SectionCard title="Mail" icon={<IconMail />} count={communications.length}>
-              {communications.length === 0 ? (
-                <p className="text-base text-ink-muted">No messages yet.</p>
-              ) : (
-                <div className="flex flex-col">
-                  {communications.map((c) => (
-                    <div
-                      key={c.id}
-                      className="flex items-start justify-between gap-4 border-t border-line py-2.5 first:border-t-0"
-                    >
-                      <div className="min-w-0">
-                        <div className="text-base text-ink">
-                          {c.subject ?? (c.direction === 'inbound' ? 'Message from client' : 'Message to client')}
-                        </div>
-                        <div className="truncate text-sm text-ink-muted">{c.body}</div>
-                      </div>
-                      <div className="shrink-0 text-right text-sm text-muted">
-                        <div>{c.direction === 'inbound' ? 'Received' : 'Sent'}</div>
-                        <div className="tabular">{formatSydneyDate(c.createdAt)}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </SectionCard>
-          </div>
-        </div>
+        <ClientDetail
+          client={{
+            id: client.id,
+            clientNumber: client.clientNumber,
+            displayName: client.displayName,
+            email: client.email,
+            phone: client.phone,
+            partnerName: client.partnerName,
+            preferredContact: client.preferredContact,
+            source: client.source,
+            status: client.status,
+            addressLine,
+            createdLabel: formatSydneyDate(client.createdAt),
+          }}
+          enquiry={enquiryData}
+          enquiryCount={enquiryCount}
+          csrf={csrf}
+          canDelete={user.role === 'ADMIN'}
+        />
       </PageContainer>
     </AppShell>
   )

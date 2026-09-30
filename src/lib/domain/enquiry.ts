@@ -110,50 +110,21 @@ async function runCreateEnquiry(input: CreateEnquiryInput, actorUserId: string |
   })
 }
 
-const OPEN_STAGES = ['NEW', 'CONTACTED', 'QUALIFIED'] as const
-type OpenStage = (typeof OPEN_STAGES)[number]
-
-export async function advanceEnquiry(
-  enquiryId: string,
-  to: OpenStage,
-  actorUserId: string | null = null,
-) {
-  return prisma.$transaction(async (tx) => {
-    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Enquiry not found.')
-    if (!OPEN_STAGES.includes(enquiry.status as OpenStage)) {
-      throw new Error('This enquiry is already closed.')
-    }
-    const updated = await tx.enquiry.update({ where: { id: enquiryId }, data: { status: to } })
-    await tx.auditLog.create({
-      data: {
-        companyId: enquiry.companyId,
-        action: 'enquiry.status',
-        entityType: 'Enquiry',
-        entityId: enquiryId,
-        actorUserId,
-        beforeData: { status: enquiry.status },
-        afterData: { status: to },
-      },
-    })
-    return updated
-  })
-}
-
 export async function markEnquiryLost(
   enquiryId: string,
   lostReason: string,
   actorUserId: string | null = null,
 ) {
   const reason = lostReason.trim()
-  if (!reason) throw new Error('A reason is required to mark an enquiry lost.')
+  if (!reason) throw new Error('Please enter a reason for declining this lead.')
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Enquiry not found.')
-    if (enquiry.status === 'CONVERTED') throw new Error('A converted enquiry cannot be marked lost.')
+    if (!enquiry) throw new Error('Lead not found.')
+
+    if (enquiry.status === 'BOOKING_CONFIRMED') throw new Error('A confirmed booking cannot be declined - cancel the Job instead.')
     const updated = await tx.enquiry.update({
       where: { id: enquiryId },
-      data: { status: 'LOST', lostReason: reason, waitingOn: null },
+      data: { status: 'DECLINED', lostReason: reason, waitingOn: null },
     })
     await cancelOpenWorkItems(tx, enquiryId)
     await tx.auditLog.create({
@@ -173,9 +144,9 @@ export async function markEnquiryLost(
 export async function reopenEnquiry(enquiryId: string, actorUserId: string | null = null) {
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Enquiry not found.')
-    if (enquiry.status !== 'LOST' && enquiry.status !== 'ARCHIVED') {
-      throw new Error('Only a lost or archived enquiry can be reopened.')
+    if (!enquiry) throw new Error('Lead not found.')
+    if (enquiry.status !== 'DECLINED') {
+      throw new Error('Only a declined lead can be reopened.')
     }
     const updated = await tx.enquiry.update({
       where: { id: enquiryId },
@@ -221,16 +192,17 @@ export async function convertEnquiryCore(
   now: Date,
 ) {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Enquiry not found.')
-    if (enquiry.status === 'CONVERTED') {
+    if (!enquiry) throw new Error('Lead not found.')
+
+    if (enquiry.convertedProjectId) {
       return {
         clientId: enquiry.convertedClientId,
         projectId: enquiry.convertedProjectId,
         alreadyConverted: true,
       }
     }
-    if (enquiry.status === 'LOST' || enquiry.status === 'ARCHIVED') {
-      throw new Error('Reopen the enquiry before converting it.')
+    if (enquiry.status === 'DECLINED') {
+      throw new Error('Reopen the lead before converting it.')
     }
     const company = await requireCompany(tx)
 
@@ -278,7 +250,7 @@ export async function convertEnquiryCore(
     await tx.enquiry.update({
       where: { id: enquiry.id },
       data: {
-        status: 'CONVERTED',
+        status: 'AWAITING_BOOKING_CONFIRMATION',
         waitingOn: null,
         convertedClientId: client.id,
         convertedProjectId: project.id,
@@ -312,8 +284,8 @@ export async function convertEnquiryCore(
 export async function cancelBooking(enquiryId: string, actorUserId: string | null = null) {
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Enquiry not found.')
-    if (enquiry.status !== 'CONVERTED') throw new Error('This enquiry is not booked.')
+    if (!enquiry) throw new Error('Lead not found.')
+    if (enquiry.status !== 'BOOKING_CONFIRMED') throw new Error('This lead is not a confirmed booking.')
 
     if (enquiry.convertedProjectId) {
       await tx.project.update({
@@ -321,17 +293,6 @@ export async function cancelBooking(enquiryId: string, actorUserId: string | nul
         data: { lifecycleStatus: 'CANCELLED' },
       })
     }
-    await tx.enquiry.update({
-      where: { id: enquiryId },
-      data: {
-        status: 'LOST',
-        lostReason: 'Booking cancelled',
-        waitingOn: null,
-        convertedProjectId: null,
-        convertedClientId: null,
-        convertedAt: null,
-      },
-    })
     await tx.auditLog.create({
       data: {
         companyId: enquiry.companyId,

@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
-import { Prisma } from '@prisma/client'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
@@ -10,13 +10,16 @@ import { quoteDisplayNumber } from '@/lib/domain/quote'
 import { quoteView } from '@/features/quotes/status'
 import { computeDeposit } from '@/lib/domain/pricing'
 import { formatAud } from '@/lib/money'
-import { formatSydneyDate } from '@/lib/time'
+import { formatSydneyDate, formatSydneyTime } from '@/lib/time'
 import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
-import { Button } from '@/components/ui/Button'
+import { IconButton, IconLink } from '@/components/ui/IconButton'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { SentToast } from '@/components/ui/SentToast'
+import { QuoteDocument, type QuoteDocData } from '@/components/QuoteDocument'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
+import { InvoicePreview } from '../../finance/[invoiceId]/InvoicePreview'
+import { HistoryLog, type HistoryRow } from '../../finance/[invoiceId]/HistoryLog'
 import { shareQuoteAction, acceptQuoteAction, reviseQuoteAction, declineQuoteAction } from '../actions'
 
 export const runtime = 'nodejs'
@@ -24,17 +27,25 @@ export const metadata: Metadata = { title: 'Quote - Moments' }
 
 const label = (s: string) => s.charAt(0) + s.slice(1).toLowerCase()
 
-const ACTIVITY_LABEL: Record<string, string> = {
-  'quote.created': 'Quote created',
-  'quote.revised': 'Quote revised',
-  'quote.sent': 'Quote shared',
-  'quote.accepted': 'Quote accepted',
-  'quote.declined': 'Quote declined',
-  'quote.duplicated': 'Quote duplicated',
+const QUOTE_EVENT: Record<string, { action: string; details: string }> = {
+  'quote.created': { action: 'Created', details: 'Quote created.' },
+  'quote.revised': { action: 'Revised', details: 'A new version of the quote was created.' },
+  'quote.sent': { action: 'Shared', details: 'Quote shared with the client.' },
+  'quote.accepted': { action: 'Accepted', details: 'Quote accepted; the lead was converted to a job.' },
+  'quote.declined': { action: 'Declined', details: 'Quote marked as declined.' },
+  'quote.duplicated': { action: 'Duplicated', details: 'Quote duplicated.' },
 }
 const INVOICE_TONE: Record<string, Tone> = {
   DRAFT: 'neutral', ISSUED: 'info', SENT: 'info', PARTIALLY_PAID: 'warn', PAID: 'good', OVERDUE: 'bad', VOID: 'neutral',
 }
+
+const PRIMARY_BTN = 'inline-flex h-9 items-center gap-1.5 rounded-md bg-ink px-3.5 text-sm font-medium text-surface transition-opacity hover:opacity-90'
+const ICON = { viewBox: '0 0 24 24', className: 'h-4 w-4', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true }
+const SendIcon = <svg {...ICON}><path d="m22 2-7 20-4-9-9-4 20-7z" /><path d="M22 2 11 13" /></svg>
+const EditIcon = <svg {...ICON}><path d="M4 20h4l10-10-4-4L4 16v4z" /><path d="m13.5 6.5 4 4" /></svg>
+const CheckIcon = <svg {...ICON}><path d="M20 6 9 17l-5-5" /></svg>
+const DeclineIcon = <svg {...ICON}><circle cx="12" cy="12" r="9" /><path d="M15 9l-6 6M9 9l6 6" /></svg>
+const DownloadIcon = <svg {...ICON}><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" /></svg>
 
 export default async function QuoteDetailPage({
   params,
@@ -72,10 +83,6 @@ export default async function QuoteDetailPage({
   const jobName = quote.enquiry?.eventType ?? 'Photography'
   const shootDate = quote.project?.bookings[0]?.startsAt ?? null
 
-  const packageLines = v.lines.filter((l) => l.lineType === 'package')
-  const addonLines = v.lines.filter((l) => l.lineType === 'addon')
-  const otherLines = v.lines.filter((l) => l.lineType !== 'package' && l.lineType !== 'addon')
-
   const dep = v.depositPercent != null ? computeDeposit(v.total, v.depositPercent) : null
 
   const contract = quote.project?.contracts[0]?.currentVersion ?? null
@@ -83,10 +90,28 @@ export default async function QuoteDetailPage({
 
   const activity = await prisma.auditLog.findMany({
     where: { entityType: 'Quote', entityId: id },
-    orderBy: { createdAt: 'desc' },
-    take: 20,
+    orderBy: { createdAt: 'asc' }, // oldest first, like the invoice history log
+    take: 40,
     select: { id: true, action: true, createdAt: true, actor: { select: { name: true } } },
   })
+  const historyRows: HistoryRow[] = activity.map((a) => {
+    const e = QUOTE_EVENT[a.action] ?? { action: label(a.action.replace(/^quote\./, '')), details: '' }
+    return { id: a.id, date: formatSydneyDate(a.createdAt), time: formatSydneyTime(a.createdAt), user: a.actor?.name ?? 'System', action: e.action, details: e.details }
+  })
+
+  const doc: QuoteDocData = {
+    number: quoteDisplayNumber(quote.reference, quote.seq),
+    clientName,
+    issueDate: v.issueDate,
+    validUntil: v.validUntil,
+    introduction: v.introduction,
+    lines: v.lines,
+    subtotal: v.subtotal,
+    taxTotal: v.taxTotal,
+    total: v.total,
+    depositPercent: v.depositPercent,
+    notes: v.notes,
+  }
 
   const isDraft = quote.status === 'DRAFT'
   const isSentOrViewed = quote.status === 'SENT' || quote.status === 'VIEWED'
@@ -95,97 +120,68 @@ export default async function QuoteDetailPage({
     <AppShell user={user} csrf={csrf} active="quotes">
       {sp.sent !== undefined ? <SentToast email={sp.sent} /> : null}
       <PageContainer variant="standard">
-      <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Quotes', href: '/quotes' }, { label: quoteDisplayNumber(quote.reference, quote.seq) }]} />
+        <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Quotes', href: '/quotes' }, { label: quoteDisplayNumber(quote.reference, quote.seq) }]} />
 
-      {/* Header — breadcrumb (location) sits above; the title row shows the full quote number + client with
-          the status inline, then a context subline. Same shape as the other detail pages. */}
-      <div className="mt-3 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold text-ink">{quoteDisplayNumber(quote.reference, quote.seq)} · {clientName}</h1>
-        <StatusPill tone={view.tone}>{view.label}</StatusPill>
-      </div>
+        {/* Header: number + status and the context subline on the left, the actions on the right - the same
+            shape as the Invoice detail page. */}
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-2xl font-semibold leading-tight text-ink">{quoteDisplayNumber(quote.reference, quote.seq)} · {clientName}</h1>
+              <StatusPill tone={view.tone}>{view.label}</StatusPill>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-muted">
+              {quote.project ? (
+                <Link href={`/jobs/${quote.project.id}`} className="text-ink hover:text-accent">{jobName}</Link>
+              ) : quote.enquiry ? (
+                <Link href={`/leads/${quote.enquiry.id}`} className="text-ink hover:text-accent">{jobName}</Link>
+              ) : <span className="text-ink">{jobName}</span>}
+              {shootDate ? <><span aria-hidden>·</span><span>Shoot {formatSydneyDate(shootDate)}</span></> : null}
+              {v.issueDate ? <><span aria-hidden>·</span><span>Issued {formatSydneyDate(v.issueDate)}</span></> : null}
+              {v.validUntil ? <><span aria-hidden>·</span><span>Valid until {formatSydneyDate(v.validUntil)}</span></> : null}
+            </div>
+          </div>
 
-      {/* Context subline — only fields that are actually set are shown (progressive disclosure, NN/g).
-          Job/Enquiry is reached by its name, not a button. */}
-      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-muted">
-        {quote.project ? (
-          <Link href={`/jobs/${quote.project.id}`} className="text-ink hover:text-accent">{jobName}</Link>
-        ) : quote.enquiry ? (
-          <Link href={`/enquiries/${quote.enquiry.id}`} className="text-ink hover:text-accent">{jobName}</Link>
-        ) : <span className="text-ink">{jobName}</span>}
-        {shootDate ? <><span aria-hidden>·</span><span>Shoot {formatSydneyDate(shootDate)}</span></> : null}
-        {v.issueDate ? <><span aria-hidden>·</span><span>Issued {formatSydneyDate(v.issueDate)}</span></> : null}
-        {v.validUntil ? <><span aria-hidden>·</span><span>Valid until {formatSydneyDate(v.validUntil)}</span></> : null}
-      </div>
-
-      {sp.acceptError ? <div className="mt-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.acceptError}</div> : null}
-      {sp.shareError ? <div className="mt-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.shareError}</div> : null}
-      {sp.declineError ? <div className="mt-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.declineError}</div> : null}
-
-      {/* Action bar — only the actions this state actually needs (no duplicate-purpose or utility clutter).
-          Cross-record navigation (Job) is via its name in the context line above. */}
-      <div className="mt-5 flex flex-wrap items-center gap-2">
-        {isDraft ? (
-          <>
-            <Link href={`/quotes/${id}/edit`}><Button>Edit</Button></Link>
-            <FormButton action={shareQuoteAction} csrf={csrf} quoteId={id} label="Send quote" variant="secondary" />
-            <Link href={`/quotes/${id}/preview`}><Button variant="secondary">Preview</Button></Link>
-          </>
-        ) : isSentOrViewed ? (
-          <>
-            {/* "Mark as accepted" is the Enquiry -> Job conversion, so it only applies to a quote that is
-                linked to an enquiry. Quotes tied straight to a job (e.g. seeded/imported) have no enquiry
-                to convert, so hide it rather than let the click dead-end into an error. */}
-            {quote.enquiry ? <FormButton action={acceptQuoteAction} csrf={csrf} quoteId={id} label="Mark as accepted" /> : null}
-            {/* "Edit" a sent quote safely opens a NEW version (reviseQuoteAction) - the client is still
-                looking at the version they were sent, so we never edit that one in place. */}
-            <FormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Edit" variant="secondary" />
-            <FormButton action={declineQuoteAction} csrf={csrf} quoteId={id} label="Declined" variant="danger" />
-            <Link href={`/quotes/${id}/preview`}><Button variant="secondary">Preview</Button></Link>
-          </>
-        ) : quote.status === 'DECLINED' ? (
-          <>
-            <FormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Edit" />
-            <Link href={`/quotes/${id}/preview`}><Button variant="secondary">Preview</Button></Link>
-          </>
-        ) : (
-          <Link href={`/quotes/${id}/preview`}><Button>Preview</Button></Link>
-        )}
-      </div>
-
-      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="flex flex-col gap-4 lg:col-span-2">
-          {/* Contents */}
-          <section className="rounded-md border border-line bg-surface p-5">
-            <h2 className="mb-3 text-sm font-bold text-ink">Quote contents</h2>
-            {v.introduction ? <p className="mb-4 whitespace-pre-line text-sm text-ink-muted">{v.introduction}</p> : null}
-            {v.lines.length === 0 ? (
-              <p className="text-sm text-ink-muted">No items yet. Edit the quote to add packages and add-ons.</p>
+          {/* Action bar - one labelled primary + round icon buttons with tooltips, exactly like the invoice
+              header. Only the actions this state actually needs are shown. */}
+          <div className="flex flex-wrap items-center gap-2 print:hidden">
+            {isDraft ? (
+              <>
+                <PrimaryAction action={shareQuoteAction} csrf={csrf} quoteId={id} label="Send quote" icon={SendIcon} />
+                <IconLink label="Edit" tone="accent" href={`/quotes/${id}/edit`} icon={EditIcon} />
+                <IconLink label="Save as PDF" href={`/quotes/${id}/preview`} icon={DownloadIcon} />
+              </>
+            ) : isSentOrViewed ? (
+              <>
+                {/* "Mark as accepted" is the Enquiry -> Job conversion, so it only applies to a quote linked to
+                    an enquiry; a quote tied straight to a job has no enquiry to convert. */}
+                {quote.enquiry ? <PrimaryAction action={acceptQuoteAction} csrf={csrf} quoteId={id} label="Mark as accepted" icon={CheckIcon} /> : null}
+                {/* "Edit" a sent quote opens a NEW version (reviseQuoteAction); the client is still looking at the
+                    version they were sent, so that one is never edited in place. */}
+                <IconFormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Edit" tone="accent" icon={EditIcon} />
+                <IconFormButton action={declineQuoteAction} csrf={csrf} quoteId={id} label="Declined" tone="danger" icon={DeclineIcon} />
+                <IconLink label="Save as PDF" href={`/quotes/${id}/preview`} icon={DownloadIcon} />
+              </>
+            ) : quote.status === 'DECLINED' ? (
+              <>
+                <PrimaryAction action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Edit" icon={EditIcon} />
+                <IconLink label="Save as PDF" href={`/quotes/${id}/preview`} icon={DownloadIcon} />
+              </>
             ) : (
-              <div className="flex flex-col gap-4">
-                <LineGroup title="Packages" lines={packageLines} />
-                <LineGroup title="Add-ons" lines={addonLines} />
-                <LineGroup title="Other" lines={otherLines} />
-              </div>
+              <IconLink label="Save as PDF" href={`/quotes/${id}/preview`} icon={DownloadIcon} />
             )}
-          </section>
+          </div>
+        </div>
 
-          {/* Pricing — shown once the quote has line items (no empty $0 block on a blank draft). */}
-          {v.lines.length > 0 ? (
-            <section className="rounded-md border border-line bg-surface p-5">
-              <h2 className="mb-3 text-sm font-bold text-ink">Pricing</h2>
-              <div className="ml-auto flex w-full max-w-sm flex-col gap-1 text-sm">
-                <Row term="Subtotal (excl. GST)" value={formatAud(v.subtotal)} muted />
-                <Row term="GST" value={formatAud(v.taxTotal)} muted />
-                <div className="my-1 border-t border-line" />
-                <Row term="Total (incl. GST)" value={formatAud(v.total)} strong />
-              </div>
-            </section>
-          ) : null}
+        {sp.acceptError ? <div className="mt-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.acceptError}</div> : null}
+        {sp.shareError ? <div className="mt-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.shareError}</div> : null}
+        {sp.declineError ? <div className="mt-4 rounded-md border border-danger bg-paper px-3 py-2 text-sm text-danger">{sp.declineError}</div> : null}
 
-          {/* Payment schedule — only once there's real pricing (no empty $0 section). */}
+        <div className="mt-6 flex flex-col gap-6">
+          {/* Payment schedule */}
           {v.total.greaterThan(0) ? (
             <section className="rounded-md border border-line bg-surface p-5">
-              <h2 className="mb-3 text-sm font-bold text-ink">Payment schedule</h2>
+              <h2 className="mb-3 text-base font-semibold text-ink">Payment schedule</h2>
               {dep ? (
                 <ul className="flex flex-col gap-2 text-sm">
                   <li className="flex items-center justify-between gap-3 border-b border-line pb-2">
@@ -203,20 +199,10 @@ export default async function QuoteDetailPage({
             </section>
           ) : null}
 
-          {v.notes ? (
-            <section className="rounded-md border border-line bg-surface p-5">
-              <h2 className="mb-2 text-sm font-bold text-ink">Notes</h2>
-              <p className="whitespace-pre-line text-sm text-ink-muted">{v.notes}</p>
-            </section>
-          ) : null}
-        </div>
-
-        <div className="flex flex-col gap-4">
-          {/* Related records — only appears once a contract or invoice actually exists (progressive
-              disclosure); navigable rows, not primary quote actions. */}
+          {/* Related records - only once a contract or invoice actually exists (progressive disclosure). */}
           {(contract && quote.project) || invoices.length > 0 ? (
             <section className="rounded-md border border-line bg-surface p-5">
-              <h2 className="mb-3 text-sm font-bold text-ink">Related records</h2>
+              <h2 className="mb-3 text-base font-semibold text-ink">Related records</h2>
               <div className="flex flex-col gap-3 text-sm">
                 {contract && quote.project ? (
                   <div>
@@ -246,65 +232,40 @@ export default async function QuoteDetailPage({
             </section>
           ) : null}
 
-          {/* Activity */}
-          <section className="rounded-md border border-line bg-surface p-5">
-            <h2 className="mb-3 text-sm font-bold text-ink">Activity</h2>
-            {activity.length === 0 ? (
-              <p className="text-sm text-ink-muted">No activity yet.</p>
-            ) : (
-              <ul className="flex flex-col gap-2.5 text-sm">
-                {activity.map((a) => (
-                  <li key={a.id} className="flex flex-col">
-                    <span className="text-ink">{ACTIVITY_LABEL[a.action] ?? a.action}{a.actor?.name ? ` · ${a.actor.name}` : ''}</span>
-                    <span className="text-xs text-muted">{formatSydneyDate(a.createdAt)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          {/* Quote preview - the document as the client sees it, mirroring the invoice preview. */}
+          {v.lines.length > 0 ? (
+            <InvoicePreview title="Quote preview"><QuoteDocument doc={doc} /></InvoicePreview>
+          ) : (
+            <section className="rounded-md border border-line bg-surface p-5">
+              <h2 className="mb-2 text-base font-semibold text-ink">Quote preview</h2>
+              <p className="text-sm text-ink-muted">No items yet. Edit the quote to add packages and add-ons.</p>
+            </section>
+          )}
+
+          {/* History log */}
+          <HistoryLog rows={historyRows} />
         </div>
-      </div>
-    </PageContainer>
+      </PageContainer>
     </AppShell>
   )
 }
 
-function Row({ term, value, strong, muted }: { term: string; value: string; strong?: boolean; muted?: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className={muted ? 'text-ink-muted' : 'text-ink'}>{term}</span>
-      <span className={`tabular-nums ${strong ? 'font-semibold text-ink' : muted ? 'text-ink-muted' : 'text-ink'}`}>{value}</span>
-    </div>
-  )
-}
-
-function LineGroup({ title, lines }: { title: string; lines: { id: string; description: string; details: string | null; quantity: number; unitPrice: Prisma.Decimal; lineTotal: Prisma.Decimal }[] }) {
-  if (lines.length === 0) return null
-  return (
-    <div>
-      <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">{title}</h3>
-      <ul className="flex flex-col gap-3">
-        {lines.map((l) => (
-          <li key={l.id} className="border-b border-line pb-3 last:border-b-0">
-            <div className="flex items-start justify-between gap-3">
-              <span className="font-medium text-ink">{l.description}</span>
-              <span className="tabular-nums text-ink">{formatAud(l.lineTotal)}</span>
-            </div>
-            <div className="mt-0.5 text-xs text-muted">Qty {l.quantity} × {formatAud(l.unitPrice)}</div>
-            {l.details ? <p className="mt-1 whitespace-pre-line text-sm text-ink-muted">{l.details}</p> : null}
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-function FormButton({ action, csrf, quoteId, label, variant }: { action: (fd: FormData) => Promise<void>; csrf: string; quoteId: string; label: string; variant?: 'primary' | 'secondary' | 'danger' | 'ghost' }) {
+function PrimaryAction({ action, csrf, quoteId, label, icon }: { action: (fd: FormData) => Promise<void>; csrf: string; quoteId: string; label: string; icon: ReactNode }) {
   return (
     <form action={action}>
       <input type="hidden" name="csrf" value={csrf} />
       <input type="hidden" name="quoteId" value={quoteId} />
-      <Button type="submit" variant={variant}>{label}</Button>
+      <button type="submit" className={PRIMARY_BTN}>{icon}{label}</button>
+    </form>
+  )
+}
+
+function IconFormButton({ action, csrf, quoteId, label, icon, tone }: { action: (fd: FormData) => Promise<void>; csrf: string; quoteId: string; label: string; icon: ReactNode; tone?: 'neutral' | 'accent' | 'warn' | 'danger' }) {
+  return (
+    <form action={action}>
+      <input type="hidden" name="csrf" value={csrf} />
+      <input type="hidden" name="quoteId" value={quoteId} />
+      <IconButton type="submit" label={label} tone={tone} icon={icon} />
     </form>
   )
 }

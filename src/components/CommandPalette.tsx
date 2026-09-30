@@ -5,17 +5,16 @@ import { useRouter } from 'next/navigation'
 import { SearchField } from '@/components/ui/SearchField'
 import { searchEntitiesAction, type SearchHit } from '@/app/(staff)/calendar/actions'
 
-const GROUP_LABEL: Record<SearchHit['type'], string> = { Client: 'Clients', Enquiry: 'Enquiries', Job: 'Jobs', Invoice: 'Invoices' }
+const GROUP_LABEL: Record<SearchHit['type'], string> = { Client: 'Clients', Lead: 'Leads', Job: 'Jobs', Invoice: 'Invoices' }
 
 export function CommandPalette() {
   const router = useRouter()
+  const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<SearchHit[]>([])
   const [active, setActive] = useState(0)
   const [loading, setLoading] = useState(false)
-  const [open, setOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
-  const wrapRef = useRef<HTMLDivElement>(null)
   const reqId = useRef(0)
 
   useEffect(() => {
@@ -24,7 +23,7 @@ export function CommandPalette() {
       const slash = e.key === '/' && !isTypingTarget(document.activeElement)
       if (cmdK || slash) {
         e.preventDefault()
-        inputRef.current?.focus()
+        setOpen(true)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -32,14 +31,11 @@ export function CommandPalette() {
   }, [])
 
   useEffect(() => {
-    const onDown = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    window.addEventListener('mousedown', onDown)
-    return () => window.removeEventListener('mousedown', onDown)
-  }, [])
+    if (open) inputRef.current?.focus()
+  }, [open])
 
   useEffect(() => {
+    if (!open) return
     const q = query.trim()
     if (q.length < 2) {
       setHits([])
@@ -56,86 +52,102 @@ export function CommandPalette() {
       setLoading(false)
     }, 180)
     return () => clearTimeout(t)
-  }, [query])
+  }, [query, open])
+
+  function close() {
+    setOpen(false)
+    setQuery('')
+    setHits([])
+  }
 
   function go(hit: SearchHit | undefined) {
     if (!hit) return
-    setOpen(false)
-    setQuery('')
-    inputRef.current?.blur()
+    close()
     router.push(hit.href)
   }
 
   const q = query.trim()
-  const showResults = open && q.length > 0
 
   return (
-    <div ref={wrapRef} className="relative w-full">
-      <SearchField
-        ref={inputRef}
-        value={query}
-        onChange={(v) => {
-          setQuery(v)
-          setOpen(true)
-        }}
-        variant="global"
-        placeholder="Search clients, enquiries, jobs, invoices..."
-        ariaLabel="Search"
-        onFocus={() => setOpen(true)}
-        onKeyDown={(e) => {
-          if (e.key === 'ArrowDown') {
-            e.preventDefault()
-            setActive((a) => Math.min(a + 1, hits.length - 1))
-          } else if (e.key === 'ArrowUp') {
-            e.preventDefault()
-            setActive((a) => Math.max(a - 1, 0))
-          } else if (e.key === 'Enter') {
-            e.preventDefault()
-            go(hits[active])
-          } else if (e.key === 'Escape') {
+    <>
+      {/* Trigger: a compact search icon in the top-right cluster. */}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Search"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-sunk hover:text-ink"
+      >
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-3.5-3.5" />
+        </svg>
+      </button>
 
-            setOpen(false)
-            inputRef.current?.blur()
-          }
-        }}
-      />
+      {/* Command palette modal. */}
+      {open ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-24" role="dialog" aria-modal="true" aria-label="Search">
+          <div className="fixed inset-0 bg-ink/30" onClick={close} aria-hidden="true" />
+          <div className="relative z-10 w-full max-w-xl overflow-hidden rounded-lg border border-line bg-surface shadow-lg">
+            <div className="border-b border-line p-3">
+              <SearchField
+                ref={inputRef}
+                value={query}
+                onChange={setQuery}
+                variant="global"
+                placeholder="Search clients, leads, jobs, invoices..."
+                ariaLabel="Search"
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault()
+                    setActive((a) => Math.min(a + 1, hits.length - 1))
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault()
+                    setActive((a) => Math.max(a - 1, 0))
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault()
+                    go(hits[active])
+                  } else if (e.key === 'Escape') {
 
-      {showResults ? (
-        <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-lg border border-line bg-surface shadow-lg">
-          <div className="max-h-96 overflow-y-auto py-1">
-            {q.length < 2 ? (
-              <p className="px-4 py-6 text-center text-sm text-muted">Type at least 2 characters to search.</p>
-            ) : loading ? (
-              <p className="px-4 py-6 text-center text-sm text-muted">Searching...</p>
-            ) : hits.length === 0 ? (
-              <p className="px-4 py-6 text-center text-sm text-muted">No matches for &ldquo;{q}&rdquo;.</p>
-            ) : (
-              hits.map((h, i) => {
-                const showHeader = i === 0 || hits[i - 1]!.type !== h.type
-                return (
-                  <div key={`${h.href}-${i}`}>
-                    {showHeader ? (
-                      <div className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted first:pt-1.5">{GROUP_LABEL[h.type]}</div>
-                    ) : null}
-                    <button
-                      type="button"
-                      onMouseEnter={() => setActive(i)}
-                      onClick={() => go(h)}
-                      className={`flex w-full items-center gap-3 px-4 py-2 text-left text-sm transition-colors ${i === active ? 'bg-sunk' : ''}`}
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-ink">{h.label}</span>
-                        {h.sub ? <span className="block truncate text-xs text-ink-muted">{h.sub}</span> : null}
-                      </span>
-                    </button>
-                  </div>
-                )
-              })
-            )}
+                    close()
+                  }
+                }}
+              />
+            </div>
+            <div className="max-h-96 overflow-y-auto py-1">
+              {q.length < 2 ? (
+                <p className="px-4 py-6 text-center text-sm text-muted">Type at least 2 characters to search.</p>
+              ) : loading ? (
+                <p className="px-4 py-6 text-center text-sm text-muted">Searching...</p>
+              ) : hits.length === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-muted">No matches for &ldquo;{q}&rdquo;.</p>
+              ) : (
+                hits.map((h, i) => {
+                  const showHeader = i === 0 || hits[i - 1]!.type !== h.type
+                  return (
+                    <div key={`${h.href}-${i}`}>
+                      {showHeader ? (
+                        <div className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted first:pt-1.5">{GROUP_LABEL[h.type]}</div>
+                      ) : null}
+                      <button
+                        type="button"
+                        onMouseEnter={() => setActive(i)}
+                        onClick={() => go(h)}
+                        className={`flex w-full items-center gap-3 px-4 py-2 text-left text-sm transition-colors ${i === active ? 'bg-sunk' : ''}`}
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-ink">{h.label}</span>
+                          {h.sub ? <span className="block truncate text-xs text-ink-muted">{h.sub}</span> : null}
+                        </span>
+                      </button>
+                    </div>
+                  )
+                })
+              )}
+            </div>
           </div>
         </div>
       ) : null}
-    </div>
+    </>
   )
 }
 

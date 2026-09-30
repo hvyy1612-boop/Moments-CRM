@@ -18,7 +18,7 @@ const SECTIONS: { title: string; items: SectionItem[] }[] = [
   { title: 'Company', items: [{ label: 'Company details' }, { label: 'Logo' }, { label: 'Currency & tax (GST)' }, { label: 'Date & time' }] },
   { title: 'Finance', items: [{ label: 'Invoice settings' }, { label: 'Payment schedules' }, { label: 'Payment methods' }] },
   { title: 'Templates', items: [{ label: 'Packages' }, { label: 'Email templates' }, { label: 'Quote & contract' }, { label: 'Questionnaire' }, { label: 'Workflow templates' }] },
-  { title: 'Labels & status', items: [{ label: 'Job statuses' }, { label: 'Enquiry statuses' }, { label: 'Invoice statuses' }] },
+  { title: 'Labels & status', items: [{ label: 'Job statuses' }, { label: 'Lead stages' }, { label: 'Invoice statuses' }] },
   { title: 'Account', items: [{ label: 'Users', href: '/users' }, { label: 'Notifications', href: '/settings/notifications' }, { label: 'Density' }] },
 ]
 
@@ -30,7 +30,7 @@ export default async function SettingsPage() {
   return (
     <AppShell user={user} csrf={csrf} active="settings">
       <PageContainer variant="standard">
-      <PageHeader breadcrumb={[DASHBOARD_CRUMB, { label: 'Settings' }]} title="Settings" description="Studio configuration and account tools." />
+      <PageHeader breadcrumb={[DASHBOARD_CRUMB, { label: 'Settings' }]} title="Settings" />
       {can(user, 'USER_MANAGE') ? (
         <div className="mb-4">
           <ResetLinkGenerator csrf={csrf} />

@@ -10,9 +10,10 @@ import { prisma } from '@/lib/db'
 import {
   addClientNote,
   archiveClient,
+  clientHasHistory,
   createClient,
-  deleteClient,
   deleteClientNote,
+  deleteEmptyClients,
   restoreClient,
   setClientConsent,
   updateClient,
@@ -98,8 +99,8 @@ export async function createClientAction(formData: FormData): Promise<void> {
   )
 
   revalidatePath('/clients')
-  revalidatePath('/enquiries')
-  redirect(`/enquiries/${enquiry.id}`)
+  revalidatePath('/leads')
+  redirect(`/leads/${enquiry.id}?toast=enquiry-added`)
 }
 
 export type ImportState =
@@ -200,15 +201,34 @@ export async function restoreClientAction(formData: FormData): Promise<void> {
   revalidatePath(`/clients/${clientId}`)
 }
 
-export async function deleteClientAction(formData: FormData): Promise<void> {
+export async function removeClientAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
-  if (user.role !== 'ADMIN') throw new Error('Only an admin can permanently delete a client.')
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
   const clientId = String(formData.get('clientId') ?? '')
   if (!clientId) return
-  await deleteClient(clientId, user.id)
+  if (await clientHasHistory(clientId)) {
+    if (user.role !== 'ADMIN') {
+      throw new Error('Only an admin can archive a client that already has jobs or leads.')
+    }
+    await archiveClient(clientId, user.id)
+  } else {
+
+    await deleteEmptyClients([clientId], user.id)
+  }
   revalidatePath('/clients')
   redirect('/clients')
+}
+
+export async function deleteClientsAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const ids = String(formData.get('ids') ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (ids.length === 0) return
+  await deleteEmptyClients(ids, user.id)
+  revalidatePath('/clients')
 }
 
 export async function addClientNoteAction(formData: FormData): Promise<void> {

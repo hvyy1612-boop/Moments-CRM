@@ -75,6 +75,12 @@ export function sydneyYmd(date: Date): { year: number; month: number; day: numbe
   return { year: Number(at.year), month: Number(at.month), day: Number(at.day) }
 }
 
+export function daysUntilSydney(due: Date, now: Date = new Date()): number {
+  const a = sydneyYmd(due)
+  const b = sydneyYmd(now)
+  return Math.round((Date.UTC(a.year, a.month - 1, a.day) - Date.UTC(b.year, b.month - 1, b.day)) / 86400000)
+}
+
 export function sydneyDateTimeParts(date: Date): { date: string; time: string } {
   const at: Record<string, string> = {}
   for (const part of new Intl.DateTimeFormat('en-GB', {

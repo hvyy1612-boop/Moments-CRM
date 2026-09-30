@@ -6,10 +6,9 @@ import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
 import { PageHeader } from '@/components/PageHeader'
 import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
-import { Button } from '@/components/ui/Button'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
-import { createQuoteForEnquiryAction } from '../actions'
+import { NewQuotePicker } from './NewQuotePicker'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Create quote - Moments' }
@@ -20,38 +19,29 @@ export default async function CreateQuotePage() {
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
   const enquiries = await prisma.enquiry.findMany({
-    where: { status: { in: ['NEW', 'CONTACTED', 'QUALIFIED'] } },
+    where: { status: { in: ['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION', 'QUOTE_SENT'] } },
     orderBy: { createdAt: 'desc' },
-    select: { id: true, name: true, eventType: true, createdAt: true, client: { select: { displayName: true } } },
+    select: { id: true, enquiryNumber: true, name: true, eventType: true, createdAt: true, client: { select: { displayName: true } } },
     take: 100,
   })
 
   return (
     <AppShell user={user} csrf={csrf} active="quotes">
-      <PageContainer variant="narrow">
-      <PageHeader breadcrumb={[DASHBOARD_CRUMB, { label: 'Quotes', href: '/quotes' }, { label: 'New quote' }]} title="Create quote" description="Choose the enquiry this quote is for." />
+      <PageContainer variant="standard">
+      <PageHeader breadcrumb={[DASHBOARD_CRUMB, { label: 'Quotes', href: '/quotes' }, { label: 'New quote' }]} title="Create quote" />
 
-      {enquiries.length === 0 ? (
-        <p className="rounded-md border border-dashed border-line bg-paper px-4 py-10 text-center text-sm text-ink-muted">
-          No open enquiries to quote. Quotes are created from an enquiry.
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {enquiries.map((e) => (
-            <li key={e.id} className="flex items-center justify-between gap-3 rounded-md border border-line bg-surface px-4 py-3">
-              <div className="min-w-0">
-                <div className="truncate font-medium text-ink">{e.client?.displayName ?? e.name}</div>
-                <div className="text-xs text-muted">{e.eventType ?? 'Enquiry'} · {formatSydneyDate(e.createdAt)}</div>
-              </div>
-              <form action={createQuoteForEnquiryAction}>
-                <input type="hidden" name="csrf" value={csrf} />
-                <input type="hidden" name="enquiryId" value={e.id} />
-                <Button type="submit" size="sm">Create quote</Button>
-              </form>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="mt-7">
+        <NewQuotePicker
+          csrf={csrf}
+          rows={enquiries.map((e) => ({
+            id: e.id,
+            number: e.enquiryNumber,
+            client: e.client?.displayName ?? e.name,
+            event: e.eventType ?? '-',
+            received: formatSydneyDate(e.createdAt),
+          }))}
+        />
+      </div>
     </PageContainer>
     </AppShell>
   )

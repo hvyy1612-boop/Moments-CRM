@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { can, type Permission } from '@/lib/auth/authz'
 import type { SessionUser } from '@/lib/auth/guard'
 import { getRecentAlerts } from '@/lib/domain/alerts'
+import { prisma } from '@/lib/db'
 import { AppChrome } from './AppChrome'
 
 export type NavKey =
@@ -48,7 +49,7 @@ function svg(children: ReactNode): ReactNode {
 
 const NAV: NavItem[] = [
   { key: 'clients', label: 'Clients', href: '/clients', group: 'Studio', built: true, icon: svg(<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>) },
-  { key: 'enquiries', label: 'Enquiries', href: '/enquiries', group: 'Studio', built: true, icon: svg(<><rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></>) },
+  { key: 'enquiries', label: 'Leads', href: '/leads', group: 'Studio', built: true, icon: svg(<><rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></>) },
   { key: 'quotes', label: 'Quotes', href: '/quotes', group: 'Studio', built: true, icon: svg(<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M8 13h5" /><path d="M8 17h8" /></>) },
   { key: 'jobs', label: 'Jobs', href: '/jobs', group: 'Studio', built: true, icon: svg(<><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /><rect width="20" height="14" x="2" y="6" rx="2" /></>) },
   { key: 'calendar', label: 'Calendar', href: '/calendar', group: 'Operations', built: true, icon: svg(<><path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" /><path d="m9 16 2 2 4-4" /></>) },
@@ -80,6 +81,11 @@ export async function AppShell({
   const initial = user.name.trim().charAt(0).toUpperCase() || 'U'
   const alerts = await getRecentAlerts()
 
+  const unreadEnquiries = await prisma.enquiry.count({
+    where: { viewedAt: null, convertedProjectId: null, status: { not: 'DECLINED' } },
+  })
+  const notifKeys = unreadEnquiries > 0 ? ['enquiries'] : []
+
   return (
     <AppChrome
       items={items}
@@ -90,6 +96,7 @@ export async function AppShell({
       userRole={user.role}
       csrf={csrf}
       alerts={alerts}
+      notifKeys={notifKeys}
     >
       {children}
     </AppChrome>

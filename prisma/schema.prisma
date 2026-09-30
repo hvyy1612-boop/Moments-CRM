@@ -165,12 +165,13 @@ enum OutboxStatus {
 }
 
 enum EnquiryStatus {
-  NEW
+  NEW_ENQUIRY
   CONTACTED
-  QUALIFIED
-  CONVERTED
-  LOST
-  ARCHIVED
+  CONSULTATION
+  QUOTE_SENT
+  AWAITING_BOOKING_CONFIRMATION
+  BOOKING_CONFIRMED
+  DECLINED
 }
 
 enum WaitingOn {
@@ -269,17 +270,17 @@ model Company {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  users     User[]
-  clients   Client[]
-  projects  Project[]
-  enquiries Enquiry[]
-  packages  Package[]
-  bookings  Booking[]
-  resources Resource[]
-  workItems WorkItem[]
-  calendarEvents CalendarEvent[]
+  users            User[]
+  clients          Client[]
+  projects         Project[]
+  enquiries        Enquiry[]
+  packages         Package[]
+  bookings         Booking[]
+  resources        Resource[]
+  workItems        WorkItem[]
+  calendarEvents   CalendarEvent[]
   invoiceTemplates InvoiceTemplate[]
-  numberCounters NumberCounter[]
+  numberCounters   NumberCounter[]
 
   @@map("companies")
 }
@@ -306,32 +307,32 @@ model NumberCounter {
 }
 
 model User {
-  id                 String    @id @default(cuid()) @db.VarChar(30)
-  companyId          String    @map("company_id") @db.VarChar(30)
-  email              String    @unique @db.Citext
-  passwordHash       String    @map("password_hash") @db.VarChar(255)
-  passwordAlgo       String    @map("password_algo") @db.VarChar(30)
-  role               UserRole
-  name               String    @db.VarChar(150)
-  isActive           Boolean   @default(true) @map("is_active")
-  status             String    @default("PENDING") @db.VarChar(20)
-  googleSub          String?   @unique @map("google_sub") @db.VarChar(255)
-  mustChangePassword Boolean   @default(false) @map("must_change_password")
-  lastLoginAt        DateTime? @map("last_login_at") @db.Timestamptz
-  failedAttempts     Int       @default(0) @map("failed_attempts")
-  lockedUntil        DateTime? @map("locked_until") @db.Timestamptz
-  passwordChangedAt  DateTime? @map("password_changed_at") @db.Timestamptz
+  id                        String    @id @default(cuid()) @db.VarChar(30)
+  companyId                 String    @map("company_id") @db.VarChar(30)
+  email                     String    @unique @db.Citext
+  passwordHash              String    @map("password_hash") @db.VarChar(255)
+  passwordAlgo              String    @map("password_algo") @db.VarChar(30)
+  role                      UserRole
+  name                      String    @db.VarChar(150)
+  isActive                  Boolean   @default(true) @map("is_active")
+  status                    String    @default("PENDING") @db.VarChar(20)
+  googleSub                 String?   @unique @map("google_sub") @db.VarChar(255)
+  mustChangePassword        Boolean   @default(false) @map("must_change_password")
+  lastLoginAt               DateTime? @map("last_login_at") @db.Timestamptz
+  failedAttempts            Int       @default(0) @map("failed_attempts")
+  lockedUntil               DateTime? @map("locked_until") @db.Timestamptz
+  passwordChangedAt         DateTime? @map("password_changed_at") @db.Timestamptz
   activityPinHash           String?   @map("activity_pin_hash") @db.VarChar(255)
   activityPinAlgo           String?   @map("activity_pin_algo") @db.VarChar(30)
   activityPinFailedAttempts Int       @default(0) @map("activity_pin_failed_attempts")
   activityPinLockedUntil    DateTime? @map("activity_pin_locked_until") @db.Timestamptz
-  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                 DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   company                 Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
   passwordResets          PasswordReset[]
   sessions                Session[]
-  signInLogs          SignInLog[]
+  signInLogs              SignInLog[]
   auditLogs               AuditLog[]
   ownedProjects           Project[]            @relation("ProjectOwner")
   createdQuoteVersions    QuoteVersion[]       @relation("QuoteVersionCreatedBy")
@@ -340,7 +341,8 @@ model User {
   assignmentsMade         ResourceAssignment[] @relation("AssignmentAssignedBy")
   recordedPayments        Payment[]            @relation("PaymentRecordedBy")
   ownedEnquiries          Enquiry[]            @relation("EnquiryOwner")
-  communications          Communication[]
+  communications          Communication[]      @relation("CommunicationBy")
+  editedCommunications    Communication[]      @relation("CommunicationEditedBy")
   uploadedFiles           File[]
   requestedChanges        ChangeRequest[]      @relation("ChangeRequestedBy")
   approvedChanges         ChangeRequest[]      @relation("ChangeApprovedBy")
@@ -426,6 +428,9 @@ model Client {
   state              String?      @db.VarChar(100)
   postcode           String?      @db.VarChar(20)
   country            String?      @db.VarChar(100)
+  partnerName        String?      @map("partner_name") @db.VarChar(150)
+  preferredContact   String?      @map("preferred_contact") @db.VarChar(120)
+  instagram          String?      @db.VarChar(100)
   marketingConsent   Boolean      @default(false) @map("marketing_consent")
   consentUpdatedAt   DateTime?    @map("consent_updated_at") @db.Timestamptz
   anonymisedAt       DateTime?    @map("anonymised_at") @db.Timestamptz
@@ -498,23 +503,26 @@ model Project {
   updatedAt            DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   archivedAt           DateTime?        @map("archived_at") @db.Timestamptz
 
-  company                Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  client                 Client          @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  owner                  User?           @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  package                Package?        @relation(fields: [packageId], references: [id], onDelete: SetNull)
-  quotes                 Quote[]         @relation("ProjectQuotes")
-  sourceQuote            Quote?          @relation("ProjectSourceQuote", fields: [sourceQuoteId], references: [id], onDelete: SetNull)
+  company                Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  client                 Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  owner                  User?                @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  package                Package?             @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  quotes                 Quote[]              @relation("ProjectQuotes")
+  sourceQuote            Quote?               @relation("ProjectSourceQuote", fields: [sourceQuoteId], references: [id], onDelete: SetNull)
   contracts              Contract[]
   bookings               Booking[]
   workItems              WorkItem[]
   invoices               Invoice[]
   payments               Payment[]
   galleries              Gallery[]
-  convertedFromEnquiries Enquiry[]       @relation("EnquiryConvertedProject")
+  convertedFromEnquiries Enquiry[]            @relation("EnquiryConvertedProject")
   communications         Communication[]
   files                  File[]
   questionnaires         Questionnaire[]
   changeRequests         ChangeRequest[]
+  requirements           ProjectRequirement[]
+  moodboardItems         MoodboardItem[]
+  teamMembers            ProjectTeamMember[]
 
   @@index([companyId])
   @@index([clientId])
@@ -545,48 +553,49 @@ model Package {
 }
 
 model Enquiry {
-  id                 String        @id @default(cuid()) @db.VarChar(30)
-  companyId          String        @map("company_id") @db.VarChar(30)
-  enquiryNumber      String?       @map("enquiry_number") @db.VarChar(20)
-  ownerUserId        String?       @map("owner_user_id") @db.VarChar(30)
-  name               String        @db.VarChar(150)
-  firstName          String?       @map("first_name") @db.VarChar(80)
-  lastName           String?       @map("last_name") @db.VarChar(80)
-  email              String        @db.Citext
-  phone              String?       @db.VarChar(30)
-  street             String?       @db.VarChar(200)
-  suburb             String?       @db.VarChar(100)
-  state              String?       @db.VarChar(100)
-  postcode           String?       @db.VarChar(20)
-  country            String?       @db.VarChar(100)
-  isCompany          Boolean       @default(false) @map("is_company")
-  eventType          String?       @map("event_type") @db.VarChar(50)
-  eventDate          DateTime?     @map("event_date") @db.Date
-  message            String?       @db.Text
-  partnerName          String?     @map("partner_name") @db.VarChar(150)
-  coverage             String?     @db.VarChar(30)
-  gettingReadyLocation String?     @map("getting_ready_location") @db.Text
-  ceremonyLocation     String?     @map("ceremony_location") @db.Text
-  weddingDetails       String?     @map("wedding_details") @db.Text
-  styleReason          String?     @map("style_reason") @db.Text
-  heardAbout           String?     @map("heard_about") @db.VarChar(120)
-  source             EnquirySource @default(WEBSITE)
-  status             EnquiryStatus @default(NEW)
-  waitingOn          WaitingOn?    @map("waiting_on")
-  lostReason         String?       @map("lost_reason") @db.VarChar(500)
-  clientId           String?       @map("client_id") @db.VarChar(30)
-  convertedClientId  String?       @map("converted_client_id") @db.VarChar(30)
-  convertedProjectId String?       @map("converted_project_id") @db.VarChar(30)
-  convertedAt        DateTime?     @map("converted_at") @db.Timestamptz
-  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt          DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  id                   String        @id @default(cuid()) @db.VarChar(30)
+  companyId            String        @map("company_id") @db.VarChar(30)
+  enquiryNumber        String?       @map("enquiry_number") @db.VarChar(20)
+  ownerUserId          String?       @map("owner_user_id") @db.VarChar(30)
+  name                 String        @db.VarChar(150)
+  firstName            String?       @map("first_name") @db.VarChar(80)
+  lastName             String?       @map("last_name") @db.VarChar(80)
+  email                String        @db.Citext
+  phone                String?       @db.VarChar(30)
+  street               String?       @db.VarChar(200)
+  suburb               String?       @db.VarChar(100)
+  state                String?       @db.VarChar(100)
+  postcode             String?       @db.VarChar(20)
+  country              String?       @db.VarChar(100)
+  isCompany            Boolean       @default(false) @map("is_company")
+  eventType            String?       @map("event_type") @db.VarChar(50)
+  eventDate            DateTime?     @map("event_date") @db.Date
+  message              String?       @db.Text
+  partnerName          String?       @map("partner_name") @db.VarChar(150)
+  coverage             String?       @db.VarChar(30)
+  gettingReadyLocation String?       @map("getting_ready_location") @db.Text
+  ceremonyLocation     String?       @map("ceremony_location") @db.Text
+  weddingDetails       String?       @map("wedding_details") @db.Text
+  styleReason          String?       @map("style_reason") @db.Text
+  heardAbout           String?       @map("heard_about") @db.Text
+  source               EnquirySource @default(WEBSITE)
+  status               EnquiryStatus @default(NEW_ENQUIRY)
+  waitingOn            WaitingOn?    @map("waiting_on")
+  lostReason           String?       @map("lost_reason") @db.VarChar(500)
+  clientId             String?       @map("client_id") @db.VarChar(30)
+  convertedClientId    String?       @map("converted_client_id") @db.VarChar(30)
+  convertedProjectId   String?       @map("converted_project_id") @db.VarChar(30)
+  convertedAt          DateTime?     @map("converted_at") @db.Timestamptz
+  viewedAt             DateTime?     @map("viewed_at") @db.Timestamptz
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  company          Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  owner            User?    @relation("EnquiryOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  client           Client?  @relation("ClientEnquiries", fields: [clientId], references: [id], onDelete: SetNull)
-  convertedClient  Client?  @relation("EnquiryConvertedClient", fields: [convertedClientId], references: [id], onDelete: SetNull)
-  convertedProject Project? @relation("EnquiryConvertedProject", fields: [convertedProjectId], references: [id], onDelete: SetNull)
-  quotes           Quote[]  @relation("EnquiryQuotes")
+  company          Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  owner            User?           @relation("EnquiryOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  client           Client?         @relation("ClientEnquiries", fields: [clientId], references: [id], onDelete: SetNull)
+  convertedClient  Client?         @relation("EnquiryConvertedClient", fields: [convertedClientId], references: [id], onDelete: SetNull)
+  convertedProject Project?        @relation("EnquiryConvertedProject", fields: [convertedProjectId], references: [id], onDelete: SetNull)
+  quotes           Quote[]         @relation("EnquiryQuotes")
   communications   Communication[]
   workItems        WorkItem[]
 
@@ -765,6 +774,7 @@ model Resource {
   company     Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
   linkedUser  User?                @relation("ResourceUser", fields: [linkedUserId], references: [id], onDelete: SetNull)
   assignments ResourceAssignment[]
+  teamMembers ProjectTeamMember[]
 
   @@index([companyId, resourceType])
   @@map("resources")
@@ -806,6 +816,8 @@ model Invoice {
   issuedAt             DateTime?     @map("issued_at") @db.Timestamptz
   billingNameSnapshot  String        @map("billing_name_snapshot") @db.VarChar(150)
   billingEmailSnapshot String?       @map("billing_email_snapshot") @db.VarChar(255)
+  billingPhoneSnapshot   String?     @map("billing_phone_snapshot") @db.VarChar(40)
+  billingJobNameSnapshot String?     @map("billing_job_name_snapshot") @db.VarChar(150)
   voidedAt             DateTime?     @map("voided_at") @db.Timestamptz
   voidReason           String?       @map("void_reason") @db.VarChar(500)
   invoiceDate          DateTime?     @map("invoice_date") @db.Timestamptz
@@ -1061,31 +1073,35 @@ model NotificationDeliveryEvent {
 }
 
 model NotificationSuppression {
-  recipientHash String   @id @map("recipient_hash") @db.VarChar(64)
-  recipientEmail String  @map("recipient_email") @db.VarChar(255)
-  reason        String   @db.VarChar(20)
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  recipientHash  String   @id @map("recipient_hash") @db.VarChar(64)
+  recipientEmail String   @map("recipient_email") @db.VarChar(255)
+  reason         String   @db.VarChar(20)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   @@map("notification_suppressions")
 }
 
 model Communication {
-  id        String            @id @default(cuid()) @db.VarChar(30)
-  projectId String?           @map("project_id") @db.VarChar(30)
-  enquiryId String?           @map("enquiry_id") @db.VarChar(30)
-  clientId  String?           @map("client_id") @db.VarChar(30)
-  type      CommunicationType
-  direction String            @db.VarChar(10)
-  subject   String?           @db.VarChar(255)
-  body      String            @db.Text
-  byUserId  String?           @map("by_user_id") @db.VarChar(30)
-  channel   String?           @db.VarChar(50)
-  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  id             String            @id @default(cuid()) @db.VarChar(30)
+  projectId      String?           @map("project_id") @db.VarChar(30)
+  enquiryId      String?           @map("enquiry_id") @db.VarChar(30)
+  clientId       String?           @map("client_id") @db.VarChar(30)
+  type           CommunicationType
+  direction      String            @db.VarChar(10)
+  subject        String?           @db.VarChar(255)
+  body           String            @db.Text
+  internal       Boolean           @default(false)
+  byUserId       String?           @map("by_user_id") @db.VarChar(30)
+  editedByUserId String?           @map("edited_by_user_id") @db.VarChar(30)
+  editedAt       DateTime?         @map("edited_at") @db.Timestamptz
+  channel        String?           @db.VarChar(50)
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz
 
-  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  client  Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  by      User?   @relation(fields: [byUserId], references: [id], onDelete: SetNull)
-  enquiry Enquiry? @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  project  Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  client   Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  by       User?    @relation("CommunicationBy", fields: [byUserId], references: [id], onDelete: SetNull)
+  editedBy User?    @relation("CommunicationEditedBy", fields: [editedByUserId], references: [id], onDelete: SetNull)
+  enquiry  Enquiry? @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
 
   @@index([projectId, createdAt])
   @@index([enquiryId, createdAt])
@@ -1251,4 +1267,49 @@ model ChangeRequest {
   @@index([projectId])
   @@index([status])
   @@map("change_requests")
+}
+
+model ProjectRequirement {
+  id        String   @id @default(cuid()) @db.VarChar(30)
+  projectId String   @map("project_id") @db.VarChar(30)
+  label     String   @db.VarChar(120)
+  detail    String   @db.Text
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("project_requirements")
+}
+
+model MoodboardItem {
+  id        String   @id @default(cuid()) @db.VarChar(30)
+  projectId String   @map("project_id") @db.VarChar(30)
+  url       String   @db.Text
+  caption   String?  @db.VarChar(200)
+  kind      String   @default("image") @db.VarChar(20)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("moodboard_items")
+}
+
+model ProjectTeamMember {
+  id         String   @id @default(cuid()) @db.VarChar(30)
+  projectId  String   @map("project_id") @db.VarChar(30)
+  resourceId String?  @map("resource_id") @db.VarChar(30)
+  name       String   @db.VarChar(150)
+  role       String   @db.VarChar(80)
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  resource Resource? @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@map("project_team_members")
 }

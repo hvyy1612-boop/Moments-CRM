@@ -1,4 +1,6 @@
-import type { ReactNode } from 'react'
+'use client'
+
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 
 export type SidebarItem = { key: string; label: string; href: string; group: string; built: boolean; icon: ReactNode }
@@ -8,15 +10,52 @@ export function Sidebar({
   groups,
   active,
   collapsed,
+  notifKeys = [],
 }: {
   items: SidebarItem[]
   groups: string[]
   active: string
   collapsed: boolean
+  notifKeys?: string[]
 }) {
+  const notif = new Set(notifKeys)
+  const navRef = useRef<HTMLElement>(null)
+  const [indicator, setIndicator] = useState<{ top: number; height: number; shown: boolean }>({
+    top: 0,
+    height: 0,
+    shown: false,
+  })
+
+  const moveTo = (el: HTMLElement | null) => {
+    const nav = navRef.current
+    if (!el || !nav) return
+    setIndicator({ top: el.offsetTop, height: el.offsetHeight, shown: true })
+  }
+  const restToActive = () => {
+    const el = navRef.current?.querySelector<HTMLElement>('[data-active="true"]') ?? null
+    if (el) moveTo(el)
+    else setIndicator((s) => ({ ...s, shown: false }))
+  }
+
+  useEffect(() => {
+    restToActive()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, collapsed, items.length])
+
   return (
     <aside className={`sticky top-16 hidden h-[calc(100vh-4rem)] shrink-0 flex-col bg-paper md:flex ${collapsed ? 'w-16' : 'w-56'}`}>
-      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-4 pt-2">
+      <nav
+        ref={navRef}
+        onMouseLeave={restToActive}
+        className="relative flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-4 pt-2"
+      >
+        {/* Sliding accent rail: a single element that transitions between item positions. */}
+        <span
+          aria-hidden="true"
+          className={`pointer-events-none absolute left-0 w-1 rounded-full bg-accent transition-all duration-200 ease-out ${indicator.shown ? 'opacity-100' : 'opacity-0'}`}
+          style={{ top: indicator.top, height: indicator.height }}
+        />
+
         {groups.map((group) => {
           const groupItems = items.filter((n) => n.group === group)
           if (groupItems.length === 0) return null
@@ -30,13 +69,25 @@ export function Sidebar({
                   <Link
                     key={item.key}
                     href={item.href}
+                    data-active={item.key === active ? 'true' : undefined}
+                    onMouseEnter={(e) => moveTo(e.currentTarget)}
                     title={collapsed ? item.label : undefined}
                     aria-current={item.key === active ? 'page' : undefined}
-                    className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${collapsed ? 'justify-center' : ''} ${
-                      item.key === active ? 'bg-sunk font-medium text-ink' : 'text-ink-muted hover:bg-sunk/60 hover:text-ink'
+                    className={`relative flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-[background-color,color,transform] duration-150 ease-out ${collapsed ? 'justify-center' : ''} ${
+                      item.key === active
+                        ? 'bg-sunk font-medium text-ink'
+                        : 'text-ink-muted hover:translate-x-0.5 hover:bg-sunk/50 hover:text-ink'
                     }`}
                   >
-                    {item.icon}
+                    <span className="relative flex shrink-0">
+                      {item.icon}
+                      {notif.has(item.key) ? (
+                        <span
+                          aria-hidden="true"
+                          className="absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full bg-warn ring-2 ring-paper"
+                        />
+                      ) : null}
+                    </span>
                     {!collapsed ? item.label : null}
                   </Link>
                 ) : (

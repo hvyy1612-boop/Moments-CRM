@@ -184,15 +184,14 @@ export default async function JobsPage({
 
   return (
     <AppShell user={user} csrf={csrf} active="jobs" bareHeader>
-      <PageContainer variant="standard">
+      <PageContainer variant="full">
         <PageHeader
           breadcrumb={[DASHBOARD_CRUMB, { label: 'Jobs' }]}
           title="Jobs"
-          description="Booked work from planning through the shoot, editing and delivery."
           actions={canEdit ? <AddJobButton csrf={csrf} /> : null}
         />
 
-        <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
           <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Job status">
             {([['active', 'Active', activeCount], ['completed', 'Completed', completedCount]] as const).map(([key, label, count]) => {
               const on = tab === key

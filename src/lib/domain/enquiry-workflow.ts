@@ -12,7 +12,7 @@ import { syncEnquiryStageFromTasks } from './enquiry-stage'
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
-const OPEN = new Set(['NEW', 'CONTACTED', 'QUALIFIED'])
+const OPEN = new Set(['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION'])
 
 export async function seedEnquiryWorkflow(
   tx: Tx,
@@ -54,9 +54,9 @@ export async function cancelOpenWorkItems(tx: Tx, enquiryId: string) {
 export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> {
   const enquiry = await prisma.enquiry.findUnique({
     where: { id: enquiryId },
-    select: { createdAt: true, status: true },
+    select: { createdAt: true, status: true, owner: { select: { name: true } } },
   })
-  const booked = enquiry?.status === 'CONVERTED'
+  const booked = enquiry?.status === 'BOOKING_CONFIRMED'
   const items = await prisma.workItem.findMany({
 
     where: booked ? { enquiryId } : { enquiryId, status: { not: 'CANCELLED' } },
@@ -84,7 +84,7 @@ export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> 
     completedByName: w.completedBy?.name ?? null,
     completedAt: w.completedAt ?? null,
   }))
-  return buildEnquiryBoard(tasks, formatSydneyDate, enquiry?.createdAt ?? null, new Date(), booked)
+  return buildEnquiryBoard(tasks, formatSydneyDate, enquiry?.createdAt ?? null, new Date(), booked, enquiry?.owner?.name ?? null)
 }
 
 export async function sendStaffReply(enquiryId: string, body: string, actorUserId: string) {
@@ -92,15 +92,15 @@ export async function sendStaffReply(enquiryId: string, body: string, actorUserI
   if (!text) throw new Error('A reply cannot be empty.')
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Enquiry not found.')
-    if (!OPEN.has(enquiry.status)) throw new Error('This enquiry is already closed.')
+    if (!enquiry) throw new Error('Lead not found.')
+    if (!OPEN.has(enquiry.status)) throw new Error('This lead is already closed.')
 
     await tx.communication.create({
       data: { enquiryId, type: 'CLIENT_MESSAGE', direction: 'outbound', body: text, byUserId: actorUserId },
     })
     await tx.enquiry.update({
       where: { id: enquiryId },
-      data: { status: enquiry.status === 'NEW' ? 'CONTACTED' : enquiry.status, waitingOn: 'CLIENT' },
+      data: { status: enquiry.status === 'NEW_ENQUIRY' ? 'CONTACTED' : enquiry.status, waitingOn: 'CLIENT' },
     })
     await tx.auditLog.create({
       data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.replied', entityType: 'Enquiry', entityId: enquiryId },
@@ -114,8 +114,8 @@ export async function logClientReply(enquiryId: string, body: string, actorUserI
   if (!text) throw new Error('The client message cannot be empty.')
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Enquiry not found.')
-    if (!OPEN.has(enquiry.status)) throw new Error('This enquiry is already closed.')
+    if (!enquiry) throw new Error('Lead not found.')
+    if (!OPEN.has(enquiry.status)) throw new Error('This lead is already closed.')
 
     await tx.communication.create({
       data: { enquiryId, type: 'CLIENT_MESSAGE', direction: 'inbound', body: text, byUserId: null },
@@ -128,16 +128,16 @@ export async function logClientReply(enquiryId: string, body: string, actorUserI
   })
 }
 
-export async function startQuoting(enquiryId: string, actorUserId: string) {
-  return prisma.$transaction(async (tx) => {
-    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Enquiry not found.')
-    if (enquiry.status !== 'CONTACTED') throw new Error('This enquiry is not in the discussion stage.')
-    await tx.enquiry.update({ where: { id: enquiryId }, data: { status: 'QUALIFIED', waitingOn: 'STUDIO' } })
-    await tx.auditLog.create({
-      data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.moved_to_quote', entityType: 'Enquiry', entityId: enquiryId },
-    })
-    return enquiry
+export async function addEnquiryNote(enquiryId: string, body: string, actorUserId: string) {
+  const text = body.trim()
+  if (!text) throw new Error('A note cannot be empty.')
+  const enquiry = await prisma.enquiry.findUnique({ where: { id: enquiryId }, select: { id: true, companyId: true } })
+  if (!enquiry) throw new Error('Lead not found.')
+  await prisma.communication.create({
+    data: { enquiryId, type: 'CLIENT_MESSAGE', direction: 'outbound', internal: true, body: text, byUserId: actorUserId },
+  })
+  await prisma.auditLog.create({
+    data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.note_added', entityType: 'Enquiry', entityId: enquiryId },
   })
 }
 
@@ -162,12 +162,14 @@ export async function addEnquiryTask(
 ) {
   const clean = title.trim()
   if (!clean) throw new Error('A task needs a title.')
-  if (!ENQUIRY_STAGE_KEYS.has(stage)) throw new Error('Unknown stage.')
+
+  const stageKey = stage.trim()
+  if (!stageKey || stageKey.length > 50) throw new Error('Please enter a valid stage.')
   const taskType = ADDABLE.has(type) ? type : 'TODO'
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUniqueOrThrow({ where: { id: enquiryId }, select: { companyId: true } })
     const last = await tx.workItem.findFirst({
-      where: { enquiryId, stage },
+      where: { enquiryId, stage: stageKey },
       orderBy: { order: 'desc' },
       select: { order: true },
     })
@@ -176,7 +178,7 @@ export async function addEnquiryTask(
         companyId: enquiry.companyId,
         enquiryId,
         kind: 'CUSTOM',
-        stage,
+        stage: stageKey,
         type: taskType,
         title: clean,
         status: 'PENDING',
@@ -191,9 +193,62 @@ export async function addEnquiryTask(
         action: 'enquiry.task_added',
         entityType: 'Enquiry',
         entityId: enquiryId,
-        afterData: { stage: enquiryStageLabel(stage), title: clean },
+        afterData: { stage: enquiryStageLabel(stageKey), title: clean },
       },
     })
+  })
+}
+
+export async function addEnquiryStage(enquiryId: string, stageName: string, actorUserId: string) {
+  const key = stageName.trim()
+  if (!key || key.length > 50) throw new Error('Please enter a stage name.')
+  if (ENQUIRY_STAGE_KEYS.has(key)) throw new Error('That stage already exists.')
+  return prisma.$transaction(async (tx) => {
+    const enquiry = await tx.enquiry.findUniqueOrThrow({ where: { id: enquiryId }, select: { companyId: true } })
+    await tx.workItem.create({
+      data: {
+        companyId: enquiry.companyId,
+        enquiryId,
+        kind: 'CUSTOM',
+        stage: key,
+        type: 'TODO',
+        title: 'New task',
+        status: 'PENDING',
+        order: 1,
+        dueAt: null,
+      },
+    })
+    await tx.auditLog.create({
+      data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.stage_added', entityType: 'Enquiry', entityId: enquiryId, afterData: { stage: key } },
+    })
+  })
+}
+
+export async function renameEnquiryStage(enquiryId: string, fromStage: string, toStage: string, actorUserId: string) {
+  const to = toStage.trim()
+  if (!to || to.length > 50) throw new Error('Please enter a stage name.')
+  if (ENQUIRY_STAGE_KEYS.has(fromStage) || ENQUIRY_STAGE_KEYS.has(to)) throw new Error('The core stages cannot be renamed.')
+  return prisma.$transaction(async (tx) => {
+    const enquiry = await tx.enquiry.findUniqueOrThrow({ where: { id: enquiryId }, select: { companyId: true } })
+    const res = await tx.workItem.updateMany({ where: { enquiryId, stage: fromStage }, data: { stage: to } })
+    if (res.count > 0) {
+      await tx.auditLog.create({
+        data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.stage_renamed', entityType: 'Enquiry', entityId: enquiryId, afterData: { from: fromStage, to } },
+      })
+    }
+  })
+}
+
+export async function deleteEnquiryStage(enquiryId: string, stage: string, actorUserId: string) {
+  if (ENQUIRY_STAGE_KEYS.has(stage)) throw new Error('The core stages cannot be deleted.')
+  return prisma.$transaction(async (tx) => {
+    const enquiry = await tx.enquiry.findUniqueOrThrow({ where: { id: enquiryId }, select: { companyId: true } })
+    const res = await tx.workItem.deleteMany({ where: { enquiryId, stage } })
+    if (res.count > 0) {
+      await tx.auditLog.create({
+        data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.stage_deleted', entityType: 'Enquiry', entityId: enquiryId, afterData: { stage } },
+      })
+    }
   })
 }
 

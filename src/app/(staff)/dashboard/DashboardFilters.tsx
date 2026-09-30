@@ -136,7 +136,7 @@ export function DashboardFilters({ period, service, services, from, to }: { peri
 
   function applyCustom() {
     if (!fromDate || !toDate) {
-      setErr('Choose both a From and a To date.')
+      setErr('Please choose both a From and a To date.')
       return
     }
     if (fromDate > toDate) {

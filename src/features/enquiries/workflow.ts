@@ -27,9 +27,9 @@ export const ADDABLE_TASK_TYPES: { value: TaskType; label: string }[] = [
 type StageDef = { key: string; label: string; color: string }
 
 export const ENQUIRY_STAGES: StageDef[] = [
-  { key: 'new', label: 'New', color: 'enquiry' },
-  { key: 'discussion', label: 'In discussion', color: 'quote' },
-  { key: 'quote', label: 'Quoting', color: 'booked' },
+  { key: 'new', label: 'New enquiry', color: 'enquiry' },
+  { key: 'discussion', label: 'Contacted', color: 'quote' },
+  { key: 'quote', label: 'Consultation', color: 'booked' },
 ]
 
 export const ENQUIRY_STAGE_KEYS: ReadonlySet<string> = new Set(ENQUIRY_STAGES.map((s) => s.key))
@@ -127,12 +127,16 @@ export type EnqTaskRow = {
   blockedBy: string | null
   completedByName: string | null
   completedAt: Date | null
+
+  owner: string | null
 }
 export type EnqStage = {
   key: string
   label: string
   color: string
   active: boolean
+
+  custom: boolean
   done: number
   total: number
   tasks: EnqTaskRow[]
@@ -149,12 +153,13 @@ export function buildEnquiryBoard(
   anchorDate: Date | null = null,
   now: Date | null = null,
   forceAllDone = false,
+  ownerName: string | null = null,
 ): EnquiryBoard {
   const doneTitles = new Set(tasks.filter((t) => t.status === 'COMPLETED').map((t) => t.title))
-  let activeKey: string | null = null
-  const stages: EnqStage[] = ENQUIRY_STAGES.map((stage) => {
-    const stageTasks: EnqTaskRow[] = tasks
-      .filter((t) => t.stage === stage.key)
+
+  const rowsFor = (stageKey: string): EnqTaskRow[] =>
+    tasks
+      .filter((t) => t.stage === stageKey)
       .sort((a, b) => a.order - b.order)
       .map((t) => {
         const type = (t.type as TaskType) ?? 'TODO'
@@ -184,19 +189,41 @@ export function buildEnquiryBoard(
           blockedBy,
           completedByName: t.completedByName,
           completedAt: t.completedAt,
+          owner: ownerName,
         }
       })
-    if (stageTasks.some((t) => !t.done) && activeKey === null) activeKey = stage.key
+
+  const toStage = (key: string, label: string, color: string, custom: boolean): EnqStage => {
+    const stageTasks = rowsFor(key)
     return {
-      key: stage.key,
-      label: stage.label,
-      color: stage.color,
+      key,
+      label,
+      color,
       active: false,
+      custom,
       done: stageTasks.filter((t) => t.done).length,
       total: stageTasks.length,
       tasks: stageTasks,
     }
-  })
-  for (const s of stages) s.active = s.key === activeKey
-  return { stages, allDone: activeKey === null }
+  }
+
+  const coreStages = ENQUIRY_STAGES.map((s) => toStage(s.key, s.label, s.color, false))
+
+  let activeKey: string | null = null
+  for (const s of coreStages) {
+    if (activeKey === null && s.tasks.some((t) => !t.done)) activeKey = s.key
+  }
+  for (const s of coreStages) s.active = s.key === activeKey
+
+  const firstOrder = new Map<string, number>()
+  for (const t of tasks) {
+    if (!t.stage || ENQUIRY_STAGE_KEYS.has(t.stage)) continue
+    const prev = firstOrder.get(t.stage)
+    if (prev === undefined || t.order < prev) firstOrder.set(t.stage, t.order)
+  }
+  const customStages = [...firstOrder.keys()]
+    .sort((a, b) => firstOrder.get(a)! - firstOrder.get(b)!)
+    .map((key) => toStage(key, key, 'enquiry', true))
+
+  return { stages: [...coreStages, ...customStages], allDone: activeKey === null }
 }

@@ -97,7 +97,7 @@ export async function markTaskDoneAction(formData: FormData): Promise<void> {
   revalidatePath('/calendar')
 }
 
-export type SearchHit = { type: 'Client' | 'Enquiry' | 'Job' | 'Invoice'; label: string; sub: string | null; href: string }
+export type SearchHit = { type: 'Client' | 'Lead' | 'Job' | 'Invoice'; label: string; sub: string | null; href: string }
 
 export async function searchEntitiesAction(query: string): Promise<SearchHit[]> {
   const user = await getSessionUser()
@@ -123,7 +123,7 @@ export async function searchEntitiesAction(query: string): Promise<SearchHit[]> 
 
   return [
     ...clients.map((c): SearchHit => ({ type: 'Client', label: c.displayName, sub: c.email, href: `/clients/${c.id}` })),
-    ...enquiries.map((e): SearchHit => ({ type: 'Enquiry', label: e.name, sub: e.eventType, href: `/enquiries/${e.id}` })),
+    ...enquiries.map((e): SearchHit => ({ type: 'Lead', label: e.name, sub: e.eventType, href: `/leads/${e.id}` })),
     ...projects.map((p): SearchHit => ({ type: 'Job', label: p.client.displayName, sub: `${p.name} - ${p.code}`, href: `/jobs/${p.id}` })),
     ...invoices.map((inv): SearchHit => ({ type: 'Invoice', label: inv.project.client.displayName, sub: inv.invoiceNumber, href: `/finance/${inv.id}` })),
   ]

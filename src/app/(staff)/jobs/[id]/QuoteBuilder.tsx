@@ -1,19 +1,44 @@
 'use client'
 
-import { useActionState, useEffect, useRef, useState } from 'react'
+import { useActionState, useEffect, useRef, useState, type ReactNode } from 'react'
+import Link from 'next/link'
 import { Alert } from '@/components/ui/Alert'
-import { Button } from '@/components/ui/Button'
-import { Field, FieldGrid, FormSection, Select, TextInput, Textarea } from '@/components/ui/form'
+import { Button, secondaryLinkLg } from '@/components/ui/Button'
+import { MainAside } from '@/components/EditLayout'
+import { Field, TextInput, Textarea } from '@/components/ui/form'
 import { estimateTotals, estimateDeposit, toCents, formatCents } from '@/lib/pricing-estimate'
+import { AddItemModal, LineItemsTable, EMPTY_DRAFT, draftDiscountOff, type CatalogueItem, type ItemDraft, type LineItem } from '@/components/LineItems'
+import { useToast } from '@/components/ui/ToastProvider'
 import type { QuoteActionState } from '../actions'
 
 type QuoteFormAction = (prev: QuoteActionState, formData: FormData) => Promise<QuoteActionState>
-type QuotePackage = { id: string; name: string; price: string; details?: string | null }
+type QuotePackage = { id: string; name: string; price: string; details?: string | null; isAddOn?: boolean }
 
 type LineType = 'custom' | 'package' | 'addon'
-type Line = { description: string; quantity: number; unitPrice: string; lineType: LineType; referenceId?: string | null; details?: string | null }
+
+type InitialLine = { description: string; quantity: number; unitPrice: string; lineType: LineType; referenceId?: string | null; details?: string | null; discount?: string }
 
 const IDLE: QuoteActionState = { status: 'idle' }
+
+function FieldRow({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[7em_minmax(0,1fr)] items-center gap-4">
+      <label htmlFor={htmlFor} className="text-sm font-medium text-ink">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+function ReadField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[7em_minmax(0,1fr)] items-center gap-4">
+      <span className="text-sm font-medium text-ink">{label}</span>
+      <div className="flex min-h-10 min-w-0 items-center rounded-md border border-line bg-paper px-3 text-sm text-ink">
+        <span className="truncate" title={value || undefined}>{value || '-'}</span>
+      </div>
+    </div>
+  )
+}
 
 export function QuoteBuilder({
   csrf,
@@ -31,16 +56,19 @@ export function QuoteBuilder({
   packages,
   clientName,
   clientEmail,
+  clientPhone = '',
+  jobName = '',
   saveAction,
   sendAction,
   sendLabel = 'Send to client',
+  cancelHref,
 }: {
   csrf: string
   projectId: string
   quoteId: string
   versionId: string
   validUntil: string
-  initialLines: Line[]
+  initialLines: InitialLine[]
   initialIntroduction: string
   initialPoNumber: string
   initialNotes: string
@@ -50,11 +78,34 @@ export function QuoteBuilder({
   packages: QuotePackage[]
   clientName: string
   clientEmail: string
+  clientPhone?: string
+  jobName?: string
   saveAction: QuoteFormAction
   sendAction: QuoteFormAction
   sendLabel?: string
+
+  cancelHref?: string
 }) {
-  const [lines, setLines] = useState<Line[]>(initialLines)
+
+  const [lines, setLines] = useState<LineItem[]>(() =>
+    initialLines.map((l, i) => ({
+      id: i + 1,
+      name: l.description,
+      description: l.details ?? '',
+      quantity: l.quantity,
+      unitPrice: l.unitPrice,
+      discount: l.discount ?? '0',
+      lineType: l.lineType,
+      referenceId: l.referenceId ?? null,
+    })),
+  )
+  const [nextId, setNextId] = useState(() => initialLines.length + 1)
+
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editId, setEditId] = useState<number | null>(null)
+  const [draft, setDraft] = useState<ItemDraft>(EMPTY_DRAFT)
+  const [addType, setAddType] = useState<LineType>('package')
+  const chosenRef = useRef<string | null>(null)
   const [depositPercent, setDepositPercent] = useState(initialDepositPercent || '30')
   const [sendOpen, setSendOpen] = useState(false)
   const [saveState, save, saving] = useActionState(saveAction, IDLE)
@@ -62,156 +113,260 @@ export function QuoteBuilder({
   const saveFormRef = useRef<HTMLFormElement>(null)
 
   const pendingSendRef = useRef(false)
+  const toast = useToast()
 
   useEffect(() => {
-    if (!pendingSendRef.current) return
     if (saveState.status === 'success') {
-      pendingSendRef.current = false
-      setSendOpen(true)
+      if (pendingSendRef.current) {
+
+        pendingSendRef.current = false
+        setSendOpen(true)
+      } else {
+
+        toast({ title: cancelHref ? 'Quote saved' : 'Draft saved' })
+      }
     } else if (saveState.status === 'error') {
       pendingSendRef.current = false
     }
-  }, [saveState])
+  }, [saveState, toast, cancelHref])
 
   const startSend = () => {
     pendingSendRef.current = true
     saveFormRef.current?.requestSubmit()
   }
 
-  const est = estimateTotals(lines.map((l) => ({ unitPriceCents: toCents(l.unitPrice), quantity: l.quantity || 0 })))
+  const est = estimateTotals(
+    lines.map((l) => ({ unitPriceCents: toCents(l.unitPrice), quantity: l.quantity || 0, discountCents: toCents(l.discount || '0') })),
+  )
   const pct = Math.min(100, Math.max(0, Number.parseInt(depositPercent || '0', 10) || 0))
   const dep = estimateDeposit(est.totalCents, pct)
 
-  const addPackage = (id: string) => {
-    const pkg = packages.find((p) => p.id === id)
-    if (pkg) setLines((cur) => [...cur, { description: pkg.name, quantity: 1, unitPrice: pkg.price, lineType: 'package', referenceId: pkg.id, details: pkg.details ?? null }])
-  }
-  const addRow = (lineType: LineType) => setLines((cur) => [...cur, { description: '', quantity: 1, unitPrice: '', lineType }])
-  const update = (index: number, patch: Partial<Line>) => setLines((cur) => cur.map((l, i) => (i === index ? { ...l, ...patch } : l)))
-  const removeRow = (index: number) => setLines((cur) => cur.filter((_, i) => i !== index))
+  const packageOptions = packages.filter((p) => !p.isAddOn)
+  const addonOptions = packages.filter((p) => p.isAddOn)
+  const toCatalogue = (list: QuotePackage[], group: string): CatalogueItem[] =>
+    list.map((p) => ({ id: p.id, name: p.name, price: p.price, group, detail: p.details ?? null }))
+  const packageCatalogue = toCatalogue(packageOptions, 'Packages')
+  const addonCatalogue = toCatalogue(addonOptions, 'Add-ons')
+  const modalCatalogue = addType === 'package' ? packageCatalogue : addType === 'addon' ? addonCatalogue : []
 
-  const indexed = lines.map((l, i) => ({ l, i }))
-  const packageRows = indexed.filter((r) => r.l.lineType === 'package')
-  const addonRows = indexed.filter((r) => r.l.lineType === 'addon')
-  const customRows = indexed.filter((r) => r.l.lineType === 'custom')
+  function openAdd(type: LineType) {
+    setAddType(type)
+    setEditId(null)
+    setDraft(EMPTY_DRAFT)
+    chosenRef.current = null
+    setModalOpen(true)
+  }
+  function openEdit(l: LineItem) {
+    setAddType(l.lineType ?? 'custom')
+    setEditId(l.id)
+    setDraft({ name: l.name, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: l.discount, discountMode: 'fixed' })
+    chosenRef.current = l.referenceId ?? null
+    setModalOpen(true)
+  }
+  function choosePackage(id: string) {
+    const cat = [...packageCatalogue, ...addonCatalogue].find((c) => c.id === id)
+    if (!cat) return
+    chosenRef.current = id
+    setDraft((d) => ({ ...d, name: cat.name, description: cat.detail ?? '', unitPrice: cat.price }))
+  }
+  function saveItem() {
+    if (!draft.name.trim()) return
+    const base = {
+      name: draft.name,
+      description: draft.description,
+      quantity: draft.quantity,
+      unitPrice: draft.unitPrice,
+      discount: String(draftDiscountOff(draft)),
+      lineType: addType,
+      referenceId: chosenRef.current,
+    }
+    if (editId === null) {
+      setLines((ls) => [...ls, { id: nextId, ...base }])
+      setNextId((n) => n + 1)
+    } else {
+      setLines((ls) => ls.map((l) => (l.id === editId ? { ...l, ...base } : l)))
+    }
+    setModalOpen(false)
+  }
+  function duplicate(id: number) {
+    setLines((ls) => {
+      const idx = ls.findIndex((l) => l.id === id)
+      if (idx < 0) return ls
+      const copy = [...ls]
+      copy.splice(idx + 1, 0, { ...ls[idx]!, id: nextId })
+      return copy
+    })
+    setNextId((n) => n + 1)
+  }
+  function removeLine(id: number) {
+    setLines((ls) => ls.filter((l) => l.id !== id))
+  }
+  function reorder(draggedId: number, targetId: number) {
+    setLines((ls) => {
+      const copy = [...ls]
+      const from = copy.findIndex((l) => l.id === draggedId)
+      if (from < 0) return ls
+      const [moved] = copy.splice(from, 1)
+      const to = copy.findIndex((l) => l.id === targetId)
+      copy.splice(to < 0 ? from : to, 0, moved!)
+      return copy
+    })
+  }
+
+  const packageLines = lines.filter((l) => (l.lineType ?? 'custom') === 'package')
+  const addonLines = lines.filter((l) => (l.lineType ?? 'custom') === 'addon')
+  const customLines = lines.filter((l) => (l.lineType ?? 'custom') === 'custom')
 
   return (
     <div className="mt-4 flex flex-col gap-5">
-      {saveState.status === 'error' ? <Alert tone="danger" title={saveState.message} /> : null}
-      {saveState.status === 'success' ? <Alert tone="success" title="Draft saved" /> : null}
-
-      <form ref={saveFormRef} action={save} className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20em] lg:items-start">
+      <form ref={saveFormRef} action={save} className="border-t border-line pt-6">
+        {saveState.status === 'error' ? <div className="mb-6"><Alert tone="danger" title={saveState.message} /></div> : null}
         <input type="hidden" name="csrf" value={csrf} />
         <input type="hidden" name="versionId" value={versionId} />
         <input type="hidden" name="projectId" value={projectId} />
         <input type="hidden" name="quoteId" value={quoteId} />
         <input type="hidden" name="depositPercent" value={depositPercent} />
-        <input type="hidden" name="linesJson" value={JSON.stringify(lines)} />
+        {/* Edit-quote page (cancelHref set): return to the read-only detail after saving, like the
+            invoice editor. The job-detail inline builder omits this and stays put. */}
+        {cancelHref ? <input type="hidden" name="redirectToDetail" value="1" /> : null}
+        <input
+          type="hidden"
+          name="linesJson"
+          value={JSON.stringify(
+            lines.map((l) => ({
+              description: l.name,
+              details: l.description || null,
+              quantity: l.quantity,
+              unitPrice: l.unitPrice,
+              discount: l.discount,
+              lineType: l.lineType ?? 'custom',
+              referenceId: l.referenceId ?? null,
+            })),
+          )}
+        />
 
-        {/* Main editing column: the quote is assembled here. */}
-        <div className="flex min-w-0 flex-col gap-8">
-          <FormSection title="Quote details" description="Reference and dates shown on the client's quote.">
-            <FieldGrid>
-              <Field label="Quote ID *" htmlFor="reference" hint="Required. Shown to the client.">
-                <TextInput id="reference" name="reference" required defaultValue={initialReference} placeholder="e.g. Q-0005" />
-              </Field>
-              <Field label="Issue date *" htmlFor="issueDate" hint="Required. The date the quote is issued.">
-                <TextInput id="issueDate" name="issueDate" type="date" required defaultValue={initialIssueDate} />
-              </Field>
-              <Field label="PO number (optional)" htmlFor="poNumber" hint="The client's reference, if they use one.">
-                <TextInput id="poNumber" name="poNumber" defaultValue={initialPoNumber} placeholder="e.g. PO-2026-014" />
-              </Field>
-              <Field label="Valid until" htmlFor="validUntil" hint="Optional. The quote expires after this date.">
-                <TextInput id="validUntil" name="validUntil" type="date" defaultValue={validUntil} />
-              </Field>
-            </FieldGrid>
-          </FormSection>
-
-          <FormSection title="Introduction" description="A short covering note shown at the top of the quote.">
-            <Textarea id="introduction" name="introduction" rows={3} defaultValue={initialIntroduction} placeholder="Thank you for considering Moments. Here is the quote for your shoot..." />
-          </FormSection>
-
-          <FormSection
-            title="Packages"
-            description="Fixed-price packages from your catalogue."
-            control={
-              packages.length > 0 ? (
-                <Select aria-label="Add a package" value="" onChange={(e) => { addPackage(e.target.value); e.currentTarget.value = '' }} className="max-w-xs">
-                  <option value="" disabled>Add a package...</option>
-                  {packages.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name} - {formatCents(toCents(p.price))}</option>
-                  ))}
-                </Select>
-              ) : null
-            }
-          >
-            {packageRows.length === 0 ? <EmptyLines /> : (
-              <div className="flex flex-col">
-                {packageRows.map(({ l, i }) => (
-                  <LineRow key={i} line={l} onChange={(patch) => update(i, patch)} onRemove={() => removeRow(i)} nameLabel="Package" />
-                ))}
-              </div>
-            )}
-          </FormSection>
-
-          <FormSection
-            title="Add-ons"
-            description="Optional extras - albums, prints, extra hours."
-            control={<Button type="button" variant="secondary" size="sm" onClick={() => addRow('addon')}>+ Add add-on</Button>}
-          >
-            {addonRows.length === 0 ? <EmptyLines /> : (
-              <div className="flex flex-col">
-                {addonRows.map(({ l, i }) => (
-                  <LineRow key={i} line={l} onChange={(patch) => update(i, patch)} onRemove={() => removeRow(i)} nameLabel="Add-on" />
-                ))}
-              </div>
-            )}
-          </FormSection>
-
-          {customRows.length > 0 ? (
-            <FormSection title="Other lines" description="Free-typed lines.">
-              <div className="flex flex-col">
-                {customRows.map(({ l, i }) => (
-                  <LineRow key={i} line={l} onChange={(patch) => update(i, patch)} onRemove={() => removeRow(i)} nameLabel="Item" />
-                ))}
-              </div>
-            </FormSection>
-          ) : null}
-          <div>
-            <Button type="button" variant="ghost" size="sm" onClick={() => addRow('custom')}>+ Add a custom line</Button>
-          </div>
-
-          <FormSection title="Notes" description="Any extra notes for the client (optional).">
-            <Textarea id="notes" name="notes" rows={2} defaultValue={initialNotes} />
-          </FormSection>
-        </div>
-
-        {/* Summary column: sticky totals + the primary save action. */}
-        <aside className="flex flex-col gap-4 lg:sticky lg:top-6">
-          <div className="rounded-md border border-line bg-paper p-4 text-sm">
-            <Row label="Subtotal (excl. GST)" value={formatCents(est.exGstCents)} muted />
-            <Row label="GST (incl., ÷ 11)" value={formatCents(est.gstCents)} muted />
-            <div className="my-1 border-t border-line" />
-            <Row label="Total (incl. GST)" value={formatCents(est.totalCents)} strong />
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <span className="flex items-center gap-2 text-ink">Deposit
-                <span className="inline-flex items-center gap-1">
-                  <TextInput value={depositPercent} onChange={(e) => setDepositPercent(e.target.value)} inputMode="numeric" className="w-14" aria-label="Deposit percent" />%
-                </span>
-              </span>
-              <span className="tabular-nums font-medium text-ink">{formatCents(dep.depositCents)}</span>
+        {/* One full-width column, mirroring the New-invoice form: details, then the line items, then the
+            totals (right) with notes on the left and the Save / Send actions under the totals. */}
+        <div className="flex flex-col gap-8">
+          {/* Quote details — the same two-column shape as the invoice: editable quote fields on the
+              left, read-only client/job info (from the linked enquiry/client) on the right. */}
+          <div className="grid grid-cols-1 gap-x-12 gap-y-4 md:grid-cols-2">
+            <div className="flex flex-col gap-4">
+              <FieldRow label="Quote ID" htmlFor="reference"><TextInput id="reference" name="reference" required defaultValue={initialReference} placeholder="e.g. Q-0005" /></FieldRow>
+              <FieldRow label="PO number" htmlFor="poNumber"><TextInput id="poNumber" name="poNumber" defaultValue={initialPoNumber} placeholder="Optional" /></FieldRow>
+              <FieldRow label="Issue date" htmlFor="issueDate"><TextInput id="issueDate" name="issueDate" type="date" required defaultValue={initialIssueDate} /></FieldRow>
+              <FieldRow label="Valid until" htmlFor="validUntil"><TextInput id="validUntil" name="validUntil" type="date" defaultValue={validUntil} /></FieldRow>
             </div>
-            <Row label="Balance due later" value={formatCents(dep.balanceCents)} muted />
+            <div className="flex flex-col gap-4">
+              <ReadField label="Job name" value={jobName} />
+              <ReadField label="Client name" value={clientName} />
+              <ReadField label="Email" value={clientEmail} />
+              <ReadField label="Phone" value={clientPhone} />
+            </div>
           </div>
-          <Button type="submit" loading={saving} className="w-full">Save draft</Button>
-          <p className="text-xs text-ink-muted">Prices include GST. Totals are recalculated when you save.</p>
-        </aside>
+
+          {/* Line items — packages, add-ons and any custom lines. Each group adds via the shared
+              invoice-style "Add item" modal and shows the shared line-items table. */}
+          <section className="flex min-w-0 flex-col gap-6">
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-ink">Packages</p>
+                <Button type="button" variant="secondary" size="sm" onClick={() => openAdd('package')}>
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                  Add a package
+                </Button>
+              </div>
+              {packageLines.length === 0 ? <EmptyLines /> : (
+                <LineItemsTable lines={packageLines} onEdit={openEdit} onDuplicate={duplicate} onRemove={removeLine} onReorder={reorder} />
+              )}
+            </div>
+
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-ink">Add-ons</p>
+                <Button type="button" variant="secondary" size="sm" onClick={() => openAdd('addon')}>
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                  Add an add-on
+                </Button>
+              </div>
+              {addonLines.length === 0 ? <EmptyLines /> : (
+                <LineItemsTable lines={addonLines} onEdit={openEdit} onDuplicate={duplicate} onRemove={removeLine} onReorder={reorder} />
+              )}
+            </div>
+
+            {customLines.length > 0 ? (
+              <div>
+                <p className="text-sm font-semibold text-ink">Other lines</p>
+                <LineItemsTable lines={customLines} onEdit={openEdit} onDuplicate={duplicate} onRemove={removeLine} onReorder={reorder} />
+              </div>
+            ) : null}
+            <div>
+              <Button type="button" variant="ghost" size="sm" onClick={() => openAdd('custom')}>+ Add a custom line</Button>
+            </div>
+          </section>
+
+          {/* Notes (main) + Financial summary (aside) sit in ONE row sharing a top keyline. */}
+          <MainAside
+            main={
+              <div>
+                <label htmlFor="notes" className="text-sm font-semibold text-ink">Notes (optional)</label>
+                <Textarea id="notes" name="notes" rows={6} defaultValue={initialNotes} placeholder="Any extra notes for the client..." className="mt-2" />
+              </div>
+            }
+            aside={
+              <div className="text-sm">
+                <div className="flex justify-between py-1 text-ink"><span>Subtotal (excl. GST)</span><span className="tabular-nums">{formatCents(est.exGstCents)}</span></div>
+                <div className="flex justify-between py-1 text-ink"><span>GST (incl., ÷ 11)</span><span className="tabular-nums">{formatCents(est.gstCents)}</span></div>
+                <div className="mt-2 flex items-baseline justify-between border-t border-line pt-3 font-semibold text-ink">
+                  <span className="text-lg">Total (incl. GST)</span>
+                  <span className="tabular-nums text-xl">{formatCents(est.totalCents)}</span>
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3 py-0.5 text-ink">
+                  <span className="flex items-center gap-2">Deposit
+                    <span className="inline-flex items-center gap-1">
+                      <TextInput value={depositPercent} onChange={(e) => setDepositPercent(e.target.value)} inputMode="numeric" className="h-8 w-14 text-right" aria-label="Deposit percent" />%
+                    </span>
+                  </span>
+                  <span className="tabular-nums font-medium text-ink">{formatCents(dep.depositCents)}</span>
+                </div>
+                <div className="flex justify-between py-0.5 text-ink-muted"><span>Balance due later</span><span className="tabular-nums">{formatCents(dep.balanceCents)}</span></div>
+              </div>
+            }
+          />
+
+          {/* Action footer: its own full-width row (Carbon in-page - primary first, secondary after). */}
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-ink-muted">
+              {cancelHref
+                ? 'Prices include GST and are recalculated when you save.'
+                : 'Prices include GST and are recalculated when you save. Sending saves your latest changes first, then opens the email to the client.'}
+            </p>
+            {cancelHref ? (
+              <div className="grid w-full max-w-sm grid-cols-2 gap-3">
+                <Button type="submit" size="lg" loading={saving} className="w-full rounded-lg">Save quote</Button>
+                <Link href={cancelHref} className={`w-full ${secondaryLinkLg}`}>Cancel</Link>
+              </div>
+            ) : (
+              <div className="grid w-full max-w-sm grid-cols-2 gap-3">
+                <Button type="button" size="lg" loading={saving && pendingSendRef.current} onClick={startSend} className="w-full rounded-lg">{sendLabel}</Button>
+                <Button type="submit" variant="secondary" size="lg" loading={saving && !pendingSendRef.current} className="w-full rounded-lg">Save draft</Button>
+              </div>
+            )}
+          </div>
+        </div>
       </form>
 
-      <div className="border-t border-line pt-4">
-        <p className="text-sm text-ink-muted">Sending saves your latest changes first, then opens the email to the client.</p>
-        <Button type="button" className="mt-3" loading={saving && pendingSendRef.current} onClick={startSend}>{sendLabel}</Button>
-      </div>
+      <AddItemModal
+        open={modalOpen}
+        editing={editId !== null}
+        noun="quote"
+        catalogue={modalCatalogue}
+        draft={draft}
+        setDraft={setDraft}
+        onChoose={choosePackage}
+        onSave={saveItem}
+        onClose={() => setModalOpen(false)}
+      />
 
       {sendOpen ? (
         <SendQuoteDialog
@@ -305,44 +460,5 @@ function SendQuoteDialog({
 }
 
 function EmptyLines() {
-  return <p className="rounded-md border border-dashed border-line bg-paper px-4 py-5 text-center text-sm text-ink-muted">Nothing added yet.</p>
-}
-
-function LineRow({ line, onChange, onRemove, nameLabel }: { line: Line; onChange: (patch: Partial<Line>) => void; onRemove: () => void; nameLabel: string }) {
-  return (
-    <div className="border-t border-line py-3 first:border-t-0 first:pt-0">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_5em_7em_2.5em] sm:items-center">
-        <TextInput aria-label={nameLabel} placeholder={nameLabel} value={line.description} onChange={(e) => onChange({ description: e.target.value })} />
-        <TextInput aria-label="Quantity" inputMode="numeric" className="sm:text-right" value={String(line.quantity)} onChange={(e) => onChange({ quantity: Number(e.target.value) || 0 })} />
-        <TextInput aria-label="Unit price" inputMode="decimal" placeholder="0.00" className="sm:text-right" value={line.unitPrice} onChange={(e) => onChange({ unitPrice: e.target.value })} />
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label="Remove line"
-          className="flex h-10 w-10 items-center justify-center justify-self-end rounded text-ink-muted transition-colors hover:bg-sunk hover:text-danger"
-        >
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M7 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" /></svg>
-        </button>
-      </div>
-      {/* What's included - editable (prefilled from the package), shown on the client quote. Kept compact
-          and secondary so a package reads as a line of structured content, not a stack of tall boxes. */}
-      <Textarea
-        aria-label="What's included"
-        placeholder="What's included (one per line) - shown on the client's quote"
-        rows={2}
-        value={line.details ?? ''}
-        onChange={(e) => onChange({ details: e.target.value })}
-        className="mt-2 text-sm"
-      />
-    </div>
-  )
-}
-
-function Row({ label, value, strong, muted }: { label: string; value: string; strong?: boolean; muted?: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-0.5">
-      <span className={muted ? 'text-ink-muted' : 'text-ink'}>{label}</span>
-      <span className={`tabular-nums ${strong ? 'font-semibold text-ink' : muted ? 'text-ink-muted' : 'text-ink'}`}>{value}</span>
-    </div>
-  )
+  return <p className="mt-2 rounded-md border border-dashed border-muted bg-paper px-4 py-5 text-center text-sm text-ink-muted">Nothing added yet.</p>
 }

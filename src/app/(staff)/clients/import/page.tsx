@@ -17,11 +17,11 @@ export default async function ImportClientsPage() {
 
   return (
     <AppShell user={user} csrf={csrf} active="clients" bareHeader>
-      <PageContainer variant="narrow">
+      <PageContainer variant="standard">
         <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Clients', href: '/clients' }, { label: 'Import' }]} />
-        <h1 className="mt-3 text-xl font-semibold text-ink">Import clients</h1>
-        <p className="mt-1 text-sm text-ink-muted">Bulk-add client profiles from a CSV. This creates profiles only. It does not open enquiries.</p>
-        <div className="mt-6">
+        <h1 className="mt-3 text-2xl font-semibold text-ink">Import clients</h1>
+        <p className="mt-1 max-w-prose text-sm text-ink-muted">Bulk-add client profiles from a CSV. This creates profiles only. It does not open leads.</p>
+        <div className="mt-8">
           <ImportForm csrf={csrf} />
         </div>
       </PageContainer>

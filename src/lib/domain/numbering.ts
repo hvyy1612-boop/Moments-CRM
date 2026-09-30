@@ -3,7 +3,7 @@ import { sydneyYmd, systemClock } from '@/lib/time'
 
 export type RecordType = 'CLIENT' | 'ENQUIRY' | 'QUOTE' | 'JOB' | 'INVOICE'
 
-const PREFIX: Record<RecordType, string> = { CLIENT: 'C', ENQUIRY: 'E', QUOTE: 'Q', JOB: 'J', INVOICE: 'INV' }
+const PREFIX: Record<RecordType, string> = { CLIENT: 'C', ENQUIRY: 'L', QUOTE: 'Q', JOB: 'J', INVOICE: 'I' }
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 

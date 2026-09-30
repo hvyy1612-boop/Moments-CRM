@@ -141,7 +141,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-xl">
             <h1 className="font-semibold text-3xl leading-none text-ink">Dashboard</h1>
-            <p className="mt-1.5 text-sm text-ink-muted">A snapshot of your studio&rsquo;s bookings, revenue and operations.</p>
           </div>
           <DashboardFilters period={period} service={service} services={d.services} from={from} to={to} />
         </div>
@@ -155,7 +154,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             delta={d.kpi.bookedDeltaPct}
             sub={d.kpi.bookedDeltaPct != null ? 'vs previous period' : 'no prior period'}
           />
-          <Kpi label="Booking rate" value={`${d.kpi.bookingRatePct}%`} icon={ICONS.rate} sub={`${d.kpi.bookingNum} of ${d.kpi.bookingDenom} enquiries`} />
+          <Kpi label="Booking rate" value={`${d.kpi.bookingRatePct}%`} icon={ICONS.rate} sub={`${d.kpi.bookingNum} of ${d.kpi.bookingDenom} leads`} />
           <Kpi label="Outstanding" value={kShort(d.kpi.outstanding)} icon={ICONS.outstanding} sub={`${d.kpi.unpaidCount} unpaid invoice${d.kpi.unpaidCount === 1 ? '' : 's'}`} />
           <Kpi
             label="Avg. turnaround"
@@ -195,7 +194,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <div className="lg:col-span-4">
             <Card title="Lead source quality" desc="Which channels bring clients who actually book?">
               {d.leadSources.length === 0 ? (
-                <Empty>No enquiry data for this period</Empty>
+                <Empty>No lead data for this period</Empty>
               ) : (
                 <HBars bars={d.leadSources} colors={LEAD_COLORS} format={(v) => `${v}%`} />
               )}
@@ -232,8 +231,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </Card>
           </div>
           <div className="lg:col-span-6">
-            <Card title="Enquiry pipeline" desc="How many enquiries progress toward a confirmed booking?" right={<div className="tabular font-semibold text-xl text-ink">{d.kpi.bookingRatePct}%</div>}>
-              {d.pipeline.every((p) => p.value === 0) ? <Empty>No enquiries in this period</Empty> : <HBars bars={d.pipeline} colors={PIPELINE_COLORS} format={(v) => String(v)} />}
+            <Card title="Lead pipeline" desc="How many leads progress toward a confirmed booking?" right={<div className="tabular font-semibold text-xl text-ink">{d.kpi.bookingRatePct}%</div>}>
+              {d.pipeline.every((p) => p.value === 0) ? <Empty>No leads in this period</Empty> : <HBars bars={d.pipeline} colors={PIPELINE_COLORS} format={(v) => String(v)} />}
             </Card>
           </div>
 
@@ -242,13 +241,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <section className="rounded-xl border border-line bg-surface p-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h2 className="font-semibold text-lg leading-tight text-ink">Recent enquiries</h2>
-                  <p className="mt-0.5 text-xs text-ink-muted">Latest enquiries across all channels.</p>
+                  <h2 className="font-semibold text-lg leading-tight text-ink">Recent leads</h2>
+                  <p className="mt-0.5 text-xs text-ink-muted">Latest leads across all channels.</p>
                 </div>
-                <Link href="/enquiries" className="shrink-0 text-sm font-medium text-accent-ink hover:underline">View all →</Link>
+                <Link href="/leads" className="shrink-0 text-sm font-medium text-accent-ink hover:underline">View all →</Link>
               </div>
               {d.recentEnquiries.length === 0 ? (
-                <Empty>No enquiries yet</Empty>
+                <Empty>No leads yet</Empty>
               ) : (
                 <div className="mt-4 overflow-x-auto">
                   <table className="w-full text-sm">
@@ -265,7 +264,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                       {d.recentEnquiries.map((e) => (
                         <tr key={e.id} className="border-b border-line last:border-0">
                           <td className="py-2.5 pr-3 font-medium text-ink">
-                            <Link href={`/enquiries/${e.id}`} className="hover:text-accent-ink">{e.name}</Link>
+                            <Link href={`/leads/${e.id}`} className="hover:text-accent-ink">{e.name}</Link>
                           </td>
                           <td className="py-2.5 pr-3 text-ink-muted">{fmtDate(e.createdAt)}</td>
                           <td className="py-2.5 pr-3 text-ink-muted">{e.service ?? '-'}</td>

@@ -169,7 +169,7 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
         primary: isLead ? w.enquiry!.name : (w.project?.client.displayName ?? 'Job'),
         secondary: appointmentKind(w.title), category, tone: tone(date.getTime(), done, nowMs),
         timeLabel: timed ? formatSydneyTime(date) : null,
-        href: isLead ? `/enquiries/${w.enquiry!.id}` : `/jobs/${w.project!.id}`,
+        href: isLead ? `/leads/${w.enquiry!.id}` : `/jobs/${w.project!.id}`,
         editable: false, location: null, status: null, conflict: false, done,
       })
     }
@@ -194,7 +194,7 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
         startMin: timed ? sydneyMinutes(date) : null, endMin: null,
         primary: w.title, secondary: isLead ? w.enquiry!.name : (w.project?.client.displayName ?? 'Job'),
         category, tone: tone(date.getTime(), false, nowMs), timeLabel: timed ? formatSydneyTime(date) : null,
-        href: isLead ? `/enquiries/${w.enquiry!.id}` : `/jobs/${w.project!.id}`,
+        href: isLead ? `/leads/${w.enquiry!.id}` : `/jobs/${w.project!.id}`,
         editable: false, location: null, status: null, conflict: false, done: false,
       })
     }

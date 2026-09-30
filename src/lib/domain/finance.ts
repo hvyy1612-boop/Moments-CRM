@@ -2,9 +2,10 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { splitGstInclusive } from '@/lib/money'
 import { sydneyLocalToUtc, systemClock } from '@/lib/time'
+import { sendComposedInvoiceEmail, type SendResult } from '@/lib/email'
 import type { CreateInvoiceInput, CreateInvoiceLinesInput, RecordPaymentInput } from '@/lib/validation/finance'
 import { invoicePaidNet, lockInvoiceRow, refreshInvoiceAmountPaid } from './invoice-ledger'
-import { maybeAutoCompleteJob } from './project-workflow'
+import { confirmBookingByDepositTx, maybeAutoCompleteJob } from './project-workflow'
 import { nextRecordNumber } from './numbering'
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
@@ -55,14 +56,17 @@ export async function createInvoiceTx(
       projectId,
       invoiceNumber: await nextInvoiceNumber(tx, project.companyId, now),
       type: input.type,
-      status: 'DRAFT',
+
+      status: 'ISSUED',
+      issuedAt: now,
       subtotal,
       taxTotal,
       total,
       billingNameSnapshot: project.client.displayName,
       billingEmailSnapshot: project.client.email,
       lines: {
-        create: { description: input.description, quantity: 1, unitPrice: total, tax: taxTotal, lineTotal: total, sortOrder: 0 },
+
+        create: { itemName: input.description, description: '', quantity: 1, unitPrice: total, tax: taxTotal, lineTotal: total, sortOrder: 0 },
       },
     },
   })
@@ -162,22 +166,35 @@ export async function createInvoiceWithLines(
           instalmentData = [{ label: 'Full payment', dueAt: null, amount: total, status: 'UNPAID', sortOrder: 0 }]
         }
 
+        const docDate = input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now
+        const dueFromInstalments = instalmentData.reduce<Date | null>((m, it) => (it.dueAt && (!m || it.dueAt > m) ? it.dueAt : m), null)
+        const dueFromRule =
+          input.due === 'NET7' ? new Date(docDate.getTime() + 7 * 86_400_000)
+          : input.due === 'NET14' ? new Date(docDate.getTime() + 14 * 86_400_000)
+          : input.due === 'ON_ISSUE' ? docDate
+          : null
+
         const invoice = await tx.invoice.create({
           data: {
             projectId,
             invoiceNumber: wantedNumber || (await nextInvoiceNumber(tx, project.companyId, now)),
             accessToken,
             type: input.type,
-            status: 'DRAFT',
+
+            status: 'ISSUED',
+            issuedAt: now,
             subtotal,
             taxTotal,
             total,
-            invoiceDate: input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now,
-            dueAt: instalmentData.reduce<Date | null>((m, it) => (it.dueAt && (!m || it.dueAt > m) ? it.dueAt : m), null),
+            invoiceDate: docDate,
+            dueAt: dueFromInstalments ?? dueFromRule,
             poNumber: input.poNumber?.trim() || null,
             notes: input.notes?.trim() || null,
-            billingNameSnapshot: project.client.displayName,
-            billingEmailSnapshot: project.client.email,
+
+            billingNameSnapshot: input.billingName?.trim() || project.client.displayName,
+            billingEmailSnapshot: input.billingEmail?.trim() || project.client.email,
+            billingPhoneSnapshot: input.billingPhone?.trim() || null,
+            billingJobNameSnapshot: input.jobName?.trim() || null,
             lines: { create: lineData },
             instalments: { create: instalmentData },
           },
@@ -278,6 +295,14 @@ export async function updateInvoiceWithLines(
 
     await tx.invoiceLine.deleteMany({ where: { invoiceId } })
     await tx.invoiceInstalment.deleteMany({ where: { invoiceId } })
+
+    const docDate = input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now
+    const dueFromInstalments = instalmentData.reduce<Date | null>((m, it) => (it.dueAt && (!m || it.dueAt > m) ? it.dueAt : m), null)
+    const dueFromRule =
+      input.due === 'NET7' ? new Date(docDate.getTime() + 7 * 86_400_000)
+      : input.due === 'NET14' ? new Date(docDate.getTime() + 14 * 86_400_000)
+      : input.due === 'ON_ISSUE' ? docDate
+      : null
     const invoice = await tx.invoice.update({
       where: { id: invoiceId },
       data: {
@@ -286,10 +311,15 @@ export async function updateInvoiceWithLines(
         subtotal,
         taxTotal,
         total,
-        invoiceDate: input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now,
-        dueAt: instalmentData.reduce<Date | null>((m, it) => (it.dueAt && (!m || it.dueAt > m) ? it.dueAt : m), null),
+        invoiceDate: docDate,
+        dueAt: dueFromInstalments ?? dueFromRule,
         poNumber: input.poNumber?.trim() || null,
         notes: input.notes?.trim() || null,
+
+        ...(input.billingName?.trim() ? { billingNameSnapshot: input.billingName.trim() } : {}),
+        ...(input.billingEmail?.trim() ? { billingEmailSnapshot: input.billingEmail.trim() } : {}),
+        ...(input.billingPhone !== undefined ? { billingPhoneSnapshot: input.billingPhone.trim() || null } : {}),
+        ...(input.jobName !== undefined ? { billingJobNameSnapshot: input.jobName.trim() || null } : {}),
         lines: { create: lineData },
         instalments: { create: instalmentData },
       },
@@ -300,7 +330,7 @@ export async function updateInvoiceWithLines(
         entityType: 'Invoice',
         entityId: invoiceId,
         actorUserId,
-        afterData: { total: total.toString(), lines: input.lines.length },
+        afterData: { total: total.toString(), lines: input.lines.length, instalments: instalmentData.length },
       },
     })
     return invoice
@@ -382,6 +412,41 @@ export async function issueCreditNoteTx(
     },
   })
   return creditNote
+}
+
+export async function sendInvoice(
+  invoiceId: string,
+  email: { to: string; subject: string; body: string; baseUrl: string },
+  actorUserId: string | null,
+): Promise<{ outcome: SendResult['outcome'] }> {
+  const inv = await prisma.invoice.findUnique({ where: { id: invoiceId }, select: { status: true, accessToken: true } })
+  if (!inv) throw new Error('Invoice not found.')
+  if (inv.status === 'VOID') throw new Error('This invoice is void, so it cannot be sent.')
+  if (inv.status === 'DRAFT') await issueInvoice(invoiceId, actorUserId)
+  let token = inv.accessToken
+  if (!token) {
+    token = invoiceToken()
+    await prisma.invoice.update({ where: { id: invoiceId }, data: { accessToken: token } })
+  }
+
+  const now = systemClock.now()
+  const result = await sendComposedInvoiceEmail({
+    to: email.to,
+    subject: email.subject,
+    body: email.body,
+    invoiceLink: `${email.baseUrl}/invoice/${token}`,
+    idempotencyKey: `invoice-send-${invoiceId}-${now.getTime()}`,
+  })
+  if (result.outcome === 'ACCEPTED') {
+    await prisma.$transaction(async (tx) => {
+
+      await tx.invoice.updateMany({ where: { id: invoiceId, status: 'ISSUED' }, data: { status: 'SENT' } })
+      await tx.auditLog.create({
+        data: { action: 'invoice.sent', entityType: 'Invoice', entityId: invoiceId, actorUserId, afterData: { to: email.to } },
+      })
+    })
+  }
+  return { outcome: result.outcome }
 }
 
 export async function issueInvoice(invoiceId: string, actorUserId: string | null) {
@@ -527,6 +592,8 @@ export async function recordPayment(
           data: { commercialStatus: next },
         })
       }
+
+      if (invoice.projectId) await confirmBookingByDepositTx(tx, invoice.projectId, actorUserId)
 
       if (invoice.projectId) await maybeAutoCompleteJob(tx, invoice.projectId, actorUserId)
     }

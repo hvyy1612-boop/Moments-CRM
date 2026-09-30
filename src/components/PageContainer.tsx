@@ -6,8 +6,8 @@ const GUTTER = 'px-4 sm:px-6 lg:px-8'
 
 const MEASURE: Record<PageVariant, string> = {
   narrow: 'mx-auto w-full max-w-page-narrow',
-  standard: 'mx-auto w-full max-w-page-standard',
-  wide: 'mx-auto w-full max-w-page-wide',
+  standard: 'w-full',
+  wide: 'w-full',
   full: 'w-full',
 }
 

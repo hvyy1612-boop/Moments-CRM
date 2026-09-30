@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import { formatSydneyDate } from '@/lib/time'
+import { formatSydneyDate, daysUntilSydney } from '@/lib/time'
 import { getJobBalance } from './money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
 import { makeShootDateOf, resolveTaskDueDate, type DeadlineContext } from './deadline'
@@ -29,7 +29,7 @@ async function seedIfNeeded(tx: Tx, projectId: string, companyId: string) {
     data: DEFAULT_PROJECT_TASKS.map((t, i) => ({
       companyId,
       projectId,
-      kind: 'TASK',
+      kind: t.key, // stable core-task key (custom tasks use 'CUSTOM')
       stage: t.stage,
       type: t.type,
       title: t.title,
@@ -50,12 +50,32 @@ export async function seedProjectWorkflow(projectId: string) {
   await prisma.$transaction((tx) => seedIfNeeded(tx, projectId, project.companyId))
 }
 
+export async function confirmBookingByDepositTx(tx: Tx, projectId: string, actorUserId: string | null) {
+  const project = await tx.project.findUnique({ where: { id: projectId }, select: { companyId: true, lifecycleStatus: true } })
+  if (!project) return
+  if (project.lifecycleStatus === 'BOOKING_REQUESTED') {
+    await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'CONFIRMED' } })
+  }
+  await seedIfNeeded(tx, projectId, project.companyId)
+  const enquiry = await tx.enquiry.findFirst({
+    where: { convertedProjectId: projectId },
+    select: { id: true, status: true, companyId: true },
+  })
+  if (enquiry && enquiry.status === 'AWAITING_BOOKING_CONFIRMATION') {
+    await tx.enquiry.update({ where: { id: enquiry.id }, data: { status: 'BOOKING_CONFIRMED' } })
+    await tx.auditLog.create({
+      data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.booking_confirmed', entityType: 'Enquiry', entityId: enquiry.id, afterData: { projectId } },
+    })
+  }
+}
+
 export async function getProjectBoard(projectId: string): Promise<ProjectBoard> {
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: projectId },
     select: {
       companyId: true,
       confirmedByClientAt: true,
+      owner: { select: { name: true } },
       invoices: { select: INVOICE_MONEY_SELECT },
       galleries: { select: { status: true } },
       bookings: { select: { id: true, startsAt: true, status: true, rescheduledFromId: true } },
@@ -73,6 +93,7 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
       status: true,
       stage: true,
       type: true,
+      kind: true,
       dueAnchor: true,
       dueOffsetDays: true,
       dueDateFixed: true,
@@ -90,9 +111,14 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
   }
 
   const jobMoney = getJobBalance(project.invoices.map(toInvoiceMoneyInput), null)
+  const gallerySent = project.galleries.some((g) => g.status === 'PUBLISHED')
+  const finalPaid = jobMoney.invoicedObligation.greaterThan(0) && jobMoney.outstanding.lessThanOrEqualTo(0)
   const facts: ProjectFacts = {
-    gallerySent: project.galleries.some((g) => g.status === 'PUBLISHED'),
-    finalPaid: jobMoney.invoicedObligation.greaterThan(0) && jobMoney.outstanding.lessThanOrEqualTo(0),
+
+    shootScheduled: project.bookings.some((b) => b.status !== 'CANCELLED' && b.startsAt != null),
+    gallerySent,
+    finalPaid,
+    deliveryComplete: gallerySent && finalPaid,
   }
 
   const tasks: TaskInput[] = items.map((w) => ({
@@ -101,6 +127,7 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     status: w.status,
     stage: w.stage,
     type: w.type,
+    kind: w.kind,
     resolvedDueAt: resolveTaskDueDate(w, ctx),
     dueAnchor: w.dueAnchor,
     order: w.order,
@@ -108,7 +135,9 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     completedAt: w.completedAt ?? null,
   }))
 
-  return buildProjectBoard(facts, tasks, formatSydneyDate, new Date())
+  const now = new Date()
+  const daysUntil = (d: Date) => daysUntilSydney(d, now)
+  return buildProjectBoard(facts, tasks, formatSydneyDate, now, daysUntil, project.owner?.name ?? null)
 }
 
 async function loadTask(taskId: string) {
@@ -167,12 +196,14 @@ export async function addProjectTask(
 ) {
   const clean = title.trim()
   if (!clean) throw new Error('A task needs a title.')
-  if (!PROJECT_STAGE_KEYS.has(stage)) throw new Error('Unknown stage.')
+
+  const stageKey = stage.trim()
+  if (!stageKey || stageKey.length > 50) throw new Error('Please enter a valid stage.')
   const taskType = ADDABLE.has(type) ? type : 'TODO'
   return prisma.$transaction(async (tx) => {
     const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { companyId: true } })
     const last = await tx.workItem.findFirst({
-      where: { projectId, stage },
+      where: { projectId, stage: stageKey },
       orderBy: { order: 'desc' },
       select: { order: true },
     })
@@ -181,7 +212,7 @@ export async function addProjectTask(
         companyId: project.companyId,
         projectId,
         kind: 'CUSTOM',
-        stage,
+        stage: stageKey,
         type: taskType,
         title: clean,
         status: 'PENDING',
@@ -197,9 +228,52 @@ export async function addProjectTask(
         action: 'project.task_added',
         entityType: 'Project',
         entityId: projectId,
-        afterData: { stage: stageLabel(stage), title: clean },
+        afterData: { stage: stageLabel(stageKey), title: clean },
       },
     })
+  })
+}
+
+export async function addProjectStage(projectId: string, stageName: string, actorUserId: string) {
+  const key = stageName.trim()
+  if (!key || key.length > 50) throw new Error('Please enter a stage name.')
+  if (PROJECT_STAGE_KEYS.has(key)) throw new Error('That stage already exists.')
+  return prisma.$transaction(async (tx) => {
+    const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { companyId: true } })
+    await tx.workItem.create({
+      data: { companyId: project.companyId, projectId, kind: 'CUSTOM', stage: key, type: 'TODO', title: 'New task', status: 'PENDING', order: 1, dueOverrideAt: null },
+    })
+    await tx.auditLog.create({
+      data: { companyId: project.companyId, actorUserId, action: 'project.stage_added', entityType: 'Project', entityId: projectId, afterData: { stage: key } },
+    })
+  })
+}
+
+export async function renameProjectStage(projectId: string, fromStage: string, toStage: string, actorUserId: string) {
+  const to = toStage.trim()
+  if (!to || to.length > 50) throw new Error('Please enter a stage name.')
+  if (PROJECT_STAGE_KEYS.has(fromStage) || PROJECT_STAGE_KEYS.has(to)) throw new Error('The core stages cannot be renamed.')
+  return prisma.$transaction(async (tx) => {
+    const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { companyId: true } })
+    const res = await tx.workItem.updateMany({ where: { projectId, stage: fromStage }, data: { stage: to } })
+    if (res.count > 0) {
+      await tx.auditLog.create({
+        data: { companyId: project.companyId, actorUserId, action: 'project.stage_renamed', entityType: 'Project', entityId: projectId, afterData: { from: fromStage, to } },
+      })
+    }
+  })
+}
+
+export async function deleteProjectStage(projectId: string, stage: string, actorUserId: string) {
+  if (PROJECT_STAGE_KEYS.has(stage)) throw new Error('The core stages cannot be deleted.')
+  return prisma.$transaction(async (tx) => {
+    const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { companyId: true } })
+    const res = await tx.workItem.deleteMany({ where: { projectId, stage } })
+    if (res.count > 0) {
+      await tx.auditLog.create({
+        data: { companyId: project.companyId, actorUserId, action: 'project.stage_deleted', entityType: 'Project', entityId: projectId, afterData: { stage } },
+      })
+    }
   })
 }
 

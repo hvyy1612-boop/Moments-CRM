@@ -13,7 +13,7 @@ const controlBase =
   'disabled:cursor-not-allowed disabled:bg-paper disabled:text-ink-muted'
 
 function borderFor(hasError: boolean): string {
-  return hasError ? 'border-danger focus:border-danger focus:ring-danger' : 'border-line'
+  return hasError ? 'border-danger focus:border-danger focus:ring-danger' : 'border-ink'
 }
 
 export function Field({
@@ -68,6 +68,44 @@ export function FormSection({ title, description, control, children }: { title: 
       </div>
       {children}
     </section>
+  )
+}
+
+export function PageForm({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={`flex flex-col${className ? ` ${className}` : ''}`}>{children}</div>
+}
+
+export function FormBlock({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+  return (
+    <section className="grid grid-cols-1 gap-x-8 gap-y-5 border-t border-line py-8 first:border-t-0 first:pt-0 lg:grid-cols-12">
+      <div className="lg:col-span-4">
+        <h2 className="text-base font-semibold text-ink">{title}</h2>
+        {description ? <p className="mt-1 max-w-prose text-sm text-ink-muted">{description}</p> : null}
+      </div>
+      <div className="grid grid-cols-12 gap-x-8 gap-y-8 lg:col-span-8">{children}</div>
+    </section>
+  )
+}
+
+const CELL_SPAN = {
+  3: 'sm:col-span-3',
+  4: 'sm:col-span-4',
+  5: 'sm:col-span-5',
+  6: 'sm:col-span-6',
+  7: 'sm:col-span-7',
+  8: 'sm:col-span-8',
+  12: 'sm:col-span-12',
+} as const
+
+export function FormCell({ span = 12, children }: { span?: keyof typeof CELL_SPAN; children: ReactNode }) {
+  return <div className={`col-span-12 ${CELL_SPAN[span]}`}>{children}</div>
+}
+
+export function FormActions({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-1 gap-x-8 pt-4 lg:grid-cols-12">
+      <div className="flex flex-wrap items-center gap-3 lg:col-span-8 lg:col-start-5">{children}</div>
+    </div>
   )
 }
 

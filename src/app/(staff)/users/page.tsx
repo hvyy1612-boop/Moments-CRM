@@ -46,14 +46,13 @@ export default async function UsersPage() {
 
   return (
     <AppShell user={user} csrf={csrf} active="users">
-      <PageContainer variant="standard">
+      <PageContainer variant="full">
         <PageHeader
           breadcrumb={[DASHBOARD_CRUMB, { label: 'Users' }]}
           title="Users"
-          description="Create staff accounts here. Each staff member gets a Staff ID and a one-time password, then sets their own password on first sign-in. There is no public sign-up."
         />
 
-        <section className="mt-6 rounded-md border border-line bg-surface p-5">
+        <section className="rounded-md border border-line bg-surface p-5">
           <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Add staff</h2>
           <AddStaffForm csrf={csrf} />
         </section>

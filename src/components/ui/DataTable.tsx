@@ -60,6 +60,8 @@ export function DataTable<T>({
   searchPlaceholder = 'Search',
   rowClassName,
   selection,
+  toolbarStart,
+  toolbarEnd,
 }: {
   columns: DataColumn<T>[]
   rows: T[]
@@ -68,6 +70,10 @@ export function DataTable<T>({
   ariaLabel?: string
 
   selection?: Selection<T>
+
+  toolbarStart?: ReactNode
+
+  toolbarEnd?: ReactNode
 
   storageKey?: string
 
@@ -126,7 +132,18 @@ export function DataTable<T>({
 
   return (
     <div>
-      {search ? (
+      {toolbarStart || toolbarEnd ? (
+
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          {toolbarStart}
+          {search ? (
+            <div className="min-w-0 flex-1 sm:max-w-xs">
+              <ActiveSearchField value={query} onChange={setQuery} placeholder={searchPlaceholder} resultCount={total} />
+            </div>
+          ) : null}
+          {toolbarEnd ? <div className="ml-auto flex items-center gap-2">{toolbarEnd}</div> : null}
+        </div>
+      ) : search ? (
         <div className="mb-3">
           <ActiveSearchField value={query} onChange={setQuery} placeholder={searchPlaceholder} resultCount={total} />
         </div>
@@ -143,7 +160,7 @@ export function DataTable<T>({
             style={{ gridTemplateColumns: template }}
           >
             {selection ? (
-              <div role="columnheader" className="flex items-center justify-center px-2 py-2">
+              <div role="columnheader" className="flex items-center justify-start py-2 pl-0 pr-2">
                 <Check
                   checked={allSelected}
                   indeterminate={someSelected}
@@ -153,8 +170,8 @@ export function DataTable<T>({
                 />
               </div>
             ) : null}
-            {visible.map((c) => (
-              <div key={c.key} role="columnheader" className={`flex min-w-0 ${alignCls(c.align)} whitespace-nowrap px-4 py-2 text-xs font-medium`}>
+            {visible.map((c, i) => (
+              <div key={c.key} role="columnheader" className={`flex min-w-0 ${alignCls(c.align)} whitespace-nowrap ${i === 0 && !selection ? 'pl-0 pr-4' : 'px-4'} py-2 text-xs font-medium`}>
                 {c.header}
               </div>
             ))}
@@ -178,7 +195,7 @@ export function DataTable<T>({
                   style={{ gridTemplateColumns: template }}
                 >
                   {selection ? (
-                    <div role="cell" className="flex items-center justify-center px-2 py-2">
+                    <div role="cell" className="flex items-center justify-start py-2 pl-0 pr-2">
                       <Check
                         checked={selected}
                         disabled={!(selection.isSelectable?.(row) ?? true)}
@@ -187,8 +204,8 @@ export function DataTable<T>({
                       />
                     </div>
                   ) : null}
-                  {visible.map((c) => (
-                    <div key={c.key} role="cell" className={`flex min-w-0 ${alignCls(c.align)} px-4 py-2`}>
+                  {visible.map((c, i) => (
+                    <div key={c.key} role="cell" className={`flex min-w-0 ${alignCls(c.align)} ${i === 0 && !selection ? 'pl-0 pr-4' : 'px-4'} py-2`}>
                       {c.cell(row)}
                     </div>
                   ))}

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import type { Alert } from '@/lib/domain/alerts'
+import { ToastProvider } from '@/components/ui/ToastProvider'
 import { Sidebar, type SidebarItem } from './Sidebar'
 import { TopNav } from './TopNav'
 
@@ -18,6 +19,7 @@ export function AppChrome({
   userRole,
   csrf,
   alerts,
+  notifKeys = [],
   children,
 }: {
   items: SidebarItem[]
@@ -28,6 +30,8 @@ export function AppChrome({
   userRole: string
   csrf: string
   alerts: Alert[]
+
+  notifKeys?: string[]
   children: ReactNode
 }) {
   const [collapsed, setCollapsed] = useState(false)
@@ -53,6 +57,7 @@ export function AppChrome({
   }
 
   return (
+    <ToastProvider>
     <div className="min-h-screen bg-paper">
       <TopNav
         collapsed={collapsed}
@@ -83,12 +88,13 @@ export function AppChrome({
       </nav>
 
       <div className="flex">
-        <Sidebar items={items} groups={groups} active={active} collapsed={collapsed} />
+        <Sidebar items={items} groups={groups} active={active} collapsed={collapsed} notifKeys={notifKeys} />
         {/* Workspace only: `main` provides the remaining width + vertical padding. The horizontal page
             gutter and the content measure are owned by PageContainer, so every page shares one gutter and
             no content can end up flush against the sidebar. */}
         <main className="min-w-0 flex-1 pb-6 pt-1.5 sm:pb-8">{children}</main>
       </div>
     </div>
+    </ToastProvider>
   )
 }

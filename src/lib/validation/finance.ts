@@ -7,12 +7,12 @@ const money = z
 
 export const createInvoiceSchema = z.object({
   type: z.enum(['DEPOSIT', 'BALANCE', 'SUPPLEMENTARY']),
-  description: z.string().trim().min(1, 'Describe what this invoice is for.').max(300),
+  description: z.string().trim().min(1, 'Please describe what this invoice is for.').max(300),
   amount: money,
 })
 
 const invoiceLine = z.object({
-  itemName: z.string().trim().min(1, 'Add a name for each item.').max(200),
+  itemName: z.string().trim().min(1, 'Please add a name for each item.').max(200),
   description: z.string().trim().max(500).optional().or(z.literal('')),
   quantity: z.coerce.number().int().min(1, 'Quantity must be at least 1.').max(999),
   unitPrice: money,
@@ -41,8 +41,14 @@ export const createInvoiceLinesSchema = z.object({
   notes: z.string().trim().max(2000).optional().or(z.literal('')),
   discount: money.optional().or(z.literal('')),
   discountReason: z.string().trim().max(100).optional().or(z.literal('')),
-  lines: z.array(invoiceLine).min(1, 'Add at least one item.').max(50),
+  lines: z.array(invoiceLine).min(1, 'Please add at least one item.').max(50),
   instalments: z.array(instalment).max(12).optional(),
+
+  billingName: z.string().trim().max(150).optional().or(z.literal('')),
+  billingEmail: z.string().trim().max(255).optional().or(z.literal('')),
+  billingPhone: z.string().trim().max(40).optional().or(z.literal('')),
+  jobName: z.string().trim().max(150).optional().or(z.literal('')),
+  due: z.enum(['ON_ISSUE', 'NET7', 'NET14']).optional(),
 })
 
 export const recordPaymentSchema = z.object({

@@ -2,16 +2,16 @@ import { prisma } from '@/lib/db'
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
-export const OPEN_STAGE_ORDER = ['NEW', 'CONTACTED', 'QUALIFIED'] as const
+export const OPEN_STAGE_ORDER = ['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION'] as const
 export type OpenStage = (typeof OPEN_STAGE_ORDER)[number]
 const OPEN = new Set<string>(OPEN_STAGE_ORDER)
 
 type DeriveTask = { stage: string | null; status: string; type: string }
 
 const GROUP_TO_STAGE: [string, OpenStage][] = [
-  ['new', 'NEW'],
+  ['new', 'NEW_ENQUIRY'],
   ['discussion', 'CONTACTED'],
-  ['quote', 'QUALIFIED'],
+  ['quote', 'CONSULTATION'],
 ]
 
 export function deriveOpenStage(tasks: DeriveTask[]): OpenStage {
@@ -20,7 +20,7 @@ export function deriveOpenStage(tasks: DeriveTask[]): OpenStage {
     const groupTasks = real.filter((t) => t.stage === group)
     if (groupTasks.some((t) => t.status !== 'COMPLETED')) return stage
   }
-  return 'QUALIFIED'
+  return 'CONSULTATION'
 }
 
 export async function syncEnquiryStageFromTasks(tx: Tx, enquiryId: string, actorUserId: string) {

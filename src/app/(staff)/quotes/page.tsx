@@ -34,11 +34,10 @@ export default async function QuotesPage() {
   return (
     <AppShell user={user} csrf={csrf} active="quotes">
       {/* Content measure so the table fills a normal wide screen without sprawling (shared with the other lists). */}
-      <PageContainer variant="standard">
+      <PageContainer variant="full">
         <PageHeader
           breadcrumb={[DASHBOARD_CRUMB, { label: 'Quotes' }]}
           title="Quotes"
-          description="Quotations you have prepared. Create a quote from an enquiry; when the client accepts, it becomes a job."
           actions={
             <div className="flex gap-2">
               <Link href="/pricing"><Button variant="secondary" size="sm">Quick calculation</Button></Link>

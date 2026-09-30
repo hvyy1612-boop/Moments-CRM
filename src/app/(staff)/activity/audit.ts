@@ -6,7 +6,7 @@ const DOMAIN: Record<string, Domain> = {
   auth: { category: 'Authentication & users', noun: 'Account' },
   client: { category: 'Clients', noun: 'Client' },
   contact: { category: 'Clients', noun: 'Contact' },
-  enquiry: { category: 'Enquiries', noun: 'Enquiry' },
+  enquiry: { category: 'Leads', noun: 'Lead' },
   quote: { category: 'Quotes', noun: 'Quote' },
   booking: { category: 'Bookings', noun: 'Booking' },
   contract: { category: 'Contracts', noun: 'Contract' },
@@ -30,8 +30,23 @@ const SPECIAL: Record<string, string> = {
   'client.deleted': 'Client deleted',
   'client.merged': 'Clients merged',
   'client.restored': 'Client restored',
-  'enquiry.converted': 'Enquiry converted to job',
-  'enquiry.lost': 'Enquiry marked lost',
+
+  'enquiry.created': 'Lead created',
+  'enquiry.replied': 'Reply sent to client',
+  'enquiry.client_replied': 'Client message logged',
+  'enquiry.stage_auto': 'Lead stage moved on',
+  'enquiry.status': 'Lead stage changed',
+  'enquiry.moved_to_quote': 'Lead moved to consultation',
+  'enquiry.converted': 'Lead converted to job',
+  'enquiry.lost': 'Lead declined',
+  'enquiry.reopened': 'Lead reopened',
+  'enquiry.booking_confirmed': 'Booking confirmed (deposit paid)',
+  'enquiry.booking_cancelled': 'Booking cancelled',
+
+  'booking.created': 'Shoot scheduled',
+  'booking.rescheduled': 'Shoot rescheduled',
+  'booking.requested': 'Booking requested',
+  'booking.confirmed': 'Booking confirmed',
 }
 
 const cap = (s: string): string => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)

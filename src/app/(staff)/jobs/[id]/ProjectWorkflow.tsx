@@ -1,9 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { ADDABLE_TASK_TYPES, type BoardStage, type TaskType } from '@/features/projects/workflow'
-import { WorkflowProgress } from '@/components/WorkflowProgress'
-import { ReminderChip } from '@/components/ui/WorkflowChips'
+import { useState, type ReactNode } from 'react'
+import { ADDABLE_TASK_TYPES, type ProjectBoard } from '@/features/projects/workflow'
 import {
   checkTaskForm,
   TaskDueDateTimeFields,
@@ -13,289 +11,428 @@ import {
   type TaskFormErrors,
 } from '@/components/ui/TaskDateTimeFields'
 import {
+  addProjectStageAction,
   addProjectStageBlockAction,
   addProjectTaskAction,
+  deleteProjectStageAction,
+  renameProjectStageAction,
+  toggleProjectTaskAction,
   updateProjectTaskAction,
 } from '../actions'
-import { EditableTaskRow } from './EditableTaskRow'
+import { AttentionDot, CheckBox, EditableTaskRow, OwnerCell, PHASE_GRID, ROW, StatusBadge } from './EditableTaskRow'
+import { HistoryLogModal, type HistoryEntry } from './HistoryLogModal'
+import { IconArrowRight, IconCalendar, IconChevron, IconUser } from './icons'
 
-const PHASE: Record<string, { rail: string; label: string }> = {
-  enquiry: { rail: 'bg-enquiry', label: 'text-enquiry-ink' },
-  quote: { rail: 'bg-quote', label: 'text-quote-ink' },
-  booked: { rail: 'bg-booked', label: 'text-booked-ink' },
-  editing: { rail: 'bg-editing', label: 'text-editing-ink' },
-  delivered: { rail: 'bg-delivered', label: 'text-delivered-ink' },
-}
-const FALLBACK = { rail: 'bg-hold', label: 'text-hold-ink' }
-
-const TYPE_BADGE: Record<TaskType, string> = {
-  TODO: '',
-  AUTO_EMAIL: 'bg-enquiry text-enquiry-ink',
-  APPOINTMENT: 'bg-quote text-quote-ink',
-  SHOOT: 'bg-delivered text-delivered-ink',
-  AUTO: 'bg-paper text-muted',
-}
-
-function TypeTag({ label, type }: { label: string; type: TaskType }) {
-  if (!label) return null
-  return <span className={`rounded px-1.5 py-0.5 text-xs font-bold ${TYPE_BADGE[type]}`}>{label}</span>
-}
+type Filter = 'all' | 'pending' | 'attention'
 
 export function ProjectWorkflow({
-  stages,
-  allDone,
+  board,
   projectId,
   csrf,
   taskTimes = {},
+  history = [],
+  rail,
 }: {
-  stages: BoardStage[]
-  allDone: boolean
+  board: ProjectBoard
   projectId: string
   csrf: string
   taskTimes?: Record<string, string>
+  history?: HistoryEntry[]
+
+  rail?: ReactNode
 }) {
+  const { stages, allDone, attentionCount, nextAction } = board
+
   const [editingId, setEditingId] = useState<string | null>(null)
   const [addingStage, setAddingStage] = useState<string | null>(null)
   const [addStageOpen, setAddStageOpen] = useState(false)
+  const [renamingStage, setRenamingStage] = useState<string | null>(null)
   const [editErrors, setEditErrors] = useState<TaskFormErrors>({})
   const [addErrors, setAddErrors] = useState<TaskFormErrors>({})
+  const [filter, setFilter] = useState<Filter>('all')
+  const [showCompleted, setShowCompleted] = useState(true)
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const toggleCollapsed = (key: string) => setCollapsed((p) => ({ ...p, [key]: !p[key] }))
+
   const clearEdit = (field: keyof TaskFormErrors) =>
     setEditErrors((p) => (p[field] ? { ...p, [field]: undefined } : p))
   const clearAdd = (field: keyof TaskFormErrors) =>
     setAddErrors((p) => (p[field] ? { ...p, [field]: undefined } : p))
 
-  const allTasks = stages.flatMap((s) => s.tasks)
-  const nowStage = stages.find((s) => s.active) ?? null
-  const nextTask = nowStage?.tasks.find((t) => !t.done) ?? allTasks.find((t) => !t.done) ?? null
-
   const visibleStages = stages.filter((s) => !(s.optional && s.total === 0))
   const hiddenStages = stages.filter((s) => s.optional && s.total === 0)
 
+  const rowVisible = (done: boolean, attention: boolean) => {
+    if (done && !showCompleted) return false
+    if (filter === 'pending' && done) return false
+    if (filter === 'attention' && !attention) return false
+    return true
+  }
+
   return (
-    <div className="flex flex-col gap-5">
-      <WorkflowProgress
-        done={allTasks.filter((t) => t.done).length}
-        total={allTasks.length}
-        nowLabel={allDone ? null : (nowStage?.label ?? null)}
-        nextTitle={allDone ? null : (nextTask?.title ?? null)}
-      />
-      {visibleStages.map((stage) => {
-        const cls = PHASE[stage.color] ?? FALLBACK
-        return (
-          <div key={stage.key} className="flex gap-3">
-            <div className={`w-1 shrink-0 rounded ${cls.rail}`} aria-hidden="true" />
-            <div className="min-w-0 flex-1">
-              <div className="mb-1.5 flex items-center gap-2">
-                <span className={`text-xs font-bold uppercase tracking-wide ${cls.label}`}>{stage.label}</span>
-                {stage.optional ? <span className="text-xs text-muted">(optional)</span> : null}
-                {stage.active && !allDone ? (
-                  <span className="rounded bg-accent px-1.5 py-0.5 text-xs font-bold text-accent-ink">Now</span>
-                ) : null}
-                {stage.total > 0 && stage.done === stage.total ? (
-                  <span className="rounded bg-delivered px-1.5 py-0.5 text-xs font-bold text-delivered-ink">Complete</span>
-                ) : null}
-                {stage.total > 0 ? (
-                  <span className="tabular ml-auto text-xs text-muted">
-                    {stage.done}/{stage.total}
-                  </span>
-                ) : null}
-              </div>
-              {stage.total > 0 ? (
-                <div className="mb-2 h-1 w-full overflow-hidden rounded-full bg-sunk">
-                  <div
-                    className="h-full rounded-full bg-accent transition-all"
-                    style={{ width: `${Math.round((stage.done / stage.total) * 100)}%` }}
+    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[repeat(16,minmax(0,1fr))]">
+      {/* MAIN - 11/16 of the row (workflow is dense, so it gets the wider share) */}
+      <div className="flex min-w-0 flex-col gap-4 lg:col-span-11">
+        {/* Title + toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-xl">Workflow</h2>
+          <div className="flex flex-wrap items-center gap-3">
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as Filter)}
+              aria-label="Filter tasks"
+              className="rounded-md border border-line-strong bg-surface px-3 py-1.5 text-sm text-ink"
+            >
+              <option value="all">All tasks</option>
+              <option value="pending">Pending</option>
+              <option value="attention">Needs attention</option>
+            </select>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showCompleted}
+              onClick={() => setShowCompleted((v) => !v)}
+              className="flex items-center gap-2 text-sm text-ink-muted"
+            >
+              <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${showCompleted ? 'bg-accent' : 'bg-line-strong'}`}>
+                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-surface transition-all ${showCompleted ? 'left-4' : 'left-0.5'}`} />
+              </span>
+              Show completed
+            </button>
+            <HistoryLogModal entries={history} />
+          </div>
+        </div>
+
+        {/* Attention banner */}
+        {attentionCount > 0 ? (
+          <div className="flex items-start gap-3 rounded-md border border-danger bg-danger/5 px-4 py-3">
+            <AttentionDot />
+            <p className="text-sm text-ink">
+              <span className="font-bold text-danger">Attention required.</span>{' '}
+              You have {attentionCount} task{attentionCount === 1 ? '' : 's'} due within 3 days or overdue. Please review and take action to keep this job on track.
+            </p>
+          </div>
+        ) : null}
+
+        {/* Phases */}
+        {visibleStages.map((stage, i) => {
+          const isCollapsed = collapsed[stage.key]
+          const rows = stage.tasks.filter((t) => rowVisible(t.done, t.needsAttention && !t.done))
+          return (
+            <section key={stage.key} className="rounded-md border border-line-strong">
+              {renamingStage === stage.key ? (
+                <form
+                  action={renameProjectStageAction}
+                  onSubmit={(e) => {
+                    if (!String(new FormData(e.currentTarget).get('toStage') ?? '').trim()) { e.preventDefault(); return }
+                    setRenamingStage(null)
+                  }}
+                  className="flex flex-wrap items-center gap-2 px-3 py-2.5"
+                >
+                  <input type="hidden" name="csrf" value={csrf} />
+                  <input type="hidden" name="projectId" value={projectId} />
+                  <input type="hidden" name="fromStage" value={stage.key} />
+                  <input
+                    name="toStage"
+                    defaultValue={stage.label}
+                    autoFocus
+                    maxLength={50}
+                    aria-label="Stage name"
+                    className={`${taskInputBase} ${taskBorderFor(false)} min-w-0 flex-1`}
                   />
-                </div>
-              ) : null}
-
-              <div className="flex flex-col gap-1.5">
-                {stage.tasks.map((t) => {
-                  if (!t.editable) {
-                    return (
-                      <div key={t.id} className="flex items-start gap-2 rounded-md border border-line bg-paper px-3 py-2">
-                        <span
-                          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border text-xs ${
-                            t.done ? 'border-delivered-ink bg-delivered text-delivered-ink' : 'border-line-strong text-transparent'
-                          }`}
-                          aria-hidden="true"
-                        >
-                          ✓
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className={`text-base ${t.done ? 'text-ink-muted' : 'text-ink'}`}>{t.title}</span>
-                            <TypeTag label={t.typeLabel} type={t.type} />
-                            {t.dueLabel ? (
-                              <span className="rounded bg-paper px-1.5 py-0.5 text-xs text-ink-muted">{t.dueLabel}</span>
-                            ) : null}
-                            {t.noDate ? (
-                              <span className="rounded bg-sunk px-1.5 py-0.5 text-xs text-muted">No date</span>
-                            ) : null}
-                            {!t.done ? <ReminderChip tone={t.dueTone} /> : null}
-                          </div>
-                          {t.note ? <div className="mt-0.5 text-sm text-muted">{t.note}</div> : null}
-                        </div>
-                      </div>
-                    )
-                  }
-                  return editingId === t.id ? (
-                    <form
-                      key={t.id}
-                      action={updateProjectTaskAction}
-                      noValidate
-                      onSubmit={(e) => {
-                        const errs = checkTaskForm(e.currentTarget)
-                        if (errs.title || errs.date || errs.time) {
-                          e.preventDefault()
-                          setEditErrors(errs)
-                          return
-                        }
-                        setEditErrors({})
-                        setEditingId(null)
-                      }}
-                      className="flex flex-col gap-2 rounded-md border border-accent bg-paper p-3"
-                    >
-                      <input type="hidden" name="csrf" value={csrf} />
-                      <input type="hidden" name="projectId" value={projectId} />
-                      <input type="hidden" name="workItemId" value={t.id} />
-                      <div className="flex flex-col gap-1">
-                        <input
-                          className={`${taskInputBase} ${taskBorderFor(Boolean(editErrors.title))}`}
-                          name="title"
-                          defaultValue={t.title}
-                          aria-label="Task title"
-                          onInput={() => clearEdit('title')}
-                        />
-                        {editErrors.title ? <p className="text-sm text-danger">{editErrors.title}</p> : null}
-                      </div>
-                      <TaskDueDateTimeFields
-                        dateDefault={t.dueValue ?? ''}
-                        timeDefault={taskTimes[t.id] ?? ''}
-                        errors={editErrors}
-                        onClear={clearEdit}
-                      />
-                      <div className="flex items-center gap-2">
-                        <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface">Save</button>
-                        <button type="button" onClick={() => { setEditErrors({}); setEditingId(null) }} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">Cancel</button>
-                      </div>
-                    </form>
-                  ) : (
-                    <EditableTaskRow
-                      key={t.id}
-                      task={t}
-                      projectId={projectId}
-                      csrf={csrf}
-                      onEdit={() => { setEditErrors({}); setEditingId(t.id) }}
-                    />
-                  )
-                })}
-
-                {stage.optional && stage.tasks.length === 0 ? (
-                  <form action={addProjectStageBlockAction}>
-                    <input type="hidden" name="csrf" value={csrf} />
-                    <input type="hidden" name="projectId" value={projectId} />
-                    <input type="hidden" name="stage" value={stage.key} />
-                    <button
-                      type="submit"
-                      className="self-start rounded border border-line-strong px-2.5 py-1 text-sm font-bold text-ink-muted hover:text-ink"
-                    >
-                      + Add {stage.label} tasks
-                    </button>
-                  </form>
-                ) : null}
-
-                {addingStage === stage.key ? (
-                  <form
-                    action={addProjectTaskAction}
-                    noValidate
-                    onSubmit={(e) => {
-                      const errs = checkTaskForm(e.currentTarget)
-                      if (errs.title || errs.date || errs.time) {
-                        e.preventDefault()
-                        setAddErrors(errs)
-                        return
-                      }
-                      setAddErrors({})
-                      setAddingStage(null)
-                    }}
-                    className="flex flex-col gap-2 rounded-md border border-accent bg-paper p-3"
-                  >
-                    <input type="hidden" name="csrf" value={csrf} />
-                    <input type="hidden" name="projectId" value={projectId} />
-                    <input type="hidden" name="stage" value={stage.key} />
-                    <div className="flex flex-col gap-1">
-                      <input
-                        className={`${taskInputBase} ${taskBorderFor(Boolean(addErrors.title))}`}
-                        name="title"
-                        placeholder="New task"
-                        autoFocus
-                        aria-label="Task title"
-                        onInput={() => clearAdd('title')}
-                      />
-                      {addErrors.title ? <p className="text-sm text-danger">{addErrors.title}</p> : null}
-                    </div>
-                    <div className="flex flex-wrap items-end gap-3">
-                      <label className="flex flex-col gap-1 text-xs font-bold text-muted">
-                        <span>Type</span>
-                        <select className={`${taskInputClass} max-w-40`} name="type" defaultValue="TODO" aria-label="Task type">
-                          {ADDABLE_TASK_TYPES.map((o) => (
-                            <option key={o.value} value={o.value}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <TaskDueDateTimeFields errors={addErrors} onClear={clearAdd} />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface">Add</button>
-                      <button type="button" onClick={() => { setAddErrors({}); setAddingStage(null) }} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">Cancel</button>
-                    </div>
-                  </form>
-                ) : (
+                  <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface">Save</button>
+                  <button type="button" onClick={() => setRenamingStage(null)} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">Cancel</button>
+                </form>
+              ) : (
+                <div className="flex w-full items-center gap-2 rounded-t-md px-3 py-3 hover:bg-paper">
                   <button
                     type="button"
-                    onClick={() => { setAddErrors({}); setAddingStage(stage.key) }}
-                    className="self-start rounded px-1 py-1 text-sm font-bold text-accent-ink hover:underline"
+                    onClick={() => toggleCollapsed(stage.key)}
+                    aria-expanded={!isCollapsed}
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
                   >
-                    + Add task
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-surface">
+                      {i + 1}
+                    </span>
+                    <span className="truncate text-sm font-bold text-ink">{stage.label}</span>
+                    {stage.optional ? <span className="shrink-0 text-xs text-muted">(optional)</span> : null}
+                    {stage.total > 0 ? (
+                      <span className="shrink-0 whitespace-nowrap text-sm text-muted">{stage.done} / {stage.total} completed</span>
+                    ) : null}
                   </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )
-      })}
+                  {stage.custom ? (
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button type="button" onClick={() => setRenamingStage(stage.key)} aria-label="Rename stage" className="rounded p-1 text-ink-muted transition-colors hover:bg-sunk hover:text-ink">
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h4l10-10-4-4L4 16v4z" /><path d="m13.5 6.5 4 4" /></svg>
+                      </button>
+                      <form action={deleteProjectStageAction} onSubmit={(e) => { if (!window.confirm(`Delete the "${stage.label}" stage and its tasks?`)) e.preventDefault() }}>
+                        <input type="hidden" name="csrf" value={csrf} />
+                        <input type="hidden" name="projectId" value={projectId} />
+                        <input type="hidden" name="stage" value={stage.key} />
+                        <button type="submit" aria-label="Delete stage" className="rounded p-1 text-ink-muted transition-colors hover:bg-danger/10 hover:text-danger">
+                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
+                        </button>
+                      </form>
+                    </div>
+                  ) : null}
+                  <button type="button" onClick={() => toggleCollapsed(stage.key)} aria-label={isCollapsed ? 'Expand stage' : 'Collapse stage'} className="shrink-0 rounded p-1 text-muted hover:text-ink">
+                    <IconChevron className={`h-4 w-4 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+                  </button>
+                </div>
+              )}
 
-      {hiddenStages.length > 0 ? (
-        addStageOpen ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-line bg-paper p-3">
-            <span className="text-sm text-ink-muted">Add a stage:</span>
-            {hiddenStages.map((s) => (
-              <form key={s.key} action={addProjectStageBlockAction} onSubmit={() => setAddStageOpen(false)}>
-                <input type="hidden" name="csrf" value={csrf} />
-                <input type="hidden" name="projectId" value={projectId} />
-                <input type="hidden" name="stage" value={s.key} />
-                <button type="submit" className="rounded border border-line-strong px-2.5 py-1 text-sm font-bold text-ink-muted hover:text-ink">
-                  {s.label}
-                </button>
-              </form>
-            ))}
-            <button type="button" onClick={() => setAddStageOpen(false)} className="text-sm font-bold text-muted hover:text-ink">
-              Cancel
-            </button>
+              {!isCollapsed ? (
+                <div className="border-t border-line">
+                  {stage.total > 0 ? (
+                    <div className={PHASE_GRID}>
+                      <div className={`${ROW} border-transparent bg-paper text-xs font-bold uppercase tracking-wide text-muted`}>
+                        <span />
+                        <span>Task</span>
+                        <span>Due date</span>
+                        <span>Owner</span>
+                        <span>Status</span>
+                        <span />
+                      </div>
+
+                      {rows.length === 0 ? (
+                        <div className="col-span-full px-3 py-3 text-sm text-muted">No matching tasks in this view.</div>
+                      ) : (
+                        rows.map((t) => {
+                          if (t.isSystem) {
+                            return (
+                              <div key={t.id} className={`${ROW} border-transparent`}>
+                                <CheckBox done={t.done} muted />
+                                <div className="min-w-0">
+                                  <span className={`text-base ${t.done ? 'text-ink-muted' : 'text-ink'}`}>
+                                    {t.title} <span className="text-xs text-muted">(Auto)</span>
+                                  </span>
+                                  {t.note ? <span className="block truncate text-sm text-muted">{t.note}</span> : null}
+                                </div>
+                                <div className="whitespace-nowrap text-sm text-muted">{t.dueLabel ?? '-'}</div>
+                                <OwnerCell name={t.owner ?? 'System'} system />
+                                <StatusBadge done={t.done} />
+                                <span />
+                              </div>
+                            )
+                          }
+                          return editingId === t.id ? (
+                            <form
+                              key={t.id}
+                              action={updateProjectTaskAction}
+                              noValidate
+                              onSubmit={(e) => {
+                                const errs = checkTaskForm(e.currentTarget)
+                                if (errs.title || errs.date || errs.time) {
+                                  e.preventDefault()
+                                  setEditErrors(errs)
+                                  return
+                                }
+                                setEditErrors({})
+                                setEditingId(null)
+                              }}
+                              className="col-span-full flex flex-col gap-2 border-l-2 border-accent bg-paper p-3"
+                            >
+                              <input type="hidden" name="csrf" value={csrf} />
+                              <input type="hidden" name="projectId" value={projectId} />
+                              <input type="hidden" name="workItemId" value={t.id} />
+                              <div className="flex flex-col gap-1">
+                                <input
+                                  className={`${taskInputBase} ${taskBorderFor(Boolean(editErrors.title))}`}
+                                  name="title"
+                                  defaultValue={t.title}
+                                  aria-label="Task title"
+                                  onInput={() => clearEdit('title')}
+                                />
+                                {editErrors.title ? <p className="text-sm text-danger">{editErrors.title}</p> : null}
+                              </div>
+                              <TaskDueDateTimeFields
+                                dateDefault={t.dueValue ?? ''}
+                                timeDefault={taskTimes[t.id] ?? ''}
+                                errors={editErrors}
+                                onClear={clearEdit}
+                              />
+                              <div className="flex items-center gap-2">
+                                <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface">Save</button>
+                                <button type="button" onClick={() => { setEditErrors({}); setEditingId(null) }} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">Cancel</button>
+                              </div>
+                            </form>
+                          ) : (
+                            <EditableTaskRow
+                              key={t.id}
+                              task={t}
+                              projectId={projectId}
+                              csrf={csrf}
+                              dueTime={taskTimes[t.id]}
+                              onEdit={() => { setEditErrors({}); setEditingId(t.id) }}
+                            />
+                          )
+                        })
+                      )}
+                    </div>
+                  ) : null}
+
+                  <div className="border-t border-line px-3 py-2">
+                    {stage.optional && stage.tasks.length === 0 ? (
+                      <form action={addProjectStageBlockAction}>
+                        <input type="hidden" name="csrf" value={csrf} />
+                        <input type="hidden" name="projectId" value={projectId} />
+                        <input type="hidden" name="stage" value={stage.key} />
+                        <button type="submit" className="rounded border border-line-strong px-2.5 py-1 text-sm font-bold text-ink-muted hover:text-ink">
+                          + Add {stage.label} tasks
+                        </button>
+                      </form>
+                    ) : addingStage === stage.key ? (
+                      <form
+                        action={addProjectTaskAction}
+                        noValidate
+                        onSubmit={(e) => {
+                          const errs = checkTaskForm(e.currentTarget)
+                          if (errs.title || errs.date || errs.time) {
+                            e.preventDefault()
+                            setAddErrors(errs)
+                            return
+                          }
+                          setAddErrors({})
+                          setAddingStage(null)
+                        }}
+                        className="flex flex-col gap-2 rounded-md border border-accent bg-paper p-3"
+                      >
+                        <input type="hidden" name="csrf" value={csrf} />
+                        <input type="hidden" name="projectId" value={projectId} />
+                        <input type="hidden" name="stage" value={stage.key} />
+                        <div className="flex flex-col gap-1">
+                          <input
+                            className={`${taskInputBase} ${taskBorderFor(Boolean(addErrors.title))}`}
+                            name="title"
+                            placeholder="New task"
+                            autoFocus
+                            aria-label="Task title"
+                            onInput={() => clearAdd('title')}
+                          />
+                          {addErrors.title ? <p className="text-sm text-danger">{addErrors.title}</p> : null}
+                        </div>
+                        <div className="flex flex-wrap items-end gap-3">
+                          <label className="flex flex-col gap-1 text-xs font-bold text-muted">
+                            <span>Type</span>
+                            <select className={`${taskInputClass} max-w-40`} name="type" defaultValue="TODO" aria-label="Task type">
+                              {ADDABLE_TASK_TYPES.map((o) => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <TaskDueDateTimeFields errors={addErrors} onClear={clearAdd} />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface">Add</button>
+                          <button type="button" onClick={() => { setAddErrors({}); setAddingStage(null) }} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">Cancel</button>
+                        </div>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { setAddErrors({}); setAddingStage(stage.key) }}
+                        className="rounded py-1 text-sm font-bold text-accent-ink hover:underline"
+                      >
+                        + Add task
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          )
+        })}
+
+        {/* Add a stage: an optional production add-on (Video/Film/Album), or a custom stage of your own. */}
+        {addStageOpen ? (
+          <div className="flex flex-col gap-3 rounded-md border border-accent bg-paper p-3">
+            {hiddenStages.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-ink-muted">Add-on stage:</span>
+                {hiddenStages.map((s) => (
+                  <form key={s.key} action={addProjectStageBlockAction} onSubmit={() => setAddStageOpen(false)}>
+                    <input type="hidden" name="csrf" value={csrf} />
+                    <input type="hidden" name="projectId" value={projectId} />
+                    <input type="hidden" name="stage" value={s.key} />
+                    <button type="submit" className="rounded border border-line-strong px-2.5 py-1 text-sm font-bold text-ink-muted hover:text-ink">
+                      {s.label}
+                    </button>
+                  </form>
+                ))}
+              </div>
+            ) : null}
+            <form
+              action={addProjectStageAction}
+              onSubmit={(e) => {
+                if (!String(new FormData(e.currentTarget).get('stageName') ?? '').trim()) { e.preventDefault(); return }
+                setAddStageOpen(false)
+              }}
+              className="flex flex-wrap items-center gap-2"
+            >
+              <input type="hidden" name="csrf" value={csrf} />
+              <input type="hidden" name="projectId" value={projectId} />
+              <input
+                name="stageName"
+                placeholder={hiddenStages.length > 0 ? 'Or type a custom stage name' : 'Custom stage name (e.g. Second shooter)'}
+                maxLength={50}
+                aria-label="Custom stage name"
+                className={`${taskInputBase} ${taskBorderFor(false)} min-w-0 flex-1`}
+              />
+              <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface">Add stage</button>
+              <button type="button" onClick={() => setAddStageOpen(false)} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">Cancel</button>
+            </form>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => setAddStageOpen(true)}
-            className="self-start rounded px-1 py-1 text-sm font-bold text-accent-ink hover:underline"
-          >
-            + Add a stage
+          <button type="button" onClick={() => setAddStageOpen(true)} className="self-start rounded py-1 text-sm font-bold text-accent-ink hover:underline">
+            + Add stage
           </button>
-        )
-      ) : null}
+        )}
+      </div>
+
+      {/* RAIL: Next action + the job's Client / Notes / Team cards (5/16 of the row) */}
+      <aside className="flex flex-col gap-3 lg:col-span-5">
+        <div className="rounded-md border border-line-strong bg-surface p-4">
+          <h2 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-muted">
+            <span className="text-ink-muted"><IconArrowRight className="h-4 w-4" /></span>
+            Next action
+          </h2>
+          {allDone || !nextAction ? (
+            <p className="text-sm text-ink-muted">All caught up - no task is waiting.</p>
+          ) : nextAction.kind === 'task' ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <CheckBox done={false} />
+                <span className={`text-base ${nextAction.needsAttention ? 'font-bold text-danger' : 'text-ink'}`}>{nextAction.title}</span>
+                {nextAction.needsAttention ? <AttentionDot /> : null}
+              </div>
+              {nextAction.dueLabel ? (
+                <div className={`flex items-center gap-1.5 text-sm ${nextAction.needsAttention ? 'font-bold text-danger' : 'text-ink-muted'}`}>
+                  <IconCalendar className="h-4 w-4" /> Due {nextAction.dueLabel}
+                </div>
+              ) : null}
+              {nextAction.owner ? (
+                <div className="flex items-center gap-1.5 text-sm text-ink-muted">
+                  <IconUser className="h-4 w-4" /> {nextAction.owner}
+                </div>
+              ) : null}
+              <form action={toggleProjectTaskAction} className="mt-1">
+                <input type="hidden" name="csrf" value={csrf} />
+                <input type="hidden" name="projectId" value={projectId} />
+                <input type="hidden" name="workItemId" value={nextAction.taskId} />
+                <button type="submit" className="w-full rounded-md bg-ink px-3 py-2 text-sm font-bold text-surface hover:opacity-90">
+                  Mark as complete
+                </button>
+              </form>
+            </div>
+          ) : (
+            <div className="text-sm text-ink">
+              Waiting on <span className="font-bold">{nextAction.label}</span>
+              <span className="mt-1 block text-sm text-muted">This updates automatically from records - no action needed.</span>
+            </div>
+          )}
+        </div>
+        {rail}
+      </aside>
     </div>
   )
 }

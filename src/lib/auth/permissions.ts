@@ -28,9 +28,11 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/change-password': { roles: ['ADMIN', 'STUDIO', 'EDITOR'] },
 
   '/dashboard': { roles: ['ADMIN', 'STUDIO'] },
-  '/enquiries': { roles: ['ADMIN', 'STUDIO'] },
-  '/enquiries/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  '/leads': { roles: ['ADMIN', 'STUDIO'] },
+  '/leads/report': { roles: ['ADMIN', 'STUDIO'] },
+  '/leads/[id]': { roles: ['ADMIN', 'STUDIO'] },
   '/jobs': { roles: ['ADMIN', 'STUDIO'] },
+  '/jobs/report': { roles: ['ADMIN', 'STUDIO'] },
   '/jobs/[id]': { roles: ['ADMIN', 'STUDIO'] },
 
   '/quotes': { roles: ['ADMIN', 'STUDIO'] },
@@ -40,7 +42,9 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/quotes/[id]/preview': { roles: ['ADMIN', 'STUDIO'] },
   '/jobs/[id]/invoice/[invoiceId]': { roles: ['ADMIN', 'STUDIO'] },
   '/finance/new': { roles: ['ADMIN', 'STUDIO'] },
+  '/finance/report': { roles: ['ADMIN', 'STUDIO'] },
   '/finance/[invoiceId]': { roles: ['ADMIN', 'STUDIO'] },
+  '/finance/[invoiceId]/edit': { roles: ['ADMIN', 'STUDIO'] },
   '/clients': { roles: ['ADMIN', 'STUDIO'] },
   '/clients/new': { roles: ['ADMIN', 'STUDIO'] },
   '/clients/import': { roles: ['ADMIN', 'STUDIO'] },

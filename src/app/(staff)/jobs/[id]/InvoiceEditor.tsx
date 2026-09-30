@@ -1,10 +1,14 @@
 'use client'
 
-import { useActionState, useEffect, useRef, useState, useTransition } from 'react'
+import { useActionState, useEffect, useRef, useState, type ReactNode } from 'react'
+import Link from 'next/link'
 import { Alert } from '@/components/ui/Alert'
-import { Button } from '@/components/ui/Button'
+import { Button, secondaryLinkLg } from '@/components/ui/Button'
+import { MainAside } from '@/components/EditLayout'
 import { Field, Select, Textarea, TextInput } from '@/components/ui/form'
-import { createInvoiceLinesAction, saveInvoiceTemplateAction, updateInvoiceLinesAction, type QuoteActionState } from '../actions'
+import { createInvoiceLinesAction, updateInvoiceLinesAction, type QuoteActionState } from '../actions'
+import { formatScheduleDate, presetRows, type ScheduleKey, type ScheduleRow } from '@/features/finance/payment-schedule'
+import { PaymentScheduleSelect } from './PaymentScheduleSelect'
 
 const IDLE: QuoteActionState = { status: 'idle' }
 
@@ -17,11 +21,27 @@ export type InitialInvoice = {
   poNumber: string
   notes: string
   discount: string
+
+  discountReason?: string
   lines: { name: string; description: string; quantity: number; unitPrice: string; discount: string }[]
   instalments: { label: string; dueAt: string; amount: string }[]
 }
 export type JobContext = { name: string; type: string | null; shootLabel: string | null; location: string | null }
 export type ClientContext = { name: string; email: string | null; phone: string | null; address: string | null }
+
+export type ContactPrefill = {
+  jobName: string
+  clientName: string
+  clientEmail: string
+  clientPhone: string
+  numberPreview: string
+  defaultType: string
+  issueDate: string
+
+  shootDate?: string | null
+
+  due?: 'ON_ISSUE' | 'NET7' | 'NET14'
+}
 type Line = { id: number; name: string; description: string; quantity: number; unitPrice: string; discount: string }
 type Instalment = { id: number; label: string; dueAt: string; amount: string }
 type Draft = { name: string; description: string; quantity: number; unitPrice: string; discount: string; discountMode: 'percent' | 'fixed' }
@@ -36,6 +56,15 @@ function amountOf(l: { unitPrice: string; quantity: number; discount: string }):
   return Math.max((Number(l.unitPrice) || 0) * l.quantity - (Number(l.discount) || 0), 0)
 }
 
+function FieldRow({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[7em_minmax(0,1fr)] items-center gap-4">
+      <label htmlFor={htmlFor} className="text-sm font-medium text-ink">{label}</label>
+      {children}
+    </div>
+  )
+}
+
 export function InvoiceEditor({
   csrf,
   projectId,
@@ -46,6 +75,7 @@ export function InvoiceEditor({
   job,
   client,
   amountPaid,
+  contact,
 }: {
   csrf: string
   projectId: string
@@ -56,6 +86,7 @@ export function InvoiceEditor({
   job?: JobContext
   client?: ClientContext
   amountPaid?: string
+  contact?: ContactPrefill
 }) {
   const editing = Boolean(invoiceId)
   const workspace = Boolean(job || client)
@@ -63,12 +94,21 @@ export function InvoiceEditor({
   const [lines, setLines] = useState<Line[]>(() => (initial?.lines ?? []).map((l, i) => ({ id: i + 1, ...l })))
   const [discount, setDiscount] = useState(initial?.discount ?? '')
   const [nextId, setNextId] = useState((initial?.lines.length ?? 0) + 1)
-  const [invoiceNumber, setInvoiceNumber] = useState(initial?.invoiceNumber ?? '')
-  const [invoiceDate, setInvoiceDate] = useState(initial?.invoiceDate || new Date().toISOString().slice(0, 10))
+  const [invoiceNumber, setInvoiceNumber] = useState(initial?.invoiceNumber || contact?.numberPreview || '')
+  const [invoiceDate, setInvoiceDate] = useState(initial?.invoiceDate || contact?.issueDate || new Date().toISOString().slice(0, 10))
   const [poNumber, setPoNumber] = useState(initial?.poNumber ?? '')
-  const [, startSave] = useTransition()
+
+  const [jobName, setJobName] = useState(contact?.jobName ?? '')
+  const [clientName, setClientName] = useState(contact?.clientName ?? '')
+  const [clientEmail, setClientEmail] = useState(contact?.clientEmail ?? '')
+  const [clientPhone, setClientPhone] = useState(contact?.clientPhone ?? '')
+  const [due, setDue] = useState<'ON_ISSUE' | 'NET7' | 'NET14'>(contact?.due ?? 'ON_ISSUE')
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [instalments, setInstalments] = useState<Instalment[]>(() => (initial?.instalments ?? []).map((it, i) => ({ id: i + 1, ...it })))
+
+  const [schedule, setSchedule] = useState<ScheduleKey>((initial?.instalments.length ?? 0) > 0 ? 'CUSTOM' : 'NONE')
+  const [discountOpen, setDiscountOpen] = useState(Boolean(initial?.discount))
+  const shootDate = contact?.shootDate ?? null
   const [nextInstId, setNextInstId] = useState((initial?.instalments.length ?? 0) + 1)
   const [state, action, pending] = useActionState(editing ? updateInvoiceLinesAction : createInvoiceLinesAction, IDLE)
 
@@ -150,39 +190,27 @@ export function InvoiceEditor({
     setLines(t.lines.map((l) => ({ id: idc++, name: l.itemName ?? '', description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: '' })))
     setNextId(idc)
   }
-  function saveTemplate() {
-    const name = window.prompt('Save these items as a template. Template name:')
-    if (!name) return
-    const fd = new FormData()
-    fd.set('csrf', csrf)
-    fd.set('projectId', projectId)
-    fd.set('name', name)
-    fd.set('lines', JSON.stringify(lines.map((l) => ({ itemName: l.name, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice }))))
-    startSave(async () => { await saveInvoiceTemplateAction(fd) })
-  }
 
   const gross = lines.reduce((sum, l) => sum + amountOf(l), 0)
   const disc = Math.min(Number(discount) || 0, gross)
   const total = Math.max(gross - disc, 0)
   const gst = total / 11
   const subtotal = total - gst
-  const dueDates = instalments.map((it) => it.dueAt).filter(Boolean).sort()
+
+  const presetSchedule = schedule !== 'NONE' && schedule !== 'CUSTOM' ? presetRows(schedule, total, invoiceDate, shootDate) : null
+  const scheduleRows: ScheduleRow[] =
+    schedule === 'CUSTOM' ? instalments.map(({ label, dueAt, amount }) => ({ label, dueAt, amount })) : (presetSchedule ?? [])
+  const dueDates = scheduleRows.map((it) => it.dueAt).filter(Boolean).sort()
   const dueDisplay = dueDates.length > 0 ? dueDates[dueDates.length - 1]! : 'On issue'
 
   const scheduled = instalments.reduce((s, it) => s + (Number(it.amount) || 0), 0)
-  const scheduleMismatch = instalments.length > 0 && Math.abs(scheduled - total) > 0.005
+  const scheduleMismatch = schedule === 'CUSTOM' && instalments.length > 0 && Math.abs(scheduled - total) > 0.005
 
-  function genFull() {
-    setInstalments([{ id: nextInstId, label: 'Full payment', dueAt: invoiceDate, amount: total.toFixed(2) }])
-    setNextInstId((n) => n + 1)
-  }
-  function genDeposit() {
-    const half = Math.round((total / 2) * 100) / 100
-    setInstalments([
-      { id: nextInstId, label: 'Deposit (50%)', dueAt: invoiceDate, amount: half.toFixed(2) },
-      { id: nextInstId + 1, label: 'Balance (50%)', dueAt: '', amount: (total - half).toFixed(2) },
-    ])
-    setNextInstId((n) => n + 2)
+  function customiseSchedule() {
+    const rows = presetSchedule ?? []
+    setInstalments(rows.map((r, i) => ({ id: nextInstId + i, ...r })))
+    setNextInstId((n) => n + rows.length)
+    setSchedule('CUSTOM')
   }
   function addInst() {
     setInstalments((is) => [...is, { id: nextInstId, label: '', dueAt: '', amount: '' }])
@@ -206,27 +234,65 @@ export function InvoiceEditor({
     lines.map((l) => ({ itemName: l.name, description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: l.discount || '' })),
   )
   const instalmentPayload = JSON.stringify(
-    instalments.map((it) => ({ label: it.label, dueAt: it.dueAt, amount: it.amount || '0' })),
+    scheduleRows.map((it) => ({ label: it.label, dueAt: it.dueAt, amount: it.amount || '0' })),
   )
 
   return (
     <>
-      <form action={action} className="mt-4 flex flex-col gap-4 border-t border-line pt-4">
-        {state.status === 'error' ? <Alert tone="danger" title={state.message} /> : null}
+      <form action={action} className="mt-4 border-t border-line pt-6">
+        {state.status === 'error' ? <div className="mb-6"><Alert tone="danger" title={state.message} /></div> : null}
         <input type="hidden" name="csrf" value={csrf} />
         <input type="hidden" name="projectId" value={projectId} />
         {editing ? <input type="hidden" name="invoiceId" value={invoiceId} /> : null}
         <input type="hidden" name="lines" value={payload} />
         <input type="hidden" name="discount" value={disc > 0 ? String(disc) : ''} />
-        <input type="hidden" name="invoiceNumber" value={invoiceNumber} />
+        <input type="hidden" name="discountReason" value={disc > 0 ? (initial?.discountReason ?? '') : ''} />
+        {/* Leaving the prefilled number untouched submits blank, so the server auto-allocates it (keeping
+            the counter correct); a real edit is sent as the chosen number. */}
+        <input type="hidden" name="invoiceNumber" value={contact && invoiceNumber === contact.numberPreview ? '' : invoiceNumber} />
         <input type="hidden" name="invoiceDate" value={invoiceDate} />
         <input type="hidden" name="poNumber" value={poNumber} />
         <input type="hidden" name="notes" value={notes} />
         <input type="hidden" name="instalments" value={instalmentPayload} />
+        {contact ? (
+          <>
+            <input type="hidden" name="type" value={contact.defaultType} />
+            <input type="hidden" name="billingName" value={clientName} />
+            <input type="hidden" name="billingEmail" value={clientEmail} />
+            <input type="hidden" name="billingPhone" value={clientPhone} />
+            <input type="hidden" name="jobName" value={jobName} />
+            <input type="hidden" name="due" value={due} />
+          </>
+        ) : null}
 
-        {workspace ? null : <p className="text-sm font-semibold text-ink">{editing ? 'Edit invoice' : 'New invoice'}</p>}
+        {/* One full-width column (approved mockup): fields, then products, then totals on the right with the
+            payment schedule on the left and notes + the action under the totals. */}
+        <div className="flex flex-col gap-8">
+        {workspace || contact ? null : <p className="text-sm font-semibold text-ink">{editing ? 'Edit invoice' : 'New invoice'}</p>}
 
-        {workspace ? (
+        {contact ? (
+
+          <div className="grid grid-cols-1 gap-x-12 gap-y-4 md:grid-cols-2">
+            <div className="flex flex-col gap-4">
+              <FieldRow label="Invoice number" htmlFor="inv-num"><TextInput id="inv-num" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} maxLength={30} /></FieldRow>
+              <FieldRow label="PO number" htmlFor="inv-po"><TextInput id="inv-po" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="Optional" maxLength={60} /></FieldRow>
+              <FieldRow label="Issue date" htmlFor="inv-date"><TextInput id="inv-date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} /></FieldRow>
+              <FieldRow label="Due" htmlFor="inv-due">
+                <Select id="inv-due" value={due} onChange={(e) => setDue(e.target.value as 'ON_ISSUE' | 'NET7' | 'NET14')}>
+                  <option value="ON_ISSUE">On issue</option>
+                  <option value="NET7">7 days</option>
+                  <option value="NET14">14 days</option>
+                </Select>
+              </FieldRow>
+            </div>
+            <div className="flex flex-col gap-4">
+              <FieldRow label="Job name" htmlFor="inv-job"><TextInput id="inv-job" value={jobName} onChange={(e) => setJobName(e.target.value)} maxLength={150} /></FieldRow>
+              <FieldRow label="Client name" htmlFor="inv-client"><TextInput id="inv-client" value={clientName} onChange={(e) => setClientName(e.target.value)} maxLength={150} /></FieldRow>
+              <FieldRow label="Email" htmlFor="inv-email"><TextInput id="inv-email" type="email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} maxLength={255} /></FieldRow>
+              <FieldRow label="Phone" htmlFor="inv-phone"><TextInput id="inv-phone" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} maxLength={40} /></FieldRow>
+            </div>
+          </div>
+        ) : workspace ? (
 
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             <div className="rounded-md border border-line bg-surface p-4">
@@ -240,7 +306,7 @@ export function InvoiceEditor({
                   </Select>
                 </label>
                 <label className="flex flex-col text-xs text-ink-muted">Invoice number
-                  <TextInput value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Auto (INV-...)" maxLength={30} className="mt-1 h-9" />
+                  <TextInput value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Auto (I...)" maxLength={30} className="mt-1 h-9" />
                 </label>
                 <label className="flex flex-col text-xs text-ink-muted">Issue date
                   <TextInput type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="mt-1 h-9" />
@@ -284,7 +350,7 @@ export function InvoiceEditor({
                 <option value="SUPPLEMENTARY">Supplementary</option>
               </Select>
             </Field>
-            <Field label="Invoice number" htmlFor="inv-num" hint="Blank = auto (INV-...).">
+            <Field label="Invoice number" htmlFor="inv-num" hint="Blank = auto (I...).">
               <TextInput id="inv-num" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="Auto" maxLength={30} />
             </Field>
             <Field label="Issue date" htmlFor="inv-date">
@@ -296,25 +362,31 @@ export function InvoiceEditor({
           </div>
         )}
 
-        {/* Products & Packages (table left, totals right) */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-        <div className="min-w-0 flex-1">
+        {/* Products & packages (full editing-column width; totals live in the summary on the right) */}
+        <section className="min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-semibold text-ink">Products &amp; packages</p>
-            {templates.length > 0 ? (
-              <Select aria-label="Apply a template" value="" onChange={(e) => { applyTemplate(e.target.value); e.currentTarget.value = '' }} className="h-8 max-w-xs">
-                <option value="" disabled>Apply a template...</option>
-                {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </Select>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              {templates.length > 0 ? (
+                <Select aria-label="Apply a template" value="" onChange={(e) => { applyTemplate(e.target.value); e.currentTarget.value = '' }} className="h-8 max-w-xs">
+                  <option value="" disabled>Apply a template...</option>
+                  {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </Select>
+              ) : null}
+              <Button type="button" variant="secondary" size="sm" onClick={openAdd}>
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                Add products &amp; packages
+              </Button>
+            </div>
           </div>
 
           {lines.length === 0 ? (
-            <p className="mt-2 rounded border border-dashed border-line px-3 py-6 text-center text-sm text-ink-muted">
-              No items yet. Use <span className="font-semibold text-ink">Add products &amp; packages</span> to add one.
-            </p>
+
+            <div className="mt-2 flex items-center justify-center rounded border border-line-strong bg-surface px-3 py-8">
+              <p className="text-sm text-muted">No products or packages added yet.</p>
+            </div>
           ) : (
-            <div className="mt-2 overflow-x-auto rounded-md border border-line">
+            <div className="mt-2 overflow-x-auto rounded-md border border-muted">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-line-strong text-left text-xs uppercase tracking-wide text-muted">
@@ -373,77 +445,109 @@ export function InvoiceEditor({
             </div>
           )}
 
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <Button type="button" onClick={openAdd}>
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-              Add products &amp; packages
-            </Button>
-            {lines.length > 0 ? (
-              <Button type="button" variant="secondary" size="sm" onClick={saveTemplate}>Save as template</Button>
-            ) : null}
-            <div className="flex items-center gap-2">
-              <label htmlFor="inv-discount" className="text-sm text-ink-muted">Discount</label>
-              <TextInput id="inv-discount" inputMode="decimal" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="0.00" className="h-8 w-28" />
-            </div>
-          </div>
-        </div>
+        </section>
 
-        {/* Totals (right column) */}
-        <div className="w-full rounded-md border border-line bg-surface p-4 text-sm lg:w-72 lg:shrink-0">
-          <div className="flex justify-between py-0.5 text-ink-muted"><span>Subtotal (excl. GST)</span><span className="tabular">{money(subtotal)}</span></div>
-          <div className="flex justify-between py-0.5 text-ink-muted"><span>GST (10%)</span><span className="tabular">{money(gst)}</span></div>
-          {disc > 0 ? <div className="flex justify-between py-0.5 text-ink-muted"><span>Discount</span><span className="tabular">-{money(disc)}</span></div> : null}
-          <div className="mt-1 flex justify-between border-t border-line pt-2 text-base font-semibold text-ink"><span>Total (incl. GST)</span><span className="tabular">{money(total)}</span></div>
-          {workspace ? (
-            <>
-              <div className="mt-1 flex justify-between py-0.5 text-ink-muted"><span>Paid</span><span className="tabular text-delivered-ink">{money(paidNum)}</span></div>
-              <div className="flex justify-between py-0.5 font-semibold text-ink"><span>Balance</span><span className="tabular">{money(Math.max(total - paidNum, 0))}</span></div>
-            </>
+        {/* Payment schedule is its own full-width row; the $0 notice explains an empty schedule. */}
+        <section className="min-w-0">
+          {total <= 0 ? <Alert tone="info" title="A payment schedule cannot be calculated because the total amount due is $0.00." /> : null}
+          <label htmlFor="inv-schedule" className="text-sm font-semibold text-ink">Payment schedule</label>
+          <div className="mt-2 max-w-2xl">
+            <PaymentScheduleSelect id="inv-schedule" value={schedule} onChange={setSchedule} shootDate={shootDate} />
+          </div>
+          {presetSchedule ? (
+
+            <div className="mt-3 max-w-2xl">
+              <div className="divide-y divide-line-strong rounded border border-muted bg-surface">
+                {presetSchedule.map((r) => (
+
+                  <div key={r.label} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-2 text-sm sm:grid-cols-[minmax(0,1fr)_9em_8em]">
+                    <span className="text-ink">{r.label}</span>
+                    <span className="tabular whitespace-nowrap text-ink-muted max-sm:col-start-1 max-sm:row-start-2">{r.dueAt ? `Due ${formatScheduleDate(r.dueAt)}` : 'Due date set later'}</span>
+                    <span className="tabular text-right font-medium text-ink max-sm:col-start-2 max-sm:row-start-1">{money(Number(r.amount))}</span>
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={customiseSchedule} className="mt-2 text-sm font-medium text-accent-ink hover:underline">Customise</button>
+            </div>
           ) : null}
-        </div>
-        </div>
-
-        {/* Payment schedule */}
-        <div className="border-t border-line pt-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-ink">Payment schedule</p>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" size="sm" onClick={genFull}>Full payment</Button>
-              <Button type="button" variant="secondary" size="sm" onClick={genDeposit}>50% + 50%</Button>
-              <Button type="button" variant="secondary" size="sm" onClick={addInst}>Add instalment</Button>
-            </div>
-          </div>
-          {instalments.length === 0 ? (
-            <p className="mt-2 text-sm text-ink-muted">No split - a single full payment on issue.</p>
-          ) : (
-            <div className="mt-2 flex flex-col gap-2">
+          {schedule === 'CUSTOM' ? (
+            <div className="mt-3 flex flex-col gap-2">
               {instalments.map((it) => (
-                <div key={it.id} className="grid grid-cols-1 gap-2 sm:grid-cols-12 sm:items-center">
-                  <div className="sm:col-span-5"><TextInput aria-label="Instalment label" value={it.label} onChange={(e) => updateInst(it.id, { label: e.target.value })} placeholder="Deposit" /></div>
-                  <div className="sm:col-span-4"><TextInput aria-label="Due date" type="date" value={it.dueAt} onChange={(e) => updateInst(it.id, { dueAt: e.target.value })} /></div>
-                  <div className="sm:col-span-2"><TextInput aria-label="Instalment amount" inputMode="decimal" value={it.amount} onChange={(e) => updateInst(it.id, { amount: e.target.value })} placeholder="0.00" /></div>
-                  <div className="flex justify-end sm:col-span-1">
+
+                <div key={it.id} className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,20em)_12em_10em_2em] sm:items-center">
+                  <div><TextInput aria-label="Instalment label" value={it.label} onChange={(e) => updateInst(it.id, { label: e.target.value })} placeholder="Deposit" /></div>
+                  <div><TextInput aria-label="Due date" type="date" value={it.dueAt} onChange={(e) => updateInst(it.id, { dueAt: e.target.value })} /></div>
+                  <div><TextInput aria-label="Instalment amount" inputMode="decimal" value={it.amount} onChange={(e) => updateInst(it.id, { amount: e.target.value })} placeholder="0.00" /></div>
+                  <div className="flex justify-end">
                     <button type="button" onClick={() => removeInst(it.id)} aria-label="Remove instalment" className="rounded p-1 text-ink-muted hover:bg-paper hover:text-danger">
                       <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
                     </button>
                   </div>
                 </div>
               ))}
-              <p className={`text-xs ${scheduleMismatch ? 'font-bold text-danger' : 'text-ink-muted'}`}>
-                Scheduled {money(scheduled)} of {money(total)}{scheduleMismatch ? ' - must match the total' : ''}
-              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button type="button" variant="secondary" size="sm" onClick={addInst}>Add payment stage</Button>
+                <p className={`text-xs ${scheduleMismatch ? 'font-bold text-danger' : 'text-ink-muted'}`}>
+                  Scheduled {money(scheduled)} of {money(total)}{scheduleMismatch ? ' - must match the total' : ''}
+                </p>
+              </div>
             </div>
-          )}
-        </div>
+          ) : null}
+        </section>
 
-        <Field label="Notes (optional)" htmlFor="inv-notes">
-          <Textarea id="inv-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={2000} placeholder="Notes shown on the invoice..." />
-        </Field>
+        {/* Notes (main) + Financial summary (aside) share one row and a top keyline. */}
+        <MainAside
+          main={
+            <Field label="Notes (optional)" htmlFor="inv-notes">
+              <Textarea id="inv-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={6} maxLength={2000} placeholder="Notes shown on the invoice..." />
+            </Field>
+          }
+          aside={
+            <div className="text-sm">
+              <div className="flex justify-between py-1 text-ink"><span>Subtotal (excl. GST)</span><span className="tabular">{money(subtotal)}</span></div>
+              <div className="flex items-center justify-between gap-3 py-1 text-ink">
+                <label htmlFor="inv-discount">Discount</label>
+                {discountOpen || disc > 0 ? (
+                  <TextInput
+                    id="inv-discount"
+                    inputMode="decimal"
+                    value={discount}
+                    onChange={(e) => setDiscount(e.target.value)}
+                    onBlur={() => { if (!(Number(discount) > 0)) setDiscountOpen(false) }}
+                    placeholder="0.00"
+                    autoFocus={discountOpen && !discount}
+                    className="h-8 w-28 text-right"
+                  />
+                ) : (
+                  <button type="button" onClick={() => setDiscountOpen(true)} className="text-ink-muted hover:text-ink hover:underline">None</button>
+                )}
+              </div>
+              <div className="flex justify-between py-1 text-ink"><span>GST (10%)</span><span className="tabular">{money(gst)}</span></div>
+              <div className="mt-2 flex items-baseline justify-between border-t border-line-strong pt-3 font-semibold text-ink">
+                <span className="text-lg">Total due</span>
+                <span className="tabular text-xl">{money(total)}</span>
+              </div>
+              {workspace ? (
+                <>
+                  <div className="mt-1 flex justify-between py-0.5 text-ink-muted"><span>Paid</span><span className="tabular text-delivered-ink">{money(paidNum)}</span></div>
+                  <div className="flex justify-between py-0.5 font-semibold text-ink"><span>Balance</span><span className="tabular">{money(Math.max(total - paidNum, 0))}</span></div>
+                </>
+              ) : null}
+            </div>
+          }
+        />
 
+        {/* Action footer: its own full-width row (Carbon in-page - primary first, secondary after). */}
         <div>
-          <Button type="submit" loading={pending} disabled={lines.length === 0 || scheduleMismatch}>
-            {editing ? 'Save changes' : 'Raise invoice'}
-          </Button>
+          <div className="grid w-full max-w-sm grid-cols-2 gap-3">
+            <Button type="submit" size="lg" loading={pending} disabled={lines.length === 0 || scheduleMismatch} className="w-full rounded-lg">
+              {editing ? 'Save changes' : 'Save invoice'}
+            </Button>
+            <Link href={editing ? `/finance/${invoiceId}` : projectId ? `/jobs/${projectId}` : '/finance'} className={`w-full ${secondaryLinkLg}`}>
+              Cancel
+            </Link>
+          </div>
+        </div>
         </div>
       </form>
 
