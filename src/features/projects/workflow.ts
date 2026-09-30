@@ -43,19 +43,20 @@ export function stageLabel(key: string): string {
  * and they never drift out of sync. buildProjectBoard injects these virtual rows into their stage.
  */
 export const AUTO_MILESTONES: { stage: string; key: string; title: string; fact: keyof ProjectFacts; note: string }[] = [
-  { stage: 'shoot', key: 'shoot_scheduled', title: 'Shoot scheduled', fact: 'shootScheduled', note: 'Confirmed automatically once a shoot date is booked.' },
   { stage: 'delivery', key: 'final_payment_received', title: 'Final payment received', fact: 'finalPaid', note: 'Confirmed automatically when the balance is paid in full.' },
   { stage: 'delivery', key: 'delivery_complete', title: 'Delivery complete', fact: 'deliveryComplete', note: 'Confirmed automatically once the gallery is delivered and paid.' },
 ]
 
 /** The production workflow seeded for a new Job: staff (manual) tasks only, action-oriented names
- *  (Verb + Object). System milestones (Shoot scheduled / Final payment received / Delivery complete) are
- *  NOT seeded here - they are read-only rows derived from real records (see AUTO_MILESTONES). Optional
- *  add-on stages (video/film/album) start empty and are added per package. */
+ *  (Verb + Object). System milestones (Final payment received / Delivery complete) are NOT seeded here -
+ *  they are read-only rows derived from real records (see AUTO_MILESTONES). "Shoot scheduled" is a staff
+ *  task (staff confirm it), NOT a system milestone. Optional add-on stages (video/film/album) start empty
+ *  and are added per package. */
 export const DEFAULT_PROJECT_TASKS: { stage: string; key: string; title: string; type: TaskType }[] = [
   { stage: 'preshoot', key: 'confirm_shoot_details', title: 'Confirm shoot details', type: 'TODO' },
   { stage: 'preshoot', key: 'send_pre_shoot_reminder', title: 'Send pre-shoot reminder', type: 'TODO' },
 
+  { stage: 'shoot', key: 'shoot_scheduled', title: 'Shoot scheduled', type: 'TODO' },
   { stage: 'shoot', key: 'mark_shoot_completed', title: 'Mark shoot completed', type: 'SHOOT' },
 
   { stage: 'editing', key: 'send_files_to_editor', title: 'Send files to editor', type: 'TODO' },
@@ -101,6 +102,7 @@ export const OPTIONAL_STAGE_TASKS: Record<string, { title: string; type: TaskTyp
 
 /** A short, formal note under each default and optional task - what it is and when it is done. */
 export const PROJECT_TASK_NOTE: Record<string, string> = {
+  'Shoot scheduled': 'Tick once a shoot date is booked with the client.',
   'Confirm shoot details': 'Lock the date, timeline, locations, and key people with the client.',
   'Send pre-shoot reminder': 'Remind the client of the details shortly before the shoot.',
   'Mark shoot completed': 'Tick once the shoot has been photographed and filmed.',
