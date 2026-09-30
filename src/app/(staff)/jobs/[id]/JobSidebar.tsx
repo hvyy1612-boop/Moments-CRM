@@ -194,11 +194,11 @@ export function JobSidebar({
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-sm font-bold text-ink">{n.author}</span>
                   <div className="flex shrink-0 items-center gap-3 opacity-0 transition-opacity group-hover:opacity-100">
-                    <button type="button" onClick={() => setEditingNoteId(n.id)} className="text-xs font-bold text-accent-ink hover:underline">Edit</button>
-                    <form action={deleteInternalNoteAction}>
+                    <button type="button" onClick={() => setEditingNoteId(n.id)} className="text-xs text-accent-ink hover:underline">Edit</button>
+                    <form action={deleteInternalNoteAction} className="contents">
                       {hidden}
                       <input type="hidden" name="communicationId" value={n.id} />
-                      <button type="submit" aria-label="Delete note" className="text-xs text-muted hover:text-lost-ink">Delete</button>
+                      <button type="submit" aria-label="Delete note" className="text-xs text-lost-ink hover:underline">Delete</button>
                     </form>
                   </div>
                 </div>
