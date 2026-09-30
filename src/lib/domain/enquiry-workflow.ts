@@ -60,7 +60,7 @@ export async function cancelOpenWorkItems(tx: Tx, enquiryId: string) {
 export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> {
   const enquiry = await prisma.enquiry.findUnique({
     where: { id: enquiryId },
-    select: { createdAt: true, status: true },
+    select: { createdAt: true, status: true, owner: { select: { name: true } } },
   })
   const booked = enquiry?.status === 'BOOKING_CONFIRMED'
   const items = await prisma.workItem.findMany({
@@ -90,7 +90,7 @@ export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> 
     completedByName: w.completedBy?.name ?? null,
     completedAt: w.completedAt ?? null,
   }))
-  return buildEnquiryBoard(tasks, formatSydneyDate, enquiry?.createdAt ?? null, new Date(), booked)
+  return buildEnquiryBoard(tasks, formatSydneyDate, enquiry?.createdAt ?? null, new Date(), booked, enquiry?.owner?.name ?? null)
 }
 
 /** Staff sends a reply: records an outbound message and moves the ball to the client. A brand-new lead

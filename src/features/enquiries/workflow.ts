@@ -141,6 +141,8 @@ export type EnqTaskRow = {
   blockedBy: string | null
   completedByName: string | null
   completedAt: Date | null
+  /** The lead's owner (staff), shown uniformly per lead - mirrors the Jobs board's ownerName. */
+  owner: string | null
 }
 export type EnqStage = {
   key: string
@@ -165,6 +167,7 @@ export function buildEnquiryBoard(
   anchorDate: Date | null = null,
   now: Date | null = null,
   forceAllDone = false,
+  ownerName: string | null = null,
 ): EnquiryBoard {
   const doneTitles = new Set(tasks.filter((t) => t.status === 'COMPLETED').map((t) => t.title))
 
@@ -201,6 +204,7 @@ export function buildEnquiryBoard(
           blockedBy,
           completedByName: t.completedByName,
           completedAt: t.completedAt,
+          owner: ownerName,
         }
       })
 

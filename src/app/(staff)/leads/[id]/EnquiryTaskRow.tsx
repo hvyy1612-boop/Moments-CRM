@@ -3,16 +3,16 @@
 import { useOptimistic, useRef, useTransition } from 'react'
 import type { EnqTaskRow } from '@/features/enquiries/workflow'
 import { deleteEnquiryTaskAction, moveEnquiryTaskAction, toggleWorkItemAction } from '../actions'
-import { AttentionDot, StatusBadge } from '../../jobs/[id]/EditableTaskRow'
+import { AttentionDot, OwnerCell, StatusBadge } from '../../jobs/[id]/EditableTaskRow'
 import { IconMore } from '../../jobs/[id]/icons'
 
-// Fixed workflow row grid, to the Lead-detail layout spec: checkbox | Task | Due date | Status | action.
-// Task is the one flexible column (1fr); Due date and Status get steady em widths and the action a narrow
-// fixed track. With the even column gap on the row below, the columns line up in every phase and stay a
-// calm, evenly-spaced cluster instead of drifting apart. Header and every row share these exact tracks
-// via subgrid, and every row carries the same side and vertical padding.
+// Fixed workflow row grid: checkbox | Task | Due date | Owner | Status | action. Task is the one flexible
+// column (1fr); Due date / Owner / Status get steady em widths (Owner wide enough for a full staff name)
+// and the action a narrow fixed track. Due date, Owner and Status are CENTERED in their columns (header +
+// content) per the approved layout. Header and every row share these exact tracks via subgrid, with the
+// same side and vertical padding.
 export const LEADS_PHASE_GRID =
-  'grid grid-cols-[2.25em_minmax(0,1fr)_10em_8.5em_2.75em] items-center'
+  'grid grid-cols-[2.25em_minmax(0,1fr)_10em_11.5em_8.5em_2.75em] items-center'
 export const LEADS_ROW = 'col-span-full grid grid-cols-subgrid items-center gap-x-6 border-l-2 px-4 py-3'
 
 const menuItem = 'block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper'
@@ -95,16 +95,23 @@ export function EnquiryTaskRow({
         {done && task.completedByName ? <span className="block text-xs text-muted">Done by {task.completedByName}</span> : null}
       </div>
 
-      {/* Due date, with the stored time on a second line below it when the task has one */}
-      <div className="text-sm">
+      {/* Due date (centered), with the stored time on a second line below it when the task has one */}
+      <div className="text-center text-sm">
         <div className={`whitespace-nowrap ${attention ? 'font-bold text-danger' : task.dueLabel ? 'text-ink-muted' : 'text-muted'}`}>
           {task.dueLabel ?? (task.noDate ? 'No date' : '-')}
         </div>
         {timeLabel ? <div className="whitespace-nowrap text-xs text-muted">{timeLabel}</div> : null}
       </div>
 
-      {/* Status */}
-      <StatusBadge done={done} />
+      {/* Owner (centered) */}
+      <div className="flex justify-center">
+        <OwnerCell name={task.owner} />
+      </div>
+
+      {/* Status (centered) */}
+      <div className="flex justify-center">
+        <StatusBadge done={done} />
+      </div>
 
       {/* Actions (kebab) */}
       <details ref={menuRef} className="relative justify-self-center">

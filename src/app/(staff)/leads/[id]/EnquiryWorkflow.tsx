@@ -18,7 +18,7 @@ import {
   updateEnquiryTaskAction,
 } from '../actions'
 import { EnquiryTaskRow, LEADS_PHASE_GRID, LEADS_ROW } from './EnquiryTaskRow'
-import { AttentionDot, CheckBox, StatusBadge } from '../../jobs/[id]/EditableTaskRow'
+import { AttentionDot, CheckBox, OwnerCell, StatusBadge } from '../../jobs/[id]/EditableTaskRow'
 import { IconChevron } from '../../jobs/[id]/icons'
 
 type Filter = 'all' | 'pending' | 'attention'
@@ -191,8 +191,9 @@ export function EnquiryWorkflow({
                     <div className={`${LEADS_ROW} border-transparent bg-paper text-xs font-medium uppercase tracking-wider text-muted`}>
                       <span />
                       <span>Task</span>
-                      <span>Due date</span>
-                      <span>Status</span>
+                      <span className="text-center">Due date</span>
+                      <span className="text-center">Owner</span>
+                      <span className="text-center">Status</span>
                       <span />
                     </div>
 
@@ -212,8 +213,9 @@ export function EnquiryWorkflow({
                                 </span>
                                 {t.note ? <span className="block truncate text-sm text-muted">{t.note}</span> : null}
                               </div>
-                              <div className="whitespace-nowrap text-sm text-muted">{t.dueLabel ?? (t.noDate ? 'No date' : '-')}</div>
-                              <StatusBadge done={t.done} />
+                              <div className="whitespace-nowrap text-center text-sm text-muted">{t.dueLabel ?? (t.noDate ? 'No date' : '-')}</div>
+                              <div className="flex justify-center"><OwnerCell name={t.owner} /></div>
+                              <div className="flex justify-center"><StatusBadge done={t.done} /></div>
                               <span />
                             </div>
                           )
