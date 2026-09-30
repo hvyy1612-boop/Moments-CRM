@@ -128,7 +128,7 @@ export function EnquiryWorkflow({
                   if (!String(new FormData(e.currentTarget).get('toStage') ?? '').trim()) { e.preventDefault(); return }
                   setRenamingStage(null)
                 }}
-                className="flex flex-wrap items-center gap-2 px-3 py-2.5"
+                className="flex flex-wrap items-center gap-2 px-4 py-3"
               >
                 <input type="hidden" name="csrf" value={csrf} />
                 <input type="hidden" name="enquiryId" value={enquiryId} />
@@ -145,7 +145,7 @@ export function EnquiryWorkflow({
                 <button type="button" onClick={() => setRenamingStage(null)} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">Cancel</button>
               </form>
             ) : (
-              <div className="flex w-full items-center gap-2 rounded-t-md px-3 py-3 hover:bg-paper">
+              <div className="flex w-full items-center gap-2 rounded-t-md px-4 py-3 hover:bg-paper">
                 <button
                   type="button"
                   onClick={() => toggleCollapsed(stage.key)}
@@ -188,7 +188,7 @@ export function EnquiryWorkflow({
               <div className="border-t border-line">
                 {stage.total > 0 ? (
                   <div className={LEADS_PHASE_GRID}>
-                    <div className={`${LEADS_ROW} border-transparent bg-paper text-xs font-bold uppercase tracking-wide text-muted`}>
+                    <div className={`${LEADS_ROW} border-transparent bg-paper text-xs font-medium uppercase tracking-wider text-muted`}>
                       <span />
                       <span>Task</span>
                       <span>Due date</span>
@@ -197,7 +197,7 @@ export function EnquiryWorkflow({
                     </div>
 
                     {rows.length === 0 ? (
-                      <div className="col-span-full px-3 py-3 text-sm text-muted">No matching tasks in this view.</div>
+                      <div className="col-span-full px-4 py-3 text-sm text-muted">No matching tasks in this view.</div>
                     ) : (
                       rows.map((t) => {
                         if (!t.editable || readOnly) {
@@ -275,7 +275,7 @@ export function EnquiryWorkflow({
                 ) : null}
 
                 {readOnly ? null : (
-                  <div className="border-t border-line px-3 py-2">
+                  <div className="border-t border-line px-4 py-3">
                     {addingStage === stage.key ? (
                       <form
                         action={addEnquiryTaskAction}

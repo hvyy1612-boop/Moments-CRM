@@ -6,15 +6,14 @@ import { deleteEnquiryTaskAction, moveEnquiryTaskAction, toggleWorkItemAction } 
 import { AttentionDot, StatusBadge } from '../../jobs/[id]/EditableTaskRow'
 import { IconMore } from '../../jobs/[id]/icons'
 
-// One shared column grid so the phase header and every row line up in true columns
-// (checkbox | Task | Due date | Status | actions). Leads have no task owner, so that column is dropped.
-// With only two text-bearing metadata columns, giving Task all the slack (a lone 1fr) parks Due/Status
-// against the far right and opens one big empty gap that reads as uneven. Instead the slack is shared
-// proportionally - Task widest, then Due and Status - so every column carries a small, even trailing gap
-// and the row reads as evenly spaced. Header and every row share the tracks via subgrid.
+// Fixed workflow row grid, to the Lead-detail layout spec: checkbox | Task | Due date | Status | action.
+// Task is the one flexible column (1fr); Due date and Status get steady em widths and the action a narrow
+// fixed track. With the even column gap on the row below, the columns line up in every phase and stay a
+// calm, evenly-spaced cluster instead of drifting apart. Header and every row share these exact tracks
+// via subgrid, and every row carries the same side and vertical padding.
 export const LEADS_PHASE_GRID =
-  'grid grid-cols-[max-content_minmax(16em,2.6fr)_minmax(8em,1fr)_minmax(6.5em,0.9fr)_2.75em] items-center'
-export const LEADS_ROW = 'col-span-full grid grid-cols-subgrid items-center gap-x-6 border-l-2 px-3 py-2.5'
+  'grid grid-cols-[2.25em_minmax(0,1fr)_10em_8.5em_2.75em] items-center'
+export const LEADS_ROW = 'col-span-full grid grid-cols-subgrid items-center gap-x-6 border-l-2 px-4 py-3'
 
 const menuItem = 'block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper'
 
@@ -87,11 +86,11 @@ export function EnquiryTaskRow({
 
       {/* Task */}
       <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <span className={`truncate text-base ${done ? 'text-ink-muted line-through' : 'text-ink'}`}>{task.title}</span>
+        <div className="flex items-center gap-1.5">
+          <span className={`truncate text-base font-medium ${done ? 'text-ink-muted line-through' : 'text-ink'}`}>{task.title}</span>
           {attention ? <AttentionDot /> : null}
         </div>
-        {task.note ? <span className="block truncate text-sm text-muted">{task.note}</span> : null}
+        {task.note ? <span className="mt-0.5 block truncate text-sm text-muted">{task.note}</span> : null}
         {task.blocked && !done ? <span className="block text-xs text-muted">Waiting for {task.blockedBy}</span> : null}
         {done && task.completedByName ? <span className="block text-xs text-muted">Done by {task.completedByName}</span> : null}
       </div>
