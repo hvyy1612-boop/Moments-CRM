@@ -1045,3 +1045,15 @@ export async function editInternalNoteAction(formData: FormData): Promise<void> 
   })
   revalidatePath(`/jobs/${projectId}`)
 }
+
+/** Delete an internal team note. */
+export async function deleteInternalNoteAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  const communicationId = String(formData.get('communicationId') ?? '')
+  if (!projectId || !communicationId) return
+  await prisma.communication.deleteMany({ where: { id: communicationId, projectId, internal: true } })
+  revalidatePath(`/jobs/${projectId}`)
+}

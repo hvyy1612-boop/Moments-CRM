@@ -5,6 +5,7 @@ import {
   addInternalNoteAction,
   addRequirementAction,
   addTeamMemberAction,
+  deleteInternalNoteAction,
   deleteRequirementAction,
   editInternalNoteAction,
   removeTeamMemberAction,
@@ -192,7 +193,14 @@ export function JobSidebar({
               <li key={n.id} className="group py-2.5 first:pt-0">
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-sm font-bold text-ink">{n.author}</span>
-                  <button type="button" onClick={() => setEditingNoteId(n.id)} className="shrink-0 text-xs font-bold text-accent-ink opacity-0 transition-opacity hover:underline group-hover:opacity-100">Edit</button>
+                  <div className="flex shrink-0 items-center gap-3 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button type="button" onClick={() => setEditingNoteId(n.id)} className="text-xs font-bold text-accent-ink hover:underline">Edit</button>
+                    <form action={deleteInternalNoteAction}>
+                      {hidden}
+                      <input type="hidden" name="communicationId" value={n.id} />
+                      <button type="submit" aria-label="Delete note" className="text-xs text-muted hover:text-lost-ink">Delete</button>
+                    </form>
+                  </div>
                 </div>
                 <p className="mt-0.5 whitespace-pre-line break-words text-sm text-ink">{n.body}</p>
                 <p className="mt-0.5 text-xs text-muted">{n.dateLabel}{n.editedLabel ? ` · edited by ${n.editedByName ?? 'staff'} ${n.editedLabel}` : ''}</p>
