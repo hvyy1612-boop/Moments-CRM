@@ -32,7 +32,7 @@ const TABS: { key: TabKey; label: string }[] = [
  * of resolved quotes (Accepted/Declined). Rows are selectable (Carbon "selectable" table): tick quotes to
  * reveal a batch-action bar that can delete them; ACCEPTED quotes are locked (they booked a Job).
  */
-export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) {
+export function QuotesTable({ rows, csrf, canDeleteQuotes = false }: { rows: QuoteRow[]; csrf: string; /** ADMIN only (docs/33) */ canDeleteQuotes?: boolean }) {
   const [tab, setTab] = useState<TabKey>('active')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
@@ -58,7 +58,8 @@ export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) 
     setSelectedIds(new Set())
   }
 
-  const canDelete = (r: QuoteRow) => r.status !== 'ACCEPTED'
+  // Rows are selectable only to delete them, which is ADMIN only; an accepted quote is never deletable.
+  const canDelete = (r: QuoteRow) => canDeleteQuotes && r.status !== 'ACCEPTED'
   const selection = {
     isSelected: (id: string) => selectedIds.has(id),
     isSelectable: canDelete,

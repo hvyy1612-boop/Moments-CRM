@@ -7,7 +7,7 @@ import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Checkbox, Field, Select, TextInput, Textarea } from '@/components/ui/form'
 import type { CalItem, CalendarViewData } from '@/lib/domain/calendar'
-import { createCalendarEventAction, moveCalendarItemAction, type CalendarActionState } from './actions'
+import { createCalendarEventAction, moveCalendarItemAction, resetCalendarFeedAction, type CalendarActionState } from './actions'
 
 const IDLE: CalendarActionState = { status: 'idle' }
 const ROW_H = 48 // hour-row height in week view (number -> React adds px, keeps design-token check clean)
@@ -470,7 +470,7 @@ export function AddEventButton({ csrf, clients, date }: { csrf: string; clients:
   )
 }
 
-export function SyncButton({ feedPath }: { feedPath: string }) {
+export function SyncButton({ feedPath, csrf, canReset }: { feedPath: string; csrf: string; canReset: boolean }) {
   const [open, setOpen] = useState(false)
   const [url, setUrl] = useState(feedPath)
   const [copied, setCopied] = useState(false)
@@ -495,6 +495,17 @@ export function SyncButton({ feedPath }: { feedPath: string }) {
           </div>
           <a href={webcal} className="mt-2 block text-xs font-bold text-accent hover:underline">Open in Apple Calendar (.ics)</a>
           <p className="mt-2 text-xs text-ink-muted">Google Calendar: Other calendars → From URL → paste the link.</p>
+          {canReset ? (
+            <form
+              action={resetCalendarFeedAction}
+              onSubmit={(e) => { if (!window.confirm('Make a new link? Every phone or calendar using the current link stops updating until it subscribes again.')) e.preventDefault() }}
+              className="mt-3 border-t border-line pt-3"
+            >
+              <input type="hidden" name="csrf" value={csrf} />
+              <button type="submit" className="text-xs font-bold text-danger hover:underline">Reset link</button>
+              <p className="mt-1 text-xs text-ink-muted">Use this if the link was shared by mistake or a phone was lost.</p>
+            </form>
+          ) : null}
         </div>
       ) : null}
     </div>

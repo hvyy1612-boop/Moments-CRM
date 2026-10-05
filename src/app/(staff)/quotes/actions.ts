@@ -3,8 +3,10 @@
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { appBaseUrl } from '@/lib/app-url'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { getSessionUser } from '@/lib/auth/guard'
+import { can } from '@/lib/auth/authz'
+import { getActionUser } from '@/lib/auth/guard'
 import { createQuoteForEnquiry, saveQuoteDraft, sendQuote, acceptQuote, reviseQuote, deleteQuotes, declineQuote } from '@/lib/domain/quote'
 import { saveQuoteSchema } from '@/lib/validation/quote'
 import { sendComposedQuoteEmail } from '@/lib/email'
@@ -18,7 +20,7 @@ import { sendComposedQuoteEmail } from '@/lib/email'
 export type QuoteActionState = { status: 'idle' } | { status: 'success' } | { status: 'error'; message: string }
 
 async function requireStaff() {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDIO')) throw new Error('Not authorised.')
   return user
 }
@@ -112,7 +114,7 @@ export async function sendQuoteAction(_prev: QuoteActionState, formData: FormDat
     return { status: 'error', message: error instanceof Error ? error.message : 'Could not send.' }
   }
   if (to && viewToken) {
-    const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    const base = await appBaseUrl()
     await sendComposedQuoteEmail({ to, subject, body: message, quoteLink: `${base}/quote/${viewToken}` })
   }
   revalidatePath(`/quotes/${quoteId}`)
@@ -178,7 +180,8 @@ export async function acceptQuoteAction(formData: FormData): Promise<void> {
 export async function deleteQuotesAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
   if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  await requireStaff()
+  const user = await requireStaff()
+  if (!can(user, 'MONEY_ADMIN')) return // deleting quotes is ADMIN only (docs/33 §2)
   const ids = str(formData, 'ids').split(',').map((s) => s.trim()).filter(Boolean)
   if (ids.length === 0) return
   try {

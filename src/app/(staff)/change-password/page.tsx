@@ -21,8 +21,8 @@ export default async function ChangePasswordPage() {
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
   return (
-    <AuthCard heading="Set a new password" subtitle="Choose your own password to finish signing in.">
-      <ChangePasswordForm csrf={csrf} />
+    <AuthCard heading="Set a new password" subtitle={user.mustChangePassword ? 'Choose your own password to finish signing in.' : 'Enter your current password, then choose a new one. Your other signed-in devices will be signed out.'}>
+      <ChangePasswordForm csrf={csrf} requireCurrent={!user.mustChangePassword} />
     </AuthCard>
   )
 }

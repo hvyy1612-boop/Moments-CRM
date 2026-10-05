@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { getSessionUser } from '@/lib/auth/guard'
+import { getActionUser } from '@/lib/auth/guard'
 import {
   applyChangeRequest,
   approveChangeRequest,
@@ -23,7 +23,7 @@ import { changeRequestPayloadSchema, type ChangeRequestPayload } from '@/lib/val
  */
 
 async function requireStaff() {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDIO')) throw new Error('Not authorised.')
   return user
 }

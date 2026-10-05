@@ -29,6 +29,7 @@ const SPECIAL: Record<string, string> = {
   'auth.activity_pin_set': 'Activity PIN set',
   'auth.activity_pin_reset': 'Activity PIN reset via password',
   'auth.activity_password_unlock': 'Activity opened with password',
+  'auth.activity_password_failed': 'Activity password attempt failed',
   'auth.staff_created': 'Staff member added',
   'auth.staff_removed': 'Staff member removed',
   'auth.user_registered': 'User account registered',
@@ -38,6 +39,7 @@ const SPECIAL: Record<string, string> = {
   'client.restored': 'Client restored',
   // Leads (DB `Enquiry`; the codes are kept as recorded, only the wording is staff-facing).
   'enquiry.created': 'Lead created',
+  'enquiry.public_submitted': 'Website enquiry received',
   'enquiry.replied': 'Reply sent to client',
   'enquiry.client_replied': 'Client message logged',
   'enquiry.stage_auto': 'Lead stage moved on',
@@ -52,6 +54,7 @@ const SPECIAL: Record<string, string> = {
   'booking.created': 'Shoot scheduled',
   'booking.rescheduled': 'Shoot rescheduled',
   'booking.moved': 'Shoot moved on the calendar',
+  'calendar.feed_link_reset': 'Calendar sync link reset',
   'booking.requested': 'Booking requested',
   'booking.confirmed': 'Booking confirmed',
 }

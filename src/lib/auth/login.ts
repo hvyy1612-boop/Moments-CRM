@@ -14,6 +14,7 @@ import { createSession, type CreatedSession } from './session'
  */
 const LOCKOUT_THRESHOLD = 5 // SEC-S04
 const LOCKOUT_WINDOW_MS = 15 * 60 * 1000 // SEC-S04: 15 minutes
+const KNOWN_ADDRESS_MS = 30 * 24 * 60 * 60 * 1000 // an address this account signed in from in the last 30 days
 
 export type LoginResult = { ok: true; session: CreatedSession } | { ok: false }
 
@@ -79,8 +80,24 @@ export async function attemptLogin(
   // SEC-S04 per account. An active lock refuses without verifying; an expired lock clears its
   // stale counter so the next failure does not instantly re-lock. BR-G12: the lock is on the User,
   // so no sign-in method can bypass it.
+  // Lockout-DoS guard: anyone who knows a staff email could otherwise lock that person out on purpose.
+  // An address this account has signed in from successfully in the last 30 days is "known" and still
+  // gets through the account lock (the per-IP limit above still applies to it), so an attacker
+  // elsewhere cannot keep the real user out of their own office or home connection.
   if (user.lockedUntil && user.lockedUntil.getTime() > now.getTime()) {
-    return fail(user.id)
+    const knownAddress = await prisma.signInLog.count({
+      where: {
+        eventType: 'login_success',
+        userId: user.id,
+        ipAddress: meta.ipAddress,
+        createdAt: { gte: new Date(now.getTime() - KNOWN_ADDRESS_MS) },
+      },
+    })
+    if (knownAddress === 0) {
+      const dummy = await dummyHash()
+      await verifyPassword(dummy.hash, dummy.algo, input.password)
+      return fail(user.id)
+    }
   }
   let failedAttempts = user.failedAttempts
   if (user.lockedUntil && user.lockedUntil.getTime() <= now.getTime()) {

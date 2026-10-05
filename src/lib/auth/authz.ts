@@ -22,6 +22,9 @@ export type Permission =
   | 'AUTH_LOG_VIEW'
   | 'AUDIT_LOG_VIEW'
   | 'SETTINGS_EDIT'
+  // Heavy / irreversible money operations (docs/33 §2): mark an invoice uncollectible, refund a payment,
+  // delete invoices or quotes. ADMIN only.
+  | 'MONEY_ADMIN'
 
 // The everyday CRM work a staff member does. Admin gets this plus the sensitive/management ones.
 const STAFF_CRM: Permission[] = [
@@ -39,7 +42,7 @@ const STAFF_CRM: Permission[] = [
 ]
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
-  ADMIN: [...STAFF_CRM, 'USER_MANAGE', 'AUTH_LOG_VIEW', 'AUDIT_LOG_VIEW', 'SETTINGS_EDIT'],
+  ADMIN: [...STAFF_CRM, 'USER_MANAGE', 'AUTH_LOG_VIEW', 'AUDIT_LOG_VIEW', 'SETTINGS_EDIT', 'MONEY_ADMIN'],
   STUDIO: STAFF_CRM,
   EDITOR: ['ENQUIRY_VIEW', 'PROJECT_VIEW', 'CLIENT_VIEW', 'QUOTE_VIEW', 'FINANCE_VIEW', 'CALENDAR_VIEW'],
 }

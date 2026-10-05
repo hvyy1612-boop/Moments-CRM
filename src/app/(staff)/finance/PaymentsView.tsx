@@ -123,7 +123,7 @@ const columns: DataColumn<Row>[] = [
  * (All / Unpaid / Paid / Overdue) and search replace the old stacked groups; a summary line shows the
  * count + total of what is on screen, and overdue / due-soon rows carry a red heads-up and a tinted row.
  */
-export function PaymentsView({ rows, csrf }: { rows: Row[]; csrf: string }) {
+export function PaymentsView({ rows, csrf, canDelete = false }: { rows: Row[]; csrf: string; /** ADMIN only (docs/33) */ canDelete?: boolean }) {
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -210,7 +210,7 @@ export function PaymentsView({ rows, csrf }: { rows: Row[]; csrf: string }) {
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 17v2a2 2 0 002 2h10a2 2 0 002-2v-2" /></svg>
               Export PDF
             </a>
-            <form
+            {canDelete ? <form
               action={deleteInvoicesAction}
               onSubmit={(e) => {
                 if (!window.confirm(`Delete ${selectedCount} invoice${selectedCount > 1 ? 's' : ''}? Invoices with recorded payments are kept. This can't be undone.`)) e.preventDefault()
@@ -222,7 +222,7 @@ export function PaymentsView({ rows, csrf }: { rows: Row[]; csrf: string }) {
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" /></svg>
                 Delete
               </button>
-            </form>
+            </form> : null}
           </div>
         ) : null}
       </div>

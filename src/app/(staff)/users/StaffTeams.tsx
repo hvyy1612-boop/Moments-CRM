@@ -41,13 +41,18 @@ function StaffRow({ staff, csrf, isSelf }: { staff: StaffRowData; csrf: string; 
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="tabular text-sm text-ink-muted">{staff.lastLogin}</span>
-          <form action={resetAction}>
-            <input type="hidden" name="csrf" value={csrf} />
-            <input type="hidden" name="userId" value={staff.id} />
-            <button type="submit" disabled={resetting} className={btn}>
-              {resetting ? 'Resetting…' : 'Reset password'}
-            </button>
-          </form>
+          {/* Your own password is changed via Change password: resetting it here would sign you out. */}
+          {!isSelf ? (
+            <form action={resetAction}>
+              <input type="hidden" name="csrf" value={csrf} />
+              <input type="hidden" name="userId" value={staff.id} />
+              <button type="submit" disabled={resetting} className={btn}>
+                {resetting ? 'Resetting…' : 'Reset password'}
+              </button>
+            </form>
+          ) : (
+            <a href="/change-password" className={btn}>Change password</a>
+          )}
           {!isSelf ? (
             <form action={setStaffActiveAction}>
               <input type="hidden" name="csrf" value={csrf} />

@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { Prisma, ClientSource, ClientStatus } from '@prisma/client'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { getSessionUser } from '@/lib/auth/guard'
+import { getActionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 
 /**
@@ -25,7 +25,7 @@ function text(fd: FormData, key: string): string | null {
 }
 
 export async function saveClientDetailAction(_prev: SaveDetailState, formData: FormData): Promise<SaveDetailState> {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDIO')) {
     return { status: 'error', message: 'You do not have permission to edit this client.' }
   }

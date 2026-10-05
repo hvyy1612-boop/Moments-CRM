@@ -15,6 +15,9 @@ import { revokeAllSessions } from './session'
  * - On a successful reset every session is revoked, so a stolen session cannot outlive the reset.
  */
 const RESET_TTL_MS = 60 * 60 * 1000 // 60 minutes (OWASP: 15-60)
+const RESET_LIMIT_WINDOW_MS = 60 * 60 * 1000
+const RESET_LIMIT_PER_ACCOUNT = 3 // reset emails per account per hour
+const RESET_LIMIT_PER_ADDRESS = 10 // reset emails requested from one IP per hour
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex')
@@ -37,6 +40,15 @@ export async function requestPasswordReset(
   const now = clock.now()
   const user = await prisma.user.findUnique({ where: { email }, select: { id: true, isActive: true } })
   if (!user || !user.isActive) return null
+
+  // Throttle (OWASP): the form is public, so a script must not flood a staff inbox with reset emails.
+  // Over the limit nothing is sent, and the caller still shows the same generic confirmation.
+  const hourAgo = new Date(now.getTime() - RESET_LIMIT_WINDOW_MS)
+  const [forAccount, fromAddress] = await Promise.all([
+    prisma.signInLog.count({ where: { eventType: 'password_reset_requested', userId: user.id, createdAt: { gte: hourAgo } } }),
+    prisma.signInLog.count({ where: { eventType: 'password_reset_requested', ipAddress: ip, createdAt: { gte: hourAgo } } }),
+  ])
+  if (forAccount >= RESET_LIMIT_PER_ACCOUNT || fromAddress >= RESET_LIMIT_PER_ADDRESS) return null
 
   // Invalidate any earlier unused tokens so only the latest link works.
   await prisma.passwordReset.updateMany({

@@ -3,8 +3,10 @@
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { appBaseUrl } from '@/lib/app-url'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { getSessionUser } from '@/lib/auth/guard'
+import { can } from '@/lib/auth/authz'
+import { getActionUser } from '@/lib/auth/guard'
 import { deleteInvoice, sendInvoice } from '@/lib/domain/finance'
 
 /** Server actions for the Payments list (bulk operations on the ticked invoices) and invoice sending. */
@@ -37,7 +39,7 @@ export async function sendInvoiceAction(_prev: SendInvoiceState, formData: FormD
         to,
         subject: String(formData.get('subject') ?? ''),
         body: String(formData.get('message') ?? ''),
-        baseUrl: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+        baseUrl: await appBaseUrl(),
       },
       user.id,
     ))
@@ -55,7 +57,7 @@ export async function sendInvoiceAction(_prev: SendInvoiceState, formData: FormD
 }
 
 async function requireStaff() {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDIO')) throw new Error('Not authorised.')
   return user
 }
@@ -69,6 +71,7 @@ export async function deleteInvoicesAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
   if (!verifyCsrf(cookieStore.get(CSRF_COOKIE)?.value, formData.get('csrf'))) return
   const user = await requireStaff()
+  if (!can(user, 'MONEY_ADMIN')) return // deleting invoices is ADMIN only (docs/33 §2)
   const ids = String(formData.get('ids') ?? '')
     .split(',')
     .map((s) => s.trim())

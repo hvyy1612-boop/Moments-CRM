@@ -1,5 +1,6 @@
 import { Prisma, type ClientSource, type ClientType } from '@prisma/client'
 import { requireRole } from '@/lib/auth/guard'
+import { csvCell } from '@/lib/csv'
 import { prisma } from '@/lib/db'
 import { titleCase } from '@/lib/text'
 import { formatSydneyDate } from '@/lib/time'
@@ -8,10 +9,6 @@ export const runtime = 'nodejs'
 
 const SOURCES: ClientSource[] = ['DIRECT_BOOKING', 'ENQUIRY', 'REFERRAL', 'MANUAL', 'OTHER']
 const TYPES: ClientType[] = ['INDIVIDUAL', 'BUSINESS']
-
-function cell(value: string): string {
-  return /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
-}
 
 /** Download the current (filtered) client list as a CSV. Mirrors the list's own filters. */
 export async function GET(request: Request): Promise<Response> {
@@ -54,7 +51,7 @@ export async function GET(request: Request): Promise<Response> {
         String(c._count.projects),
         formatSydneyDate(c.createdAt),
       ]
-        .map((v) => cell(String(v)))
+        .map((v) => csvCell(String(v)))
         .join(','),
     )
   }

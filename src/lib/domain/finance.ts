@@ -773,8 +773,14 @@ export async function getInvoiceByToken(token: string) {
   if (!inv) return null
   // Fold effective credit notes into one credits total so the printable balance matches the ledger (bug #5).
   const creditsTotal = inv.creditNotes.reduce((s, c) => s.add(c.amount), new Prisma.Decimal(0))
-  return { ...inv, creditsTotal }
+  // This page is public (token link): hand the document ONLY the settings an invoice prints, never the
+  // rest of Company Settings (e.g. the calendar subscription token).
+  const all = (inv.project.company.settings ?? {}) as Record<string, unknown>
+  const settings = Object.fromEntries(INVOICE_SETTINGS.filter((k) => k in all).map((k) => [k, all[k]])) as Prisma.JsonObject
+  return { ...inv, project: { ...inv.project, company: { ...inv.project.company, settings } }, creditsTotal }
 }
+
+const INVOICE_SETTINGS = ['website', 'businessAddress', 'businessEmail', 'businessPhone', 'paymentInstructions', 'accountName', 'bsb', 'accountNumber', 'payId'] as const
 
 /** Save the given line items as a reusable invoice template. */
 export async function saveInvoiceTemplate(name: string, lines: { itemName?: string; description: string; quantity: number; unitPrice: string }[]) {

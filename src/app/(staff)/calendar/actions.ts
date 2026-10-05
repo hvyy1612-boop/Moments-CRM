@@ -5,8 +5,8 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { getSessionUser } from '@/lib/auth/guard'
-import { createCalendarEvent, moveCalendarItem } from '@/lib/domain/calendar'
+import { getActionUser } from '@/lib/auth/guard'
+import { createCalendarEvent, moveCalendarItem, rotateFeedToken } from '@/lib/domain/calendar'
 import { toggleEnquiryTask } from '@/lib/domain/enquiry-workflow'
 import { toggleProjectTask } from '@/lib/domain/project-workflow'
 import { prisma } from '@/lib/db'
@@ -31,7 +31,7 @@ const createSchema = z
   })
 
 export async function createCalendarEventAction(_prev: CalendarActionState, formData: FormData): Promise<CalendarActionState> {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || !can(user, 'CALENDAR_MANAGE')) return { status: 'error', message: 'Not authorised.' }
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value
   if (!verifyCsrf(cookieValue, formData.get('csrf'))) return { status: 'error', message: 'Invalid request.' }
@@ -62,7 +62,7 @@ const moveSchema = z.object({
 
 /** Drag-to-reschedule: move a booking or standalone event to a new day/time. */
 export async function moveCalendarItemAction(formData: FormData): Promise<CalendarActionState> {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || !can(user, 'CALENDAR_MANAGE')) return { status: 'error', message: 'Not authorised.' }
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value
   if (!verifyCsrf(cookieValue, formData.get('csrf'))) return { status: 'error', message: 'Invalid request.' }
@@ -85,7 +85,7 @@ export async function moveCalendarItemAction(formData: FormData): Promise<Calend
 
 /** Mark a to-do complete straight from the calendar's Agenda view; routes to the right toggle. */
 export async function markTaskDoneAction(formData: FormData): Promise<void> {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user) throw new Error('Not authorised.')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value
   if (!verifyCsrf(cookieValue, formData.get('csrf'))) throw new Error('Invalid request.')
@@ -108,7 +108,7 @@ export type SearchHit = { type: 'Client' | 'Lead' | 'Job' | 'Invoice'; label: st
 
 /** Global search - clients, enquiries, jobs and invoices by name/number, grouped in that order. */
 export async function searchEntitiesAction(query: string): Promise<SearchHit[]> {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user) return []
   const q = query.trim()
   if (q.length < 2) return []
@@ -136,4 +136,14 @@ export async function searchEntitiesAction(query: string): Promise<SearchHit[]> 
     ...projects.map((p): SearchHit => ({ type: 'Job', label: p.client.displayName, sub: `${p.name} - ${p.code}`, href: `/jobs/${p.id}` })),
     ...invoices.map((inv): SearchHit => ({ type: 'Invoice', label: inv.project.client.displayName, sub: inv.invoiceNumber, href: `/finance/${inv.id}` })),
   ]
+}
+
+/** Admin: retire the calendar subscription link and issue a new one (old subscriptions stop updating). */
+export async function resetCalendarFeedAction(formData: FormData): Promise<void> {
+  const user = await getActionUser()
+  if (!user || user.role !== 'ADMIN') return
+  const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value
+  if (!verifyCsrf(cookieValue, formData.get('csrf'))) return
+  await rotateFeedToken(user.id)
+  revalidatePath('/calendar')
 }

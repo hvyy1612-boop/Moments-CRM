@@ -97,7 +97,7 @@ export async function verifyActivityPin(userId: string, pin: string): Promise<Pi
   return { ok: false, reason: 'wrong', attemptsLeft: MAX_ATTEMPTS - attempts }
 }
 
-type ActivityPinEvent = 'auth.activity_pin_set' | 'auth.activity_pin_reset' | 'auth.activity_password_unlock'
+type ActivityPinEvent = 'auth.activity_pin_set' | 'auth.activity_pin_reset' | 'auth.activity_password_unlock' | 'auth.activity_password_failed'
 
 /**
  * Record a PIN/step-up security event on the (insert-only) audit trail. Kept in the auth layer next to the

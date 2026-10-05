@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { getSessionUser } from '@/lib/auth/guard'
+import { getActionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { sydneyLocalToUtc } from '@/lib/time'
 import { setAutomationSettings } from '@/lib/domain/automation'
@@ -17,7 +17,7 @@ import { setAutomationSettings } from '@/lib/domain/automation'
  * date (Sydney start-of-day) prevents backfilling old overdue invoices when the switch is first turned on.
  */
 export async function updateAutomationSettingsAction(formData: FormData): Promise<void> {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!can(user, 'SETTINGS_EDIT')) return
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value
   if (!verifyCsrf(cookieValue, formData.get('csrf'))) return

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
+import { can } from '@/lib/auth/authz'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
@@ -115,7 +116,7 @@ export default async function FinancePage() {
           }
         />
 
-        <PaymentsView rows={rows} csrf={csrf} />
+        <PaymentsView rows={rows} csrf={csrf} canDelete={can(user, 'MONEY_ADMIN')} />
       </PageContainer>
     </AppShell>
   )

@@ -174,6 +174,9 @@ export async function sendContract(contractId: string, actorUserId: string | nul
   })
 }
 
+const STOPPED = new Set(['CANCELLED', 'LOST', 'CLOSED'])
+const PRE_CONFIRMED = new Set(['ENQUIRY', 'QUALIFYING', 'QUOTING', 'AWAITING_DECISION', 'NEGOTIATION', 'BOOKING_REQUESTED'])
+
 /**
  * Client signs the current version by token. Idempotent if already signed. On signature the version
  * is locked SIGNED (immutable) and the project moves to CONFIRMED.
@@ -189,6 +192,10 @@ export async function signContractByToken(signToken: string, signedName: string,
     const version = contract.currentVersion
     if (version.status === 'SIGNED') return { alreadySigned: true }
     if (version.status !== 'SENT') throw new Error('This contract cannot be signed.')
+    // A signature never brings a stopped or finished job back to life, and never moves a job that is
+    // already further along (In production / Completed) backwards to Confirmed.
+    const project = await tx.project.findUnique({ where: { id: contract.projectId }, select: { lifecycleStatus: true } })
+    if (!project || STOPPED.has(project.lifecycleStatus)) throw new Error('This booking is no longer active, so the contract cannot be signed. Please contact the studio.')
 
     await tx.contractVersion.update({
       where: { id: version.id },
@@ -200,10 +207,9 @@ export async function signContractByToken(signToken: string, signedName: string,
       },
     })
     await tx.contract.update({ where: { id: contract.id }, data: { status: 'SIGNED' } })
-    await tx.project.update({
-      where: { id: contract.projectId },
-      data: { lifecycleStatus: 'CONFIRMED' },
-    })
+    if (PRE_CONFIRMED.has(project.lifecycleStatus)) {
+      await tx.project.update({ where: { id: contract.projectId }, data: { lifecycleStatus: 'CONFIRMED' } })
+    }
     await tx.auditLog.create({
       data: {
         action: 'contract.signed',

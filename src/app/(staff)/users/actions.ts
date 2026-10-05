@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { z } from 'zod'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { getSessionUser } from '@/lib/auth/guard'
+import { getActionUser } from '@/lib/auth/guard'
 import { passwordCredentials, resetUserPassword } from '@/lib/auth/user-password'
 import { revokeAllSessions } from '@/lib/auth/session'
 import { generateTempPassword, nextStaffLoginId } from '@/lib/auth/staff'
@@ -13,7 +13,7 @@ import { requireCompany } from '@/lib/domain/project'
 
 /** Only an ADMIN may manage staff accounts. Returns the admin, or null. */
 async function requireAdmin() {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || user.role !== 'ADMIN') return null
   return user
 }
@@ -97,6 +97,9 @@ export async function resetStaffPasswordAction(_prev: ResetState, formData: Form
   const userId = String(formData.get('userId') ?? '')
   const target = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true } })
   if (!target) return { status: 'error', message: 'That account no longer exists.' }
+  // Resetting your OWN password would sign you out before you could copy the temporary one (and login IDs
+  // cannot receive reset emails), locking the admin out. Your own password is changed via Change password.
+  if (target.id === admin.id) return { status: 'error', message: 'To change your own password, use Change password instead.' }
 
   const tempPassword = generateTempPassword()
   await resetUserPassword(target.id, tempPassword)

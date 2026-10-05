@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { formatSydneyTime, sydneyLocalToUtc, sydneyYmd, systemClock } from '@/lib/time'
@@ -426,9 +427,33 @@ export async function getOrCreateFeedToken(): Promise<string> {
   return token
 }
 
+/**
+ * Issue a NEW subscription link and retire the old one at once (admin, e.g. after a phone is lost or the
+ * link was shared by mistake). Every subscribed calendar must be re-subscribed with the new link.
+ */
+export async function rotateFeedToken(actorUserId: string): Promise<string> {
+  const company = await prisma.company.findFirst({ select: { id: true, settings: true } })
+  if (!company) throw new Error('No company configured.')
+  const settings = (company.settings ?? {}) as Record<string, unknown>
+  const token = randomToken()
+  await prisma.$transaction([
+    prisma.company.update({ where: { id: company.id }, data: { settings: { ...settings, calendarFeedToken: token } as Prisma.InputJsonValue } }),
+    prisma.auditLog.create({ data: { companyId: company.id, action: 'calendar.feed_link_reset', entityType: 'Company', entityId: company.id, actorUserId } }),
+  ])
+  return token
+}
+
+/** Constant-time token comparison, so response timing never leaks how much of a guess was right. */
+function sameToken(stored: unknown, given: string): boolean {
+  if (typeof stored !== 'string') return false
+  const a = Buffer.from(stored)
+  const b = Buffer.from(given)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
 function randomToken(): string {
-  // 24 hex chars from the platform crypto (Node 20+ exposes a global crypto).
-  const bytes = new Uint8Array(12)
+  // 32 hex chars (128 bits) from the platform crypto (Node 20+ exposes a global crypto).
+  const bytes = new Uint8Array(16)
   globalThis.crypto.getRandomValues(bytes)
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 }
@@ -465,7 +490,7 @@ export async function getIcsForToken(token: string): Promise<string | null> {
   const company = await prisma.company.findFirst({ select: { id: true, name: true, settings: true } })
   if (!company) return null
   const settings = (company.settings ?? {}) as Record<string, unknown>
-  if (settings.calendarFeedToken !== token) return null
+  if (!sameToken(settings.calendarFeedToken, token)) return null
 
   const now = systemClock.now()
   const start = new Date(now.getTime() - 30 * 86_400_000)

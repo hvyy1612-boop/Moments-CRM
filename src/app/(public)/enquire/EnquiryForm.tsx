@@ -28,6 +28,13 @@ export function EnquiryForm({ csrf }: { csrf: string }) {
       ) : null}
 
       <input type="hidden" name="csrf" value={csrf} />
+      {/* Bot trap: hidden from people and screen readers, so only a script fills it in. */}
+      <div aria-hidden="true" className="sr-only">
+        <label>
+          Website
+          <input type="text" name="website" tabIndex={-1} autoComplete="off" defaultValue="" />
+        </label>
+      </div>
 
       <Field label="Your name" htmlFor="name" error={errors.name}>
         <TextInput id="name" name="name" autoComplete="name" autoFocus hasError={Boolean(errors.name)} />

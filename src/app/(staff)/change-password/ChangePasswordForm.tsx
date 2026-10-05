@@ -59,8 +59,9 @@ function RuleRow({ met, children }: { met: boolean; children: ReactNode }) {
   )
 }
 
-export function ChangePasswordForm({ csrf }: { csrf: string }) {
+export function ChangePasswordForm({ csrf, requireCurrent = false }: { csrf: string; /** A voluntary change proves the current password. */ requireCurrent?: boolean }) {
   const [state, action, pending] = useActionState(changePassword, INITIAL)
+  const [showCurrent, setShowCurrent] = useState(false)
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [showNew, setShowNew] = useState(false)
@@ -76,6 +77,23 @@ export function ChangePasswordForm({ csrf }: { csrf: string }) {
 
       <input type="hidden" name="csrf" value={csrf} />
 
+      {requireCurrent ? (
+        <Field label="Current password" htmlFor="currentPassword" error={errors.current}>
+          <div className="relative">
+            <TextInput
+              id="currentPassword"
+              name="currentPassword"
+              type={showCurrent ? 'text' : 'password'}
+              autoComplete="current-password"
+              autoFocus
+              hasError={Boolean(errors.current)}
+              className="pr-12"
+            />
+            <EyeToggle shown={showCurrent} onToggle={() => setShowCurrent((v) => !v)} />
+          </div>
+        </Field>
+      ) : null}
+
       <div className="flex flex-col gap-2">
         <Field label="New password" htmlFor="password" error={errors.password}>
           <div className="relative">
@@ -84,7 +102,7 @@ export function ChangePasswordForm({ csrf }: { csrf: string }) {
               name="password"
               type={showNew ? 'text' : 'password'}
               autoComplete="new-password"
-              autoFocus
+              autoFocus={!requireCurrent}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               hasError={Boolean(errors.password)}

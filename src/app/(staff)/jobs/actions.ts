@@ -3,8 +3,10 @@
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { appBaseUrl } from '@/lib/app-url'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { getSessionUser } from '@/lib/auth/guard'
+import { can } from '@/lib/auth/authz'
+import { getActionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { sydneyLocalToUtc } from '@/lib/time'
 import { assignResource, createBooking } from '@/lib/domain/booking'
@@ -41,7 +43,7 @@ export type QuoteActionState =
   | { status: 'error'; message: string }
 
 async function requireStaff() {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDIO')) {
     throw new Error('Not authorised.')
   }
@@ -157,7 +159,7 @@ export async function sendQuoteAction(
   let recipient = ''
   if (quote?.project) {
     recipient = quote.project.client.email ?? ''
-    const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    const base = await appBaseUrl()
     await sendQuoteEmail({
       to: quote.project.client.email,
       clientName: quote.project.client.displayName,
@@ -210,7 +212,7 @@ export async function sendContractAction(
     include: { project: { include: { client: { select: { email: true, displayName: true } } } } },
   })
   if (contract) {
-    const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    const base = await appBaseUrl()
     await sendContractEmail({
       to: contract.project.client.email,
       clientName: contract.project.client.displayName,
@@ -394,6 +396,7 @@ export async function refundPaymentAction(
     return { status: 'error', message: 'Your session expired. Refresh and try again.' }
   }
   const user = await requireStaff()
+  if (!can(user, 'MONEY_ADMIN')) return { status: 'error', message: 'Only an admin can refund a payment.' }
   const paymentId = String(formData.get('paymentId') ?? '')
   const invoiceId = String(formData.get('invoiceId') ?? '')
   const amount = String(formData.get('amount') ?? '')
@@ -417,9 +420,14 @@ export async function voidInvoiceAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
   if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
   const user = await requireStaff()
+  if (!can(user, 'MONEY_ADMIN')) return // ADMIN only (docs/33 §2); the button is hidden for others
   const invoiceId = String(formData.get('invoiceId') ?? '')
   if (!invoiceId) return
-  await voidInvoice(invoiceId, user.id)
+  try {
+    await voidInvoice(invoiceId, user.id)
+  } catch {
+    // Refused (e.g. money recorded since the page loaded): the re-render shows the real state.
+  }
   revalidatePath('/finance')
   revalidatePath(`/finance/${invoiceId}`)
   const projectId = String(formData.get('projectId') ?? '')
@@ -530,16 +538,24 @@ export async function deleteInvoiceAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
   if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
   const user = await requireStaff()
+  if (!can(user, 'MONEY_ADMIN')) return // ADMIN only (docs/33 §2); the button is hidden for others
   const invoiceId = String(formData.get('invoiceId') ?? '')
   if (!invoiceId) return
-  await deleteInvoice(invoiceId, user.id)
+  try {
+    await deleteInvoice(invoiceId, user.id)
+  } catch {
+    // Refused (payment history): nothing was deleted; the re-render shows the invoice as it is.
+    revalidatePath(`/finance/${invoiceId}`)
+    return
+  }
   revalidatePath('/finance')
   const projectId = String(formData.get('projectId') ?? '')
   if (projectId) revalidatePath(`/jobs/${projectId}`)
   const clientId = String(formData.get('clientId') ?? '')
   if (clientId) revalidatePath(`/clients/${clientId}`)
+  // Only an in-app path: a single leading "/" (never "//host" or a full URL), so it can't redirect off-site.
   const back = String(formData.get('back') ?? '')
-  if (back) redirect(back)
+  if (/^\/(?!\/)/.test(back)) redirect(back)
 }
 
 /** Record a manual payment against an invoice. */

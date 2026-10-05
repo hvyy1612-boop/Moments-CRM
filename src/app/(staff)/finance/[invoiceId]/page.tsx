@@ -9,6 +9,7 @@ import { InvoiceFit } from '@/components/InvoiceFit'
 import { SentToast } from '@/components/ui/SentToast'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
+import { can } from '@/lib/auth/authz'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { getInvoiceBalanceById } from '@/lib/domain/invoice-money'
@@ -106,7 +107,9 @@ export default async function InvoiceDetailPage({
   const status = inv.status
   const unpaid = inv.amountPaid.lte(0)
   const isEditable = unpaid && status !== 'VOID' && status !== 'PAID' && status !== 'PARTIALLY_PAID'
-  const canVoid = unpaid && status !== 'VOID' && status !== 'DRAFT'
+  // Uncollectible / delete / refund are ADMIN only (docs/33 §2); the server enforces it too.
+  const moneyAdmin = can(user, 'MONEY_ADMIN')
+  const canVoid = moneyAdmin && unpaid && status !== 'VOID' && status !== 'DRAFT'
   const c = inv.project.client
   const clientName = inv.billingNameSnapshot ?? c.displayName
   const jobName = inv.billingJobNameSnapshot ?? inv.project.name
@@ -150,7 +153,7 @@ export default async function InvoiceDetailPage({
       amount: formatAud(p.amount),
       refunded: refunded.greaterThan(0) ? formatAud(refunded) : null,
       refundable: refundable.toString(),
-      canRefund: refundable.greaterThan(0) && status !== 'VOID',
+      canRefund: moneyAdmin && refundable.greaterThan(0) && status !== 'VOID',
     }
   })
 
@@ -202,7 +205,7 @@ export default async function InvoiceDetailPage({
                 clientViewHref={inv.accessToken ? `/invoice/${inv.accessToken}` : null}
                 editHref={isEditable ? `/finance/${inv.id}/edit` : null}
                 canVoid={canVoid}
-                canDelete={unpaid && inv.payments.length === 0 /* refunded payments still count as history */}
+                canDelete={moneyAdmin && unpaid && inv.payments.length === 0 /* refunded payments still count as history */}
               />
             </div>
 

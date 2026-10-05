@@ -5,7 +5,7 @@ import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { getSessionUser } from '@/lib/auth/guard'
+import { getActionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import {
   addClientNote,
@@ -24,7 +24,7 @@ import { clientSchema } from '@/lib/validation/client'
 import type { ClientFormValues } from './ClientForm'
 
 async function requireStaff() {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDIO')) {
     throw new Error('Not authorised.')
   }
@@ -248,6 +248,8 @@ export async function updateClientFormAction(_prev: ClientFormState, formData: F
 export async function archiveClientAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  // Archiving a client with history is ADMIN only, the same rule removeClientAction enforces (docs/33 §1).
+  if (user.role !== 'ADMIN') return
   const clientId = String(formData.get('clientId') ?? '')
   if (!clientId) return
   await archiveClient(clientId, user.id)

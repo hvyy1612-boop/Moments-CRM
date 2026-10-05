@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { getSessionUser } from '@/lib/auth/guard'
+import { getActionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { sydneyLocalToUtc } from '@/lib/time'
 import { findOrCreateClient } from '@/lib/domain/client'
@@ -27,7 +27,7 @@ import {
 import { seedProjectWorkflow } from '@/lib/domain/project-workflow'
 
 async function requireStaff() {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || !can(user, 'ENQUIRY_CONVERT')) {
     throw new Error('Not authorised.')
   }
@@ -357,7 +357,7 @@ export async function markEnquiryLostAction(formData: FormData): Promise<void> {
  * so it fires on a real view, not on route prefetch. Clears the "new" bold row + the nav dot.
  */
 export async function markEnquiryViewedAction(id: string): Promise<void> {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDIO')) return
   if (!id) return
   await prisma.enquiry.updateMany({ where: { id, viewedAt: null }, data: { viewedAt: new Date() } })

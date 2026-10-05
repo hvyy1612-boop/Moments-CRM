@@ -2,12 +2,13 @@
 
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { getSessionUser } from '@/lib/auth/guard'
-import { verifyUserPassword } from '@/lib/auth/reauth'
+import { getActionUser } from '@/lib/auth/guard'
+import { verifyUserPasswordWithLockout } from '@/lib/auth/reauth'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { STEPUP_COOKIE, STEPUP_TTL_MS, issueStepUp } from '@/lib/auth/stepup'
 import {
   clearActivityPin,
+  getActivityPinStatus,
   isValidPinFormat,
   isWeakPin,
   logActivityPinEvent,
@@ -56,8 +57,9 @@ function minutesUntil(when: Date): number {
  * On success it sets the signed step-up cookie and reloads; on failure it returns a friendly message.
  */
 export async function confirmActivityAccessAction(_prev: StepUpState, formData: FormData): Promise<StepUpState> {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user) return ERR('Your session has expired. Please sign in again.')
+  if (user.role !== 'ADMIN') return ERR('Only an admin can open the activity log.')
 
   const store = await cookies()
   if (!verifyCsrf(store.get(CSRF_COOKIE)?.value, formData.get('csrf'))) {
@@ -70,7 +72,13 @@ export async function confirmActivityAccessAction(_prev: StepUpState, formData: 
   if (mode === 'password') {
     const password = String(formData.get('password') ?? '')
     if (!password) return ERR('Please enter your account password.')
-    if (!(await verifyUserPassword(user.id, password))) return ERR('That password is not correct. Please try again.')
+    // Same lockout budget as sign-in, and every miss is on the audit trail (it bypasses the PIN lock).
+    const verdict = await verifyUserPasswordWithLockout(user.id, password)
+    if (verdict === 'locked') return ERR('Too many wrong attempts. Please wait 15 minutes and try again.')
+    if (verdict === 'wrong') {
+      await safeLog(user.id, 'auth.activity_password_failed')
+      return ERR('That password is not correct. Please try again.')
+    }
 
     if (String(formData.get('intent') ?? 'unlock') === 'reset') {
       await clearActivityPin(user.id)
@@ -83,6 +91,9 @@ export async function confirmActivityAccessAction(_prev: StepUpState, formData: 
 
   // ---- First-time PIN creation ----------------------------------------------------------------
   if (mode === 'create') {
+    // Creation is ONLY for an admin with no PIN yet; otherwise the hidden "mode" field could be changed to
+    // overwrite an existing PIN and walk straight past the step-up. Changing a PIN goes via the password reset.
+    if ((await getActivityPinStatus(user.id)).isSet) return ERR('A PIN is already set. Enter your PIN, or use your password to reset it.')
     const pin = String(formData.get('pin') ?? '')
     const confirm = String(formData.get('pinConfirm') ?? '')
     if (!isValidPinFormat(pin)) return ERR('Your PIN must be exactly 4 digits.')

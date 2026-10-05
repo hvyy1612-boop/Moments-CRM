@@ -27,6 +27,17 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 }
 
 /**
+ * The signed-in user for a SERVER ACTION, or null. Same as {@link getSessionUser}, except an account that
+ * still has to replace its temporary password gets null: pages already force /change-password through
+ * requireRole, and this closes the same gap for actions, which can be called without visiting a page.
+ * Only the change-password action itself (and sign-out) use getSessionUser directly.
+ */
+export async function getActionUser(): Promise<SessionUser | null> {
+  const user = await getSessionUser()
+  return user && !user.mustChangePassword ? user : null
+}
+
+/**
  * Deny-by-default gate for a staff route (SEC-A01). The route must be declared with a roles list
  * in ROUTE_PERMISSIONS and the signed-in user's role must be in it.
  *

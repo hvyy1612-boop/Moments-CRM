@@ -217,7 +217,7 @@ export type ContractEmail = { to: string; clientName: string; contractLink: stri
 export async function sendContractEmail(email: ContractEmail): Promise<void> {
   const html = shell(
     'Your booking contract',
-    `<p>Hi ${email.clientName}, please review and sign your booking contract.</p><p>${button(email.contractLink, 'Review and sign')}</p>`,
+    `<p>Hi ${escapeHtml(email.clientName)}, please review and sign your booking contract.</p><p>${button(email.contractLink, 'Review and sign')}</p>`,
   )
   await deliver({ to: email.to, subject: 'Your Moments booking contract', html, event: 'email.contract_sent', devLink: email.contractLink })
 }
@@ -228,13 +228,14 @@ export type TaskDigestEmail = { to: string; name: string; overdue: string[]; tod
 export async function sendTaskDigestEmail(email: TaskDigestEmail): Promise<void> {
   const list = (items: string[]) =>
     `<ul style="margin:6px 0 16px;padding-left:18px">${items
-      .map((i) => `<li style="margin:3px 0">${i}</li>`)
+      // Task lines carry lead/client names typed on the PUBLIC enquiry form: always escaped, never HTML.
+      .map((i) => `<li style="margin:3px 0">${escapeHtml(i)}</li>`)
       .join('')}</ul>`
   const section = (title: string, items: string[]) =>
     items.length ? `<h2 style="font-size:15px;font-weight:700;margin:16px 0 4px">${title}</h2>${list(items)}` : ''
   const html = shell(
     'What needs you today',
-    `<p>Hi ${email.name},</p>${section('Overdue', email.overdue)}${section('Due today', email.today)}`,
+    `<p>Hi ${escapeHtml(email.name)},</p>${section('Overdue', email.overdue)}${section('Due today', email.today)}`,
   )
   await deliver({ to: email.to, subject: 'Moments - tasks due today', html, event: 'email.task_digest' })
 }

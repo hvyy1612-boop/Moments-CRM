@@ -5,11 +5,13 @@ import { redirect } from 'next/navigation'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
 import { checkPasswordPolicy } from '@/lib/auth/password'
+import { verifyUserPasswordWithLockout } from '@/lib/auth/reauth'
+import { revokeAllSessions, SESSION_COOKIE, validateSession } from '@/lib/auth/session'
 import { setOwnPassword } from '@/lib/auth/user-password'
 
 export type ChangePasswordState =
   | { status: 'idle' }
-  | { status: 'error'; message?: string; errors?: { password?: string; confirm?: string } }
+  | { status: 'error'; message?: string; errors?: { current?: string; password?: string; confirm?: string } }
 
 /** Set the signed-in staff member's own password and clear the forced-change flag. */
 export async function changePassword(
@@ -23,6 +25,14 @@ export async function changePassword(
 
   const user = await getSessionUser()
   if (!user) redirect('/login')
+
+  // A voluntary change must prove the current password (a session left open must not be enough to take
+  // the account over). The forced first-login change skips it: they just signed in with the temp password.
+  if (!user.mustChangePassword) {
+    const verdict = await verifyUserPasswordWithLockout(user.id, String(formData.get('currentPassword') ?? ''))
+    if (verdict === 'locked') return { status: 'error', message: 'Too many wrong attempts. Please wait 15 minutes and try again.' }
+    if (verdict === 'wrong') return { status: 'error', errors: { current: 'Your current password is not correct.' } }
+  }
 
   const password = String(formData.get('password') ?? '')
   const confirm = String(formData.get('confirm') ?? '')
@@ -39,5 +49,9 @@ export async function changePassword(
   }
 
   await setOwnPassword(user.id, password)
+  // SEC-P06: a password change signs out every OTHER session (e.g. a stolen cookie); this one stays.
+  const token = cookieStore.get(SESSION_COOKIE)?.value
+  const current = token ? await validateSession(token) : null
+  await revokeAllSessions(user.id, { exceptSessionId: current?.sessionId })
   redirect('/dashboard')
 }
