@@ -1,10 +1,10 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { splitGstInclusive } from '@/lib/money'
-import { sydneyLocalToUtc, systemClock } from '@/lib/time'
+import { sydneyLocalToUtc, sydneyYmd, systemClock } from '@/lib/time'
 import { sendComposedInvoiceEmail, type SendResult } from '@/lib/email'
 import type { CreateInvoiceInput, CreateInvoiceLinesInput, RecordPaymentInput } from '@/lib/validation/finance'
-import { invoicePaidNet, lockInvoiceRow, refreshInvoiceAmountPaid } from './invoice-ledger'
+import { invoiceObligation, invoicePaidNet, lockInvoiceRow, refreshInvoiceAmountPaid } from './invoice-ledger'
 import { confirmBookingByDepositTx, maybeAutoCompleteJob } from './project-workflow'
 import { nextRecordNumber } from './numbering'
 
@@ -18,8 +18,37 @@ import { nextRecordNumber } from './numbering'
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
 /** Human invoice number, I<YYYY><4d> (e.g. I20260001), from the shared per-company/year counter. */
+/** A YYYY-MM-DD Sydney calendar date for an instant. */
+function sydneyYmdString(at: Date): string {
+  const { year, month, day } = sydneyYmd(at)
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+/**
+ * The form's "Due" rule (On issue / 7 / 14 days) as the start of that Sydney calendar day. Counted in
+ * calendar days, not 24h blocks, so a daylight-saving change never lands it on the previous evening.
+ */
+function dueFromRuleOf(due: CreateInvoiceLinesInput['due'], invoiceDate: string | undefined, docDate: Date): Date | null {
+  const days = due === 'NET7' ? 7 : due === 'NET14' ? 14 : due === 'ON_ISSUE' ? 0 : null
+  if (days === null) return null
+  const base = new Date(`${invoiceDate || sydneyYmdString(docDate)}T00:00:00Z`)
+  base.setUTCDate(base.getUTCDate() + days)
+  return sydneyLocalToUtc(`${base.toISOString().slice(0, 10)}T00:00`)
+}
+
+/**
+ * The next free invoice number. Staff may type an invoice number by hand, which never advances the
+ * counter, so the counter can later land on a number that is already taken. Skip past any such number
+ * instead of colliding: a collision would roll the counter back with the failed insert and every retry -
+ * and every later invoice - would hit the same number again.
+ */
 async function nextInvoiceNumber(tx: Tx, companyId: string, at: Date = systemClock.now()): Promise<string> {
-  return nextRecordNumber(tx, companyId, 'INVOICE', at)
+  for (let guard = 0; guard < 1000; guard++) {
+    const candidate = await nextRecordNumber(tx, companyId, 'INVOICE', at)
+    const taken = await tx.invoice.findFirst({ where: { invoiceNumber: candidate }, select: { id: true } })
+    if (!taken) return candidate
+  }
+  throw new Error('Could not find a free invoice number. Please try again.')
 }
 
 /**
@@ -175,7 +204,12 @@ export async function createInvoiceWithLines(
           })
         }
 
-        // Payment schedule: use the given instalments (must sum to the total) or a single full one.
+        // Document date + the form's due rule (On issue / 7 / 14 days).
+        const docDate = input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now
+        const dueFromRule = dueFromRuleOf(input.due, input.invoiceDate || undefined, docDate)
+
+        // Payment schedule: use the given instalments (must sum to the total) or a single full one. The single
+        // payment carries the due date too, so reminders and overdue follow-ups work without a split.
         let instalmentData
         if (input.instalments && input.instalments.length > 0) {
           let sum = new Prisma.Decimal(0)
@@ -189,18 +223,11 @@ export async function createInvoiceWithLines(
             sortOrder: i,
           }))
         } else {
-          instalmentData = [{ label: 'Full payment', dueAt: null, amount: total, status: 'UNPAID', sortOrder: 0 }]
+          instalmentData = [{ label: 'Full payment', dueAt: dueFromRule, amount: total, status: 'UNPAID', sortOrder: 0 }]
         }
 
-        // Document date + due date. A multi-instalment schedule sets the due from its latest instalment;
-        // otherwise the "Due" rule from the form (On issue / 7 / 14 days) applies, relative to the doc date.
-        const docDate = input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now
+        // A multi-instalment schedule is due at its latest instalment; otherwise the form's rule applies.
         const dueFromInstalments = instalmentData.reduce<Date | null>((m, it) => (it.dueAt && (!m || it.dueAt > m) ? it.dueAt : m), null)
-        const dueFromRule =
-          input.due === 'NET7' ? new Date(docDate.getTime() + 7 * 86_400_000)
-          : input.due === 'NET14' ? new Date(docDate.getTime() + 14 * 86_400_000)
-          : input.due === 'ON_ISSUE' ? docDate
-          : null
 
         const invoice = await tx.invoice.create({
           data: {
@@ -274,12 +301,16 @@ export async function updateInvoiceWithLines(
   const wantedNumber = input.invoiceNumber?.trim()
 
   return prisma.$transaction(async (tx) => {
+    // Serialise with payments/refunds on this invoice (F-1) and check the LEDGER, not the cache, so a payment
+    // committing at the same moment can never be followed by a total edited below what was paid.
+    await lockInvoiceRow(tx, invoiceId)
     const existing = await tx.invoice.findUnique({
       where: { id: invoiceId },
       select: { id: true, status: true, amountPaid: true, invoiceNumber: true },
     })
     if (!existing) throw new Error('Invoice not found.')
-    if (existing.amountPaid.gt(0) || existing.status === 'PAID' || existing.status === 'PARTIALLY_PAID' || existing.status === 'VOID') {
+    const paidOnLedger = await invoicePaidNet(tx, invoiceId)
+    if (paidOnLedger.gt(0) || existing.amountPaid.gt(0) || existing.status === 'PAID' || existing.status === 'PARTIALLY_PAID' || existing.status === 'VOID') {
       throw new Error('This invoice has payments or is closed. It can no longer be edited.')
     }
     if (wantedNumber && wantedNumber !== existing.invoiceNumber) {
@@ -310,6 +341,9 @@ export async function updateInvoiceWithLines(
       })
     }
 
+    const docDate = input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now
+    const dueFromRule = dueFromRuleOf(input.due, input.invoiceDate || undefined, docDate)
+
     let instalmentData
     if (input.instalments && input.instalments.length > 0) {
       let sum = new Prisma.Decimal(0)
@@ -323,20 +357,14 @@ export async function updateInvoiceWithLines(
         sortOrder: i,
       }))
     } else {
-      instalmentData = [{ label: 'Full payment', dueAt: null, amount: total, status: 'UNPAID', sortOrder: 0 }]
+      instalmentData = [{ label: 'Full payment', dueAt: dueFromRule, amount: total, status: 'UNPAID', sortOrder: 0 }]
     }
 
     await tx.invoiceLine.deleteMany({ where: { invoiceId } })
     await tx.invoiceInstalment.deleteMany({ where: { invoiceId } })
     // Same due rule as create: a split schedule is due at its latest instalment, otherwise the form's
     // "Due" choice (On issue / 7 / 14 days) relative to the document date; no choice keeps the old rule.
-    const docDate = input.invoiceDate ? sydneyLocalToUtc(`${input.invoiceDate}T00:00`) : now
     const dueFromInstalments = instalmentData.reduce<Date | null>((m, it) => (it.dueAt && (!m || it.dueAt > m) ? it.dueAt : m), null)
-    const dueFromRule =
-      input.due === 'NET7' ? new Date(docDate.getTime() + 7 * 86_400_000)
-      : input.due === 'NET14' ? new Date(docDate.getTime() + 14 * 86_400_000)
-      : input.due === 'ON_ISSUE' ? docDate
-      : null
     const invoice = await tx.invoice.update({
       where: { id: invoiceId },
       data: {
@@ -550,6 +578,11 @@ export async function deleteInvoice(invoiceId: string, actorUserId: string | nul
     if (invoice.amountPaid.gt(0) || invoice.status === 'PAID' || invoice.status === 'PARTIALLY_PAID') {
       throw new Error('This invoice has payments recorded. Void or refund it instead of deleting.')
     }
+    // A payment that was later refunded in full still belongs to the money ledger (and the database refuses
+    // to delete an invoice with payment rows), so such an invoice is marked uncollectible instead.
+    if ((await tx.payment.count({ where: { invoiceId } })) > 0) {
+      throw new Error('This invoice has payment history, so it cannot be deleted. Mark it uncollectible instead.')
+    }
     await tx.invoice.delete({ where: { id: invoiceId } })
     await tx.auditLog.create({
       data: {
@@ -599,15 +632,17 @@ export async function recordPayment(
       })
       if (prior) {
         const already = await invoicePaidNet(tx, invoiceId)
-        return { paidInFull: already.greaterThanOrEqualTo(invoice.total), idempotentReplay: true }
+        return { paidInFull: already.greaterThanOrEqualTo(await invoiceObligation(tx, invoiceId, invoice.total)), idempotentReplay: true }
       }
     }
 
+    // What the client actually owes is the total less any credit notes (price reductions).
+    const obligation = await invoiceObligation(tx, invoiceId, invoice.total)
     const paidNet = await invoicePaidNet(tx, invoiceId)
-    if (invoice.status === 'PAID' || paidNet.greaterThanOrEqualTo(invoice.total)) {
+    if (invoice.status === 'PAID' || paidNet.greaterThanOrEqualTo(obligation)) {
       throw new Error('This invoice is already paid in full.')
     }
-    const remaining = invoice.total.sub(paidNet)
+    const remaining = obligation.sub(paidNet)
     if (amount.greaterThan(remaining)) {
       throw new Error(`That is more than the balance due (${remaining.toFixed(2)}).`)
     }
@@ -640,13 +675,29 @@ export async function recordPayment(
       // Backstop: a concurrent request with the same idempotency key hit the unique constraint.
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002' && idempotencyKey) {
         const already = await invoicePaidNet(tx, invoiceId)
-        return { paidInFull: already.greaterThanOrEqualTo(invoice.total), idempotentReplay: true }
+        return { paidInFull: already.greaterThanOrEqualTo(obligation), idempotentReplay: true }
       }
       throw err
     }
 
     const newAmountPaid = await refreshInvoiceAmountPaid(tx, invoiceId, invoice.total, invoice.status)
-    const paidInFull = newAmountPaid.greaterThanOrEqualTo(invoice.total)
+    const paidInFull = newAmountPaid.greaterThanOrEqualTo(obligation)
+
+    // Company policy (momentsphotography.com.au FAQ): the deposit secures the date. On a split DEPOSIT
+    // invoice ("25% Deposit + 75% ...") paying the first instalment in full is that deposit, so it confirms
+    // the booking without waiting for the final payment.
+    let depositCovered = false
+    if (!paidInFull && invoice.type === 'DEPOSIT') {
+      const first = await tx.invoiceInstalment.findMany({ where: { invoiceId }, orderBy: { sortOrder: 'asc' }, take: 2, select: { amount: true } })
+      depositCovered = first.length > 1 && newAmountPaid.greaterThanOrEqualTo(first[0]!.amount)
+    }
+    if (depositCovered && invoice.projectId) {
+      const project = await tx.project.findUnique({ where: { id: invoice.projectId }, select: { commercialStatus: true } })
+      if (project && !['PAID', 'DEPOSIT_PAID', 'CANCELLED'].includes(project.commercialStatus)) {
+        await tx.project.update({ where: { id: invoice.projectId }, data: { commercialStatus: 'DEPOSIT_PAID' } })
+      }
+      await confirmBookingByDepositTx(tx, invoice.projectId, actorUserId)
+    }
 
     if (paidInFull) {
       // Advance the project's commercial status, never downgrade it.
@@ -757,12 +808,23 @@ export async function listInvoiceTemplates(): Promise<InvoiceTemplateOption[]> {
  * to PARTIALLY_PAID/PAID, and the next run re-marks anything still overdue.
  */
 export async function markOverdueInvoices(now: Date = systemClock.now()) {
+  // Overdue only once the whole due DAY (Sydney) has passed: due dates are stored as the start of that day,
+  // so comparing with "now" would flag an invoice on the very morning it falls due.
+  const startOfTodaySydney = sydneyLocalToUtc(`${sydneyYmdString(now)}T00:00`)
   const candidates = await prisma.invoice.findMany({
-    where: { status: { in: ['ISSUED', 'SENT', 'PARTIALLY_PAID'] }, dueAt: { lt: now } },
-    select: { id: true, total: true, amountPaid: true },
+    where: { status: { in: ['ISSUED', 'SENT', 'PARTIALLY_PAID'] }, dueAt: { lt: startOfTodaySydney } },
+    select: { id: true, total: true, amountPaid: true, creditNotes: { where: { NOT: { status: 'VOIDED' } }, select: { amount: true } } },
   })
-  const ids = candidates.filter((i) => i.total.greaterThan(i.amountPaid)).map((i) => i.id)
+  // Credit-aware: what is owed is the total less credit notes.
+  const ids = candidates
+    .filter((i) => i.total.sub(i.creditNotes.reduce((s, c) => s.add(c.amount), new Prisma.Decimal(0))).greaterThan(i.amountPaid))
+    .map((i) => i.id)
   if (ids.length === 0) return { marked: 0 }
-  const res = await prisma.invoice.updateMany({ where: { id: { in: ids } }, data: { status: 'OVERDUE' } })
+  // Re-check the status in the same statement: a payment that settled the invoice since the read above
+  // must not be overwritten to OVERDUE.
+  const res = await prisma.invoice.updateMany({
+    where: { id: { in: ids }, status: { in: ['ISSUED', 'SENT', 'PARTIALLY_PAID'] } },
+    data: { status: 'OVERDUE' },
+  })
   return { marked: res.count }
 }

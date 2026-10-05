@@ -202,7 +202,7 @@ export default async function InvoiceDetailPage({
                 clientViewHref={inv.accessToken ? `/invoice/${inv.accessToken}` : null}
                 editHref={isEditable ? `/finance/${inv.id}/edit` : null}
                 canVoid={canVoid}
-                canDelete={unpaid}
+                canDelete={unpaid && inv.payments.length === 0 /* refunded payments still count as history */}
               />
             </div>
 

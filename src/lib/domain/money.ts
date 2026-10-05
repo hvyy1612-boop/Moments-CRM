@@ -122,8 +122,12 @@ export function allocatePaymentsToInstalments(paidNet: D, instalments: Instalmen
 /** One invoice's money (docs/25 §1.1). */
 export function getInvoiceBalance(inv: InvoiceMoneyInput): InvoiceBalance {
   const issuedTotal = OBLIGATION_STATES.has(inv.status) ? inv.total : ZERO
-  const creditedTotal = inv.creditNotes.filter(creditNoteIsEffective).reduce((s, c) => s.add(c.amount), ZERO)
-  const obligation = issuedTotal.sub(creditedTotal)
+  // Credits only reduce a live obligation: a void/draft invoice owes nothing, so its credit notes must not
+  // turn into a phantom "overpayment" (nor may credits above an edited-down total), hence the floor at 0.
+  const creditedTotal = OBLIGATION_STATES.has(inv.status)
+    ? inv.creditNotes.filter(creditNoteIsEffective).reduce((s, c) => s.add(c.amount), ZERO)
+    : ZERO
+  const obligation = dMax(issuedTotal.sub(creditedTotal), ZERO)
   const paidNet = computePaidNet(inv.transactions)
   const owed = dMax(obligation.sub(paidNet), ZERO)
   const overpaymentToResolve = dMax(paidNet.sub(obligation), ZERO)
@@ -159,7 +163,11 @@ export function getJobBalance(invoices: InvoiceMoneyInput[], agreedContractValue
   const outstanding = per.reduce((s, b) => s.add(b.owed), ZERO)
   const overpaymentToResolve = per.reduce((s, b) => s.add(b.overpaymentToResolve), ZERO)
   const agreedValueKnown = agreedContractValue !== null
-  const uninvoicedRemainder = agreedContractValue !== null ? dMax(agreedContractValue.sub(invoicedObligation), ZERO) : null
+  // "Still to invoice" compares the agreement with what was INVOICED (gross of credits). A credit note is a
+  // price reduction (e.g. an applied Price-decrease change request): it lowers the agreement by the same
+  // amount it lowers the obligation, so it must not reappear here as an amount still to bill.
+  const invoicedGross = per.reduce((s, b) => s.add(b.issuedTotal), ZERO)
+  const uninvoicedRemainder = agreedContractValue !== null ? dMax(agreedContractValue.sub(invoicedGross), ZERO) : null
   const netPosition = invoicedObligation.sub(paidNet)
   const isFullySettled =
     agreedValueKnown &&

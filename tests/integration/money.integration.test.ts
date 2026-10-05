@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
 import { createEnquiry, convertEnquiry } from '@/lib/domain/enquiry'
-import { createInvoice, issueCreditNote, recordPayment, voidInvoice } from '@/lib/domain/finance'
+import { createInvoice, createInvoiceWithLines, deleteInvoice, issueCreditNote, markOverdueInvoices, recordPayment, voidInvoice } from '@/lib/domain/finance'
+import { sydneyLocalToUtc } from '@/lib/time'
 import { closeJob } from '@/lib/domain/project'
 import { seedProjectWorkflow } from '@/lib/domain/project-workflow'
 import { refundPayment } from '@/lib/domain/refund'
@@ -256,5 +257,87 @@ describe('Money foundation against a real DB (docs/25 Part 1)', () => {
       const p = await prisma.project.findUnique({ where: { id: projectId }, select: { lifecycleStatus: true } })
       expect(p?.lifecycleStatus).toBe('CLOSED')
     })
+  })
+})
+
+describe('bug-scan 2026-10-05: money fixes against a real DB', () => {
+  const lines = (amount: string) => [{ itemName: 'Coverage', description: 'Coverage', quantity: 1, unitPrice: amount, discount: '' }]
+  const splitDeposit = (projectId: string) =>
+    createInvoiceWithLines(projectId, {
+      type: 'DEPOSIT',
+      lines: lines('4000'),
+      instalments: [
+        { label: 'Deposit (25%)', dueAt: '2026-10-05', amount: '1000' },
+        { label: 'Final payment (75%)', dueAt: '2027-05-29', amount: '3000' },
+      ],
+    }, null)
+  const leadAndJob = async () => {
+    const e = await createEnquiry({ name: 'Split deposit', email: email() })
+    const conv = await convertEnquiry(e.id)
+    return { enquiryId: e.id, projectId: conv.projectId as string }
+  }
+
+  it('paying the deposit instalment of a split DEPOSIT invoice confirms the booking (company policy)', async () => {
+    const { enquiryId, projectId } = await leadAndJob()
+    const inv = await splitDeposit(projectId)
+    await pay(inv.id, '1000')
+    const p = await prisma.project.findUnique({ where: { id: projectId }, select: { lifecycleStatus: true, commercialStatus: true } })
+    expect(p?.lifecycleStatus).toBe('CONFIRMED')
+    expect(p?.commercialStatus).toBe('DEPOSIT_PAID')
+    expect((await prisma.enquiry.findUnique({ where: { id: enquiryId } }))?.status).toBe('BOOKING_CONFIRMED')
+    expect((await prisma.invoice.findUnique({ where: { id: inv.id } }))?.status).toBe('PARTIALLY_PAID')
+  })
+
+  it('part of the deposit does not confirm the booking', async () => {
+    const { projectId } = await leadAndJob()
+    const inv = await splitDeposit(projectId)
+    await pay(inv.id, '500')
+    expect((await prisma.project.findUnique({ where: { id: projectId } }))?.lifecycleStatus).toBe('BOOKING_REQUESTED')
+  })
+
+  it('credit-aware: after a $200 credit, $800 settles a $1,000 invoice and more is refused', async () => {
+    const invId = await issuedInvoice(await newProject(), '1000')
+    await issueCreditNote(invId, '200', 'Price decrease', null)
+    await expect(pay(invId, '900')).rejects.toThrow(/more than the balance due/i)
+    await pay(invId, '800')
+    expect((await prisma.invoice.findUnique({ where: { id: invId } }))?.status).toBe('PAID')
+  })
+
+  it('a hand-typed next invoice number does not break automatic numbering', async () => {
+    const projectId = await newProject()
+    const a = await createInvoiceWithLines(projectId, { type: 'BALANCE', lines: lines('100') }, null)
+    const seq = Number(a.invoiceNumber.slice(-4))
+    const typed = `${a.invoiceNumber.slice(0, -4)}${String(seq + 1).padStart(4, '0')}`
+    await createInvoiceWithLines(projectId, { type: 'BALANCE', lines: lines('100'), invoiceNumber: typed }, null)
+    const c = await createInvoiceWithLines(projectId, { type: 'BALANCE', lines: lines('100') }, null)
+    expect(c.invoiceNumber).not.toBe(typed)
+    expect(Number(c.invoiceNumber.slice(-4))).toBe(seq + 2)
+  })
+
+  it('a single-payment invoice carries its due date on the instalment (reminders need it), in Sydney days', async () => {
+    const projectId = await newProject()
+    const inv = await createInvoiceWithLines(projectId, { type: 'BALANCE', lines: lines('500'), invoiceDate: '2027-03-30', due: 'NET7' }, null)
+    const row = await prisma.invoice.findUnique({ where: { id: inv.id }, select: { dueAt: true, instalments: { select: { dueAt: true } } } })
+    // 30 Mar 2027 + 7 days crosses the end of daylight saving (4 Apr): still due on 6 Apr, Sydney midnight.
+    expect(row?.dueAt?.toISOString()).toBe(sydneyLocalToUtc('2027-04-06T00:00').toISOString())
+    expect(row?.instalments[0]?.dueAt?.toISOString()).toBe(row?.dueAt?.toISOString())
+  })
+
+  it('an invoice is overdue only after its due day has passed (Sydney)', async () => {
+    const projectId = await newProject()
+    const inv = await createInvoiceWithLines(projectId, { type: 'BALANCE', lines: lines('500'), invoiceDate: '2026-11-10', due: 'ON_ISSUE' }, null)
+    await markOverdueInvoices(sydneyLocalToUtc('2026-11-10T09:00'))
+    expect((await prisma.invoice.findUnique({ where: { id: inv.id } }))?.status).toBe('ISSUED')
+    await markOverdueInvoices(sydneyLocalToUtc('2026-11-11T09:00'))
+    expect((await prisma.invoice.findUnique({ where: { id: inv.id } }))?.status).toBe('OVERDUE')
+  })
+
+  it('an invoice whose payment was fully refunded cannot be deleted (friendly error, no crash)', async () => {
+    const projectId = await newProject()
+    const invId = await issuedInvoice(projectId, '300')
+    await pay(invId, '300')
+    const payment = await prisma.payment.findFirst({ where: { invoiceId: invId } })
+    await refundPayment(payment!.id, '300', { reason: 'Full refund' })
+    await expect(deleteInvoice(invId, null)).rejects.toThrow(/payment history/i)
   })
 })

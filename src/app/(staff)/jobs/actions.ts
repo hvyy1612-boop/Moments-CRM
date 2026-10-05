@@ -401,6 +401,9 @@ export async function refundPaymentAction(
   const amount = String(formData.get('amount') ?? '')
   const reason = String(formData.get('reason') ?? '').trim() || undefined
   if (!paymentId || !amount) return { status: 'error', message: 'Missing refund details.' }
+  if (!/^\d{1,9}(\.\d{1,2})?$/.test(amount.trim()) || Number(amount) <= 0) {
+    return { status: 'error', message: 'Please enter the refund as an amount like 250 or 250.00.' }
+  }
   try {
     await refundPayment(paymentId, amount, { reason }, user.id)
   } catch (error) {

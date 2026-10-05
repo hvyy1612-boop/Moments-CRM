@@ -184,3 +184,26 @@ describe('getJobBalance — outstanding and overpayment aggregated separately (R
     expect(job.uninvoicedRemainder?.toString()).toBe('0')
   })
 })
+
+describe('credit notes are price reductions (bug-scan 2026-10-05)', () => {
+  it('a Price-decrease credit settles the job once the reduced amount is paid (agreed value drops with it)', () => {
+    // Accepted quote $3,000, invoiced $3,000, $200 price decrease credited, client pays $2,800.
+    const inv = invoice({ total: d(3000), transactions: [charge(2800)], creditNotes: [{ amount: d(200) }] })
+    const job = getJobBalance([inv], d(3000))
+    expect(job.outstanding.toString()).toBe('0')
+    expect(job.uninvoicedRemainder?.toString()).toBe('0')
+    expect(job.isFullySettled).toBe(true)
+  })
+
+  it('credits on a void invoice never become a phantom overpayment', () => {
+    const b = getInvoiceBalance(invoice({ status: 'VOID', total: d(1000), creditNotes: [{ amount: d(200) }] }))
+    expect(b.obligation.toString()).toBe('0')
+    expect(b.overpaymentToResolve.toString()).toBe('0')
+  })
+
+  it('credits above an edited-down total floor the obligation at zero (no phantom overpayment)', () => {
+    const b = getInvoiceBalance(invoice({ total: d(100), creditNotes: [{ amount: d(200) }] }))
+    expect(b.obligation.toString()).toBe('0')
+    expect(b.overpaymentToResolve.toString()).toBe('0')
+  })
+})
