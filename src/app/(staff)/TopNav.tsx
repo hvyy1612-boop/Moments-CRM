@@ -66,7 +66,7 @@ export function TopNav({
 
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
       <CommandPalette />
-      <NotificationBell alerts={alerts} />
+      <NotificationBell alerts={alerts} canViewActivity={userRole === 'ADMIN'} />
 
       <div ref={menuRef} className="relative shrink-0">
         <button

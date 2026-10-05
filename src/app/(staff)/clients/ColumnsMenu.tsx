@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 
-const COLS: [string, string][] = [['phone', 'Phone'], ['source', 'Source'], ['jobs', 'Jobs'], ['since', 'Client since']]
+// Only columns the Clients table actually has (keys match ClientsTable's column keys).
+const COLS: [string, string][] = [['phone', 'Phone'], ['email', 'Email'], ['since', 'Date created']]
 const KEY = 'clients.hiddenCols'
 
 /** Toggle table column visibility (per viewer, remembered in localStorage). Hides cells tagged

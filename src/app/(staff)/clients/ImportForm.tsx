@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useActionState, useState, type ChangeEvent } from 'react'
 import { Alert } from '@/components/ui/Alert'
-import { Button } from '@/components/ui/Button'
+import { Button, buttonClass } from '@/components/ui/Button'
 import { FormActions, FormBlock, FormCell, PageForm, Textarea } from '@/components/ui/form'
 import { importClientsAction, type ImportState } from './actions'
 
@@ -102,7 +102,7 @@ function ImportResult({ result, onReset }: { result: Extract<ImportState, { stat
 
           <div className="mt-5 flex flex-wrap gap-2">
             {success ? (
-              <Link href={`/clients?imported=${created}`}><Button>View clients</Button></Link>
+              <Link href={`/clients?imported=${created}`} className={buttonClass()}>View clients</Link>
             ) : null}
             <Button type="button" variant="secondary" onClick={onReset}>Import more</Button>
           </div>

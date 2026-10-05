@@ -267,8 +267,11 @@ export async function addProjectStage(projectId: string, stageName: string, acto
   if (PROJECT_STAGE_KEYS.has(key)) throw new Error('That stage already exists.')
   return prisma.$transaction(async (tx) => {
     const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { companyId: true } })
+    if (await tx.workItem.count({ where: { projectId, stage: key } })) throw new Error('A stage with that name already exists.')
+    // Placed after every existing task (follow-up rows aside), so a new stage lists after those already there.
+    const last = await tx.workItem.aggregate({ where: { projectId, stage: { not: null }, kind: { not: 'OVERDUE_FOLLOWUP' } }, _max: { order: true } })
     await tx.workItem.create({
-      data: { companyId: project.companyId, projectId, kind: 'CUSTOM', stage: key, type: 'TODO', title: 'New task', status: 'PENDING', order: 1, dueOverrideAt: null },
+      data: { companyId: project.companyId, projectId, kind: 'CUSTOM', stage: key, type: 'TODO', title: 'New task', status: 'PENDING', order: (last._max.order ?? 0) + 1, dueOverrideAt: null },
     })
     await tx.auditLog.create({
       data: { companyId: project.companyId, actorUserId, action: 'project.stage_added', entityType: 'Project', entityId: projectId, afterData: { stage: key } },
@@ -282,6 +285,7 @@ export async function renameProjectStage(projectId: string, fromStage: string, t
   if (PROJECT_STAGE_KEYS.has(fromStage) || PROJECT_STAGE_KEYS.has(to)) throw new Error('The core stages cannot be renamed.')
   return prisma.$transaction(async (tx) => {
     const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { companyId: true } })
+    if (to !== fromStage && (await tx.workItem.count({ where: { projectId, stage: to } }))) throw new Error('A stage with that name already exists.')
     const res = await tx.workItem.updateMany({ where: { projectId, stage: fromStage }, data: { stage: to } })
     if (res.count > 0) {
       await tx.auditLog.create({

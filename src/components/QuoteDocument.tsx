@@ -24,7 +24,8 @@ export type QuoteDocData = {
   clientLocation?: string | null
   issueDate: Date | null
   validUntil: Date | null
-  lines: { id: string; description: string; details: string | null; quantity: number; unitPrice: Prisma.Decimal; lineTotal: Prisma.Decimal }[]
+  /** `discount` = the line's own discount in dollars (already taken off lineTotal), shown so qty x price != amount reads clearly. */
+  lines: { id: string; description: string; details: string | null; quantity: number; unitPrice: Prisma.Decimal; discount?: Prisma.Decimal | null; lineTotal: Prisma.Decimal }[]
   subtotal: Prisma.Decimal
   taxTotal: Prisma.Decimal
   total: Prisma.Decimal
@@ -129,6 +130,7 @@ export function QuoteDocument({ doc }: { doc: QuoteDocData }) {
                 <td className="border border-line px-3 py-2 align-top">
                   <div className="break-words font-semibold text-ink">{line.description}</div>
                   {line.details ? <p className="mt-1 whitespace-pre-line break-words text-xs leading-normal text-ink-muted">{line.details}</p> : null}
+                  {line.discount && line.discount.greaterThan(0) ? <p className="tabular mt-1 text-xs font-medium text-ink">Discount -{formatAud(line.discount)}</p> : null}
                 </td>
                 <td className="tabular border border-line px-3 py-2 text-center align-top text-ink">{line.quantity}</td>
                 <td className="tabular border border-line px-3 py-2 text-right align-top text-ink">{formatAud(line.unitPrice)}</td>

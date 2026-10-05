@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getActionUser } from '@/lib/auth/guard'
+import { parseCsv } from '@/lib/csv'
 import { prisma } from '@/lib/db'
 import {
   addClientNote,
@@ -172,19 +173,18 @@ export async function importClientsAction(_prev: ImportState, formData: FormData
   const raw = String(formData.get('csv') ?? '').trim()
   if (!raw) return { status: 'error', message: 'Paste at least one row of CSV first.' }
 
-  const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-  // Drop an optional header row (first line mentioning "email").
-  if (lines[0] && /email/i.test(lines[0]) && !/@/.test(lines[0]!)) lines.shift()
+  // Real CSV parsing: quoted fields (a name with a comma, a fully quoted export) and tab-separated rows
+  // pasted from a spreadsheet both work, as does a re-import of this app's own export.
+  const rows = parseCsv(raw)
+  // Drop an optional header row (a cell mentioning "email", and no actual address on the line).
+  if (rows[0] && rows[0].some((c) => /email/i.test(c)) && !rows[0].some((c) => c.includes('@'))) rows.shift()
 
   let created = 0
   let skipped = 0
   let failed = 0
   const seen = new Set<string>()
 
-  for (const line of lines) {
-    // Accept comma, tab or semicolon between columns - pasting from Excel/Google Sheets is tab-separated,
-    // so a comma-only split silently failed every spreadsheet row (name/email/phone collapsed into one).
-    const cols = line.split(/[\t;,]/).map((c) => c.trim())
+  for (const cols of rows) {
     const [name = '', email = '', phone = ''] = cols
     const key = email.toLowerCase()
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {

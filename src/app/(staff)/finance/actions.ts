@@ -11,7 +11,10 @@ import { deleteInvoice, sendInvoice } from '@/lib/domain/finance'
 
 /** Server actions for the Payments list (bulk operations on the ticked invoices) and invoice sending. */
 
-export type SendInvoiceState = { status: 'idle' } | { status: 'error' | 'notice'; message: string }
+export type SendInvoiceState =
+  | { status: 'idle' }
+  // `values` = the typed recipient/subject/message, handed back so the dialog keeps them after an error.
+  | { status: 'error' | 'notice'; message: string; values?: { to: string; subject: string; message: string } }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -21,6 +24,13 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
  * emailed the invoice is still issued, and the dialog says exactly that.
  */
 export async function sendInvoiceAction(_prev: SendInvoiceState, formData: FormData): Promise<SendInvoiceState> {
+  const result = await sendInvoiceFromForm(formData)
+  if (result.status === 'idle') return result
+  const values = { to: String(formData.get('to') ?? ''), subject: String(formData.get('subject') ?? ''), message: String(formData.get('message') ?? '') }
+  return { ...result, values }
+}
+
+async function sendInvoiceFromForm(formData: FormData): Promise<SendInvoiceState> {
   const cookieStore = await cookies()
   if (!verifyCsrf(cookieStore.get(CSRF_COOKIE)?.value, formData.get('csrf'))) {
     return { status: 'error', message: 'Your session expired. Refresh and try again.' }

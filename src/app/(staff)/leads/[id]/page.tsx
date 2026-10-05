@@ -78,6 +78,7 @@ export default async function EnquiryDetailPage({
       weddingDetails: true,
       styleReason: true,
       heardAbout: true,
+      message: true,
       status: true,
       waitingOn: true,
       convertedProjectId: true,
@@ -327,9 +328,9 @@ export default async function EnquiryDetailPage({
 
         {/* Enquiry details (wedding-enquiry fields captured on the add-client / website form) */}
         {(() => {
-          const details: { label: string; value: string }[] = []
-          const add = (label: string, v: string | null | undefined) => {
-            if (v && v.trim()) details.push({ label, value: v })
+          const details: { label: string; value: string; wide?: boolean }[] = []
+          const add = (label: string, v: string | null | undefined, wide = false) => {
+            if (v && v.trim()) details.push({ label, value: v, wide })
           }
           add("Partner's name", enquiry.partnerName)
           add('Photography, videography or both', enquiry.coverage)
@@ -340,13 +341,15 @@ export default async function EnquiryDetailPage({
           add('About the wedding day (incl. guest numbers)', enquiry.weddingDetails)
           add('How they heard about us', enquiry.heardAbout)
           add('What draws them to our style', enquiry.styleReason)
+          // The client's own words from the enquiry form (or what staff noted when adding the lead).
+          add('Message', enquiry.message, true)
           if (details.length === 0) return null
           return (
             <div className="mt-4 rounded-md border border-line bg-surface p-5">
               <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Enquiry details</h2>
               <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {details.map((d) => (
-                  <div key={d.label}>
+                  <div key={d.label} className={d.wide ? 'sm:col-span-2' : undefined}>
                     <dt className="text-xs font-medium uppercase tracking-wide text-muted">{d.label}</dt>
                     <dd className="mt-0.5 whitespace-pre-line break-words text-sm text-ink">{d.value}</dd>
                   </div>

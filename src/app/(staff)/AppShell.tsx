@@ -41,9 +41,12 @@ const S = {
   strokeLinecap: 'round',
   strokeLinejoin: 'round',
 } as const
+// Nav icons are built here on the server and rendered by the client Sidebar next to its status dot. An
+// element that arrives in a later RSC chunk is checked like a list child, so it carries its own key
+// (without it React warns "Each child in a list should have a unique key" for Sidebar).
 function svg(children: ReactNode): ReactNode {
   return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" {...S}>
+    <svg key="nav-icon" viewBox="0 0 24 24" className="h-5 w-5 shrink-0" {...S}>
       {children}
     </svg>
   )

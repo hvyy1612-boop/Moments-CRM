@@ -46,6 +46,7 @@ export default async function ClientDetailPage({
       partnerName: true,
       preferredContact: true,
       createdAt: true,
+      archivedAt: true,
     },
   })
   if (!client) notFound()
@@ -108,6 +109,7 @@ export default async function ClientDetailPage({
             status: client.status,
             addressLine,
             createdLabel: formatSydneyDate(client.createdAt),
+            archived: client.archivedAt != null,
           }}
           enquiry={enquiryData}
           enquiryCount={enquiryCount}

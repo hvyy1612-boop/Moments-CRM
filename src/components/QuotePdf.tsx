@@ -160,6 +160,7 @@ export function QuotePdf({ doc }: { doc: QuoteDocData }) {
               <View style={[s.td, s.cDesc]}>
                 <Text style={s.lineName}>{line.description}</Text>
                 {line.details ? <Text style={s.lineDetail}>{line.details}</Text> : null}
+                {line.discount && line.discount.greaterThan(0) ? <Text style={[s.lineDetail, { color: C.ink, fontFamily: 'Helvetica-Bold' }]}>Discount -{formatAud(line.discount)}</Text> : null}
               </View>
               <Text style={[s.td, s.cQty, { textAlign: 'center' }]}>{line.quantity}</Text>
               <Text style={[s.td, s.cUnit, { textAlign: 'right' }]}>{formatAud(line.unitPrice)}</Text>

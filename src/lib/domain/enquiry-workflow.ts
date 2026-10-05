@@ -221,6 +221,9 @@ export async function addEnquiryStage(enquiryId: string, stageName: string, acto
   if (ENQUIRY_STAGE_KEYS.has(key)) throw new Error('That stage already exists.')
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUniqueOrThrow({ where: { id: enquiryId }, select: { companyId: true } })
+    if (await tx.workItem.count({ where: { enquiryId, stage: key } })) throw new Error('A stage with that name already exists.')
+    // Placed after every existing task, so a new stage always lists after the stages already there.
+    const last = await tx.workItem.aggregate({ where: { enquiryId }, _max: { order: true } })
     await tx.workItem.create({
       data: {
         companyId: enquiry.companyId,
@@ -230,7 +233,7 @@ export async function addEnquiryStage(enquiryId: string, stageName: string, acto
         type: 'TODO',
         title: 'New task',
         status: 'PENDING',
-        order: 1,
+        order: (last._max.order ?? 0) + 1,
         dueAt: null,
       },
     })
@@ -246,6 +249,7 @@ export async function renameEnquiryStage(enquiryId: string, fromStage: string, t
   if (ENQUIRY_STAGE_KEYS.has(fromStage) || ENQUIRY_STAGE_KEYS.has(to)) throw new Error('The core stages cannot be renamed.')
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUniqueOrThrow({ where: { id: enquiryId }, select: { companyId: true } })
+    if (to !== fromStage && (await tx.workItem.count({ where: { enquiryId, stage: to } }))) throw new Error('A stage with that name already exists.')
     const res = await tx.workItem.updateMany({ where: { enquiryId, stage: fromStage }, data: { stage: to } })
     if (res.count > 0) {
       await tx.auditLog.create({
@@ -265,6 +269,7 @@ export async function deleteEnquiryStage(enquiryId: string, stage: string, actor
         data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.stage_deleted', entityType: 'Enquiry', entityId: enquiryId, afterData: { stage } },
       })
     }
+    await syncEnquiryStageFromTasks(tx, enquiryId, actorUserId)
   })
 }
 
@@ -289,6 +294,8 @@ export async function deleteEnquiryTask(taskId: string, actorUserId: string) {
     await tx.auditLog.create({
       data: { companyId: task.companyId, actorUserId, action: 'enquiry.task_deleted', entityType: 'Enquiry', entityId: task.enquiryId!, afterData: { title: task.title } },
     })
+    // Removing the last open task of a stage moves the lead on, exactly as ticking it would.
+    await syncEnquiryStageFromTasks(tx, task.enquiryId!, actorUserId)
   })
 }
 

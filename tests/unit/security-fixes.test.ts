@@ -27,3 +27,29 @@ describe('client CSV export cannot carry a spreadsheet formula', () => {
     expect(csvCell('')).toBe('')
   })
 })
+
+describe('client CSV import reads real CSV', () => {
+  it('handles quoted fields, commas inside quotes and doubled quotes', async () => {
+    const { parseCsv } = await import('@/lib/csv')
+    const rows = parseCsv('"Name","Email","Phone"\n"Smith, Jane","jane@example.com","0400 000 000"\n"Ann ""Annie"" Lee",ann@example.com,')
+    expect(rows).toEqual([
+      ['Name', 'Email', 'Phone'],
+      ['Smith, Jane', 'jane@example.com', '0400 000 000'],
+      ['Ann "Annie" Lee', 'ann@example.com', ''],
+    ])
+  })
+
+  it('reads tab-separated rows pasted from a spreadsheet, and a quoted line break', async () => {
+    const { parseCsv } = await import('@/lib/csv')
+    expect(parseCsv('Jane Doe\tjane@example.com\t0400\r\n"Two\nlines"\tx@example.com\t')).toEqual([
+      ['Jane Doe', 'jane@example.com', '0400'],
+      ['Two\nlines', 'x@example.com', ''],
+    ])
+  })
+
+  it("re-imports this app's own export (formula guard removed again)", async () => {
+    const { csvCell, parseCsv } = await import('@/lib/csv')
+    const line = ['Olivia Brown', 'olivia@example.com', '+61 400 000 000'].map(csvCell).join(',')
+    expect(parseCsv(line)).toEqual([['Olivia Brown', 'olivia@example.com', '+61 400 000 000']])
+  })
+})

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { notFound } from 'next/navigation'
-import { Button } from '@/components/ui/Button'
+import { Button, buttonClass } from '@/components/ui/Button'
 import { IconLink } from '@/components/ui/IconButton'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { SentToast } from '@/components/ui/SentToast'
@@ -367,7 +367,9 @@ export async function CaseDetail({
                 taskTimes={taskTimes}
                 history={history}
                 rail={
+                  // Keyed for the same reason as the nav icons: rendered by the client board beside its own cards.
                   <JobSidebar
+                    key="job-sidebar"
                     projectId={project.id}
                     csrf={csrf}
                     client={overviewClient}
@@ -502,8 +504,8 @@ export async function CaseDetail({
                           icon={EDIT_ICON}
                         />
                       ) : null}
-                      <Link href="/finance"><Button variant="secondary" size="sm">Open Payments</Button></Link>
-                      <Link href={`/finance/new?job=${project.id}`}><Button size="sm">New invoice</Button></Link>
+                      <Link href="/finance" className={buttonClass('secondary', 'sm')}>Open Payments</Link>
+                      <Link href={`/finance/new?job=${project.id}`} className={buttonClass('primary', 'sm')}>New invoice</Link>
                     </div>
                   </div>
                 </section>

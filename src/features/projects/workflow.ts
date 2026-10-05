@@ -412,7 +412,7 @@ export function buildProjectBoard(
     if (prev === undefined || t.order < prev) firstOrder.set(t.stage, t.order)
   }
   const customStages: BoardStage[] = [...firstOrder.keys()]
-    .sort((a, b) => firstOrder.get(a)! - firstOrder.get(b)!)
+    .sort((a, b) => firstOrder.get(a)! - firstOrder.get(b)! || a.localeCompare(b)) // name breaks ties: stable order
     .map((key) => {
       const manualRows = manualRowsFor(key)
       return {

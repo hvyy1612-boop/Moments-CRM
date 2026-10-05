@@ -65,6 +65,7 @@ export async function addStaffAction(_prev: AddStaffState, formData: FormData): 
     await tx.auditLog.create({
       data: {
         companyId: company.id,
+        actorUserId: admin.id,
         action: 'auth.staff_created',
         entityType: 'User',
         entityId: created.id,
@@ -95,7 +96,7 @@ export async function resetStaffPasswordAction(_prev: ResetState, formData: Form
   if (!admin) return { status: 'error', message: 'Only an admin can reset passwords.' }
 
   const userId = String(formData.get('userId') ?? '')
-  const target = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true } })
+  const target = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, companyId: true, email: true, name: true } })
   if (!target) return { status: 'error', message: 'That account no longer exists.' }
   // Resetting your OWN password would sign you out before you could copy the temporary one (and login IDs
   // cannot receive reset emails), locking the admin out. Your own password is changed via Change password.
@@ -104,6 +105,9 @@ export async function resetStaffPasswordAction(_prev: ResetState, formData: Form
   const tempPassword = generateTempPassword()
   await resetUserPassword(target.id, tempPassword)
   await revokeAllSessions(target.id)
+  await prisma.auditLog.create({
+    data: { companyId: target.companyId, actorUserId: admin.id, action: 'auth.staff_password_reset', entityType: 'User', entityId: target.id, afterData: { loginId: target.email, name: target.name } },
+  })
   revalidatePath('/users')
   return { status: 'reset', staffLoginId: target.email, tempPassword }
 }
@@ -121,8 +125,14 @@ export async function setStaffActiveAction(formData: FormData): Promise<void> {
   const active = String(formData.get('active') ?? '') === 'true'
   if (!userId || (userId === admin.id && !active)) return // never disable your own account
 
-  await prisma.user.update({ where: { id: userId }, data: { isActive: active } })
+  const target = await prisma.user.update({ where: { id: userId }, data: { isActive: active }, select: { id: true, companyId: true, email: true, name: true } })
   if (!active) await revokeAllSessions(userId)
+  await prisma.auditLog.create({
+    data: {
+      companyId: target.companyId, actorUserId: admin.id, action: active ? 'auth.staff_enabled' : 'auth.staff_disabled',
+      entityType: 'User', entityId: target.id, afterData: { loginId: target.email, name: target.name },
+    },
+  })
   revalidatePath('/users')
 }
 
@@ -154,6 +164,7 @@ export async function removeStaffAction(formData: FormData): Promise<void> {
     await tx.auditLog.create({
       data: {
         companyId: target.companyId,
+        actorUserId: admin.id,
         action: 'auth.staff_removed',
         entityType: 'User',
         entityId: target.id,

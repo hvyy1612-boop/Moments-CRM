@@ -19,7 +19,8 @@ export async function GET(request: Request): Promise<Response> {
   const type = params.get('type') ?? ''
   const jobs = params.get('jobs') ?? ''
 
-  const where: Prisma.ClientWhereInput = { mergedIntoClientId: null, archivedAt: null }
+  // Mirrors the list's Active / Archived tab.
+  const where: Prisma.ClientWhereInput = { mergedIntoClientId: null, archivedAt: params.get('tab') === 'archived' ? { not: null } : null }
   if (q) {
     where.OR = [
       { displayName: { contains: q, mode: 'insensitive' } },

@@ -23,7 +23,9 @@ export default async function CreateQuotePage() {
     where: { status: { in: ['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION', 'QUOTE_SENT'] } },
     orderBy: { createdAt: 'desc' },
     select: { id: true, enquiryNumber: true, name: true, eventType: true, createdAt: true, client: { select: { displayName: true } } },
-    take: 100,
+    // Every OPEN lead must be choosable (the picker searches in the browser); 100 hid older open leads.
+    // This is only the open pipeline, so the cap is a safety net, not a page size.
+    take: 2000,
   })
 
   return (

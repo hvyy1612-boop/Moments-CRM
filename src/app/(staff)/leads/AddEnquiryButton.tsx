@@ -72,6 +72,7 @@ export function AddEnquiryButton({
     email: clientErrors.email ?? serverErrors.email,
   }
   const topMessage = clientErrors.contact ?? (state.status === 'error' ? state.message : undefined)
+  const typed = state.status === 'error' ? state.values : undefined
 
   useEffect(() => {
     if (state.status === 'created') router.push(`/leads/${state.enquiryId}`)
@@ -141,14 +142,15 @@ export function AddEnquiryButton({
               ) : (
                 <ClientContactPicker
                   errors={errors}
+                  defaults={typed}
                   onFieldInput={(field) => setClientErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev))}
                 />
               )}
               <Field label="Event type" htmlFor="enq-type">
-                <TextInput id="enq-type" name="eventType" placeholder="Wedding, Events, Portrait" autoComplete="off" />
+                <TextInput id="enq-type" name="eventType" defaultValue={typed?.eventType} placeholder="Wedding, Events, Portrait" maxLength={50} autoComplete="off" />
               </Field>
               <Field label="Note / first message" htmlFor="enq-note">
-                <Textarea id="enq-note" name="message" rows={3} />
+                <Textarea id="enq-note" name="message" rows={3} defaultValue={typed?.message} />
               </Field>
               <div className="mt-1 flex justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>

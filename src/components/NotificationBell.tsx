@@ -23,7 +23,8 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000
  * real data - separate from Activity (the audit trail). The badge counts items from the last 7 days;
  * there is no persistent per-user read state in the schema, so it does not claim a stored unread count.
  */
-export function NotificationBell({ alerts }: { alerts: Alert[] }) {
+/** `canViewActivity`: the Activity log is admin only, so other roles get no link to it (it would 404). */
+export function NotificationBell({ alerts, canViewActivity }: { alerts: Alert[]; canViewActivity: boolean }) {
   const [open, setOpen] = useState(false)
   const [recent, setRecent] = useState(0)
   const ref = useRef<HTMLDivElement>(null)
@@ -68,9 +69,11 @@ export function NotificationBell({ alerts }: { alerts: Alert[] }) {
         <div role="menu" className="absolute right-0 top-11 z-50 w-80 overflow-hidden rounded-lg border border-line bg-surface shadow-lg">
           <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
             <span className="text-sm font-semibold text-ink">Notifications</span>
-            <Link href="/activity" onClick={() => setOpen(false)} className="text-xs font-medium text-accent-ink hover:underline">
-              View activity
-            </Link>
+            {canViewActivity ? (
+              <Link href="/activity" onClick={() => setOpen(false)} className="text-xs font-medium text-accent-ink hover:underline">
+                View activity
+              </Link>
+            ) : null}
           </div>
           {alerts.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-ink-muted">You&apos;re all caught up.</p>

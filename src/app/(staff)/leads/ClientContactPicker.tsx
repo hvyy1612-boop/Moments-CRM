@@ -11,9 +11,12 @@ import { searchClientsAction, type ClientMatch } from './actions'
  */
 export function ClientContactPicker({
   errors,
+  defaults,
   onFieldInput,
 }: {
   errors?: { name?: string; email?: string }
+  /** Values typed before a failed save, so the new-client fields keep them. */
+  defaults?: { name?: string; email?: string; phone?: string }
   onFieldInput?: (field: 'name' | 'email') => void
 }) {
   const [mode, setMode] = useState<'search' | 'new'>('search')
@@ -115,6 +118,7 @@ export function ClientContactPicker({
             <TextInput
               id="enq-name"
               name="name"
+              defaultValue={defaults?.name}
               required
               autoFocus
               autoComplete="off"
@@ -127,6 +131,7 @@ export function ClientContactPicker({
               id="enq-email"
               name="email"
               type="email"
+              defaultValue={defaults?.email}
               required
               autoComplete="off"
               hasError={Boolean(errors?.email)}
@@ -134,7 +139,7 @@ export function ClientContactPicker({
             />
           </Field>
           <Field label="Phone" htmlFor="enq-phone">
-            <TextInput id="enq-phone" name="phone" autoComplete="off" />
+            <TextInput id="enq-phone" name="phone" defaultValue={defaults?.phone} autoComplete="off" />
           </Field>
           <button type="button" onClick={() => setMode('search')} className="self-start text-sm font-medium text-accent-ink hover:underline">
             Use an existing client instead

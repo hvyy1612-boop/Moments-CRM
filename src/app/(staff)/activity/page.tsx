@@ -38,7 +38,9 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
             breadcrumb={[DASHBOARD_CRUMB, { label: 'Activity' }]}
             title="Activity"
           />
-          <ActivityGate csrf={csrf} pinIsSet={pin.isSet} locked={pin.lockedUntil !== null} />
+          {/* Keyed on the PIN state: after "Reset my PIN" the page reloads with no PIN, and a fresh gate
+              then opens on "set a new PIN" instead of staying on the password screen. */}
+          <ActivityGate key={pin.isSet ? 'pin-set' : 'no-pin'} csrf={csrf} pinIsSet={pin.isSet} locked={pin.lockedUntil !== null} />
         </PageContainer>
       </AppShell>
     )

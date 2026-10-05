@@ -41,7 +41,8 @@ async function csrfOk(formData: FormData): Promise<boolean> {
 
 export type AddEnquiryState =
   | { status: 'idle' }
-  | { status: 'error'; message?: string; errors?: { name?: string; email?: string } }
+  // `values` = what was typed, handed back so the modal keeps it (React resets a form after every action).
+  | { status: 'error'; message?: string; errors?: { name?: string; email?: string }; values?: Record<'name' | 'email' | 'phone' | 'eventType' | 'message', string> }
   | { status: 'created'; enquiryId: string }
 
 /** Staff adds a REAL Enquiry (a lead). It appears immediately in /leads with its seeded workflow. */
@@ -54,6 +55,9 @@ export async function searchClientsAction(query: string): Promise<ClientMatch[]>
   if (q.length < 2) return []
   return prisma.client.findMany({
     where: {
+      // Never offer a merged-away duplicate or an archived client: a new lead must hang off a live client.
+      mergedIntoClientId: null,
+      archivedAt: null,
       OR: [{ displayName: { contains: q, mode: 'insensitive' } }, { email: { contains: q } }],
     },
     select: { id: true, displayName: true, email: true },
@@ -63,6 +67,13 @@ export async function searchClientsAction(query: string): Promise<ClientMatch[]>
 }
 
 export async function addEnquiryAction(_prev: AddEnquiryState, formData: FormData): Promise<AddEnquiryState> {
+  const result = await addEnquiry(formData)
+  if (result.status !== 'error') return result
+  const get = (k: string) => String(formData.get(k) ?? '')
+  return { ...result, values: { name: get('name'), email: get('email'), phone: get('phone'), eventType: get('eventType'), message: get('message') } }
+}
+
+async function addEnquiry(formData: FormData): Promise<AddEnquiryState> {
   const user = await requireStaff()
   if (!(await csrfOk(formData))) return { status: 'error', message: 'Your session expired. Refresh and try again.' }
   const eventType = String(formData.get('eventType') ?? '').trim() || null
