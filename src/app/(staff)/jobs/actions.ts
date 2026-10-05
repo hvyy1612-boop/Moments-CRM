@@ -106,7 +106,6 @@ export async function saveQuoteAction(
     reference: formData.get('reference') ?? '',
     issueDate: formData.get('issueDate') ?? '',
     validUntil: formData.get('validUntil') ?? '',
-    introduction: formData.get('introduction') ?? '',
     poNumber: formData.get('poNumber') ?? '',
     notes: formData.get('notes') ?? '',
     depositPercent: formData.get('depositPercent') ?? '',
@@ -118,7 +117,6 @@ export async function saveQuoteAction(
 
   try {
     await saveQuoteDraft(versionId, parsed.data.lines, validUntil, {
-      introduction: parsed.data.introduction,
       poNumber: parsed.data.poNumber,
       notes: parsed.data.notes,
       depositPercent: parsed.data.depositPercent,

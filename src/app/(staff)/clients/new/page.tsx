@@ -5,8 +5,7 @@ import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
-import { createClientAction } from '../actions'
-import { ClientForm } from '../ClientForm'
+import { ClientFormWithErrors } from '../ClientFormWithErrors'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Add client - Moments' }
@@ -25,7 +24,7 @@ export default async function NewClientPage() {
           Record the client and their enquiry. This opens a lead in Enquiries with a workflow you can
           work through, and becomes a job once you convert it.
         </p>
-        <ClientForm action={createClientAction} csrf={csrf} submitLabel="Add client" showEnquiryFields />
+        <ClientFormWithErrors mode="create" csrf={csrf} submitLabel="Add client" showEnquiryFields />
       </PageContainer>
     </AppShell>
   )

@@ -67,6 +67,9 @@ export async function addEnquiryAction(_prev: AddEnquiryState, formData: FormDat
   if (!(await csrfOk(formData))) return { status: 'error', message: 'Your session expired. Refresh and try again.' }
   const eventType = String(formData.get('eventType') ?? '').trim() || null
   const message = String(formData.get('message') ?? '').trim() || null
+  // Checked before any client is created: enquiries.event_type is VARCHAR(50) (a longer value used to
+  // crash the insert after the new client was already saved).
+  if (eventType && eventType.length > 50) return { status: 'error', message: 'Please keep the event type under 50 characters.' }
 
   // Studio-Ninja "Primary Client Contact": the lead is tied to a client - an existing one that was
   // picked, or a new one created from the typed fields. Either way the person is in Clients.
@@ -86,6 +89,7 @@ export async function addEnquiryAction(_prev: AddEnquiryState, formData: FormDat
     const parsed = enquirySchema.safeParse({ name, email, phone })
     if (!parsed.success) {
       const f = parsed.error.flatten().fieldErrors
+      if (f.phone?.[0] && !f.name?.[0] && !f.email?.[0]) return { status: 'error', message: `Phone: ${f.phone[0]}` }
       return { status: 'error', errors: { name: f.name?.[0], email: f.email?.[0] } }
     }
     const parts = parsed.data.name.trim().split(/\s+/)

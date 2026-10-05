@@ -135,7 +135,7 @@ async function main() {
     )
     const { quoteId, versionId } = await createQuoteForEnquiry(enquiry.id, actorId)
     await saveQuoteDraft(versionId, c.lines, c.validUntil, {
-      introduction: c.introduction, notes: c.notes, depositPercent: c.depositPercent, issueDate: c.issueDate,
+      notes: c.notes, depositPercent: c.depositPercent, issueDate: c.issueDate,
     })
 
     if (c.final === 'DRAFT') {

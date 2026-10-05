@@ -115,7 +115,6 @@ export default async function QuoteDetailPage({
     clientName,
     issueDate: v.issueDate,
     validUntil: v.validUntil,
-    introduction: v.introduction,
     lines: v.lines,
     subtotal: v.subtotal,
     taxTotal: v.taxTotal,

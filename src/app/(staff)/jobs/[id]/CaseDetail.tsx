@@ -417,7 +417,6 @@ export async function CaseDetail({
                       referenceId: line.referenceId,
                       details: line.details,
                     }))}
-                    initialIntroduction={version.introduction ?? ''}
                     initialPoNumber={version.poNumber ?? ''}
                     initialNotes={version.notes ?? ''}
                     initialDepositPercent={version.depositPercent != null ? String(version.depositPercent) : ''}

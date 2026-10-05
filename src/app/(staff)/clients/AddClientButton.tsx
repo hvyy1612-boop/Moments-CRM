@@ -1,10 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useActionState, useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { ClientForm, type ContactErrors } from './ClientForm'
-import { createClientAction } from './actions'
+import { createClientFormAction, type ClientFormState } from './actions'
+
+const IDLE: ClientFormState = { status: 'idle' }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -28,12 +30,14 @@ function validateContact(fd: FormData): ContactErrors {
 /**
  * "Add client" opens the intake in a Modal instead of navigating to /clients/new - the studio adds a
  * client (and its opening enquiry) without leaving the list. The form is the shared ClientForm in its
- * `bare` layout; on success createClientAction redirects to the new enquiry, which unmounts the modal
+ * `bare` layout; on success createClientFormAction redirects to the new enquiry, which unmounts the modal
  * on its own, so there is no manual close-on-submit (the modal only closes here via Cancel / Escape / x).
  */
 export function AddClientButton({ csrf }: { csrf: string }) {
   const [open, setOpen] = useState(false)
   const [errors, setErrors] = useState<ContactErrors>({})
+  // A refused save (duplicate email, too-long field) comes back as a message + the typed values.
+  const [state, formAction] = useActionState(createClientFormAction, IDLE)
 
   const close = () => {
     setErrors({})
@@ -65,7 +69,9 @@ export function AddClientButton({ csrf }: { csrf: string }) {
         headerBorder={false}
       >
         <ClientForm
-          action={createClientAction}
+          action={formAction}
+          values={state.status === 'error' ? state.values : undefined}
+          formError={state.status === 'error' ? state.message : undefined}
           csrf={csrf}
           submitLabel="Save client"
           showEnquiryFields

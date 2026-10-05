@@ -215,6 +215,9 @@ export async function convertEnquiryCore(
   actorUserId: string | null,
   now: Date,
 ) {
+    // Serialise conversions of this lead (Create Job in one tab, Accept quote in another): the second waits
+    // here and then sees the Job the first created, so a lead can never get two Jobs.
+    await tx.$queryRaw`SELECT id FROM enquiries WHERE id = ${enquiryId} FOR UPDATE`
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
     if (!enquiry) throw new Error('Lead not found.')
     // Idempotent by the linked Job, not the stage: once a (provisional) Job exists this returns it, so a
@@ -231,9 +234,12 @@ export async function convertEnquiryCore(
     }
     const company = await requireCompany(tx)
 
-    // Dedup tier 1: reuse an existing client with the same email, else create one. Follow a merge
-    // pointer so a merged-away duplicate resolves to its survivor instead of being revived (F-ENQ-05).
-    let client = await tx.client.findUnique({ where: { email: enquiry.email } })
+    // Every lead belongs to a client: use the one it is LINKED to first (its email may have been corrected on
+    // the client since the lead was logged). Only an unlinked lead (website form) falls back to the email,
+    // else a new client is created. Follow a merge pointer so a merged-away duplicate resolves to its
+    // survivor instead of being revived (F-ENQ-05).
+    let client = enquiry.clientId ? await tx.client.findUnique({ where: { id: enquiry.clientId } }) : null
+    if (!client) client = await tx.client.findUnique({ where: { email: enquiry.email } })
     while (client?.mergedIntoClientId) {
       client = await tx.client.findUnique({ where: { id: client.mergedIntoClientId } })
     }
@@ -241,6 +247,7 @@ export async function convertEnquiryCore(
       client = await tx.client.create({
         data: {
           companyId: company.id,
+          clientNumber: await nextRecordNumber(tx, company.id, 'CLIENT'), // C<YYYY><4> like every client
           type: enquiry.isCompany ? 'BUSINESS' : 'INDIVIDUAL',
           displayName: enquiry.name,
           firstName: enquiry.firstName,
@@ -283,6 +290,7 @@ export async function convertEnquiryCore(
       data: {
         status: 'AWAITING_BOOKING_CONFIRMATION',
         waitingOn: null,
+        clientId: enquiry.clientId ?? client.id, // a website lead becomes linked to its client here
         convertedClientId: client.id,
         convertedProjectId: project.id,
         convertedAt: now,

@@ -1,6 +1,6 @@
 import { renderToBuffer } from '@react-pdf/renderer'
 import { prisma } from '@/lib/db'
-import { markQuoteViewed, quoteDisplayNumber } from '@/lib/domain/quote'
+import { clientVisibleQuoteVersionId, markQuoteViewed, quoteDisplayNumber } from '@/lib/domain/quote'
 import { QuotePdf } from '@/components/QuotePdf'
 import type { QuoteDocData } from '@/components/QuoteDocument'
 
@@ -24,10 +24,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
       enquiry: { include: { client: { select: clientSelect } } },
     },
   })
-  if (!quote || !quote.currentVersion || quote.currentVersion.status === 'DRAFT') {
-    return new Response('This quote is not available.', { status: 404 })
-  }
-  const v = quote.currentVersion
+  if (!quote) return new Response('This quote is not available.', { status: 404 })
+  // While staff revise a sent quote the client keeps seeing the last version they were actually sent.
+  const versionId = await clientVisibleQuoteVersionId(quote.id)
+  const v = versionId === quote.currentVersion?.id
+    ? quote.currentVersion
+    : versionId
+      ? await prisma.quoteVersion.findUnique({ where: { id: versionId }, include: { lines: { orderBy: { sortOrder: 'asc' } } } })
+      : null
+  if (!v) return new Response('This quote is not available.', { status: 404 })
+  // A web lead may not be linked to a client record yet: fall back to the details it was sent with.
   const client = quote.enquiry?.client ?? quote.project?.client ?? null
   const clientName = client?.displayName ?? quote.enquiry?.name ?? 'you'
   const clientLocation = [client?.state, client?.postcode].filter(Boolean).join(' ') || null
@@ -35,12 +41,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
   const doc: QuoteDocData = {
     number: quoteDisplayNumber(quote.reference, quote.seq),
     clientName,
-    clientEmail: client?.email ?? null,
-    clientPhone: client?.phone ?? null,
+    clientEmail: client?.email ?? quote.enquiry?.email ?? null,
+    clientPhone: client?.phone ?? quote.enquiry?.phone ?? null,
     clientLocation,
     issueDate: v.issueDate,
     validUntil: v.validUntil,
-    introduction: v.introduction,
     lines: v.lines,
     subtotal: v.subtotal,
     taxTotal: v.taxTotal,

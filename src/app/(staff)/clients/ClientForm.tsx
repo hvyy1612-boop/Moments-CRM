@@ -1,4 +1,5 @@
 import type { FormEventHandler, ReactNode } from 'react'
+import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Checkbox, Field, FormActions, FormBlock, FormCell, PageForm, Select, TextInput, Textarea } from '@/components/ui/form'
 
@@ -39,6 +40,7 @@ export function ClientForm({
   errors,
   requireContact = false,
   onSubmit,
+  formError,
 }: {
   action: (formData: FormData) => void | Promise<void>
   csrf: string
@@ -51,6 +53,8 @@ export function ClientForm({
   errors?: ContactErrors
   requireContact?: boolean
   onSubmit?: FormEventHandler<HTMLFormElement>
+  /** A save the server refused (duplicate email, too-long field...): shown above the fields. */
+  formError?: string
 }) {
   const v = values
   const e = errors ?? {}
@@ -210,6 +214,7 @@ export function ClientForm({
       <form action={action} onSubmit={onSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
         {hidden}
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          {formError ? <div className="mb-5"><Alert tone="danger" title={formError} /></div> : null}
           <div className="mb-5">{isCompanyBox}</div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {firstName}
@@ -256,6 +261,7 @@ export function ClientForm({
   return (
     <form action={action} className="mt-8">
       {hidden}
+      {formError ? <div className="mb-6"><Alert tone="danger" title={formError} /></div> : null}
       <PageForm>
         <FormBlock title="Contact details" description="Who this client is and how to reach them.">
           <FormCell>{isCompanyBox}</FormCell>

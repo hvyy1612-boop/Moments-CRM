@@ -24,7 +24,6 @@ export type QuoteDocData = {
   clientLocation?: string | null
   issueDate: Date | null
   validUntil: Date | null
-  introduction: string | null
   lines: { id: string; description: string; details: string | null; quantity: number; unitPrice: Prisma.Decimal; lineTotal: Prisma.Decimal }[]
   subtotal: Prisma.Decimal
   taxTotal: Prisma.Decimal
@@ -104,7 +103,6 @@ export function QuoteDocument({ doc }: { doc: QuoteDocData }) {
         </div>
 
         {/* Optional greeting */}
-        {doc.introduction ? <p className="mt-4 whitespace-pre-line text-sm leading-normal text-ink">{doc.introduction}</p> : null}
 
         {/* Line items — accent header, even column rules, zebra rows */}
         <table className="mt-6 w-full table-fixed border-collapse border border-line-strong text-sm">

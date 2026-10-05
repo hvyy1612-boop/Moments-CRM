@@ -1,11 +1,12 @@
 import { z } from 'zod'
 
 /** Staff client intake (SEC-A02: validated server-side regardless of the browser). */
+// The limit matches the database column, with a human message (never a raw "at most N character(s)").
 const optionalText = (max: number) =>
   z
     .string()
     .trim()
-    .max(max)
+    .max(max, `Please keep this under ${max} characters.`)
     .optional()
     .or(z.literal(''))
     .transform((v) => (v ? v : undefined))
@@ -20,7 +21,7 @@ export const clientSchema = z.object({
     .min(1, 'Please enter an email address.')
     .max(254, 'That email is too long.')
     .email('Please enter a valid email address.'),
-  phone: optionalText(40),
+  phone: optionalText(30), // clients.phone is VARCHAR(30)
   street: optionalText(200),
   suburb: optionalText(100),
   state: optionalText(100),

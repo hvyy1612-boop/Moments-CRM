@@ -66,7 +66,6 @@ export async function createQuote(projectId: string, createdByUserId: string | n
 
 /** Replace the draft version's lines and recompute totals. Only a DRAFT version may be edited. */
 export type QuotePresentation = {
-  introduction?: string | null
   poNumber?: string | null
   notes?: string | null
   depositPercent?: number | null
@@ -97,7 +96,6 @@ export async function saveQuoteDraft(
         taxTotal,
         total,
         validUntil,
-        introduction: presentation.introduction ?? null,
         poNumber: presentation.poNumber ?? null,
         notes: presentation.notes ?? null,
         depositPercent: presentation.depositPercent ?? null,
@@ -154,6 +152,22 @@ export async function sendQuote(quoteId: string, actorUserId: string | null) {
 }
 
 /** Record that the client opened the quote link (SENT to VIEWED). Best-effort, never throws. */
+/**
+ * The version the client's link shows: the current one, except while staff are revising a sent quote (the
+ * current version is then a DRAFT) - the client keeps seeing the last version they were actually sent
+ * until the new one is sent (owner decision 2026-10-05). Null when nothing was ever sent.
+ */
+export async function clientVisibleQuoteVersionId(quoteId: string): Promise<string | null> {
+  const quote = await prisma.quote.findUnique({ where: { id: quoteId }, select: { currentVersion: { select: { id: true, status: true } } } })
+  if (quote?.currentVersion && quote.currentVersion.status !== 'DRAFT') return quote.currentVersion.id
+  const sent = await prisma.quoteVersion.findFirst({
+    where: { quoteId, sentToClientAt: { not: null } },
+    orderBy: { versionNumber: 'desc' },
+    select: { id: true },
+  })
+  return sent?.id ?? null
+}
+
 export async function markQuoteViewed(viewToken: string) {
   const now = systemClock.now()
   const quote = await prisma.quote.findUnique({
@@ -284,6 +298,12 @@ export async function reviseQuoteTx(
       taxTotal: current.taxTotal,
       total: current.total,
       validUntil: current.validUntil,
+      // The revision starts as an exact copy of what the client was sent - terms included - so editing
+      // never silently drops the deposit %, notes, PO number or issue date.
+      poNumber: current.poNumber,
+      notes: current.notes,
+      depositPercent: current.depositPercent,
+      issueDate: current.issueDate,
       createdByUserId: actorUserId,
     },
   })
@@ -294,6 +314,7 @@ export async function reviseQuoteTx(
         lineType: line.lineType,
         referenceId: line.referenceId,
         description: line.description,
+        details: line.details, // package inclusions shown on the quote
         quantity: line.quantity,
         unitPrice: line.unitPrice,
         discount: line.discount,

@@ -17,7 +17,7 @@ type QuotePackage = { id: string; name: string; price: string; details?: string 
 /**
  * Studio-Ninja-style staff quote builder (docs/31). The quote is assembled by staff from the catalogue:
  * choose packages, add optional add-ons, write a covering note, then Save and Send. The quote CONTENT
- * (details, introduction, packages, add-ons, deposit, notes) is unchanged - the form now shares the
+ * (details, packages, add-ons, deposit, notes) is unchanged - the form now shares the
  * New-invoice layout (`InvoiceEditor`): one full-width column with no wrapping card, label:input rows,
  * the line items, then a 12-column footer with the totals top-right and notes + actions beneath them.
  * Totals run through the sourced pricing mirror (`@/lib/pricing-estimate`); the server recomputes on save.
@@ -60,7 +60,6 @@ export function QuoteBuilder({
   versionId,
   validUntil,
   initialLines,
-  initialIntroduction,
   initialPoNumber,
   initialNotes,
   initialDepositPercent,
@@ -82,7 +81,6 @@ export function QuoteBuilder({
   versionId: string
   validUntil: string
   initialLines: InitialLine[]
-  initialIntroduction: string
   initialPoNumber: string
   initialNotes: string
   initialDepositPercent: string

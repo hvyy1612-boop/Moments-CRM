@@ -1,6 +1,6 @@
 'use server'
 
-import { EnquirySource } from '@prisma/client'
+import { EnquirySource, Prisma } from '@prisma/client'
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -21,6 +21,7 @@ import {
 } from '@/lib/domain/client'
 import { createEnquiry } from '@/lib/domain/enquiry'
 import { clientSchema } from '@/lib/validation/client'
+import type { ClientFormValues } from './ClientForm'
 
 async function requireStaff() {
   const user = await getSessionUser()
@@ -54,58 +55,104 @@ function parseClient(formData: FormData) {
   return parsed.data
 }
 
+/** What the Add / Edit client form shows when a save is refused: one friendly message plus the values the
+ *  staff member typed, so the form re-fills instead of losing their work. */
+export type ClientFormState = { status: 'idle' } | { status: 'error'; message: string; values: ClientFormValues }
+
+function submittedValues(formData: FormData): ClientFormValues {
+  const s = (k: string) => String(formData.get(k) ?? '')
+  return {
+    firstName: s('firstName'), lastName: s('lastName'), company: s('company'), email: s('email'), phone: s('phone'),
+    street: s('street'), suburb: s('suburb'), state: s('state'), postcode: s('postcode'), country: s('country'),
+    notes: s('notes'), isCompany: formData.get('isCompany') === 'on',
+  }
+}
+
+/** A human message for anything a save threw: our own validation copy passes through; database errors are
+ *  translated, never shown raw (friendly-validation rule). */
+function friendlyClientError(error: unknown): string {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === 'P2002') return 'A client with this email already exists.'
+    if (error.code === 'P2000') return 'One of the fields is too long. Please shorten it and try again.'
+    return 'Could not save the client. Please try again.'
+  }
+  if (error instanceof Prisma.PrismaClientValidationError || error instanceof Prisma.PrismaClientUnknownRequestError) {
+    return 'Could not save the client. Please try again.'
+  }
+  return error instanceof Error && error.message ? error.message : 'Could not save the client. Please try again.'
+}
+
+/** The opening lead's own fields, checked BEFORE the client is created so a too-long value can never leave a
+ *  client behind with no lead (the columns are event_type 50, coverage 30, partner_name 150). */
+function leadExtras(formData: FormData) {
+  const str = (k: string) => String(formData.get(k) ?? '').trim() || null
+  const limit = (value: string | null, max: number, label: string) => {
+    if (value && value.length > max) throw new Error(`Please keep the ${label} under ${max} characters.`)
+    return value
+  }
+  return {
+    eventType: limit(str('eventType'), 50, 'event type'),
+    partnerName: limit(str('partnerName'), 150, "partner's name"),
+    coverage: limit(str('coverage'), 30, 'coverage'),
+    gettingReadyLocation: str('gettingReadyLocation'),
+    ceremonyLocation: str('ceremonyLocation'),
+    weddingDetails: str('weddingDetails'),
+    styleReason: str('styleReason'),
+    heardAbout: str('heardAbout'),
+  }
+}
+
 /**
  * The single intake: add a client and open an enquiry (lead) for them in one step, then land on the
- * enquiry's workflow. This is the only place a lead is created by staff - there is no separate "log
- * enquiry" form. Converting the enquiry later reuses this client (dedup by email).
+ * lead's workflow. A refused save returns a friendly message and the typed values instead of throwing
+ * (which replaced the whole page with the error screen).
  */
-export async function createClientAction(formData: FormData): Promise<void> {
+export async function createClientFormAction(_prev: ClientFormState, formData: FormData): Promise<ClientFormState> {
   const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const data = parseClient(formData)
-  const client = await createClient(data, user.id)
+  if (!(await csrfOk(formData))) return { status: 'error', message: 'Your session expired. Refresh and try again.', values: submittedValues(formData) }
+  let enquiryId: string
+  try {
+    const data = parseClient(formData)
+    const extras = leadExtras(formData)
+    const client = await createClient(data, user.id)
 
-  const name = [data.firstName, data.lastName].filter(Boolean).join(' ') || data.company || data.email
-  const eventDateRaw = String(formData.get('eventDate') ?? '').trim()
-  const eventDate = eventDateRaw ? new Date(eventDateRaw) : null
-  const sourceRaw = String(formData.get('source') ?? '').toUpperCase()
-  const source = (Object.values(EnquirySource) as string[]).includes(sourceRaw)
-    ? (sourceRaw as EnquirySource)
-    : EnquirySource.MANUAL
-  const str = (k: string) => String(formData.get(k) ?? '').trim() || null
+    const name = [data.firstName, data.lastName].filter(Boolean).join(' ') || data.company || data.email
+    const eventDateRaw = String(formData.get('eventDate') ?? '').trim()
+    const eventDate = eventDateRaw ? new Date(eventDateRaw) : null
+    const sourceRaw = String(formData.get('source') ?? '').toUpperCase()
+    const source = (Object.values(EnquirySource) as string[]).includes(sourceRaw)
+      ? (sourceRaw as EnquirySource)
+      : EnquirySource.MANUAL
 
-  const enquiry = await createEnquiry(
-    {
-      clientId: client.id,
-      name,
-      firstName: data.firstName ?? null,
-      lastName: data.lastName ?? null,
-      email: data.email,
-      phone: data.phone ?? null,
-      street: data.street ?? null,
-      suburb: data.suburb ?? null,
-      state: data.state ?? null,
-      postcode: data.postcode ?? null,
-      country: data.country ?? null,
-      isCompany: data.isCompany ?? false,
-      eventType: String(formData.get('eventType') ?? '').trim() || null,
-      eventDate,
-      message: data.notes ?? null,
-      source,
-      partnerName: str('partnerName'),
-      coverage: str('coverage'),
-      gettingReadyLocation: str('gettingReadyLocation'),
-      ceremonyLocation: str('ceremonyLocation'),
-      weddingDetails: str('weddingDetails'),
-      styleReason: str('styleReason'),
-      heardAbout: str('heardAbout'),
-    },
-    user.id,
-  )
+    const enquiry = await createEnquiry(
+      {
+        clientId: client.id,
+        name,
+        firstName: data.firstName ?? null,
+        lastName: data.lastName ?? null,
+        email: data.email,
+        phone: data.phone ?? null,
+        street: data.street ?? null,
+        suburb: data.suburb ?? null,
+        state: data.state ?? null,
+        postcode: data.postcode ?? null,
+        country: data.country ?? null,
+        isCompany: data.isCompany ?? false,
+        eventDate,
+        message: data.notes ?? null,
+        source,
+        ...extras,
+      },
+      user.id,
+    )
+    enquiryId = enquiry.id
+  } catch (error) {
+    return { status: 'error', message: friendlyClientError(error), values: submittedValues(formData) }
+  }
 
   revalidatePath('/clients')
   revalidatePath('/leads')
-  redirect(`/leads/${enquiry.id}?toast=enquiry-added`)
+  redirect(`/leads/${enquiryId}?toast=enquiry-added`)
 }
 
 export type ImportState =
@@ -182,12 +229,16 @@ export async function importClientsAction(_prev: ImportState, formData: FormData
 }
 
 /** Save edits to a client. */
-export async function updateClientAction(formData: FormData): Promise<void> {
+export async function updateClientFormAction(_prev: ClientFormState, formData: FormData): Promise<ClientFormState> {
   const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  if (!(await csrfOk(formData))) return { status: 'error', message: 'Your session expired. Refresh and try again.', values: submittedValues(formData) }
   const clientId = String(formData.get('clientId') ?? '')
-  if (!clientId) throw new Error('Missing client.')
-  await updateClient(clientId, parseClient(formData), user.id)
+  if (!clientId) return { status: 'error', message: 'Missing client.', values: submittedValues(formData) }
+  try {
+    await updateClient(clientId, parseClient(formData), user.id)
+  } catch (error) {
+    return { status: 'error', message: friendlyClientError(error), values: submittedValues(formData) }
+  }
   revalidatePath('/clients')
   revalidatePath(`/clients/${clientId}`)
   redirect(`/clients/${clientId}`)
