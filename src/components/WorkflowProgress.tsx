@@ -9,7 +9,7 @@ export function WorkflowProgress({
   nextTitle,
 }: {
   done: number
-  total: number
+  total: number // money-ok: task count
   nowLabel: string | null
   nextTitle: string | null
 }) {

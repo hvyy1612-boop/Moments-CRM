@@ -3,6 +3,10 @@
 //
 // Heuristic: a property or variable whose name is monetary, annotated as `number`. Money must be
 // Prisma.Decimal in code. Reports every offending file:line (DECISIONS.md D-007).
+//
+// Not flagged: exact integer-cent values (`...Cents`), percentages (`...Percent`), and a line carrying a
+// `money-ok: <reason>` comment (task counts named `total`, display-only chart values, client previews
+// the server recomputes in Decimal). The reason must say why the number is safe.
 import { readdirSync, statSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -26,6 +30,7 @@ function scan(file) {
     .split('\n')
     .forEach((line, i) => {
       const m = RE.exec(line)
+      if (m && (/(?:Cents|Percent)\s*[?!]?\s*:/.test(m[0]) || /money-ok:\s*\S/.test(line))) return
       if (m) violations.push({ file: rel, line: i + 1, match: m[0], text: line.trim() })
     })
 }

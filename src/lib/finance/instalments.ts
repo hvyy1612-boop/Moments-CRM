@@ -7,7 +7,7 @@
 
 /** Round a decimal-string money amount to whole cents (banker-free, half-up). */
 export function toCents(amount: string | number): number {
-  const n = typeof amount === 'number' ? amount : Number(amount)
+  const n = typeof amount === 'number' ? amount : Number(amount) // money-ok: input converted to exact integer cents below
   if (!Number.isFinite(n)) return 0
   return Math.round(n * 100)
 }

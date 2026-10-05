@@ -48,7 +48,7 @@ const later = (a: string, b: string) => (a > b ? a : b)
  * instalment falls back to a 30-day net date so the amounts and dates are all filled like every other
  * preset; it recomputes to the real shoot-relative date once the job has a shoot date.
  */
-export function presetRows(key: SchedulePreset, total: number, issueDate: string, shootDate: string | null): ScheduleRow[] | null {
+export function presetRows(key: SchedulePreset, total: number, issueDate: string, shootDate: string | null): ScheduleRow[] | null { // money-ok: client preview in integer cents; the server recomputes in Decimal
   const cents = Math.round(total * 100)
   if (cents <= 0 || !issueDate) return null
   const amt = (c: number) => (c / 100).toFixed(2)

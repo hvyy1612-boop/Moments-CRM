@@ -22,7 +22,7 @@ beforeAll(async () => {
 describe('enquiry backbone (integration, real DB)', () => {
   it('captures a lead without creating a client or project', async () => {
     const e = await createEnquiry({ name: 'Lead One', email: email(), source: 'WEBSITE' })
-    expect(e.status).toBe('NEW')
+    expect(e.status).toBe('NEW_ENQUIRY')
     expect(e.convertedClientId).toBeNull()
     expect(e.convertedProjectId).toBeNull()
   })
@@ -57,7 +57,7 @@ describe('enquiry backbone (integration, real DB)', () => {
   it('lost keeps the record; convert is blocked until reopened', async () => {
     const e = await createEnquiry({ name: 'Ghost', email: email() })
     await markEnquiryLost(e.id, 'No response after 3 follow-ups')
-    expect((await prisma.enquiry.findUnique({ where: { id: e.id } }))?.status).toBe('LOST')
+    expect((await prisma.enquiry.findUnique({ where: { id: e.id } }))?.status).toBe('DECLINED')
 
     await expect(convertEnquiry(e.id)).rejects.toThrow()
     await reopenEnquiry(e.id)

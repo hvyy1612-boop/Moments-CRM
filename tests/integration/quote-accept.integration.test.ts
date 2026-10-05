@@ -42,14 +42,14 @@ describe('acceptQuote — enquiry-stage quote → job (docs/31, integration)', (
 
     expect(quote?.status).toBe('ACCEPTED')
     expect(quote?.projectId).toBe(res.projectId) // legacy link set on accept
-    expect(enquiry?.status).toBe('CONVERTED')
+    expect(enquiry?.status).toBe('AWAITING_BOOKING_CONFIRMATION') // booked only once the deposit is paid
     expect(enquiry?.convertedProjectId).toBe(res.projectId)
     expect(project?.sourceQuoteId).toBe(quoteId)
     expect(project?.lifecycleStatus).toBe('BOOKING_REQUESTED')
     expect(project?.commercialStatus).toBe('ACCEPTED')
   })
 
-  it('accepting one quote supersedes the enquiry\'s other open quotes', async () => {
+  it('accepting one quote deletes the lead\'s other open quotes (redundant alternatives, c9eb30e)', async () => {
     const enquiry = await createEnquiry({ name: 'Lead', email: email() })
     const q1 = await createQuoteForEnquiry(enquiry.id, null)
     await saveQuoteDraft(q1.versionId, [{ description: 'Option A', quantity: 1, unitPrice: '3000' }], null)
@@ -62,7 +62,7 @@ describe('acceptQuote — enquiry-stage quote → job (docs/31, integration)', (
     const a = await prisma.quote.findUnique({ where: { id: q1.quoteId } })
     const b = await prisma.quote.findUnique({ where: { id: q2.quoteId } })
     expect(b?.status).toBe('ACCEPTED')
-    expect(a?.status).toBe('SUPERSEDED')
+    expect(a).toBeNull()
   })
 
   it('only a SENT quote can be accepted; a draft cannot', async () => {

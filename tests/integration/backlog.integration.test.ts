@@ -13,7 +13,7 @@ import { listCommunications, logCommunication } from '@/lib/domain/communication
 import { confirmBookingByToken, createProjectFromPackage } from '@/lib/domain/direct-booking'
 import { convertEnquiry, createEnquiry } from '@/lib/domain/enquiry'
 import { addFile, listFiles } from '@/lib/domain/file'
-import { createInvoice, issueInvoice, recordPayment } from '@/lib/domain/finance'
+import { createInvoice, recordPayment } from '@/lib/domain/finance'
 import { createPackage } from '@/lib/domain/package'
 import { createQuestionnaire, getQuestionnaire, submitQuestionnaire } from '@/lib/domain/questionnaire'
 import { createQuote, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
@@ -117,8 +117,7 @@ describe('reschedule', () => {
 describe('cancellation and refunds', () => {
   it('refunds up to the captured amount and never beyond it', async () => {
     const projectId = await confirmedProject()
-    const invoice = await createInvoice(projectId, { type: 'DEPOSIT', description: 'Deposit', amount: '1000' }, null)
-    await issueInvoice(invoice.id, null)
+    const invoice = await createInvoice(projectId, { type: 'DEPOSIT', description: 'Deposit', amount: '1000' }, null) // ISSUED on creation
     await recordPayment(invoice.id, { paymentMethod: 'BANK_TRANSFER', amount: '1000', reference: 'BL-PAY' }, null)
     const payment = await prisma.payment.findFirst({ where: { projectId } })
 

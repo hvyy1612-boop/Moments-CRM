@@ -31,8 +31,9 @@ async function dueValueOf(projectId: string, title: string): Promise<string | nu
   return null
 }
 
-const WEDDING = 'Photograph and film the wedding day' // SHOOT anchor, offset 0
-const BACKUP = 'Back up all captured files' // SHOOT anchor, offset +1
+// Current production template (features/projects/workflow.ts PROJECT_TASK_SCHEDULE).
+const WEDDING = 'Mark shoot completed' // SHOOT anchor, offset 0
+const BACKUP = 'Send files to editor' // SHOOT anchor, offset +2
 
 describe('Deadline foundation against a real DB (docs/25 Part 2)', () => {
   it('a shoot task with no booking yet has no due date (undated until a shoot exists)', async () => {
@@ -44,7 +45,7 @@ describe('Deadline foundation against a real DB (docs/25 Part 2)', () => {
     const projectId = await confirmedJob()
     await createBooking(projectId, { startsAt: '2026-06-20T10:00', endsAt: '2026-06-20T18:00' }, null)
     expect(await dueValueOf(projectId, WEDDING)).toBe('2026-06-20') // offset 0
-    expect(await dueValueOf(projectId, BACKUP)).toBe('2026-06-21') // offset +1
+    expect(await dueValueOf(projectId, BACKUP)).toBe('2026-06-22') // offset +2
   })
 
   it('rescheduling recomputes (Rule D2): no stored date is shifted; tasks follow the new shoot', async () => {
@@ -52,7 +53,7 @@ describe('Deadline foundation against a real DB (docs/25 Part 2)', () => {
     const b = await createBooking(projectId, { startsAt: '2026-06-20T10:00', endsAt: '2026-06-20T18:00' }, null)
     await rescheduleBooking(b.id, { startsAt: '2026-07-04T10:00', endsAt: '2026-07-04T18:00' }, null)
     expect(await dueValueOf(projectId, WEDDING)).toBe('2026-07-04') // moved to the successor date
-    expect(await dueValueOf(projectId, BACKUP)).toBe('2026-07-05')
+    expect(await dueValueOf(projectId, BACKUP)).toBe('2026-07-06')
   })
 
   it('rescheduling to an earlier date anchors the tasks to the earlier date (Rule D3)', async () => {
@@ -72,7 +73,7 @@ describe('Deadline foundation against a real DB (docs/25 Part 2)', () => {
     expect(await dueValueOf(projectId, WEDDING)).toBe('2026-06-25')
     await rescheduleBooking(b.id, { startsAt: '2026-07-04T10:00', endsAt: '2026-07-04T18:00' }, null)
     expect(await dueValueOf(projectId, WEDDING)).toBe('2026-06-25') // override stays put
-    expect(await dueValueOf(projectId, BACKUP)).toBe('2026-07-05') // a non-overridden task still follows
+    expect(await dueValueOf(projectId, BACKUP)).toBe('2026-07-06') // a non-overridden task still follows
   })
 
   it('clearing the override returns the task to its anchor (Rule D1)', async () => {

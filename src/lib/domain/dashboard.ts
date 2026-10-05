@@ -36,7 +36,7 @@ export type DashboardData = {
   activeJobs: number
   leadSources: Bar[]
   revenueByService: Bar[]
-  invoiceAging: { current: number; d1: number; d8: number; d30: number; total: number }
+  invoiceAging: { current: number; d1: number; d8: number; d30: number; total: number } // money-ok: chart display values, summed from Decimal
   turnaround: Bar[]
   pipeline: Bar[]
   recentEnquiries: RecentEnquiry[]
@@ -182,7 +182,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   const bookingNum = inPeriodEnq.filter((e) => e.status === 'BOOKING_CONFIRMED').length
   const bookingRatePct = bookingDenom ? Math.round((bookingNum / bookingDenom) * 100) : 0
 
-  const sourceMap = new Map<string, { converted: number; total: number }>()
+  const sourceMap = new Map<string, { converted: number; total: number }>() // money-ok: lead counts
   for (const e of inPeriodEnq) {
     const key = e.source
     const rec = sourceMap.get(key) ?? { converted: 0, total: 0 }

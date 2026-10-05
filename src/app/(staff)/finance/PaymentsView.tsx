@@ -14,7 +14,7 @@ export type Row = {
   service: string
   group: 'unpaid' | 'paid'
   amount: string
-  amountNum: number
+  amountNum: number // money-ok: sort key only; the amount shown is the Decimal string above
   dateKind: 'due' | 'paid' | 'draft'
   dateLabel: string | null
   urgencyLabel: string | null

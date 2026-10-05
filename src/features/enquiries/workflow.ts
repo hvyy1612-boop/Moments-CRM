@@ -152,7 +152,7 @@ export type EnqStage = {
   /** A per-lead custom stage (staff-added), so the UI can offer rename/delete on it. Core stages are false. */
   custom: boolean
   done: number
-  total: number
+  total: number // money-ok: task count
   tasks: EnqTaskRow[]
 }
 export type EnquiryBoard = { stages: EnqStage[]; allDone: boolean }

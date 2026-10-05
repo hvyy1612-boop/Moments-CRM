@@ -105,7 +105,7 @@ describe('Change Requests against a real DB (docs/25 Part 3)', () => {
 
   it('C-d: reschedule to an earlier date re-anchors the shoot tasks to the earlier date', async () => {
     const { projectId, bookingId } = await bookedJob()
-    expect(await dueValueOf(projectId, 'Photograph and film the wedding day')).toBe('2027-06-20')
+    expect(await dueValueOf(projectId, 'Mark shoot completed')).toBe('2027-06-20')
     const cr = await createChangeRequest(
       projectId,
       { kind: 'reschedule', bookingId, newStartsAt: '2027-06-06T10:00', newEndsAt: '2027-06-06T18:00' },
@@ -114,7 +114,7 @@ describe('Change Requests against a real DB (docs/25 Part 3)', () => {
     await assessChangeRequest(cr.id)
     await approveChangeRequest(cr.id, null)
     await applyChangeRequest(cr.id, null)
-    expect(await dueValueOf(projectId, 'Photograph and film the wedding day')).toBe('2027-06-06')
+    expect(await dueValueOf(projectId, 'Mark shoot completed')).toBe('2027-06-06')
   })
 
   it('C-e: reschedule to the past is blocked at apply', async () => {

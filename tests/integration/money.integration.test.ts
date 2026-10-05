@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
 import { createEnquiry, convertEnquiry } from '@/lib/domain/enquiry'
-import { createInvoice, issueCreditNote, issueInvoice, recordPayment, voidInvoice } from '@/lib/domain/finance'
+import { createInvoice, issueCreditNote, recordPayment, voidInvoice } from '@/lib/domain/finance'
 import { closeJob } from '@/lib/domain/project'
+import { seedProjectWorkflow } from '@/lib/domain/project-workflow'
 import { refundPayment } from '@/lib/domain/refund'
 import { getInvoiceBalanceById, getJobBalanceByProjectId } from '@/lib/domain/invoice-money'
 
@@ -20,8 +21,8 @@ async function newProject(): Promise<string> {
 }
 
 async function issuedInvoice(projectId: string, amount: string, type: 'DEPOSIT' | 'BALANCE' | 'SUPPLEMENTARY' = 'DEPOSIT') {
+  // Invoices are official (ISSUED) the moment they are created - there is no draft step any more.
   const inv = await createInvoice(projectId, { type, description: 'Coverage', amount }, null)
-  await issueInvoice(inv.id, null)
   return inv.id
 }
 
@@ -209,6 +210,8 @@ describe('Money foundation against a real DB (docs/25 Part 1)', () => {
     it('a draft invoice cannot be credited', async () => {
       const projectId = await newProject()
       const draft = await createInvoice(projectId, { type: 'DEPOSIT', description: 'Coverage', amount: '1000' }, null)
+      // New invoices are never drafts; a legacy DRAFT row (still in the enum for history) must stay uncreditable.
+      await prisma.invoice.update({ where: { id: draft.id }, data: { status: 'DRAFT' } })
       await expect(issueCreditNote(draft.id, '100', null, null)).rejects.toThrow(/issued invoice/i)
     })
 
@@ -223,7 +226,10 @@ describe('Money foundation against a real DB (docs/25 Part 1)', () => {
     // Drive a project to COMPLETED with no blocking tasks so closeJob's only remaining gate is money.
     async function completedJobReadyToClose(): Promise<string> {
       const projectId = await newProject()
-      await prisma.workItem.deleteMany({ where: { projectId } })
+      // A real finished job: its workflow was seeded (so a later payment never re-seeds it) and every task
+      // is done - closeJob also refuses while tasks are open.
+      await seedProjectWorkflow(projectId)
+      await prisma.workItem.updateMany({ where: { projectId }, data: { status: 'COMPLETED' } })
       await prisma.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'COMPLETED' } })
       return projectId
     }

@@ -46,8 +46,7 @@ async function newProject(): Promise<string> {
 
 /** An issued invoice whose (synthetic) instalment is due `dueDays` from now. */
 async function issuedInvoiceDue(projectId: string, amount: string, dueDays: number): Promise<string> {
-  const inv = await createInvoice(projectId, { type: 'BALANCE', description: 'Coverage', amount }, null)
-  await issueInvoice(inv.id, null)
+  const inv = await createInvoice(projectId, { type: 'BALANCE', description: 'Coverage', amount }, null) // ISSUED on creation
   await prisma.invoice.update({ where: { id: inv.id }, data: { dueAt: daysFromNow(dueDays) } })
   return inv.id
 }
@@ -234,7 +233,10 @@ describe('Notifications & reminders against a real DB (docs/25 Part 4)', () => {
     await setAutomation({ clientEmailsEnabled: true }) // client emails on → invoice-issued notice dispatched
     const projectId = await newProject()
     const inv = await createInvoice(projectId, { type: 'DEPOSIT', description: 'Deposit', amount: '500' }, null)
-    await issueInvoice(inv.id, null) // writes an invoice.issued outbox event
+    // Only a legacy DRAFT is ever issued now (new invoices are ISSUED on creation); issuing one still
+    // writes the invoice.issued outbox event this processor turns into a dispatch.
+    await prisma.invoice.update({ where: { id: inv.id }, data: { status: 'DRAFT' } })
+    await issueInvoice(inv.id, null)
     // Drain the shared outbox backlog so this event is processed; the pass is idempotent.
     let guard = 0
     while ((await processOutboxOnce()).processed > 0 && guard++ < 200) {

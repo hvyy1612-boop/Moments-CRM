@@ -279,7 +279,7 @@ export type BoardStage = {
   custom: boolean
   active: boolean
   done: number
-  total: number
+  total: number // money-ok: task count
   tasks: BoardTaskRow[]
 }
 export type NextAction =
