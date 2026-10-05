@@ -397,9 +397,13 @@ export async function toggleProjectTask(taskId: string, actorUserId: string) {
       // Cascade reconciles only legitimate predecessors: earlier tasks in mandatory stages or the SAME
       // stage. It never sweeps a DIFFERENT optional stage (Pre-shoot / Video / Film / Album) - ticking a
       // Delivery task must not silently complete unfinished optional add-on work (bug #4).
+      // Optional add-on stages (Video / Film / Album) and staff custom stages run ALONGSIDE production, not
+      // after it: ticking a task there only reconciles earlier tasks of that same stage, never the core
+      // Pre-shoot..Delivery checklist (bug-scan 2026-10-05: one video tick completed the whole job).
+      const targetIsCore = stageRank.has(targetStage) && !optionalStages.has(targetStage)
       const ids = pending
         .filter((t) => rankOf(t) <= target)
-        .filter((t) => !optionalStages.has(t.stage ?? '') || (t.stage ?? '') === targetStage)
+        .filter((t) => (targetIsCore ? !optionalStages.has(t.stage ?? '') && stageRank.has(t.stage ?? '') : false) || (t.stage ?? '') === targetStage)
         .map((t) => t.id)
       await tx.workItem.updateMany({
         where: { id: { in: ids } },

@@ -73,7 +73,12 @@ export async function moveCalendarItemAction(formData: FormData): Promise<Calend
     startMin: raw === '' || raw === null ? null : raw,
   })
   if (!parsed.success) return { status: 'error', message: 'Could not move the event.' }
-  await moveCalendarItem(parsed.data.kind, parsed.data.refId, parsed.data.date, parsed.data.startMin)
+  try {
+    await moveCalendarItem(parsed.data.kind, parsed.data.refId, parsed.data.date, parsed.data.startMin, user.id)
+  } catch (error) {
+    const overlap = error instanceof Error && /exclusion|overlap|conflicting key/i.test(error.message)
+    return { status: 'error', message: overlap ? 'Someone on this shoot is already booked at the new time.' : error instanceof Error ? error.message : 'Could not move the event.' }
+  }
   revalidatePath('/calendar')
   return { status: 'success' }
 }

@@ -7,6 +7,8 @@
  * Tasks carry a type; plain To-do shows no tag.
  */
 
+import { sydneyDateTimeParts } from '@/lib/time'
+
 export function currentActionText(waitingOn: string | null, pendingTitle: string | null): string {
   if (waitingOn === 'CLIENT') return 'Waiting for client reply'
   if (pendingTitle) return `Staff needs to: ${pendingTitle.toLowerCase()}`
@@ -157,8 +159,10 @@ export type EnqStage = {
 }
 export type EnquiryBoard = { stages: EnqStage[]; allDone: boolean }
 
+/** The task's Sydney calendar date (YYYY-MM-DD) - the same day the label and the time field use. A UTC
+ *  slice would show the previous day for any due time before 10/11am Sydney and shift it on every save. */
 function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10)
+  return sydneyDateTimeParts(d).date
 }
 
 export function buildEnquiryBoard(

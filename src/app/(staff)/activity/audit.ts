@@ -51,6 +51,7 @@ const SPECIAL: Record<string, string> = {
   // `booking.*` from booking.ts is a SHOOT session; direct-booking's request/confirm is the client's booking.
   'booking.created': 'Shoot scheduled',
   'booking.rescheduled': 'Shoot rescheduled',
+  'booking.moved': 'Shoot moved on the calendar',
   'booking.requested': 'Booking requested',
   'booking.confirmed': 'Booking confirmed',
 }

@@ -9,50 +9,58 @@ import { invalidateShootReminders } from './notifications'
  * row plus a REFUND payment transaction, and total refunds can never exceed what was captured.
  */
 
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+
 /** Cancel a project: mark it CANCELLED and free any tentative/confirmed bookings and their crew. */
 export async function cancelProject(
   projectId: string,
   reason: string | null = null,
   actorUserId: string | null = null,
 ) {
-  const now = systemClock.now()
-  return prisma.$transaction(async (tx) => {
-    const project = await tx.project.findUnique({ where: { id: projectId } })
-    if (!project) throw new Error('Project not found.')
-    if (project.lifecycleStatus === 'CANCELLED') return project
+  return prisma.$transaction((tx) => cancelProjectTx(tx, projectId, reason, actorUserId))
+}
 
-    const updated = await tx.project.update({
-      where: { id: projectId },
-      data: { lifecycleStatus: 'CANCELLED', commercialStatus: 'CANCELLED' },
-    })
-    await tx.resourceAssignment.updateMany({
-      where: { booking: { projectId }, status: 'ACTIVE' },
-      data: { status: 'CANCELLED' },
-    })
-    // Capture the bookings being cancelled so their unsent shoot reminders can be invalidated below.
-    const cancelledBookings = await tx.booking.findMany({
-      where: { projectId, status: { in: ['TENTATIVE', 'CONFIRMED'] } },
-      select: { id: true },
-    })
-    await tx.booking.updateMany({
-      where: { projectId, status: { in: ['TENTATIVE', 'CONFIRMED'] } },
-      data: { status: 'CANCELLED', cancelledAt: now },
-    })
-    // Rule N7 (docs/25 Part 4): a cancelled shoot's unsent reminders are invalidated so no old-schedule
-    // notice is sent. The send worker also re-checks the booking status before sending (defence in depth).
-    for (const b of cancelledBookings) await invalidateShootReminders(tx, b.id)
-    await tx.auditLog.create({
-      data: {
-        companyId: project.companyId,
-        action: 'project.cancelled',
-        entityType: 'Project',
-        entityId: projectId,
-        actorUserId,
-        afterData: { reason },
-      },
-    })
-    return updated
+/**
+ * The cancellation itself, inside the caller's transaction (e.g. "Cancel job" on a confirmed lead), so a
+ * cancelled job never leaves its shoots on the calendar or its crew blocked for those times.
+ */
+export async function cancelProjectTx(tx: Tx, projectId: string, reason: string | null = null, actorUserId: string | null = null) {
+  const now = systemClock.now()
+  const project = await tx.project.findUnique({ where: { id: projectId } })
+  if (!project) throw new Error('Project not found.')
+  if (project.lifecycleStatus === 'CANCELLED') return project
+
+  const updated = await tx.project.update({
+    where: { id: projectId },
+    data: { lifecycleStatus: 'CANCELLED', commercialStatus: 'CANCELLED' },
   })
+  await tx.resourceAssignment.updateMany({
+    where: { booking: { projectId }, status: 'ACTIVE' },
+    data: { status: 'CANCELLED' },
+  })
+  // Capture the bookings being cancelled so their unsent shoot reminders can be invalidated below.
+  const cancelledBookings = await tx.booking.findMany({
+    where: { projectId, status: { in: ['TENTATIVE', 'CONFIRMED'] } },
+    select: { id: true },
+  })
+  await tx.booking.updateMany({
+    where: { projectId, status: { in: ['TENTATIVE', 'CONFIRMED'] } },
+    data: { status: 'CANCELLED', cancelledAt: now },
+  })
+  // Rule N7 (docs/25 Part 4): a cancelled shoot's unsent reminders are invalidated so no old-schedule
+  // notice is sent. The send worker also re-checks the booking status before sending (defence in depth).
+  for (const b of cancelledBookings) await invalidateShootReminders(tx, b.id)
+  await tx.auditLog.create({
+    data: {
+      companyId: project.companyId,
+      action: 'project.cancelled',
+      entityType: 'Project',
+      entityId: projectId,
+      actorUserId,
+      afterData: { reason },
+    },
+  })
+  return updated
 }
 
 export type RefundInput = { reason?: string | null; externalReference?: string | null }

@@ -364,14 +364,39 @@ export async function createCalendarEvent(input: CreateCalendarEventInput): Prom
 }
 
 /** Move a booking or standalone event to a new Sydney day/time (drag-to-reschedule). Duration is kept. */
-export async function moveCalendarItem(kind: 'booking' | 'event', refId: string, dateKey: string, startMin: number | null): Promise<void> {
+export async function moveCalendarItem(
+  kind: 'booking' | 'event',
+  refId: string,
+  dateKey: string,
+  startMin: number | null,
+  actorUserId: string | null = null,
+): Promise<void> {
   const hh = startMin === null ? '00' : pad(Math.floor(startMin / 60))
   const mm = startMin === null ? '00' : pad(startMin % 60)
   const newStart = sydneyLocalToUtc(`${dateKey}T${hh}:${mm}`)
   if (kind === 'booking') {
-    const b = await prisma.booking.findUniqueOrThrow({ where: { id: refId }, select: { startsAt: true, endsAt: true } })
-    const duration = b.endsAt.getTime() - b.startsAt.getTime()
-    await prisma.booking.update({ where: { id: refId }, data: { startsAt: newStart, endsAt: new Date(newStart.getTime() + Math.max(duration, 0)) } })
+    // A shoot keeps its identity and status, but its crew's booked windows move WITH it (clash-checked),
+    // otherwise the old window stays reserved and the new time can be double-booked.
+    await prisma.$transaction(async (tx) => {
+      const b = await tx.booking.findUniqueOrThrow({
+        where: { id: refId },
+        select: { startsAt: true, endsAt: true, status: true, assignments: { where: { status: 'ACTIVE' }, select: { id: true, resourceId: true } } },
+      })
+      if (b.status === 'CANCELLED') throw new Error('A cancelled shoot cannot be moved.')
+      const newEnd = new Date(newStart.getTime() + Math.max(b.endsAt.getTime() - b.startsAt.getTime(), 0))
+      for (const a of b.assignments) {
+        const clash = await tx.resourceAssignment.findFirst({
+          where: { resourceId: a.resourceId, status: 'ACTIVE', id: { not: a.id }, startsAt: { lt: newEnd }, endsAt: { gt: newStart } },
+          select: { id: true },
+        })
+        if (clash) throw new Error('Someone on this shoot is already booked at the new time.')
+      }
+      await tx.booking.update({ where: { id: refId }, data: { startsAt: newStart, endsAt: newEnd } })
+      await tx.resourceAssignment.updateMany({ where: { bookingId: refId, status: 'ACTIVE' }, data: { startsAt: newStart, endsAt: newEnd } })
+      await tx.auditLog.create({
+        data: { action: 'booking.moved', entityType: 'Booking', entityId: refId, actorUserId, beforeData: { startsAt: b.startsAt.toISOString(), endsAt: b.endsAt.toISOString() }, afterData: { startsAt: newStart.toISOString(), endsAt: newEnd.toISOString() } },
+      })
+    })
   } else {
     const e = await prisma.calendarEvent.findUniqueOrThrow({ where: { id: refId }, select: { startsAt: true, endsAt: true, allDay: true } })
     const duration = e.endsAt ? e.endsAt.getTime() - e.startsAt.getTime() : null

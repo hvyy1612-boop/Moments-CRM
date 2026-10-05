@@ -373,7 +373,7 @@ function WeekBlock({ item, startHour, canManage, onPeek, onHide, onMove }: {
     style: { top, height },
     onMouseEnter: (e: ReactMouseEvent) => onPeek(item, e),
     onMouseLeave: onHide,
-    onPointerDown: draggable ? (e: ReactPointerEvent) => beginDrag(e, item, onMove, () => { dragged.current = true }) : undefined,
+    onPointerDown: draggable ? (e: ReactPointerEvent) => beginDrag(e, item, onMove, () => { dragged.current = true }, startHour) : undefined,
   }
   return item.href
     ? <Link href={item.href} className={cls} {...handlers} onClick={(e) => { if (dragged.current) { e.preventDefault(); dragged.current = false } }}>{inner}</Link>
@@ -386,6 +386,8 @@ function beginDrag(
   item: CalItem,
   onMove: (item: CalItem, dateKey: string, startMin: number | null) => void,
   markDragged: () => void,
+  /** First hour of the week grid the item can be dropped on (the week view starts at 00:00). */
+  startHour = 0,
 ) {
   const startX = e.clientX, startY = e.clientY
   let moved = false
@@ -415,7 +417,7 @@ function beginDrag(
     if (col) {
       const dateKey = col.getAttribute('data-datekey')!
       const rect = col.getBoundingClientRect()
-      const startHour = 7
+      // The grid's real first hour, passed in - a hard-coded 7 saved every dropped shoot 7 hours late.
       const min = startHour * 60 + Math.max(0, Math.floor(((ev.clientY - rect.top) / ROW_H) * 60 / 15) * 15)
       onMove(item, dateKey, min)
     } else if (cell) {

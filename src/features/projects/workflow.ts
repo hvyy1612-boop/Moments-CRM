@@ -7,6 +7,7 @@
  */
 import { dueToneFor, TASK_TYPE_LABEL, type DueTone, type TaskType } from '@/features/enquiries/workflow'
 import type { DueAnchor } from '@/lib/domain/deadline'
+import { sydneyDateTimeParts } from '@/lib/time'
 
 export { ADDABLE_TASK_TYPES } from '@/features/enquiries/workflow'
 export type { TaskType } from '@/features/enquiries/workflow'
@@ -300,8 +301,10 @@ export type ProjectBoard = {
  *  passed). ONE policy, ONE threshold - change here to adjust everywhere. Attention is never a status. */
 export const ATTENTION_DAYS = 3
 
+/** The task's Sydney calendar date (YYYY-MM-DD) - the same day the label and the time field use. A UTC
+ *  slice would show the previous day for any due time before 10/11am Sydney and shift it on every save. */
 function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10)
+  return sydneyDateTimeParts(d).date
 }
 
 export function buildProjectBoard(

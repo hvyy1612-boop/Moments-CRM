@@ -10,6 +10,7 @@ import {
   type ClientMatch,
 } from './enquiry-match'
 import { cancelOpenWorkItems, seedEnquiryWorkflow } from './enquiry-workflow'
+import { cancelProjectTx } from './refund'
 
 /**
  * Leads (the `Enquiry` model; staff-facing name "Lead", like Job = `Project`). A website enquiry or a
@@ -325,12 +326,8 @@ export async function cancelBooking(enquiryId: string, actorUserId: string | nul
     // Spec §3: cancelling a CONFIRMED booking is a JOB-lifecycle event. The Job is cancelled, but the
     // enquiry KEEPS its BOOKING_CONFIRMED history and its link to the Job - it was a successful
     // conversion and must not be rewritten to DECLINED (that would corrupt conversion reporting).
-    if (enquiry.convertedProjectId) {
-      await tx.project.update({
-        where: { id: enquiry.convertedProjectId },
-        data: { lifecycleStatus: 'CANCELLED' },
-      })
-    }
+    // Full job cancellation (docs/33: one cancel path): the Job, its shoots, crew and shoot reminders.
+    if (enquiry.convertedProjectId) await cancelProjectTx(tx, enquiry.convertedProjectId, 'Booking cancelled', actorUserId)
     await tx.auditLog.create({
       data: {
         companyId: enquiry.companyId,
