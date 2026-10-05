@@ -98,7 +98,9 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
   await prisma.$transaction((tx) => seedIfNeeded(tx, projectId, project.companyId))
 
   const items = await prisma.workItem.findMany({
-    where: { projectId },
+    // A CANCELLED row (e.g. an overdue-payment follow-up the cron resolved once the invoice was paid) is
+    // no longer work: it never shows as Pending or counts toward progress.
+    where: { projectId, status: { not: 'CANCELLED' } },
     orderBy: { order: 'asc' },
     select: {
       id: true,

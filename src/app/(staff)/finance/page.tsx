@@ -4,6 +4,8 @@ import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { can } from '@/lib/auth/authz'
 import { requireRole } from '@/lib/auth/guard'
+import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
+import { getInvoiceBalance, nextPaymentDue } from '@/lib/domain/money'
 import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, sydneyDateTimeParts } from '@/lib/time'
@@ -49,11 +51,9 @@ export default async function FinancePage() {
   const invoices = await prisma.invoice.findMany({
     orderBy: { createdAt: 'desc' },
     select: {
+      ...INVOICE_MONEY_SELECT,
       id: true,
       invoiceNumber: true,
-      status: true,
-      total: true,
-      dueAt: true,
       issuedAt: true,
       project: {
         select: {
@@ -63,7 +63,7 @@ export default async function FinancePage() {
         },
       },
       payments: {
-        select: { transactions: { where: { status: 'SUCCEEDED', type: 'CHARGE' }, select: { createdAt: true } } },
+        select: { transactions: { select: { type: true, status: true, amount: true, createdAt: true } } },
       },
     },
   })
@@ -73,13 +73,16 @@ export default async function FinancePage() {
     if (inv.status === 'VOID') return [] // voided invoices are not a payment to track here
     const isPaid = inv.status === 'PAID'
     const isDraft = inv.status === 'DRAFT'
-    const charges = inv.payments.flatMap((p) => p.transactions)
+    const charges = inv.payments.flatMap((p) => p.transactions).filter((t) => t.status === 'SUCCEEDED' && t.type === 'CHARGE')
     const paidAt = charges.length ? new Date(Math.max(...charges.map((c) => c.createdAt.getTime()))) : inv.issuedAt
     const service = titleCase(
       inv.project.convertedFromEnquiries[0]?.eventType ?? inv.project.package?.name ?? 'Photography',
     )
-    const dateSource = isPaid ? paidAt : isDraft ? null : inv.dueAt
-    const urgency = !isPaid && !isDraft ? urgencyFor(inv.dueAt, now) : null
+    // An unpaid invoice is dated by its NEXT payment due (the earliest instalment not yet paid), so a late
+    // deposit shows as overdue here even when the final payment is months away.
+    const nextDue = isPaid || isDraft ? null : (nextPaymentDue(getInvoiceBalance(toInvoiceMoneyInput(inv))) ?? inv.dueAt)
+    const dateSource = isPaid ? paidAt : isDraft ? null : nextDue
+    const urgency = !isPaid && !isDraft ? urgencyFor(nextDue, now) : null
     return [
       {
         id: inv.id,

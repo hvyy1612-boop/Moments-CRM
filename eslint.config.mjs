@@ -11,6 +11,8 @@ const config = [
       '.next/**',
       // The e2e production build output (playwright.config.ts NEXT_DIST_DIR).
       '.next-e2e/**',
+      // The local preview server's build output (.claude/launch.json NEXT_DIST_DIR).
+      '.next-preview/**',
       'coverage/**',
       'playwright-report/**',
       'test-results/**',

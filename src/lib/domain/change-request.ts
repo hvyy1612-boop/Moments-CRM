@@ -387,6 +387,9 @@ async function applyScopeChangeTx(
       acceptedByClientAt: now,
     },
   })
+  // The revision reset the quote to Draft; the agreed scope is accepted, so the quote itself reads
+  // Accepted again (lists and the quote page fold on the quote's status, not the version's).
+  await tx.quote.update({ where: { id: quote.id }, data: { status: 'ACCEPTED' } })
   await issueAdjustmentInvoiceTx(tx, projectId, payload.fee.amount, `Scope change: ${payload.summary}`, actorUserId, now)
   return rev.versionId
 }

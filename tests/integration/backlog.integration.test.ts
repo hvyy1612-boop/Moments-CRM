@@ -163,5 +163,7 @@ describe('change requests', () => {
     expect(applied.status).toBe('APPLIED')
     expect(applied.resultingQuoteVersionId).toBeTruthy()
     expect(await prisma.quoteVersion.count({ where: { quoteId: q.quoteId } })).toBe(2)
+    // The agreed (revised) scope keeps the quote reading Accepted, not a stray Draft/Pending.
+    expect((await prisma.quote.findUnique({ where: { id: q.quoteId } }))?.status).toBe('ACCEPTED')
   })
 })

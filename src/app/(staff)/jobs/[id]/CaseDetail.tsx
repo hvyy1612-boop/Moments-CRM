@@ -212,8 +212,9 @@ export async function CaseDetail({
     isAddOn: p.isAddOn,
   }))
 
-  // Header facts: shoot date + location come from the first booking (the shoot), when one exists.
-  const shootBooking = project.bookings[0] ?? null
+  // Header facts: shoot date + location come from the first LIVE booking (the shoot), when one exists. A
+  // cancelled booking (e.g. the old date after a reschedule) never stands in for the shoot.
+  const shootBooking = project.bookings.find((b) => b.status !== 'CANCELLED') ?? null
   const shootDateLabel = shootBooking ? formatSydneyDateTime(shootBooking.startsAt) : null
   const shootLocation = shootBooking?.location ?? null
 

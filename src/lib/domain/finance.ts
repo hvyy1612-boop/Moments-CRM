@@ -7,6 +7,8 @@ import type { CreateInvoiceInput, CreateInvoiceLinesInput, RecordPaymentInput } 
 import { invoiceObligation, invoicePaidNet, lockInvoiceRow, refreshInvoiceAmountPaid } from './invoice-ledger'
 import { confirmBookingByDepositTx, maybeAutoCompleteJob } from './project-workflow'
 import { nextRecordNumber } from './numbering'
+import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
+import { getInvoiceBalance, nextPaymentDue } from './money'
 
 /**
  * Finance. Invoices are raised against a confirmed project and paid down by payments. Each payment
@@ -817,13 +819,21 @@ export async function markOverdueInvoices(now: Date = systemClock.now()) {
   // Overdue only once the whole due DAY (Sydney) has passed: due dates are stored as the start of that day,
   // so comparing with "now" would flag an invoice on the very morning it falls due.
   const startOfTodaySydney = sydneyLocalToUtc(`${sydneyYmdString(now)}T00:00`)
+  // A split invoice is overdue as soon as ANY instalment's day has passed unpaid (a late deposit), not only
+  // once its final payment (the invoice's own due date) is late.
   const candidates = await prisma.invoice.findMany({
-    where: { status: { in: ['ISSUED', 'SENT', 'PARTIALLY_PAID'] }, dueAt: { lt: startOfTodaySydney } },
-    select: { id: true, total: true, amountPaid: true, creditNotes: { where: { NOT: { status: 'VOIDED' } }, select: { amount: true } } },
+    where: {
+      status: { in: ['ISSUED', 'SENT', 'PARTIALLY_PAID'] },
+      OR: [{ dueAt: { lt: startOfTodaySydney } }, { instalments: { some: { dueAt: { lt: startOfTodaySydney } } } }],
+    },
+    select: { id: true, ...INVOICE_MONEY_SELECT },
   })
-  // Credit-aware: what is owed is the total less credit notes.
+  // Credit-aware and allocation-aware: the earliest instalment still owed is the one that decides.
   const ids = candidates
-    .filter((i) => i.total.sub(i.creditNotes.reduce((s, c) => s.add(c.amount), new Prisma.Decimal(0))).greaterThan(i.amountPaid))
+    .filter((i) => {
+      const next = nextPaymentDue(getInvoiceBalance(toInvoiceMoneyInput(i)))
+      return next != null && next.getTime() < startOfTodaySydney.getTime()
+    })
     .map((i) => i.id)
   if (ids.length === 0) return { marked: 0 }
   // Re-check the status in the same statement: a payment that settled the invoice since the read above

@@ -3,8 +3,10 @@ import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
+import { getInvoiceBalance, nextPaymentDue } from '@/lib/domain/money'
 import { formatAud } from '@/lib/money'
-import { formatSydneyDate } from '@/lib/time'
+import { formatSydneyDate, sydneyDateTimeParts } from '@/lib/time'
 import { titleCase } from '@/lib/text'
 import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { PrintButton } from '@/components/PrintButton'
@@ -32,10 +34,8 @@ export default async function PaymentsReportPage({ searchParams }: { searchParam
           where: { id: { in: ids } },
           orderBy: { createdAt: 'desc' },
           select: {
+            ...INVOICE_MONEY_SELECT,
             invoiceNumber: true,
-            status: true,
-            total: true,
-            dueAt: true,
             issuedAt: true,
             project: {
               select: {
@@ -44,22 +44,24 @@ export default async function PaymentsReportPage({ searchParams }: { searchParam
                 convertedFromEnquiries: { select: { eventType: true }, take: 1 },
               },
             },
-            payments: { select: { transactions: { where: { status: 'SUCCEEDED', type: 'CHARGE' }, select: { createdAt: true } } } },
+            payments: { select: { transactions: { select: { type: true, status: true, amount: true, createdAt: true } } } },
           },
         })
       : Promise.resolve([]),
   ])
 
-  const now = Date.now()
+  const today = sydneyDateTimeParts(new Date()).date
   let totalNum = 0
   const rows: ReportRow[] = invoices.map((inv) => {
     const isPaid = inv.status === 'PAID'
     const isDraft = inv.status === 'DRAFT'
-    const charges = inv.payments.flatMap((p) => p.transactions)
+    const charges = inv.payments.flatMap((p) => p.transactions).filter((t) => t.status === 'SUCCEEDED' && t.type === 'CHARGE')
     const paidAt = charges.length ? new Date(Math.max(...charges.map((c) => c.createdAt.getTime()))) : inv.issuedAt
-    const overdue = !isPaid && !isDraft && inv.dueAt != null && inv.dueAt.getTime() < now
+    // Same rule as the Payments list: dated by the next payment due, overdue only once that Sydney day is over.
+    const nextDue = isPaid || isDraft ? null : (nextPaymentDue(getInvoiceBalance(toInvoiceMoneyInput(inv))) ?? inv.dueAt)
+    const overdue = nextDue != null && sydneyDateTimeParts(nextDue).date < today
     const status = isPaid ? 'Paid' : isDraft ? 'Draft' : overdue ? 'Overdue' : 'Due'
-    const dateSource = isPaid ? paidAt : isDraft ? null : inv.dueAt
+    const dateSource = isPaid ? paidAt : isDraft ? null : nextDue
     totalNum += inv.total.toNumber()
     return {
       number: inv.invoiceNumber,

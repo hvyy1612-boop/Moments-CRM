@@ -18,6 +18,8 @@ export type TaskLine = {
   category: 'lead' | 'job'
   href: string
   dueLabel: string
+  /** The due instant (ms), so lists sort by real date order, never by the label text. */
+  dueMs: number
   overdue: boolean
 }
 export type ShootLine = { id: string; client: string; title: string; timeLabel: string; href: string }
@@ -33,8 +35,8 @@ export type TodayCockpit = {
   counts: { overdue: number; today: number; shoots: number; waiting: number }
 }
 
-const OPEN_ENQUIRY = ['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION', 'QUOTE_SENT', 'AWAITING_BOOKING_CONFIRMATION'] as const
-const CLOSED_PROJECT = ['LOST', 'COMPLETED', 'CANCELLED', 'ARCHIVED', 'CLOSED'] as const
+export const OPEN_ENQUIRY = ['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION', 'QUOTE_SENT', 'AWAITING_BOOKING_CONFIRMATION'] as const
+export const CLOSED_PROJECT = ['LOST', 'COMPLETED', 'CANCELLED', 'ARCHIVED', 'CLOSED'] as const
 
 function pad(n: number): string { return String(n).padStart(2, '0') }
 
@@ -106,6 +108,7 @@ export async function getTodayCockpit(): Promise<TodayCockpit> {
       category: isLead ? 'lead' : 'job',
       href: isLead ? `/leads/${w.enquiry!.id}` : `/jobs/${w.project!.id}`,
       dueLabel: formatSydneyDate(date),
+      dueMs: ms,
       overdue: ms < dayStart.getTime(),
     }
     if (ms < dayStart.getTime()) overdue.push(line)
@@ -113,7 +116,7 @@ export async function getTodayCockpit(): Promise<TodayCockpit> {
     else if (ms < weekEnd.getTime()) upcoming.push(line)
   }
 
-  const byDue = (a: TaskLine, b: TaskLine) => a.dueLabel.localeCompare(b.dueLabel) || a.client.localeCompare(b.client)
+  const byDue = (a: TaskLine, b: TaskLine) => a.dueMs - b.dueMs || a.client.localeCompare(b.client)
   overdue.sort(byDue); todayTasks.sort(byDue); upcoming.sort(byDue)
 
   const shootsToday: ShootLine[] = shoots.map((b) => ({

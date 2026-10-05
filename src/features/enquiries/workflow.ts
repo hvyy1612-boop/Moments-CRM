@@ -7,7 +7,7 @@
  * Tasks carry a type; plain To-do shows no tag.
  */
 
-import { sydneyDateTimeParts } from '@/lib/time'
+import { daysUntilSydney, sydneyDateTimeParts } from '@/lib/time'
 
 export function currentActionText(waitingOn: string | null, pendingTitle: string | null): string {
   if (waitingOn === 'CLIENT') return 'Waiting for client reply'
@@ -101,7 +101,9 @@ export type DueTone = 'overdue' | 'today' | 'soon' | null
 
 export function dueToneFor(dueDate: Date | null, done: boolean, now: Date | null): DueTone {
   if (done || !dueDate || !now) return null
-  const diff = Math.floor((dueDate.getTime() - now.getTime()) / MS_PER_DAY)
+  // Sydney calendar days, not a rolling 24 hours: a task due at 08:00 today is "today" all day, and one
+  // due tomorrow morning is not "today" this evening (the board, calendar and digest all read this).
+  const diff = daysUntilSydney(dueDate, now)
   if (diff < 0) return 'overdue'
   if (diff === 0) return 'today'
   if (diff <= 3) return 'soon'

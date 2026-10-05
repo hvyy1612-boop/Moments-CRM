@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { EnquiryStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { STAFF_DOMAIN } from '@/lib/auth/staff'
 import { getEnquiryBoard } from '@/lib/domain/enquiry-workflow'
 import { getProjectBoard } from '@/lib/domain/project-workflow'
 import { markOverdueInvoices } from '@/lib/domain/finance'
@@ -84,8 +85,10 @@ export async function GET(req: Request): Promise<Response> {
     return NextResponse.json({ ok: true, sent: 0, invoicesMarkedOverdue: overdueInvoices.marked, reminders })
   }
 
+  // Only real mailboxes: admin-issued Staff Login IDs (m000123@staff.moments.com) are usernames that
+  // cannot receive mail, so sending them a digest would only bounce every day.
   const staff = await prisma.user.findMany({
-    where: { isActive: true, status: 'ACTIVE' },
+    where: { isActive: true, status: 'ACTIVE', NOT: { email: { endsWith: `@${STAFF_DOMAIN}` } } },
     select: { email: true, name: true },
   })
   for (const u of staff) {

@@ -1,9 +1,17 @@
 import { timingSafeEqual } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import { formatSydneyTime, sydneyLocalToUtc, sydneyYmd, systemClock } from '@/lib/time'
+import { daysUntilSydney, formatSydneyTime, sydneyLocalToUtc, sydneyYmd, systemClock } from '@/lib/time'
 import { addDays, ENQUIRY_TASK_SCHEDULE } from '@/features/enquiries/workflow'
 import { makeShootDateOf, resolveTaskDueDate, type BookingLike, type DueAnchor } from './deadline'
+import { CLOSED_PROJECT, OPEN_ENQUIRY } from './today'
+
+// Only work that is still live belongs on the calendar: open leads and jobs that are not cancelled or
+// finished (same rule as the Today view), so a stopped job's leftover to-dos never sit there red forever.
+const LIVE_WORK: Prisma.WorkItemWhereInput[] = [
+  { enquiry: { status: { in: [...OPEN_ENQUIRY] } } },
+  { project: { lifecycleStatus: { notIn: [...CLOSED_PROJECT] } } },
+]
 
 /**
  * Calendar aggregation (BR-CAL). The calendar is DERIVED - it lays what staff already entered onto a
@@ -105,7 +113,7 @@ function resolveAnchor(dateKey: string | null | undefined, now: Date): { y: numb
 
 function tone(dueMs: number | null, done: boolean, nowMs: number): CalItem['tone'] {
   if (done || dueMs === null) return null
-  const diff = Math.floor((dueMs - nowMs) / 86_400_000)
+  const diff = daysUntilSydney(new Date(dueMs), new Date(nowMs)) // Sydney calendar days, like the board
   if (diff < 0) return 'overdue'
   if (diff === 0) return 'today'
   if (diff <= 3) return 'soon'
@@ -172,7 +180,7 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
   // Appointments (APPOINTMENT work items) - lead or job.
   if (want('lead') || want('job')) {
     const appts = await prisma.workItem.findMany({
-      where: { type: 'APPOINTMENT', status: { in: ['PENDING', 'COMPLETED'] } },
+      where: { type: 'APPOINTMENT', status: { in: ['PENDING', 'COMPLETED'] }, OR: LIVE_WORK },
       select: { id: true, title: true, dueAt: true, status: true,
         dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true, bookingId: true,
         enquiry: { select: { id: true, name: true, createdAt: true } },
@@ -204,7 +212,7 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
   // above) and AUTO (system rows) are excluded. Job tasks only appear once they have a resolvable date.
   if (want('lead') || want('job')) {
     const tasks = await prisma.workItem.findMany({
-      where: { type: { notIn: ['APPOINTMENT', 'AUTO'] }, status: 'PENDING' },
+      where: { type: { notIn: ['APPOINTMENT', 'AUTO'] }, status: 'PENDING', OR: LIVE_WORK },
       select: { id: true, title: true, dueAt: true,
         dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true, bookingId: true,
         enquiry: { select: { id: true, name: true, createdAt: true } },
@@ -506,7 +514,7 @@ export async function getIcsForToken(token: string): Promise<string | null> {
       select: { id: true, title: true, startsAt: true, endsAt: true, allDay: true, location: true },
     }),
     prisma.workItem.findMany({
-      where: { companyId: company.id, type: 'APPOINTMENT', status: { in: ['PENDING', 'COMPLETED'] } },
+      where: { companyId: company.id, type: 'APPOINTMENT', status: { in: ['PENDING', 'COMPLETED'] }, OR: LIVE_WORK },
       select: { id: true, title: true, dueAt: true, dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true, bookingId: true, enquiry: { select: { name: true, createdAt: true } }, project: { select: { confirmedByClientAt: true, client: { select: { displayName: true } }, bookings: { select: { id: true, startsAt: true, status: true, rescheduledFromId: true } } } } },
     }),
   ])

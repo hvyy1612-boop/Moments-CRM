@@ -447,7 +447,7 @@ export async function processOutboxOnce(now: Date = systemClock.now()): Promise<
 
 /** Auto-resolve overdue-followup tasks whose invoice is now settled (Rule N-j: resolves on owed = 0). */
 export async function resolveSettledOverdueFollowups(): Promise<number> {
-  const open = await prisma.workItem.findMany({ where: { kind: 'OVERDUE_FOLLOWUP', status: 'PENDING' }, select: { id: true, title: true } })
+  const open = await prisma.workItem.findMany({ where: { kind: 'OVERDUE_FOLLOWUP', status: 'PENDING' }, select: { id: true, title: true, projectId: true } })
   let resolved = 0
   for (const t of open) {
     const match = /\(([^)]+)\)\s*$/.exec(t.title)
@@ -457,6 +457,13 @@ export async function resolveSettledOverdueFollowups(): Promise<number> {
     if (bal && bal.owed.lessThanOrEqualTo(0)) {
       await prisma.workItem.update({ where: { id: t.id }, data: { status: 'CANCELLED' } })
       resolved++
+      // This follow-up was the last thing holding the job open when the final payment landed (the payment
+      // saw it still pending), so give the job its auto-complete check now that it is resolved.
+      if (t.projectId) {
+        const { maybeAutoCompleteJob } = await import('./project-workflow')
+        const projectId = t.projectId
+        await prisma.$transaction((tx) => maybeAutoCompleteJob(tx, projectId, null))
+      }
     }
   }
   return resolved

@@ -81,10 +81,18 @@ describe('acceptQuote — enquiry-stage quote → job (docs/31, integration)', (
   it('an expired quote cannot be accepted', async () => {
     const enquiry = await createEnquiry({ name: 'Lead', email: email() })
     const q = await createQuoteForEnquiry(enquiry.id, null)
-    const past = new Date(Date.now() - 24 * 60 * 60 * 1000)
-    await saveQuoteDraft(q.versionId, [{ description: 'X', quantity: 1, unitPrice: '2000' }], past)
+    await saveQuoteDraft(q.versionId, [{ description: 'X', quantity: 1, unitPrice: '2000' }], null)
     await sendQuote(q.quoteId, null)
+    // The valid-until day passes after the quote was sent (two days ago, so it is over in Sydney too).
+    await prisma.quoteVersion.update({ where: { id: q.versionId }, data: { validUntil: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) } })
     await expect(acceptQuote(q.quoteId, null)).rejects.toThrow(/expired/i)
+  })
+
+  it('a quote whose valid-until date has already passed cannot be sent', async () => {
+    const enquiry = await createEnquiry({ name: 'Lead', email: email() })
+    const q = await createQuoteForEnquiry(enquiry.id, null)
+    await saveQuoteDraft(q.versionId, [{ description: 'X', quantity: 1, unitPrice: '2000' }], new Date(Date.now() - 2 * 24 * 60 * 60 * 1000))
+    await expect(sendQuote(q.quoteId, null)).rejects.toThrow(/valid until/i)
   })
 
   it('accepting does NOT create a deposit invoice (workflow does that later)', async () => {

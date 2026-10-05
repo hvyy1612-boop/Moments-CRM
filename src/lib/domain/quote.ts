@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { Prisma, type DeclineReason } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import { systemClock } from '@/lib/time'
+import { sydneyDateTimeParts, systemClock } from '@/lib/time'
 import type { QuoteLineInput } from '@/lib/validation/quote'
 import { convertEnquiryCore } from './enquiry'
 import { nextRecordNumber } from './numbering'
@@ -121,6 +121,7 @@ export async function sendQuote(quoteId: string, actorUserId: string | null) {
     const version = quote.currentVersion
     if (version.status !== 'DRAFT') throw new Error('This quote has already been sent.')
     if (version.total.lessThanOrEqualTo(0)) throw new Error('This quote has no items yet. Add a package or add-on to the quote before sending it.')
+    if (quoteValidityPassed(version.validUntil, now)) throw new Error('The "valid until" date has passed. Choose a later date before sending the quote.')
 
     await tx.quoteVersion.update({ where: { id: version.id }, data: { status: 'SENT', sentToClientAt: now } })
     await tx.quote.update({ where: { id: quoteId }, data: { status: 'SENT' } })
@@ -403,7 +404,7 @@ export async function acceptQuote(quoteId: string, actorUserId: string | null = 
         if (!version) throw new Error('This quote has no version to accept.')
         if (quote.status !== 'SENT' && quote.status !== 'VIEWED') throw new Error('Only a sent quote can be accepted.')
         if (version.total.lessThanOrEqualTo(0)) throw new Error('Add at least one line before accepting.')
-        if (version.validUntil && version.validUntil.getTime() < now.getTime()) throw new Error('This quote has expired; revise it before accepting.')
+        if (quoteValidityPassed(version.validUntil, now)) throw new Error('This quote has expired; revise it before accepting.')
         if (quote.enquiry.status === 'DECLINED') throw new Error('Reopen the lead before accepting a quote.')
 
         const otherAccepted = await tx.quote.findFirst({ where: { enquiryId: quote.enquiryId, status: 'ACCEPTED', NOT: { id: quote.id } }, select: { id: true } })
@@ -448,12 +449,20 @@ export type QuoteListRow = {
 type QuoteStatusValue = 'DRAFT' | 'SENT' | 'VIEWED' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED' | 'SUPERSEDED'
 
 /**
+ * A quote is valid THROUGH its "valid until" day in Sydney: it only lapses once that calendar day is over,
+ * not at the stored instant (a bare YYYY-MM-DD is stored as UTC midnight, which is mid-morning in Sydney).
+ */
+export function quoteValidityPassed(validUntil: Date | null, now: Date = systemClock.now()): boolean {
+  return validUntil != null && sydneyDateTimeParts(now).date > sydneyDateTimeParts(validUntil).date
+}
+
+/**
  * Effective (display) status: a non-accepted quote past its valid-until date reads as EXPIRED (docs/31).
  * Accepted/declined/superseded quotes never become expired. This is a pure derivation over the stored
  * status — the backend is the source of truth; acceptQuote enforces the same rule server-side.
  */
 export function effectiveQuoteStatus(status: string, validUntil: Date | null, now: Date = systemClock.now()): QuoteStatusValue {
-  if ((status === 'DRAFT' || status === 'SENT' || status === 'VIEWED') && validUntil && validUntil.getTime() < now.getTime()) {
+  if ((status === 'DRAFT' || status === 'SENT' || status === 'VIEWED') && quoteValidityPassed(validUntil, now)) {
     return 'EXPIRED'
   }
   return status as QuoteStatusValue

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import { stageLabel } from '@/features/projects/workflow'
+import { PROJECT_STAGES, stageLabel } from '@/features/projects/workflow'
 import { sydneyLocalToUtc, sydneyYmd } from '@/lib/time'
 import { getInvoiceBalance } from './money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
@@ -45,6 +45,7 @@ export type DashboardData = {
 const INVOICE_COUNTED = ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'PAID', 'OVERDUE'] as const
 const INVOICE_UNPAID = ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'OVERDUE'] as const
 const ACTIVE_STAGES_EXCLUDE = ['CANCELLED', 'LOST', 'COMPLETED', 'CLOSED']
+const STAGE_ORDER = new Map(PROJECT_STAGES.map((s, i) => [s.key, i]))
 
 const DAY_MS = 86_400_000
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -144,7 +145,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   const svc = opts.service && opts.service !== 'all' ? opts.service : null
   const matchesSvc = (pkgName: string | null | undefined): boolean => !svc || (pkgName ?? 'Other') === svc
 
-  const [enquiries, invoices, payments, projects, packages, recentRaw] = await Promise.all([
+  const [enquiries, invoices, payments, projects, packages, recentRaw, delivered] = await Promise.all([
     prisma.enquiry.findMany({ where: { createdAt: { gte: prevStart } }, select: { status: true, source: true, createdAt: true } }),
     prisma.invoice.findMany({
       where: { status: { in: INVOICE_COUNTED as unknown as string[] } as never },
@@ -161,7 +162,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
         package: { select: { name: true } },
         bookings: { where: { status: { not: 'CANCELLED' } }, orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true } },
         galleries: { where: { publishedAt: { not: null } }, orderBy: { publishedAt: 'desc' }, take: 1, select: { publishedAt: true } },
-        workItems: { where: { status: 'PENDING', type: { not: 'AUTO' } }, orderBy: { order: 'asc' }, take: 1, select: { stage: true } },
+        workItems: { where: { status: 'PENDING', type: { not: 'AUTO' } }, select: { stage: true } },
       },
     }),
     prisma.package.findMany({ select: { name: true }, orderBy: { name: 'asc' } }),
@@ -170,6 +171,16 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
       orderBy: { createdAt: 'desc' },
       take: 6,
       select: { id: true, name: true, eventType: true, source: true, status: true, createdAt: true },
+    }),
+    // Turnaround is measured on jobs that HAVE delivered - finished jobs included (the active list above
+    // leaves COMPLETED / CLOSED out, and those are exactly the jobs with a turnaround).
+    prisma.project.findMany({
+      where: { lifecycleStatus: { notIn: ['CANCELLED', 'LOST'] }, galleries: { some: { publishedAt: { not: null } } } },
+      select: {
+        package: { select: { name: true } },
+        bookings: { where: { status: { not: 'CANCELLED' } }, orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true } },
+        galleries: { where: { publishedAt: { not: null } }, orderBy: { publishedAt: 'desc' }, take: 1, select: { publishedAt: true } },
+      },
     }),
   ])
 
@@ -207,16 +218,19 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   // --- Revenue (invoices) ---
   const svcInvoices = invoices.filter((i) => matchesSvc(i.project?.package?.name))
   const inv = (i: (typeof invoices)[number]) => (i.issuedAt ?? i.createdAt)
+  // Booked = what the client actually owes on the invoice: its total less any credit notes (a price
+  // decrease must lower booked revenue, the same credit-aware figure every money decision uses).
+  const booked = (i: (typeof invoices)[number]) => num(getInvoiceBalance(toInvoiceMoneyInput(i)).obligation)
   const periodInvoices = svcInvoices.filter((i) => inv(i) >= start && inv(i) < end)
-  const bookedRevenue = periodInvoices.reduce((s, i) => s + num(i.total), 0)
+  const bookedRevenue = periodInvoices.reduce((s, i) => s + booked(i), 0)
   const prevInvoices = svcInvoices.filter((i) => inv(i) >= prevStart && inv(i) < start)
-  const prevBooked = prevInvoices.reduce((s, i) => s + num(i.total), 0)
+  const prevBooked = prevInvoices.reduce((s, i) => s + booked(i), 0)
   const bookedDeltaPct = prevBooked > 0 ? Math.round(((bookedRevenue - prevBooked) / prevBooked) * 1000) / 10 : null
 
   const svcMap = new Map<string, number>()
   for (const i of periodInvoices) {
     const k = i.project?.package?.name ?? 'Other'
-    svcMap.set(k, (svcMap.get(k) ?? 0) + num(i.total))
+    svcMap.set(k, (svcMap.get(k) ?? 0) + booked(i))
   }
   const revenueByService: Bar[] = [...svcMap.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 6)
 
@@ -242,7 +256,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   const bk = buckets(start, end)
   const revenueSeries: SeriesPoint[] = bk.map((b) => ({
     label: b.label,
-    booked: periodInvoices.filter((i) => { const t = inv(i).getTime(); return t >= b.from && t < b.to }).reduce((s, i) => s + num(i.total), 0),
+    booked: periodInvoices.filter((i) => { const t = inv(i).getTime(); return t >= b.from && t < b.to }).reduce((s, i) => s + booked(i), 0),
     // Collected cash is NET: a CHARGE adds, a REFUND/REVERSAL subtracts. REFUND transactions are
     // stored with a positive amount, so summing raw would count a refund as income (docs/24 Inc 3b).
     collected: svcPayments.filter((p) => { const t = p.createdAt.getTime(); return t >= b.from && t < b.to }).reduce((s, p) => s + (p.type === 'CHARGE' ? num(p.amount) : -num(p.amount)), 0),
@@ -252,7 +266,12 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   const svcProjects = projects.filter((p) => matchesSvc(p.package?.name))
   const stageMap = new Map<string, number>()
   for (const p of svcProjects) {
-    const stage = p.workItems[0]?.stage
+    // The job's stage = the earliest workflow stage that still has a pending task, by the workflow's own
+    // stage order (same rule as the job board) - never by raw task order, and never a custom stage.
+    const stage = p.workItems
+      .map((w) => w.stage)
+      .filter((k): k is string => k != null && STAGE_ORDER.has(k))
+      .sort((a, b) => STAGE_ORDER.get(a)! - STAGE_ORDER.get(b)!)[0]
     if (!stage) continue
     stageMap.set(stage, (stageMap.get(stage) ?? 0) + 1)
   }
@@ -262,7 +281,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   // --- Turnaround (shoot -> published gallery), by service, median ---
   const turnMap = new Map<string, number[]>()
   const allTurn: number[] = []
-  for (const p of svcProjects) {
+  for (const p of delivered.filter((d) => matchesSvc(d.package?.name))) {
     const shoot = p.bookings[0]?.startsAt
     const delivered = p.galleries[0]?.publishedAt
     if (!shoot || !delivered) continue

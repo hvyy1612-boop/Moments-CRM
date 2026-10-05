@@ -146,6 +146,16 @@ export function getInvoiceBalance(inv: InvoiceMoneyInput): InvoiceBalance {
 }
 
 /**
+ * When the client next has to pay on an invoice: the due date of the earliest instalment that is not yet
+ * fully paid, or null when nothing is owed. So an overdue deposit makes the invoice overdue even when its
+ * final payment (the invoice's own due date) is months away.
+ */
+export function nextPaymentDue(bal: InvoiceBalance): Date | null {
+  if (bal.owed.lessThanOrEqualTo(ZERO)) return null
+  return bal.instalments.find((i) => i.state !== 'PAID')?.dueAt ?? null
+}
+
+/**
  * Whole-job money (docs/25 §1.2). `outstanding` and `overpaymentToResolve` are summed INDEPENDENTLY
  * (Rule M3): an overpaid invoice never silently offsets an underpaid one. `netPosition` is a display
  * reference only.

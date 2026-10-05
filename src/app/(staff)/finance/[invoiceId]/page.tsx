@@ -13,6 +13,7 @@ import { can } from '@/lib/auth/authz'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { getInvoiceBalanceById } from '@/lib/domain/invoice-money'
+import { nextPaymentDue } from '@/lib/domain/money'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyTime, sydneyYmd } from '@/lib/time'
 import { titleCase } from '@/lib/text'
@@ -167,8 +168,10 @@ export default async function InvoiceDetailPage({
   })
 
   // Unpaid + past its due date still reads "Unpaid" but turns red - overdue is a colour, not a 4th status.
+  // Judged on the NEXT payment due (the earliest unpaid instalment), so a late deposit turns it red too.
+  const nextDue = balance ? (nextPaymentDue(balance) ?? inv.dueAt) : inv.dueAt
   const isOverdue =
-    status !== 'PAID' && status !== 'VOID' && balanceDue.greaterThan(0) && inv.dueAt != null && ymd(inv.dueAt) < todayYmd
+    status !== 'PAID' && status !== 'VOID' && balanceDue.greaterThan(0) && nextDue != null && ymd(nextDue) < todayYmd
   const statusView = invoiceStatusView(status, { overdue: isOverdue })
   const doc = <InvoiceDocument invoice={{ ...inv, creditsTotal: docCredits }} />
 
