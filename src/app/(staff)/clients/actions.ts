@@ -242,7 +242,7 @@ export async function restoreClientAction(formData: FormData): Promise<void> {
 
 /**
  * Remove a single client safely. There is no hard cascade any more: an EMPTY client (no jobs, no
- * enquiries, no merged-in duplicate) is deleted outright; a client WITH history is ARCHIVED instead
+ * leads) is deleted outright; a client WITH history is ARCHIVED instead
  * (reversible via restore), so their jobs, invoices and payment ledger are never destroyed. Archiving a
  * client that has history is ADMIN-only (deleting an empty one is open to any staff); the UI confirms
  * first. Never deletes paid financial records - that closes the old cascade loophole.
@@ -267,7 +267,7 @@ export async function removeClientAction(formData: FormData): Promise<void> {
 
 /**
  * Bulk-remove redundant clients from the list's multi-select. Deliberately SAFE: it only ever deletes
- * clients that hold no real work (no jobs, no enquiries, no merged-in duplicate) via `deleteEmptyClients`;
+ * clients that hold no real work (no jobs, no leads) via `deleteEmptyClients`;
  * any selected client that still has records is silently kept, so this control cannot cascade-delete
  * invoices or job history the way the single admin hard-delete can. Staff-level, CSRF-guarded.
  */
