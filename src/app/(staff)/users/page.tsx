@@ -28,9 +28,9 @@ export default async function UsersPage() {
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
-  // Removed accounts (soft-deleted, or the legacy anonymised ones) are kept in the DB but hidden here.
+  // Removed (soft-deleted) accounts are kept in the DB but hidden here.
   const users = await prisma.user.findMany({
-    where: { NOT: { OR: [{ status: 'DELETED' }, { email: { endsWith: '@example.invalid' } }] } },
+    where: { status: { not: 'DELETED' } },
     orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
     select: { id: true, name: true, email: true, role: true, isActive: true, lastLoginAt: true },
   })

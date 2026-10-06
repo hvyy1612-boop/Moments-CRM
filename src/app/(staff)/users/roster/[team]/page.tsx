@@ -32,7 +32,7 @@ export default async function StaffRosterPage({ params }: { params: Promise<{ te
       where: {
         role: teamDef.role,
         isActive: true,
-        NOT: { OR: [{ status: 'DELETED' }, { email: { endsWith: '@example.invalid' } }] },
+        status: { not: 'DELETED' },
       },
       orderBy: [{ name: 'asc' }],
       select: { name: true, email: true, role: true, lastLoginAt: true },
