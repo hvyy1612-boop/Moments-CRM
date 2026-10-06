@@ -40,6 +40,9 @@ export default async function ForgotPasswordPage({
             <p className="mt-2 text-base text-ink-muted">
               Enter your email and we will send a link to set a new password.
             </p>
+            <p className="mt-2 text-sm text-ink-muted">
+              Sign in with a studio login ID instead of your own email? Ask your admin to reset your password.
+            </p>
             <form action={requestResetAction} className="mt-6 flex flex-col gap-5">
               <input type="hidden" name="csrf" value={csrf} />
               <Field label="Email" htmlFor="email">

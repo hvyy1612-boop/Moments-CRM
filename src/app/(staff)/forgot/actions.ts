@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { appBaseUrl } from '@/lib/app-url'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { requestPasswordReset } from '@/lib/auth/password-reset'
+import { isInternalLoginId } from '@/lib/auth/staff'
 import { sendPasswordResetEmail } from '@/lib/email'
 
 async function clientIp(): Promise<string> {
@@ -20,7 +21,10 @@ export async function requestResetAction(formData: FormData): Promise<void> {
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value
   if (verifyCsrf(cookieValue, formData.get('csrf'))) {
     const email = String(formData.get('email') ?? '').trim().toLowerCase()
-    if (email) {
+    // An app-issued login ID (s264831@staff.moments.com ...) is not a mailbox, and moments.com is not the
+    // studio's domain: a reset link must never be mailed there. Staff ask an admin to reset it in Users;
+    // the page shows the same confirmation either way.
+    if (email && !isInternalLoginId(email)) {
       const ip = await clientIp()
       const result = await requestPasswordReset(email, ip)
       if (result) {

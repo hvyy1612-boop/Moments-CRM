@@ -1,5 +1,6 @@
 'use server'
 
+import { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 import { cookies } from 'next/headers'
 import { z } from 'zod'
@@ -44,39 +45,44 @@ export async function addStaffAction(_prev: AddStaffState, formData: FormData): 
     return { status: 'error', errors: { name: parsed.error.flatten().fieldErrors.name?.[0] } }
   }
 
-  const staffLoginId = await nextStaffLoginId()
   const tempPassword = generateTempPassword()
   const creds = await passwordCredentials(tempPassword)
 
-  await prisma.$transaction(async (tx) => {
-    const company = await requireCompany(tx)
-    const created = await tx.user.create({
-      data: {
-        companyId: company.id,
-        email: staffLoginId,
-        name: parsed.data.name,
-        ...creds,
-        role: parsed.data.role,
-        isActive: true,
-        status: 'ACTIVE',
-        mustChangePassword: true,
-      },
-    })
-    await tx.auditLog.create({
-      data: {
-        companyId: company.id,
-        actorUserId: admin.id,
-        action: 'auth.staff_created',
-        entityType: 'User',
-        entityId: created.id,
-        afterData: { staffLoginId, name: created.name, role: created.role },
-      },
-    })
-  })
+  // The login ID follows the role (a261957@admin.moments.com, s264831@staff.moments.com ...). If two
+  // admins add staff at the same moment and draw the same ID, the unique email rejects one, which then
+  // simply draws another.
+  const { name, role } = parsed.data
+  let staffLoginId = ''
+  for (let attempt = 0; ; attempt++) {
+    staffLoginId = await nextStaffLoginId(role)
+    const loginId = staffLoginId
+    try {
+      await prisma.$transaction(async (tx) => {
+        const company = await requireCompany(tx)
+        const created = await tx.user.create({
+          data: { companyId: company.id, email: loginId, name, ...creds, role, isActive: true, status: 'ACTIVE', mustChangePassword: true },
+        })
+        await tx.auditLog.create({
+          data: {
+            companyId: company.id,
+            actorUserId: admin.id,
+            action: 'auth.staff_created',
+            entityType: 'User',
+            entityId: created.id,
+            afterData: { staffLoginId: loginId, name: created.name, role: created.role },
+          },
+        })
+      })
+      break
+    } catch (e) {
+      if (attempt < 3 && e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') continue
+      throw e
+    }
+  }
 
   revalidatePath('/users')
   // The temp password is returned to be shown ONCE; only its Argon2id hash is stored.
-  return { status: 'created', name: parsed.data.name, staffLoginId, tempPassword }
+  return { status: 'created', name, staffLoginId, tempPassword }
 }
 
 // ---------------------------------------------------------------- Reset password
