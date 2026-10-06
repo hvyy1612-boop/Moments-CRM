@@ -688,8 +688,13 @@ export async function recordPayment(
     // Company policy (momentsphotography.com.au FAQ): the deposit secures the date. On a split DEPOSIT
     // invoice ("25% Deposit + 75% ...") paying the first instalment in full is that deposit, so it confirms
     // the booking without waiting for the final payment.
+    // A cancelled job keeps its money history (e.g. a cancellation fee is still recorded), but a payment
+    // never moves a cancelled job's status or its lead.
+    const jobLive = invoice.projectId
+      ? (await tx.project.findUnique({ where: { id: invoice.projectId }, select: { lifecycleStatus: true } }))?.lifecycleStatus !== 'CANCELLED'
+      : false
     let depositCovered = false
-    if (!paidInFull && invoice.type === 'DEPOSIT') {
+    if (jobLive && !paidInFull && invoice.type === 'DEPOSIT') {
       const first = await tx.invoiceInstalment.findMany({ where: { invoiceId }, orderBy: { sortOrder: 'asc' }, take: 2, select: { amount: true } })
       depositCovered = first.length > 1 && newAmountPaid.greaterThanOrEqualTo(first[0]!.amount)
     }
@@ -701,7 +706,7 @@ export async function recordPayment(
       await confirmBookingByDepositTx(tx, invoice.projectId, actorUserId)
     }
 
-    if (paidInFull) {
+    if (paidInFull && jobLive) {
       // Advance the project's commercial status, never downgrade it.
       const next = invoice.type === 'DEPOSIT' ? 'DEPOSIT_PAID' : 'PAID'
       const project = await tx.project.findUnique({

@@ -163,9 +163,9 @@ export default async function QuoteDetailPage({
               </>
             ) : isSentOrViewed ? (
               <>
-                {/* "Mark as accepted" is the Enquiry -> Job conversion, so it only applies to a quote linked to
-                    an enquiry; a quote tied straight to a job has no enquiry to convert. */}
-                {quote.enquiry ? <PrimaryAction action={acceptQuoteAction} csrf={csrf} quoteId={id} label="Mark as accepted" icon={CheckIcon} /> : null}
+                {/* "Mark as accepted": a lead's quote converts the lead into its job; a job's own quote is
+                    accepted in place (one accepted quote per job). */}
+                <PrimaryAction action={acceptQuoteAction} csrf={csrf} quoteId={id} label="Mark as accepted" icon={CheckIcon} />
                 {/* "Edit" a sent quote opens a NEW version (reviseQuoteAction); the client is still looking at the
                     version they were sent, so that one is never edited in place. */}
                 <IconFormButton action={reviseQuoteAction} csrf={csrf} quoteId={id} label="Edit" tone="accent" icon={EditIcon} />

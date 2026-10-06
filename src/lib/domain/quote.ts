@@ -54,12 +54,9 @@ export async function createQuote(projectId: string, createdByUserId: string | n
     const version = quote.versions[0]
     if (!version) throw new Error('Quote version was not created.')
     await tx.quote.update({ where: { id: quote.id }, data: { currentVersionId: version.id } })
-    // Quoting moves the COMMERCIAL axis only - never the operational lifecycle: a booked job stays
-    // booked while you quote extras (docs/24 Increment 1).
-    await tx.project.update({
-      where: { id: projectId },
-      data: { commercialStatus: 'QUOTED' },
-    })
+    // Quoting moves the COMMERCIAL axis only - never the operational lifecycle - and only forward: a job
+    // that is already accepted, paid or cancelled keeps its status while staff quote extras.
+    await tx.project.updateMany({ where: { id: projectId, commercialStatus: 'UNQUOTED' }, data: { commercialStatus: 'QUOTED' } })
     return { quoteId: quote.id, versionId: version.id }
   })
 }
@@ -397,14 +394,36 @@ export async function acceptQuote(quoteId: string, actorUserId: string | null = 
   for (let attempt = 0; ; attempt++) {
     try {
       return await prisma.$transaction(async (tx) => {
-        const quote = await tx.quote.findUnique({ where: { id: quoteId }, include: { currentVersion: true, enquiry: true } })
+        const quote = await tx.quote.findUnique({
+          where: { id: quoteId },
+          include: { currentVersion: true, enquiry: true, project: { select: { id: true, lifecycleStatus: true } } },
+        })
         if (!quote) throw new Error('Quote not found.')
-        if (!quote.enquiryId || !quote.enquiry) throw new Error('This quote is not linked to an enquiry.')
         const version = quote.currentVersion
         if (!version) throw new Error('This quote has no version to accept.')
         if (quote.status !== 'SENT' && quote.status !== 'VIEWED') throw new Error('Only a sent quote can be accepted.')
         if (version.total.lessThanOrEqualTo(0)) throw new Error('Add at least one line before accepting.')
         if (quoteValidityPassed(version.validUntil, now)) throw new Error('This quote has expired; revise it before accepting.')
+
+        // A quote raised on an existing Job (Studio Ninja: the job's own quote) is accepted IN PLACE - there
+        // is no lead to convert. One accepted quote per job: changing an agreed scope is a change request.
+        if (!quote.enquiryId || !quote.enquiry) {
+          const job = quote.project
+          if (!job) throw new Error('This quote is not linked to a lead or a job.')
+          if (job.lifecycleStatus === 'CANCELLED' || job.lifecycleStatus === 'CLOSED') throw new Error('This job is closed or cancelled, so its quote cannot be accepted.')
+          const agreed = await tx.quote.findFirst({ where: { projectId: job.id, status: 'ACCEPTED', NOT: { id: quote.id } }, select: { id: true } })
+          if (agreed) throw new Error('This job already has an accepted quote. Use a change request to change what was agreed.')
+          await tx.quoteVersion.update({ where: { id: version.id }, data: { status: 'ACCEPTED', acceptedByClientAt: now } })
+          await tx.quote.update({ where: { id: quote.id }, data: { status: 'ACCEPTED' } })
+          // The job's other open quotes were alternatives to this one (same rule as on a lead).
+          await tx.quote.deleteMany({ where: { projectId: job.id, enquiryId: null, NOT: { id: quote.id }, status: { in: ['DRAFT', 'SENT', 'VIEWED'] } } })
+          await tx.project.update({ where: { id: job.id }, data: { sourceQuoteId: quote.id } })
+          // Commercial status only moves forward: a job already paid keeps "paid".
+          await tx.project.updateMany({ where: { id: job.id, commercialStatus: { in: ['UNQUOTED', 'QUOTED'] } }, data: { commercialStatus: 'ACCEPTED' } })
+          await tx.auditLog.create({ data: { action: 'quote.accepted', entityType: 'Quote', entityId: quote.id, actorUserId, afterData: { projectId: job.id } } })
+          await tx.outboxEvent.create({ data: { eventType: 'quote.accepted', aggregateType: 'Quote', aggregateId: quote.id, payload: { quoteId: quote.id, projectId: job.id } } })
+          return { quoteId: quote.id, projectId: job.id }
+        }
         if (quote.enquiry.status === 'DECLINED') throw new Error('Reopen the lead before accepting a quote.')
 
         const otherAccepted = await tx.quote.findFirst({ where: { enquiryId: quote.enquiryId, status: 'ACCEPTED', NOT: { id: quote.id } }, select: { id: true } })

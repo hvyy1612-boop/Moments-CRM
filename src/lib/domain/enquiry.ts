@@ -135,9 +135,32 @@ export async function markEnquiryLost(
     // A confirmed booking is a successful conversion - its history stays. If the client later pulls out,
     // that is a Job cancellation, NOT a decline (spec §3).
     if (enquiry.status === 'BOOKING_CONFIRMED') throw new Error('A confirmed booking cannot be declined - cancel the Job instead.')
+
+    // Declined while awaiting the deposit (Studio Ninja: the client backed out before booking). The
+    // provisional job is cancelled, the accepted quote that created it becomes declined, and the lead is
+    // unlinked from that job - so a reopened lead starts clean and Create Job makes a fresh job.
+    let cancelledJobId: string | null = null
+    if (enquiry.convertedProjectId) {
+      const job = await tx.project.findUnique({ where: { id: enquiry.convertedProjectId }, select: { id: true, lifecycleStatus: true } })
+      if (job && job.lifecycleStatus === 'BOOKING_REQUESTED') {
+        await cancelProjectTx(tx, job.id, 'Lead declined before the booking was confirmed', actorUserId)
+        const accepted = await tx.quote.findMany({ where: { enquiryId, status: 'ACCEPTED' }, select: { id: true, currentVersionId: true } })
+        for (const q of accepted) {
+          await tx.quote.update({ where: { id: q.id }, data: { status: 'DECLINED' } })
+          if (q.currentVersionId) await tx.quoteVersion.update({ where: { id: q.currentVersionId }, data: { status: 'DECLINED', declineReason: 'OTHER' } })
+        }
+        cancelledJobId = job.id
+      }
+    }
+
     const updated = await tx.enquiry.update({
       where: { id: enquiryId },
-      data: { status: 'DECLINED', lostReason: reason, waitingOn: null },
+      data: {
+        status: 'DECLINED',
+        lostReason: reason,
+        waitingOn: null,
+        ...(cancelledJobId ? { convertedProjectId: null, convertedAt: null } : {}),
+      },
     })
     await cancelOpenWorkItems(tx, enquiryId)
     await tx.auditLog.create({
@@ -147,7 +170,7 @@ export async function markEnquiryLost(
         entityType: 'Enquiry',
         entityId: enquiryId,
         actorUserId,
-        afterData: { lostReason: reason },
+        afterData: { lostReason: reason, ...(cancelledJobId ? { cancelledJobId } : {}) },
       },
     })
     return updated

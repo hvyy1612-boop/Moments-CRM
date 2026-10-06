@@ -8,8 +8,8 @@ import { createStaffEnquiryAction, type StaffEnquiryState } from './actions'
 
 const INITIAL: StaffEnquiryState = { status: 'idle' }
 
-/** "Add job" opens a compact sheet that creates the job (client + project) and lands on it. Job-only:
- *  no separate "new client" / "new enquiry" entry points. */
+/** "Add job" opens a compact sheet: the client is found or created, a lead is logged and converted into
+ *  its job in one step (every job keeps a lead), then the job opens. */
 export function AddJobButton({ csrf }: { csrf: string }) {
   const [open, setOpen] = useState(false)
   const [state, action, pending] = useActionState(createStaffEnquiryAction, INITIAL)

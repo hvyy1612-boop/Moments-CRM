@@ -11,7 +11,9 @@ import { prisma } from '@/lib/db'
 import { sydneyLocalToUtc } from '@/lib/time'
 import { assignResource, createBooking } from '@/lib/domain/booking'
 import { logCommunication } from '@/lib/domain/communication'
-import { closeJob, createProjectFromEnquiry } from '@/lib/domain/project'
+import { closeJob } from '@/lib/domain/project'
+import { findOrCreateClient } from '@/lib/domain/client'
+import { convertEnquiry, createEnquiry } from '@/lib/domain/enquiry'
 import {
   addProjectStage,
   addProjectStageBlock,
@@ -20,6 +22,7 @@ import {
   deleteProjectTask,
   moveProjectTask,
   renameProjectStage,
+  seedProjectWorkflow,
   toggleProjectTask,
   updateProjectTask,
 } from '@/lib/domain/project-workflow'
@@ -862,7 +865,11 @@ export type StaffEnquiryState =
       errors?: { name?: string; email?: string; phone?: string; message?: string }
     }
 
-/** Staff log an enquiry that arrived by phone, email, or the company website, then open the project. */
+/**
+ * "Add job" (Studio Ninja style, docs/33 decision 3): every job starts from a lead. The client is found or
+ * created, a lead is logged for them, and that lead is converted straight into its job (provisional until
+ * the deposit is paid), so the job keeps a lead, a client and the same lifecycle as any other.
+ */
 export async function createStaffEnquiryAction(
   _prev: StaffEnquiryState,
   formData: FormData,
@@ -871,7 +878,7 @@ export async function createStaffEnquiryAction(
   if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
     return { status: 'error', message: 'Your session expired. Refresh and try again.' }
   }
-  await requireStaff()
+  const user = await requireStaff()
 
   const parsed = enquirySchema.safeParse({
     name: formData.get('name'),
@@ -896,12 +903,36 @@ export async function createStaffEnquiryAction(
 
   let projectId: string
   try {
-    const project = await createProjectFromEnquiry(parsed.data)
-    projectId = project.id
+    const { name, email, phone, eventType, message } = parsed.data
+    const parts = name.trim().split(/\s+/)
+    const client = await findOrCreateClient(
+      { email, firstName: parts[0], lastName: parts.slice(1).join(' ') || undefined, phone: phone || undefined },
+      user.id,
+    )
+    const lead = await createEnquiry(
+      {
+        clientId: client.id,
+        name: client.displayName,
+        firstName: client.firstName,
+        lastName: client.lastName,
+        email: client.email,
+        phone: client.phone,
+        eventType: eventType || null,
+        message: message || null,
+        source: 'MANUAL',
+      },
+      user.id,
+    )
+    const converted = await convertEnquiry(lead.id, user.id)
+    if (!converted.projectId) throw new Error('No job was created.')
+    projectId = converted.projectId
+    await seedProjectWorkflow(projectId)
   } catch {
     return { status: 'error', message: 'Could not create the job. Please try again.' }
   }
-  redirect(`/jobs/${projectId}`)
+  revalidatePath('/jobs')
+  revalidatePath('/leads')
+  redirect(`/jobs/${projectId}?toast=job-created`)
 }
 
 // ---------------------------------------------------------------------------
