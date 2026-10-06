@@ -35,6 +35,7 @@ const SPECIAL: Record<string, string> = {
   'auth.staff_password_reset': 'Staff password reset',
   'auth.staff_enabled': 'Staff account enabled',
   'auth.staff_disabled': 'Staff account disabled',
+  'auth.login_id_changed': 'Login ID changed',
   'auth.user_registered': 'User account registered',
   'automation.settings_changed': 'Notification settings changed',
   'client.deleted': 'Client deleted',
