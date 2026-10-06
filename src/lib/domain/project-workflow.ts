@@ -2,7 +2,7 @@ import { prisma } from '@/lib/db'
 import { formatSydneyDate, daysUntilSydney } from '@/lib/time'
 import { getJobBalance } from './money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
-import { makeShootDateOf, resolveTaskDueDate, type DeadlineContext } from './deadline'
+import { jobShootDate, resolveTaskDueDate, type DeadlineContext } from './deadline'
 import {
   buildProjectBoard,
   DEFAULT_PROJECT_TASKS,
@@ -66,7 +66,8 @@ export async function confirmBookingByDepositTx(tx: Tx, projectId: string, actor
   const project = await tx.project.findUnique({ where: { id: projectId }, select: { companyId: true, lifecycleStatus: true } })
   if (!project) return
   if (project.lifecycleStatus === 'BOOKING_REQUESTED') {
-    await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'CONFIRMED' } })
+    // The confirmation date anchors every JOB_CONFIRMED task (e.g. "within 3 days of booking").
+    await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'CONFIRMED', confirmedByClientAt: new Date() } })
   }
   await seedIfNeeded(tx, projectId, project.companyId)
   const enquiry = await tx.enquiry.findFirst({
@@ -90,8 +91,7 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
       confirmedByClientAt: true,
       owner: { select: { name: true } },
       invoices: { select: INVOICE_MONEY_SELECT },
-      galleries: { select: { status: true } },
-      bookings: { select: { id: true, startsAt: true, status: true, rescheduledFromId: true } },
+      convertedFromEnquiries: { select: { eventDate: true }, orderBy: { createdAt: 'desc' }, take: 1 },
     },
   })
 
@@ -113,32 +113,25 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
       dueOffsetDays: true,
       dueDateFixed: true,
       dueOverrideAt: true,
-      bookingId: true,
       order: true,
       completedAt: true,
       completedBy: { select: { name: true } },
     },
   })
 
-  // One deadline resolver for the whole board (Rule D0): shoot dates come from the job's bookings
-  // (a linked task follows its own shoot; an unlinked one follows the primary shoot), JOB_CONFIRMED
-  // from the confirm date.
+  // One deadline resolver for the whole board (Rule D0): SHOOT tasks follow the job's shoot date (set on
+  // the Shoot task, else the lead's event date), JOB_CONFIRMED tasks the booking confirmation date.
   const ctx: DeadlineContext = {
-    shootDateOf: makeShootDateOf(project.bookings),
+    shootDate: jobShootDate(items, project.convertedFromEnquiries[0]?.eventDate),
     jobConfirmedAt: project.confirmedByClientAt,
   }
 
   // "Paid in full" via the Money foundation (docs/25): there is a real obligation (excludes DRAFT/VOID
   // and credit notes) and nothing is owed on it. Agreed value is irrelevant here, so pass null.
   const jobMoney = getJobBalance(project.invoices.map(toInvoiceMoneyInput), null)
-  const gallerySent = project.galleries.some((g) => g.status === 'PUBLISHED')
-  const finalPaid = jobMoney.invoicedObligation.greaterThan(0) && jobMoney.outstanding.lessThanOrEqualTo(0)
   const facts: ProjectFacts = {
-    // Read-only system milestones (derived from real records, never staff-ticked):
-    shootScheduled: project.bookings.some((b) => b.status !== 'CANCELLED' && b.startsAt != null),
-    gallerySent,
-    finalPaid,
-    deliveryComplete: gallerySent && finalPaid,
+    // The read-only system milestone (derived from real records, never staff-ticked):
+    finalPaid: jobMoney.invoicedObligation.greaterThan(0) && jobMoney.outstanding.lessThanOrEqualTo(0),
   }
 
   const tasks: TaskInput[] = items.map((w) => ({
@@ -446,7 +439,7 @@ export async function toggleProjectTask(taskId: string, actorUserId: string) {
   })
 }
 
-const AUTO_COMPLETE_FROM = new Set(['BOOKING_REQUESTED', 'CONFIRMED', 'IN_PRODUCTION'])
+const AUTO_COMPLETE_FROM = new Set(['BOOKING_REQUESTED', 'CONFIRMED'])
 
 /**
  * Auto-complete a job when it is truly finished: EVERY staff task done AND the balance fully settled.
@@ -458,7 +451,7 @@ const AUTO_COMPLETE_FROM = new Set(['BOOKING_REQUESTED', 'CONFIRMED', 'IN_PRODUC
 export async function maybeAutoCompleteJob(tx: Tx, projectId: string, actorUserId: string | null) {
   const project = await tx.project.findUnique({
     where: { id: projectId },
-    select: { companyId: true, lifecycleStatus: true, packagePriceSnapshot: true, invoices: { select: INVOICE_MONEY_SELECT } },
+    select: { companyId: true, lifecycleStatus: true, invoices: { select: INVOICE_MONEY_SELECT } },
   })
   if (!project || !AUTO_COMPLETE_FROM.has(project.lifecycleStatus)) return
 
@@ -470,16 +463,16 @@ export async function maybeAutoCompleteJob(tx: Tx, projectId: string, actorUserI
 
   // "Settled" is the canonical isFullySettled (money.ts / docs/25 Rule M4b), NOT raw outstanding: a job
   // with no invoice (outstanding 0) or only a deposit paid must NOT auto-complete (bug #3). Agreed value
-  // = the accepted quote total, else the direct booking's package price snapshot, else null (unknown).
+  // = the accepted quote total, else null (unknown).
   const acceptedQuote = await tx.quoteVersion.findFirst({
     where: { quote: { projectId }, status: 'ACCEPTED' },
     orderBy: { acceptedByClientAt: 'desc' },
     select: { total: true },
   })
-  const agreed = acceptedQuote?.total ?? project.packagePriceSnapshot ?? null
+  const agreed = acceptedQuote?.total ?? null
   const bal = getJobBalance(project.invoices.map(toInvoiceMoneyInput), agreed)
   // With a KNOWN agreed value use the canonical isFullySettled (catches deposit-only / under-invoiced,
-  // bug #3). Without one (a direct job with no quote/package) fall back to "nothing outstanding" so the
+  // bug #3). Without one (a job with no accepted quote) fall back to "nothing outstanding" so the
   // no-quote flow still completes - never demand an agreed value the studio never set (regression guard).
   const settled = bal.agreedValueKnown
     ? bal.isFullySettled

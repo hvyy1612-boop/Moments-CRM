@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyTime } from '@/lib/time'
+import { shootDateOfJob, shootHasTime } from '@/lib/domain/deadline'
 
 type D = Prisma.Decimal
 
@@ -17,7 +18,7 @@ export type InvoiceDoc = {
   notes: string | null
   total: D
   amountPaid: D
-  /** Sum of effective (non-void) credit notes on this invoice; reduces the balance due (bug #5). */
+  /** Sum of the credit notes on this invoice; reduces the balance due (bug #5). */
   creditsTotal?: D
   billingNameSnapshot: string
   billingEmailSnapshot: string | null
@@ -27,7 +28,9 @@ export type InvoiceDoc = {
     code: string
     client: { phone: string | null; street: string | null; suburb: string | null; state: string | null; postcode: string | null; country: string | null }
     company: { name: string; abn: string | null; settings: Prisma.JsonValue }
-    bookings: { startsAt: Date; endsAt: Date; location: string | null; title: string | null }[]
+    // The job's shoot date + place (fetched with JOB_SHOOT_SELECT): its Shoot task, else the lead's date.
+    workItems: { type: string; status: string; dueOverrideAt: Date | null }[]
+    convertedFromEnquiries: { eventDate: Date | null; ceremonyLocation: string | null }[]
   }
 }
 
@@ -88,7 +91,9 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
   const markSecondary = markRest.join(' ')
 
   const addr = [c.street, [c.suburb, c.state, c.postcode].filter(Boolean).join(' '), c.country].filter(Boolean) as string[]
-  const booking = invoice.project.bookings[0] ?? null
+  const shootAt = shootDateOfJob(invoice.project)
+  const shootTimed = shootHasTime(invoice.project)
+  const venue = invoice.project.convertedFromEnquiries[0]?.ceremonyLocation?.trim() || null
 
   const rows = invoice.lines.map((l) => {
     const incl = l.lineTotal
@@ -159,8 +164,8 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
           <div className="mt-2 font-semibold text-ink">{invoice.project.name}</div>
           <div className="mt-1 space-y-0.5 text-ink-muted">
             <div>Reference {invoice.project.code}</div>
-            {booking ? <div>{formatSydneyDate(booking.startsAt)} · {formatSydneyTime(booking.startsAt)}-{formatSydneyTime(booking.endsAt)}</div> : null}
-            {booking?.location ? <div>{booking.location}</div> : null}
+            {shootAt ? <div>{formatSydneyDate(shootAt)}{shootTimed ? ` · ${formatSydneyTime(shootAt)}` : ''}</div> : null}
+            {venue ? <div className="whitespace-pre-line">{venue}</div> : null}
           </div>
         </div>
       </div>

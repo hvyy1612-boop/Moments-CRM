@@ -18,8 +18,7 @@ import { IconChat, IconChecklist, IconClient, IconExternal, IconMail, IconPhone,
 
 export type ReqRow = { id: string; label: string; detail: string; addedLabel: string }
 export type NoteRow = { id: string; author: string; body: string; dateLabel: string; editedByName: string | null; editedLabel: string | null }
-export type TeamRow = { id: string; name: string; role: string; email: string | null }
-export type ResourceOpt = { id: string; name: string }
+export type TeamRow = { id: string; name: string; role: string }
 export type ClientInfo = {
   clientId: string
   displayName: string
@@ -67,7 +66,6 @@ export function JobSidebar({
   requirements,
   notes,
   team,
-  resources,
 }: {
   projectId: string
   csrf: string
@@ -75,7 +73,6 @@ export function JobSidebar({
   requirements: ReqRow[]
   notes: NoteRow[]
   team: TeamRow[]
-  resources: ResourceOpt[]
 }) {
   const toast = useToast()
   const [noteView, setNoteView] = useState<'requirements' | 'internal'>('requirements')
@@ -227,7 +224,6 @@ export function JobSidebar({
                   <span className="block break-words text-sm text-ink-muted">{m.role}</span>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  {m.email ? <a href={`mailto:${m.email}`} aria-label={`Email ${m.name}`} className="text-ink-muted hover:text-ink"><IconMail className="h-4 w-4" /></a> : null}
                   <form action={removeTeamMemberAction} className="opacity-0 transition-opacity group-hover:opacity-100">
                     {hidden}
                     <input type="hidden" name="memberId" value={m.id} />
@@ -259,16 +255,8 @@ export function JobSidebar({
         <form action={async (fd) => { await addTeamMemberAction(fd); setAddMember(false); toast({ title: 'Team member added' }) }} className="flex min-h-0 flex-1 flex-col">
           <div className={modalBody}>
             {hidden}
-            {resources.length > 0 ? (
-              <ModalField label="Person">
-                <select name="resourceId" defaultValue="" className={field}>
-                  <option value="">Select a person...</option>
-                  {resources.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                </select>
-              </ModalField>
-            ) : null}
-            <ModalField label={resources.length > 0 ? 'Or type a name (if not listed)' : 'Name'}>
-              <input name="name" placeholder="Full name" className={field} />
+            <ModalField label="Name">
+              <input name="name" required placeholder="Full name" className={field} />
             </ModalField>
             <ModalField label="Role"><input name="role" required placeholder="e.g. Lead Photographer" className={field} /></ModalField>
           </div>

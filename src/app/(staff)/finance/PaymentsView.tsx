@@ -15,7 +15,7 @@ export type Row = {
   group: 'unpaid' | 'paid'
   amount: string
   amountNum: number // money-ok: sort key only; the amount shown is the Decimal string above
-  dateKind: 'due' | 'paid' | 'draft'
+  dateKind: 'due' | 'paid'
   dateLabel: string | null
   urgencyLabel: string | null
   urgencyTone: 'over' | 'soon' | null
@@ -33,7 +33,7 @@ const menuLink = 'block w-full px-3 py-2 text-left text-sm text-ink hover:bg-pap
 
 /** The combined "Due · date / Paid · date" cell, with a red heads-up line when payment is due soon or late. */
 function DateCell({ r }: { r: Row }) {
-  const kind = r.dateKind === 'paid' ? 'Paid' : r.dateKind === 'draft' ? 'Draft' : 'Due'
+  const kind = r.dateKind === 'paid' ? 'Paid' : 'Due'
   return (
     <div className="min-w-0">
       <span className="block whitespace-nowrap">
@@ -82,10 +82,9 @@ function RowMenu({ r }: { r: Row }) {
       {({ close }) => (
         <div className="py-1">
           <Link href={href} onClick={close} className={menuLink}>View invoice</Link>
-          {r.group === 'unpaid' && r.dateKind !== 'draft' ? (
+          {r.group === 'unpaid' ? (
             <Link href={href} onClick={close} className={menuLink}>Record payment</Link>
           ) : null}
-          {r.dateKind === 'draft' ? <Link href={href} onClick={close} className={menuLink}>Edit invoice</Link> : null}
           {r.group === 'paid' ? <Link href={href} onClick={close} className={menuLink}>Download PDF</Link> : null}
         </div>
       )}

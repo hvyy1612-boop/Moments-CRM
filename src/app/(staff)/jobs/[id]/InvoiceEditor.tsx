@@ -13,7 +13,6 @@ import { PaymentScheduleSelect } from './PaymentScheduleSelect'
 const IDLE: QuoteActionState = { status: 'idle' }
 
 export type PackageOption = { id: string; name: string; price: string; description: string | null; inclusions: string | null; isAddOn: boolean }
-export type TemplateOption = { id: string; name: string; lines: { itemName?: string; description: string; quantity: number; unitPrice: string }[] }
 export type InitialInvoice = {
   type: string
   invoiceNumber: string
@@ -76,7 +75,6 @@ export function InvoiceEditor({
   csrf,
   projectId,
   packages,
-  templates,
   invoiceId,
   initial,
   job,
@@ -87,7 +85,6 @@ export function InvoiceEditor({
   csrf: string
   projectId: string
   packages: PackageOption[]
-  templates: TemplateOption[]
   invoiceId?: string
   initial?: InitialInvoice
   job?: JobContext
@@ -190,13 +187,6 @@ export function InvoiceEditor({
   }
   function remove(id: number) {
     setLines((ls) => ls.filter((l) => l.id !== id))
-  }
-  function applyTemplate(id: string) {
-    const t = templates.find((x) => x.id === id)
-    if (!t) return
-    let idc = nextId
-    setLines(t.lines.map((l) => ({ id: idc++, name: l.itemName ?? '', description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: '' })))
-    setNextId(idc)
   }
 
   const gross = lines.reduce((sum, l) => sum + amountOf(l), 0)
@@ -378,12 +368,6 @@ export function InvoiceEditor({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-semibold text-ink">Products &amp; packages</p>
             <div className="flex flex-wrap items-center gap-2">
-              {templates.length > 0 ? (
-                <Select aria-label="Apply a template" value="" onChange={(e) => { applyTemplate(e.target.value); e.currentTarget.value = '' }} className="h-8 max-w-xs">
-                  <option value="" disabled>Apply a template...</option>
-                  {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </Select>
-              ) : null}
               <Button type="button" variant="secondary" size="sm" onClick={openAdd}>
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
                 Add products &amp; packages

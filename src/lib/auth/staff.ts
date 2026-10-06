@@ -7,7 +7,7 @@ import type { Role } from './permissions'
  * Internal Staff Login IDs (see the Auth Blueprint). They look like emails but are NOT mailboxes - they
  * are usernames the system issues, kept in the unique User.email column (no schema change). Like a
  * university's student vs staff addresses, the part after @ tells the role at a glance:
- *   Admin a261957@admin.moments.com · staff s264831@staff.moments.com · editor e263310@editor.moments.com
+ *   Admin a261957@admin.moments.com · staff s264831@staff.moments.com
  * = role letter + the 2-digit year the account was made (Sydney) + 4 random digits. Random, not counted
  * from 1, so nobody can guess a colleague's ID from their own (sequential IDs invite password guessing
  * and deliberate lock-outs).
@@ -19,7 +19,6 @@ import type { Role } from './permissions'
 export const LOGIN_ID_FORMAT: Record<Role, { prefix: string; domain: string }> = {
   ADMIN: { prefix: 'a', domain: 'admin.moments.com' },
   STUDIO: { prefix: 's', domain: 'staff.moments.com' },
-  EDITOR: { prefix: 'e', domain: 'editor.moments.com' },
 }
 
 /** Every domain the app issues login IDs on (older m000123@staff.moments.com IDs included). */

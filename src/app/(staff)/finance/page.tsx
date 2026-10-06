@@ -58,12 +58,11 @@ export default async function FinancePage() {
       project: {
         select: {
           client: { select: { displayName: true } },
-          package: { select: { name: true } },
           convertedFromEnquiries: { select: { eventType: true }, take: 1 },
         },
       },
       payments: {
-        select: { transactions: { select: { type: true, status: true, amount: true, createdAt: true } } },
+        select: { transactions: { select: { type: true, amount: true, createdAt: true } } },
       },
     },
   })
@@ -72,17 +71,16 @@ export default async function FinancePage() {
   const rows: Row[] = invoices.flatMap((inv) => {
     if (inv.status === 'VOID') return [] // voided invoices are not a payment to track here
     const isPaid = inv.status === 'PAID'
-    const isDraft = inv.status === 'DRAFT'
-    const charges = inv.payments.flatMap((p) => p.transactions).filter((t) => t.status === 'SUCCEEDED' && t.type === 'CHARGE')
+    const charges = inv.payments.flatMap((p) => p.transactions).filter((t) => t.type === 'CHARGE')
     const paidAt = charges.length ? new Date(Math.max(...charges.map((c) => c.createdAt.getTime()))) : inv.issuedAt
     const service = titleCase(
-      inv.project.convertedFromEnquiries[0]?.eventType ?? inv.project.package?.name ?? 'Photography',
+      inv.project.convertedFromEnquiries[0]?.eventType ?? 'Photography',
     )
     // An unpaid invoice is dated by its NEXT payment due (the earliest instalment not yet paid), so a late
     // deposit shows as overdue here even when the final payment is months away.
-    const nextDue = isPaid || isDraft ? null : (nextPaymentDue(getInvoiceBalance(toInvoiceMoneyInput(inv))) ?? inv.dueAt)
-    const dateSource = isPaid ? paidAt : isDraft ? null : nextDue
-    const urgency = !isPaid && !isDraft ? urgencyFor(nextDue, now) : null
+    const nextDue = isPaid ? null : (nextPaymentDue(getInvoiceBalance(toInvoiceMoneyInput(inv))) ?? inv.dueAt)
+    const dateSource = isPaid ? paidAt : nextDue
+    const urgency = !isPaid ? urgencyFor(nextDue, now) : null
     return [
       {
         id: inv.id,
@@ -92,7 +90,7 @@ export default async function FinancePage() {
         group: isPaid ? ('paid' as const) : ('unpaid' as const),
         amount: formatAud(inv.total),
         amountNum: inv.total.toNumber(),
-        dateKind: isDraft ? ('draft' as const) : isPaid ? ('paid' as const) : ('due' as const),
+        dateKind: isPaid ? ('paid' as const) : ('due' as const),
         dateLabel: dateSource ? formatSydneyDate(dateSource) : null,
         urgencyLabel: urgency?.label ?? null,
         urgencyTone: urgency?.tone ?? null,

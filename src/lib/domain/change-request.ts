@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 import { splitGstInclusive } from '@/lib/money'
 import { sydneyLocalToUtc, systemClock } from '@/lib/time'
 import { changeRequestPayloadSchema, type ChangeRequestPayload } from '@/lib/validation/change-request'
-import { rescheduleBookingTx } from './booking'
+import { JOB_SHOOT_SELECT, shootDateOfJob, SHOOT_TASK_TYPE } from './deadline'
 import { createInvoiceTx, issueCreditNoteTx } from './finance'
 import { reviseQuoteTx } from './quote'
 
@@ -12,8 +12,8 @@ import { reviseQuoteTx } from './quote'
  * place: PENDING -> IMPACT_ASSESSMENT -> APPROVED -> APPLIED (terminal), or -> REJECTED. Three facts are
  * kept distinct (Rule C1): internal approval, client agreement, and effective application. Apply runs
  * ALL its side-effects in ONE transaction (Rule C5) via the transaction-aware writer cores, re-checks
- * drift and resource conflicts at apply time (Rule C4), and claims the request atomically so two
- * concurrent applies can never produce two bookings or two quote versions.
+ * drift at apply time (Rule C4), and claims the request atomically so two concurrent applies can never
+ * produce two shoot changes or two quote versions.
  */
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
@@ -32,7 +32,7 @@ const TYPE_BY_KIND: Record<ChangeRequestPayload['kind'], ChangeRequestType> = {
 function describe(p: ChangeRequestPayload): string {
   switch (p.kind) {
     case 'reschedule':
-      return `Reschedule shoot to ${p.newStartsAt}${p.fee ? ` (fee ${p.fee.amount})` : ''}`
+      return `Move the shoot to ${p.newStartsAt}${p.fee ? ` (fee ${p.fee.amount})` : ''}`
     case 'scopeChange':
       return `Scope change: ${p.summary} (fee ${p.fee.amount})`
     case 'priceDecrease':
@@ -61,17 +61,20 @@ function parseSydney(local: string): Date {
   return sydneyLocalToUtc(local.includes('T') ? local : `${local}T00:00`)
 }
 
+/** The job's current shoot date (its Shoot task, else the lead's event date). */
+async function currentShootDate(tx: Tx, projectId: string): Promise<Date | null> {
+  const job = await tx.project.findUnique({ where: { id: projectId }, select: JOB_SHOOT_SELECT })
+  return job ? shootDateOfJob(job) : null
+}
+
 /** Rule C6: block by change TYPE, not a blanket lifecycle gate. */
 async function assertChangeAllowed(tx: Tx, projectId: string, p: ChangeRequestPayload): Promise<void> {
   const project = await tx.project.findUnique({ where: { id: projectId }, select: { lifecycleStatus: true } })
   if (!project) throw new Error('Job not found.')
-  if (project.lifecycleStatus === 'LOST') throw new Error('This job is lost; no change requests apply.')
   if (p.kind === 'reschedule') {
     if (project.lifecycleStatus === 'CANCELLED') throw new Error('A cancelled job has no shoot to reschedule.')
-    const booking = await tx.booking.findUnique({ where: { id: p.bookingId }, select: { startsAt: true, status: true } })
-    if (!booking) throw new Error('Booking not found.')
-    if (booking.status === 'CANCELLED') throw new Error('That shoot was already cancelled or rescheduled.')
-    if (booking.startsAt.getTime() < systemClock.now().getTime()) {
+    const shoot = await currentShootDate(tx, projectId)
+    if (shoot && shoot.getTime() < systemClock.now().getTime()) {
       throw new Error('That shoot has already happened; it cannot be rescheduled.') // Rule C6
     }
   }
@@ -124,49 +127,6 @@ export async function createChangeRequest(
   })
 }
 
-/**
- * Replace the payload of a not-yet-applied CR (Rule C2). A new payload bumps `payloadVersion` and
- * INVALIDATES the prior approval + assessment + client agreement — the request drops back to PENDING.
- */
-export async function editChangeRequestPayload(changeRequestId: string, rawPayload: unknown, actorUserId: string | null = null) {
-  const payload = changeRequestPayloadSchema.parse(rawPayload)
-  return prisma.$transaction(async (tx) => {
-    const cr = await tx.changeRequest.findUnique({ where: { id: changeRequestId }, include: { project: { select: { companyId: true } } } })
-    if (!cr) throw new Error('Change request not found.')
-    if (cr.status === 'APPLIED') throw new Error('An applied change request cannot be edited.')
-    await assertChangeAllowed(tx, cr.projectId, payload)
-    const updated = await tx.changeRequest.update({
-      where: { id: changeRequestId },
-      data: {
-        payload: payload as unknown as Prisma.InputJsonValue,
-        payloadVersion: cr.payloadVersion + 1,
-        type: TYPE_BY_KIND[payload.kind],
-        description: describe(payload),
-        status: 'PENDING',
-        approvedByUserId: null,
-        approvedAt: null,
-        assessedBookingVersion: null,
-        assessedQuoteVersionId: null,
-        clientAgreedVia: null,
-        clientAgreedAt: null,
-        clientAgreedByUserId: null,
-        agreedQuoteVersionId: null,
-      },
-    })
-    await tx.auditLog.create({
-      data: {
-        companyId: cr.project.companyId,
-        action: 'change_request.payload_edited',
-        entityType: 'ChangeRequest',
-        entityId: changeRequestId,
-        actorUserId,
-        afterData: { payloadVersion: updated.payloadVersion },
-      },
-    })
-    return updated
-  })
-}
-
 /** Assess impact and SNAPSHOT the related versions for drift detection at apply (Rule C4). */
 export async function assessChangeRequest(changeRequestId: string, actorUserId: string | null = null) {
   return prisma.$transaction(async (tx) => {
@@ -176,11 +136,10 @@ export async function assessChangeRequest(changeRequestId: string, actorUserId: 
     const payload = changeRequestPayloadSchema.parse(cr.payload)
     await assertChangeAllowed(tx, cr.projectId, payload)
 
-    let assessedBookingVersion: string | null = null
+    let assessedShootDate: string | null = null
     let assessedQuoteVersionId: string | null = null
     if (payload.kind === 'reschedule') {
-      const booking = await tx.booking.findUnique({ where: { id: payload.bookingId }, select: { updatedAt: true } })
-      assessedBookingVersion = booking ? booking.updatedAt.toISOString() : null
+      assessedShootDate = (await currentShootDate(tx, cr.projectId))?.toISOString() ?? 'none'
     }
     if (payload.kind === 'scopeChange') {
       const accepted = await tx.quoteVersion.findFirst({ where: { quote: { projectId: cr.projectId }, status: 'ACCEPTED' }, select: { id: true } })
@@ -193,7 +152,7 @@ export async function assessChangeRequest(changeRequestId: string, actorUserId: 
         status: 'IMPACT_ASSESSMENT',
         commercialImpact: commercialAmount(payload),
         scheduleImpact: payload.kind === 'reschedule',
-        assessedBookingVersion,
+        assessedShootDate,
         assessedQuoteVersionId,
       },
     })
@@ -295,10 +254,9 @@ export async function applyChangeRequest(changeRequestId: string, actorUserId: s
 
     // Rule C4 — drift: the world must match what was assessed.
     if (payload.kind === 'reschedule') {
-      const booking = await tx.booking.findUnique({ where: { id: payload.bookingId }, select: { updatedAt: true, status: true } })
-      if (!booking || booking.status === 'CANCELLED') throw new Error('That shoot changed since assessment; re-assess the change request.')
-      if (cr.assessedBookingVersion && booking.updatedAt.toISOString() !== cr.assessedBookingVersion) {
-        throw new Error('That shoot changed since assessment; re-assess the change request.')
+      const shootNow = (await currentShootDate(tx, cr.projectId))?.toISOString() ?? 'none'
+      if (cr.assessedShootDate && shootNow !== cr.assessedShootDate) {
+        throw new Error('The shoot date changed since assessment; re-assess the change request.')
       }
     }
     if (payload.kind === 'scopeChange') {
@@ -316,10 +274,17 @@ export async function applyChangeRequest(changeRequestId: string, actorUserId: s
 
     if (payload.kind === 'reschedule') {
       const startsAt = parseSydney(payload.newStartsAt)
-      const endsAt = parseSydney(payload.newEndsAt)
       if (startsAt.getTime() < now.getTime()) throw new Error('The new shoot date is in the past.') // Rule C6/C-e
-      if (endsAt <= startsAt) throw new Error('The end time must be after the start time.')
-      await rescheduleBookingTx(tx, payload.bookingId, { startsAt, endsAt, reason: cr.reason }, actorUserId)
+      // The shoot date lives on the job's Shoot task; every shoot-anchored task follows it (Rule D2).
+      const shootTask = await tx.workItem.findFirst({ where: { projectId: cr.projectId, type: SHOOT_TASK_TYPE }, select: { id: true, dueOverrideAt: true } })
+      if (!shootTask) throw new Error('This job has no Shoot task to move.')
+      await tx.workItem.update({ where: { id: shootTask.id }, data: { dueOverrideAt: startsAt } })
+      await tx.auditLog.create({
+        data: {
+          companyId: cr.project.companyId, action: 'project.shoot_rescheduled', entityType: 'Project', entityId: cr.projectId, actorUserId,
+          beforeData: { shootAt: shootTask.dueOverrideAt?.toISOString() ?? null }, afterData: { shootAt: startsAt.toISOString(), reason: cr.reason },
+        },
+      })
       if (payload.fee) await issueAdjustmentInvoiceTx(tx, cr.projectId, payload.fee.amount, `Rescheduling fee`, actorUserId, now)
     } else if (payload.kind === 'scopeChange') {
       resultingQuoteVersionId = await applyScopeChangeTx(tx, cr.projectId, payload, actorUserId, now)

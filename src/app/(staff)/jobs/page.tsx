@@ -5,11 +5,9 @@ import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { resolveLabel } from '@/features/projects/labels'
 import { CLOSED_STATUSES } from '@/features/projects/lifecycle'
 import { buildProjectBoard, PROJECT_STAGES, type ProjectFacts, type TaskInput } from '@/features/projects/workflow'
-import { makeShootDateOf, resolveTaskDueDate } from '@/lib/domain/deadline'
-import { getCompanyStatusLabels } from '@/lib/domain/status-labels'
+import { jobShootDate, resolveTaskDueDate } from '@/lib/domain/deadline'
 import { formatSydneyDate, sydneyYmd } from '@/lib/time'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
@@ -25,7 +23,7 @@ export const metadata: Metadata = { title: 'Jobs - Moments' }
 
 const SORTS: JobSortValue[] = ['newest', 'oldest', 'stage', 'client-asc']
 // System milestones never affect the list's stage or progress (both are manual-task only).
-const NO_FACTS: ProjectFacts = { shootScheduled: false, gallerySent: false, finalPaid: false, deliveryComplete: false }
+const NO_FACTS: ProjectFacts = { finalPaid: false }
 
 // Reading order of the workflow stages, so "Sort by stage" clusters the pipeline Planning -> Delivery.
 const STAGE_RANK = new Map(PROJECT_STAGES.map((s, i) => [s.key, i]))
@@ -41,7 +39,7 @@ function daysUntilSydney(due: Date, now: Date): number {
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; sort?: string; status?: string; task?: string; tab?: string }>
+  searchParams: Promise<{ q?: string; sort?: string; task?: string; tab?: string }>
 }) {
   const user = await requireRole('/jobs')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
@@ -50,12 +48,10 @@ export default async function JobsPage({
   const sp = await searchParams
   const q = (sp.q ?? '').trim()
   const sort: JobSortValue = SORTS.includes(sp.sort as JobSortValue) ? (sp.sort as JobSortValue) : JOB_DEFAULT_SORT
-  const status = sp.status ?? ''
   const task = sp.task ?? ''
   const tab: 'active' | 'completed' = sp.tab === 'completed' ? 'completed' : 'active'
 
-  const [projects, labels] = await Promise.all([
-    prisma.project.findMany({
+  const projects = await prisma.project.findMany({
       // Jobs = Projects. A case becomes a Project only on conversion / direct booking, so membership is
       // by ENTITY - never by commercial status (docs/24). The active/closed split is applied below.
       orderBy: { enquiryReceivedAt: 'desc' },
@@ -68,25 +64,17 @@ export default async function JobsPage({
           orderBy: { order: 'asc' },
           select: {
             id: true, title: true, kind: true, order: true, type: true, stage: true, status: true,
-            dueAt: true, dueOverrideAt: true, dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, bookingId: true,
+            dueAt: true, dueOverrideAt: true, dueAnchor: true, dueOffsetDays: true, dueDateFixed: true,
           },
         },
-        // Every booking (cancelled ones too): the deadline resolver needs them to follow a rescheduled shoot.
-        bookings: {
-          orderBy: { startsAt: 'asc' },
-          select: { id: true, startsAt: true, status: true, rescheduledFromId: true },
-        },
-        // Fallback shoot/event date: the originating enquiry's event date (a job has no date field of its
-        // own, so before a formal booking exists the enquiry's date is the shoot date staff set).
+        // The lead's event date: the job's shoot date until staff set one on the Shoot task.
         convertedFromEnquiries: {
           orderBy: { createdAt: 'desc' },
           take: 1,
           select: { eventDate: true },
         },
       },
-    }),
-    getCompanyStatusLabels(),
-  ])
+    })
   const canEdit = can(user, 'PROJECT_EDIT')
 
   const now = new Date()
@@ -94,7 +82,8 @@ export default async function JobsPage({
     // Stage, progress and the next task come from the SAME board the job page shows (buildProjectBoard
     // over resolved due dates), so the list can never disagree with the job: add-on and custom stages
     // never claim the stage, custom stages never count toward progress, anchored tasks get their dates.
-    const ctx = { shootDateOf: makeShootDateOf(p.bookings), jobConfirmedAt: p.confirmedByClientAt }
+    const shootAt = jobShootDate(p.workItems, p.convertedFromEnquiries[0]?.eventDate)
+    const ctx = { shootDate: shootAt, jobConfirmedAt: p.confirmedByClientAt }
     const tasks: TaskInput[] = p.workItems.map((w) => ({
       id: w.id, title: w.title, status: w.status, stage: w.stage, type: w.type, kind: w.kind,
       resolvedDueAt: resolveTaskDueDate(w, ctx), dueAnchor: w.dueAnchor, order: w.order,
@@ -105,22 +94,12 @@ export default async function JobsPage({
     const checklistDone = total > 0 && board.allDone
     const nextId = board.nextAction?.kind === 'task' ? board.nextAction.taskId : null
     const nextDue = nextId ? (tasks.find((t) => t.id === nextId)?.resolvedDueAt ?? null) : null
-    const cancelled = p.lifecycleStatus === 'CANCELLED' || p.lifecycleStatus === 'LOST'
-    // Kept for the (URL) status filter + the Active/Completed split; the label is no longer shown in the list.
-    const label =
-      !p.statusLabelId && checklistDone
-        ? (labels.find((l) => l.stage === 'COMPLETED') ?? resolveLabel(p, labels))
-        : resolveLabel(p, labels)
+    const cancelled = p.lifecycleStatus === 'CANCELLED'
 
     // Progress % is DERIVED from real task completion (the board's own figure) - never hard-coded per
     // stage; null when the job has no tasks yet (rendered gracefully).
     const pct = total > 0 ? board.progressPercent : null
 
-    // Shoot date = the date staff set on the shoot step (the "Wedding day" SHOOT task) in the workflow,
-    // else a formal booking, else the originating enquiry's event date. So editing the shoot step shows here.
-    const shootTask = p.workItems.find((t) => t.type === 'SHOOT' && (t.dueOverrideAt ?? t.dueAt))
-    const liveBooking = p.bookings.find((b) => b.status !== 'CANCELLED')
-    const shootAt = (shootTask?.dueOverrideAt ?? shootTask?.dueAt) ?? liveBooking?.startsAt ?? p.convertedFromEnquiries[0]?.eventDate ?? null
 
     // Deadline alert (server now, Sydney day granularity): next pending task overdue/due-soon, OR an
     // imminent shoot. Overdue task = red; task due <=2d or shoot in <=2d = amber. The most urgent wins.
@@ -155,9 +134,7 @@ export default async function JobsPage({
       name: p.name,
       client: p.client.displayName,
       clientId: p.client.id,
-      label,
-      // Closed grouping is decided by the true operational lifecycle, never by a display label - a
-      // custom status label can't make a cancelled/closed job reappear in Active (docs/24 Increment 1).
+      // Closed grouping is decided by the operational lifecycle (docs/24 Increment 1).
       closed: CLOSED_STATUSES.has(p.lifecycleStatus),
       cancelled,
       completed: checklistDone,
@@ -170,7 +147,7 @@ export default async function JobsPage({
     }
   })
 
-  // Search + next-task filter first, then the Active/Completed tab split, then any status narrowing.
+  // Search + next-task filter first, then the Active/Completed tab split.
   if (q) {
     const needle = q.toLowerCase()
     rows = rows.filter((r) => [r.client, r.name, r.code].some((f) => f.toLowerCase().includes(needle)))
@@ -183,7 +160,6 @@ export default async function JobsPage({
   const activeCount = rows.filter((r) => !r.closed).length
   const completedCount = rows.filter((r) => r.closed).length
   rows = rows.filter((r) => (tab === 'completed' ? r.closed : !r.closed))
-  if (status) rows = rows.filter((r) => r.label.id === status)
 
   if (sort === 'oldest') rows = [...rows].sort((a, b) => a.enquiredAt.getTime() - b.enquiredAt.getTime())
   else if (sort === 'client-asc') rows = [...rows].sort((a, b) => a.client.localeCompare(b.client))
@@ -198,7 +174,6 @@ export default async function JobsPage({
   const listQs = new URLSearchParams()
   if (q) listQs.set('q', q)
   if (sort !== JOB_DEFAULT_SORT) listQs.set('sort', sort)
-  if (status) listQs.set('status', status)
   if (task) listQs.set('task', task)
   if (tab === 'completed') listQs.set('tab', tab)
   const listQsStr = listQs.toString()
@@ -209,7 +184,6 @@ export default async function JobsPage({
     const p = new URLSearchParams()
     if (q) p.set('q', q)
     if (sort !== JOB_DEFAULT_SORT) p.set('sort', sort)
-    if (status) p.set('status', status)
     if (task) p.set('task', task)
     if (t === 'completed') p.set('tab', t)
     const qs = p.toString()

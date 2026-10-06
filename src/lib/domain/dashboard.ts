@@ -3,6 +3,14 @@ import { PROJECT_STAGES, stageLabel } from '@/features/projects/workflow'
 import { sydneyLocalToUtc, sydneyYmd } from '@/lib/time'
 import { getInvoiceBalance } from './money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
+import { jobShootDate } from './deadline'
+import { titleCase } from '@/lib/text'
+
+// A job's "service" is what its lead asked for (the event type: Wedding, Portrait, ...), the same label
+// the Payments list shows. Selected on any project query that needs it.
+const SERVICE_SELECT = { convertedFromEnquiries: { select: { eventType: true, eventDate: true }, orderBy: { createdAt: 'desc' }, take: 1 } } as const
+const serviceOf = (p: { convertedFromEnquiries: { eventType: string | null }[] } | null | undefined): string =>
+  p?.convertedFromEnquiries[0]?.eventType?.trim() ? titleCase(p.convertedFromEnquiries[0].eventType.trim()) : 'Other'
 
 /**
  * Dashboard analytics (read-only aggregation over the existing records). Every figure is derived from
@@ -44,7 +52,7 @@ export type DashboardData = {
 
 const INVOICE_COUNTED = ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'PAID', 'OVERDUE'] as const
 const INVOICE_UNPAID = ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'OVERDUE'] as const
-const ACTIVE_STAGES_EXCLUDE = ['CANCELLED', 'LOST', 'COMPLETED', 'CLOSED']
+const ACTIVE_STAGES_EXCLUDE = ['CANCELLED', 'COMPLETED', 'CLOSED']
 const STAGE_ORDER = new Map(PROJECT_STAGES.map((s, i) => [s.key, i]))
 
 const DAY_MS = 86_400_000
@@ -143,48 +151,49 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   const { start, end } = resolveRange(opts.period, opts.from, opts.to, now)
   const prevStart = new Date(start.getTime() - (end.getTime() - start.getTime()))
   const svc = opts.service && opts.service !== 'all' ? opts.service : null
-  const matchesSvc = (pkgName: string | null | undefined): boolean => !svc || (pkgName ?? 'Other') === svc
+  const matchesSvc = (service: string): boolean => !svc || service === svc
 
-  const [enquiries, invoices, payments, projects, packages, recentRaw, delivered] = await Promise.all([
+  const [enquiries, invoices, payments, projects, serviceRows, recentRaw, delivered] = await Promise.all([
     prisma.enquiry.findMany({ where: { createdAt: { gte: prevStart } }, select: { status: true, source: true, createdAt: true } }),
     prisma.invoice.findMany({
       where: { status: { in: INVOICE_COUNTED as unknown as string[] } as never },
-      select: { issuedAt: true, createdAt: true, project: { select: { package: { select: { name: true } } } }, ...INVOICE_MONEY_SELECT },
+      select: { issuedAt: true, createdAt: true, project: { select: SERVICE_SELECT }, ...INVOICE_MONEY_SELECT },
     }),
     prisma.paymentTransaction.findMany({
-      where: { status: 'SUCCEEDED', createdAt: { gte: start, lt: end } },
-      select: { amount: true, type: true, createdAt: true, payment: { select: { invoice: { select: { project: { select: { package: { select: { name: true } } } } } } } } },
+      where: { createdAt: { gte: start, lt: end } },
+      select: { amount: true, type: true, createdAt: true, payment: { select: { invoice: { select: { project: { select: SERVICE_SELECT } } } } } },
     }),
     prisma.project.findMany({
       where: { lifecycleStatus: { notIn: ACTIVE_STAGES_EXCLUDE as never } },
       select: {
         lifecycleStatus: true,
-        package: { select: { name: true } },
-        bookings: { where: { status: { not: 'CANCELLED' } }, orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true } },
-        galleries: { where: { publishedAt: { not: null } }, orderBy: { publishedAt: 'desc' }, take: 1, select: { publishedAt: true } },
+        ...SERVICE_SELECT,
         workItems: { where: { status: 'PENDING', type: { not: 'AUTO' } }, select: { stage: true } },
       },
     }),
-    prisma.package.findMany({ select: { name: true }, orderBy: { name: 'asc' } }),
+    // The service filter's options: every event type a booked lead has had.
+    prisma.enquiry.findMany({ where: { convertedProjectId: { not: null } }, select: { eventType: true }, distinct: ['eventType'] }),
     // Recent enquiries across all channels (latest first) - real records for the dashboard table.
     prisma.enquiry.findMany({
       orderBy: { createdAt: 'desc' },
       take: 6,
       select: { id: true, name: true, eventType: true, source: true, status: true, createdAt: true },
     }),
-    // Turnaround is measured on jobs that HAVE delivered - finished jobs included (the active list above
-    // leaves COMPLETED / CLOSED out, and those are exactly the jobs with a turnaround).
+    // Turnaround = shoot date -> the day the Delivery stage was finished, measured on every job whose
+    // Delivery tasks are all done (finished jobs included - they are exactly the ones with a turnaround).
     prisma.project.findMany({
-      where: { lifecycleStatus: { notIn: ['CANCELLED', 'LOST'] }, galleries: { some: { publishedAt: { not: null } } } },
+      where: { lifecycleStatus: { not: 'CANCELLED' }, workItems: { some: { stage: 'delivery', status: 'COMPLETED' } } },
       select: {
-        package: { select: { name: true } },
-        bookings: { where: { status: { not: 'CANCELLED' } }, orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true } },
-        galleries: { where: { publishedAt: { not: null } }, orderBy: { publishedAt: 'desc' }, take: 1, select: { publishedAt: true } },
+        ...SERVICE_SELECT,
+        workItems: {
+          where: { OR: [{ type: 'SHOOT' }, { stage: 'delivery', type: { not: 'AUTO' } }], status: { not: 'CANCELLED' } },
+          select: { type: true, stage: true, status: true, dueOverrideAt: true, completedAt: true },
+        },
       },
     }),
   ])
 
-  const services = [...new Set(packages.map((p) => p.name).filter(Boolean))]
+  const services = [...new Set(serviceRows.map((r) => serviceOf({ convertedFromEnquiries: [r] })))].sort()
 
   // --- Booking rate + lead source + pipeline (enquiries) ---
   const inPeriodEnq = enquiries.filter((e) => e.createdAt >= start && e.createdAt < end)
@@ -216,7 +225,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   const pipeline: Bar[] = PIPE.map((p) => ({ label: p.label, value: inPeriodEnq.filter((e) => e.status === p.s).length }))
 
   // --- Revenue (invoices) ---
-  const svcInvoices = invoices.filter((i) => matchesSvc(i.project?.package?.name))
+  const svcInvoices = invoices.filter((i) => matchesSvc(serviceOf(i.project)))
   const inv = (i: (typeof invoices)[number]) => (i.issuedAt ?? i.createdAt)
   // Booked = what the client actually owes on the invoice: its total less any credit notes (a price
   // decrease must lower booked revenue, the same credit-aware figure every money decision uses).
@@ -229,7 +238,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
 
   const svcMap = new Map<string, number>()
   for (const i of periodInvoices) {
-    const k = i.project?.package?.name ?? 'Other'
+    const k = serviceOf(i.project)
     svcMap.set(k, (svcMap.get(k) ?? 0) + booked(i))
   }
   const revenueByService: Bar[] = [...svcMap.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 6)
@@ -252,18 +261,18 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   }
 
   // --- Collected cash + revenue series ---
-  const svcPayments = payments.filter((p) => matchesSvc(p.payment?.invoice?.project?.package?.name))
+  const svcPayments = payments.filter((p) => matchesSvc(serviceOf(p.payment?.invoice?.project)))
   const bk = buckets(start, end)
   const revenueSeries: SeriesPoint[] = bk.map((b) => ({
     label: b.label,
     booked: periodInvoices.filter((i) => { const t = inv(i).getTime(); return t >= b.from && t < b.to }).reduce((s, i) => s + booked(i), 0),
-    // Collected cash is NET: a CHARGE adds, a REFUND/REVERSAL subtracts. REFUND transactions are
+    // Collected cash is NET: a CHARGE adds, a REFUND subtracts. REFUND transactions are
     // stored with a positive amount, so summing raw would count a refund as income (docs/24 Inc 3b).
     collected: svcPayments.filter((p) => { const t = p.createdAt.getTime(); return t >= b.from && t < b.to }).reduce((s, p) => s + (p.type === 'CHARGE' ? num(p.amount) : -num(p.amount)), 0),
   }))
 
   // --- Job stages (active jobs by current workflow stage) ---
-  const svcProjects = projects.filter((p) => matchesSvc(p.package?.name))
+  const svcProjects = projects.filter((p) => matchesSvc(serviceOf(p)))
   const stageMap = new Map<string, number>()
   for (const p of svcProjects) {
     // The job's stage = the earliest workflow stage that still has a pending task, by the workflow's own
@@ -278,17 +287,18 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   const jobStages: Bar[] = [...stageMap.entries()].map(([k, v]) => ({ label: stageLabel(k), value: v }))
   const activeJobs = jobStages.reduce((s, b) => s + b.value, 0)
 
-  // --- Turnaround (shoot -> published gallery), by service, median ---
+  // --- Turnaround (shoot -> Delivery stage finished), by service, median ---
   const turnMap = new Map<string, number[]>()
   const allTurn: number[] = []
-  for (const p of delivered.filter((d) => matchesSvc(d.package?.name))) {
-    const shoot = p.bookings[0]?.startsAt
-    const delivered = p.galleries[0]?.publishedAt
-    if (!shoot || !delivered) continue
-    const days = (delivered.getTime() - shoot.getTime()) / 86_400_000
+  for (const p of delivered.filter((d) => matchesSvc(serviceOf(d)))) {
+    const shoot = jobShootDate(p.workItems, p.convertedFromEnquiries[0]?.eventDate)
+    const deliveryTasks = p.workItems.filter((w) => w.stage === 'delivery')
+    if (!shoot || deliveryTasks.length === 0 || deliveryTasks.some((w) => w.status !== 'COMPLETED' || !w.completedAt)) continue
+    const finished = new Date(Math.max(...deliveryTasks.map((w) => w.completedAt!.getTime())))
+    const days = (finished.getTime() - shoot.getTime()) / 86_400_000
     if (days < 0) continue
     allTurn.push(days)
-    const k = p.package?.name ?? 'Other'
+    const k = serviceOf(p)
     const arr = turnMap.get(k) ?? []
     arr.push(days)
     turnMap.set(k, arr)

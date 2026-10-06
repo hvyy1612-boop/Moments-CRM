@@ -15,7 +15,7 @@ import { StaffTeams, type StaffRowData, type TeamGroup } from './StaffTeams'
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Staff - Moments' }
 
-const ROLE_LABEL: Record<string, string> = { ADMIN: 'Admin', STUDIO: 'Studio', EDITOR: 'Editor' }
+const ROLE_LABEL: Record<string, string> = { ADMIN: 'Admin', STUDIO: 'Studio' }
 
 /**
  * Staff account management (ADMIN only). Accounts are provisioned here - the system issues a Staff ID

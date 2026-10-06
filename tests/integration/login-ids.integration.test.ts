@@ -19,7 +19,6 @@ describe('role-based login IDs', () => {
   it('admin and staff get their own suffix, the year and 4 random digits', async () => {
     expect(await nextStaffLoginId('ADMIN', IN_2026)).toMatch(/^a26[1-9]\d{3}@admin\.moments\.com$/)
     expect(await nextStaffLoginId('STUDIO', IN_2026)).toMatch(/^s26[1-9]\d{3}@staff\.moments\.com$/)
-    expect(await nextStaffLoginId('EDITOR', IN_2026)).toMatch(/^e26[1-9]\d{3}@editor\.moments\.com$/)
   })
 
   it('the year is the Sydney year the account is made', async () => {

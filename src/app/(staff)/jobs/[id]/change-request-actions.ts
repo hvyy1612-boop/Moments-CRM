@@ -40,7 +40,7 @@ function payloadFromForm(fd: FormData): ChangeRequestPayload {
   let raw: unknown
   switch (kind) {
     case 'reschedule':
-      raw = { kind, bookingId: str(fd, 'bookingId'), newStartsAt: str(fd, 'newStartsAt'), newEndsAt: str(fd, 'newEndsAt'), ...(fee ? { fee } : {}) }
+      raw = { kind, newStartsAt: str(fd, 'newStartsAt'), ...(fee ? { fee } : {}) }
       break
     case 'scopeChange':
       raw = { kind, summary: str(fd, 'summary'), fee: { amount: feeAmount, reason: str(fd, 'feeReason') || null } }
@@ -59,7 +59,8 @@ function payloadFromForm(fd: FormData): ChangeRequestPayload {
 
 function backTo(projectId: string, error?: string): never {
   revalidatePath(`/jobs/${projectId}`)
-  redirect(error ? `/jobs/${projectId}?crError=${encodeURIComponent(error)}#change-requests` : `/jobs/${projectId}#change-requests`)
+  // Change requests live on the Finance tab: land there so the result (or the reason it was blocked) shows.
+  redirect(error ? `/jobs/${projectId}?tab=finance&crError=${encodeURIComponent(error)}#change-requests` : `/jobs/${projectId}?tab=finance#change-requests`)
 }
 
 export async function createChangeRequestAction(formData: FormData): Promise<void> {

@@ -17,10 +17,8 @@ import {
   addEnquiryTask,
   deleteEnquiryStage,
   deleteEnquiryTask,
-  logClientReply,
   moveEnquiryTask,
   renameEnquiryStage,
-  sendStaffReply,
   toggleEnquiryTask,
   updateEnquiryTask,
 } from '@/lib/domain/enquiry-workflow'
@@ -55,8 +53,7 @@ export async function searchClientsAction(query: string): Promise<ClientMatch[]>
   if (q.length < 2) return []
   return prisma.client.findMany({
     where: {
-      // Never offer a merged-away duplicate or an archived client: a new lead must hang off a live client.
-      mergedIntoClientId: null,
+      // Never offer an archived client: a new lead must hang off a live client.
       archivedAt: null,
       OR: [{ displayName: { contains: q, mode: 'insensitive' } }, { email: { contains: q } }],
     },
@@ -303,30 +300,6 @@ export async function moveEnquiryTaskAction(formData: FormData): Promise<void> {
   revalidateEnquiry(enquiryId)
 }
 
-/** Staff sends a reply to the client (records an outbound message and moves the ball to the client). */
-export async function sendReplyAction(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const enquiryId = String(formData.get('enquiryId') ?? '')
-  const body = String(formData.get('body') ?? '')
-  if (!enquiryId || !body.trim()) return
-  await sendStaffReply(enquiryId, body, user.id)
-  revalidatePath('/leads')
-  revalidatePath(`/leads/${enquiryId}`)
-}
-
-/** Record a message received from the client (moves the ball back to the studio). */
-export async function logClientReplyAction(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const enquiryId = String(formData.get('enquiryId') ?? '')
-  const body = String(formData.get('body') ?? '')
-  if (!enquiryId || !body.trim()) return
-  await logClientReply(enquiryId, body, user.id)
-  revalidatePath('/leads')
-  revalidatePath(`/leads/${enquiryId}`)
-}
-
 /** Add an internal note to a lead (the Notes card on the lead page). */
 export async function addEnquiryNoteAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
@@ -348,17 +321,6 @@ export async function convertEnquiryAction(formData: FormData): Promise<void> {
   if (result.projectId) await seedProjectWorkflow(result.projectId)
   revalidatePath('/leads')
   redirect(`/jobs/${result.projectId}?toast=job-created`)
-}
-
-/** Mark an enquiry as lost. */
-export async function markEnquiryLostAction(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const enquiryId = String(formData.get('enquiryId') ?? '')
-  if (!enquiryId) throw new Error('Missing enquiry.')
-  const reason = String(formData.get('reason') ?? '').trim() || 'Cancelled'
-  await markEnquiryLost(enquiryId, reason, user.id)
-  revalidatePath('/leads')
 }
 
 

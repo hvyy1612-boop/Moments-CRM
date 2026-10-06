@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { JOB_SHOOT_SELECT, shootDateOfJob } from '@/lib/domain/deadline'
 import { formatSydneyDate } from '@/lib/time'
 import { statusLabel } from '@/features/projects/lifecycle'
 import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
@@ -36,12 +37,7 @@ export default async function JobsReportPage({ searchParams }: { searchParams: P
             lifecycleStatus: true,
             enquiryReceivedAt: true,
             client: { select: { displayName: true } },
-            bookings: {
-              where: { status: { not: 'CANCELLED' } },
-              orderBy: { startsAt: 'asc' },
-              take: 1,
-              select: { startsAt: true },
-            },
+            ...JOB_SHOOT_SELECT,
           },
         })
       : Promise.resolve([]),
@@ -51,7 +47,7 @@ export default async function JobsReportPage({ searchParams }: { searchParams: P
     j.client.displayName,
     j.name,
     statusLabel(j.lifecycleStatus),
-    j.bookings[0]?.startsAt ? formatSydneyDate(j.bookings[0].startsAt) : '-',
+    ((at) => (at ? formatSydneyDate(at) : '-'))(shootDateOfJob(j)),
     formatSydneyDate(j.enquiryReceivedAt),
   ])
 

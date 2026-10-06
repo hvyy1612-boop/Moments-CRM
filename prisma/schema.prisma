@@ -1,9 +1,9 @@
 // Moments — Prisma schema. Project-centric (Database Blueprint v2 final).
-// Slices 1-5: Company, auth (User/Session/PasswordReset/SignInLog), Client, Project,
-// Quote/QuoteVersion/QuoteLine, Contract/ContractVersion, Booking/Resource/ResourceAssignment,
-// Invoice/InvoiceLine/Payment/PaymentTransaction, Gallery/GalleryItem, AuditLog, OutboxEvent.
-// Later slices add: workflow/work_items, deliverables/revisions/approvals/assets (object storage),
-// notifications, policies, change_requests, refunds, Stripe online payment, etc.
+// Company, auth (User/Session/PasswordReset/SignInLog), Client, Enquiry (lead), Project (job),
+// Quote/QuoteVersion/QuoteLine, Contract/ContractVersion, Invoice/InvoiceLine/InvoiceInstalment/
+// CreditNote/Payment/PaymentTransaction/Refund, WorkItem (tasks), Communication, CalendarEvent,
+// ChangeRequest, ProjectRequirement, ProjectTeamMember, notifications, AuditLog, OutboxEvent.
+// Only what the running app uses (unused models and values removed 2026-10-06).
 //
 // Naming: code = camelCase field + PascalCase model; database = snake_case column + snake_case
 // plural table (via @map / @@map). Types are explicit per column (varchar(n) with a sensible
@@ -22,7 +22,6 @@ datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
   directUrl  = env("DIRECT_URL")
-  // btree_gist: cho phép EXCLUDE constraint chống một resource nhận hai assignment chồng giờ.
   extensions = [citext, btree_gist]
 }
 
@@ -31,7 +30,6 @@ datasource db {
 enum UserRole {
   ADMIN
   STUDIO
-  EDITOR
 }
 
 enum SecurityOutcome {
@@ -51,26 +49,15 @@ enum ClientStatus {
 }
 
 // Operational lifecycle of a Job/Project (macro axis; the WorkItem board is the micro axis).
-// COMPLETED = delivered to the client; CLOSED = delivered AND fully settled (no balance, no blocking
-// work). The funnel values (ENQUIRY, QUALIFYING, QUOTING, AWAITING_DECISION, NEGOTIATION) and LOST are
-// DEPRECATED for new writes - the Enquiry table owns the sales funnel and quoting no longer moves the
-// lifecycle (docs/24). They remain in the enum only so existing rows stay valid.
+// BOOKING_REQUESTED = provisional (from the lead, awaiting the deposit); CONFIRMED = deposit paid (or
+// contract signed); COMPLETED = every task done and fully settled; CLOSED = closed by staff. The sales
+// funnel lives on Enquiry (the lead), never here.
 enum ProjectLifecycle {
-  ENQUIRY // deprecated (funnel lives on Enquiry)
-  QUALIFYING // deprecated
-  QUOTING // deprecated
-  AWAITING_DECISION // deprecated
-  NEGOTIATION // deprecated
   BOOKING_REQUESTED
   CONFIRMED
-  IN_PRODUCTION
-  COMPLETED // = delivered to the client
-  CLOSED // = delivered and fully settled
+  COMPLETED
+  CLOSED
   CANCELLED
-  LOST // deprecated (a stopped job is CANCELLED; LOST is an Enquiry outcome)
-  ON_HOLD
-  POSTPONED
-  ARCHIVED
 }
 
 // Derived dimension. Slice 1 dùng lifecycle + commercial; các chiều khác thêm ở slice sau.
@@ -89,7 +76,6 @@ enum QuoteStatus {
   VIEWED
   ACCEPTED
   DECLINED
-  EXPIRED
   SUPERSEDED
 }
 
@@ -97,15 +83,6 @@ enum ContractStatus {
   DRAFT
   SENT
   SIGNED
-  SUPERSEDED
-  VOID
-}
-
-enum BookingStatus {
-  TENTATIVE
-  CONFIRMED
-  CANCELLED
-  COMPLETED
 }
 
 // How a job task's base due date is derived (docs/25 Part 2). No MANUAL anchor: a manual date is
@@ -116,20 +93,6 @@ enum DueAnchor {
   FIXED
 }
 
-enum ResourceType {
-  PHOTOGRAPHER
-  VIDEOGRAPHER
-  SECOND_SHOOTER
-  EDITOR
-  STUDIO
-  EQUIPMENT
-}
-
-enum AssignmentStatus {
-  ACTIVE
-  CANCELLED
-}
-
 enum InvoiceType {
   DEPOSIT
   BALANCE
@@ -137,7 +100,6 @@ enum InvoiceType {
 }
 
 enum InvoiceStatus {
-  DRAFT
   ISSUED
   SENT
   PARTIALLY_PAID
@@ -147,11 +109,7 @@ enum InvoiceStatus {
 }
 
 enum PaymentStatus {
-  UNPAID
-  PENDING
-  PARTIALLY_PAID
   PAID
-  FAILED
   REFUNDED
   PARTIALLY_REFUNDED
 }
@@ -166,27 +124,11 @@ enum PaymentMethod {
 enum TransactionType {
   CHARGE
   REFUND
-  REVERSAL
-}
-
-enum TransactionStatus {
-  PENDING
-  PROCESSING
-  SUCCEEDED
-  FAILED
-}
-
-enum GalleryStatus {
-  DRAFT
-  PUBLISHED
-  ARCHIVED
 }
 
 enum OutboxStatus {
   PENDING
-  PROCESSING
   PROCESSED
-  FAILED
 }
 
 // B2: acquisition layer — lead (Enquiry) tách khỏi Client. Xem docs/18-crm-flow-reference.md.
@@ -198,14 +140,6 @@ enum EnquiryStatus {
   AWAITING_BOOKING_CONFIRMATION
   BOOKING_CONFIRMED
   DECLINED
-}
-
-// Operational owner of the next response, kept SEPARATE from the pipeline stage above. STUDIO = the
-// lead needs staff attention; CLIENT = the studio has replied and is waiting on the client; NULL for
-// closed leads. This is what the Enquiries work queue reads, never inferred from status alone.
-enum WaitingOn {
-  STUDIO
-  CLIENT
 }
 
 // A work item is one concrete thing a staff member must do on a case (contract docs/23 §6). It is the
@@ -232,29 +166,9 @@ enum ClientSource {
   OTHER
 }
 
-// Lý do khách từ chối báo giá / dự án mất (F-QUOTE-03).
-enum DeclineReason {
-  PRICE
-  DATE_UNAVAILABLE
-  CHOSE_ANOTHER
-  PACKAGE_UNSUITABLE
-  NO_LONGER_NEED
-  OTHER
-}
-
-// Vai trò liên hệ trong một client (F-CLIENT-02).
-enum ContactRole {
-  PRIMARY
-  PARTNER
-  BILLING
-  OTHER
-}
-
 enum CommunicationType {
-  EMAIL
   NOTE
   CLIENT_MESSAGE
-  CALL
 }
 
 enum ChangeRequestType {
@@ -272,27 +186,6 @@ enum ChangeRequestStatus {
   APPLIED
 }
 
-enum FileKind {
-  CONTRACT
-  QUESTIONNAIRE
-  RAW
-  EDITED
-  PROOF
-  GALLERY
-  INVOICE
-  OTHER
-}
-
-enum FileVisibility {
-  INTERNAL
-  CLIENT_VISIBLE
-}
-
-enum QuestionnaireStatus {
-  PENDING
-  COMPLETED
-}
-
 // ---------- Company (single tenant) ----------
 
 model Company {
@@ -305,17 +198,14 @@ model Company {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  users            User[]
-  clients          Client[]
-  projects         Project[]
-  enquiries        Enquiry[]
-  packages         Package[]
-  bookings         Booking[]
-  resources        Resource[]
-  workItems        WorkItem[]
-  calendarEvents   CalendarEvent[]
-  invoiceTemplates InvoiceTemplate[]
-  numberCounters   NumberCounter[]
+  users          User[]
+  clients        Client[]
+  projects       Project[]
+  enquiries      Enquiry[]
+  packages       Package[]
+  workItems      WorkItem[]
+  calendarEvents CalendarEvent[]
+  numberCounters NumberCounter[]
 
   @@map("companies")
 }
@@ -355,12 +245,10 @@ model User {
   name                      String    @db.VarChar(150)
   isActive                  Boolean   @default(true) @map("is_active")
   status                    String    @default("PENDING") @db.VarChar(20) // PENDING | ACTIVE | REJECTED (self-signup approval)
-  googleSub                 String?   @unique @map("google_sub") @db.VarChar(255) // BR-G03: linked Google account id (null = not linked)
   mustChangePassword        Boolean   @default(false) @map("must_change_password")
   lastLoginAt               DateTime? @map("last_login_at") @db.Timestamptz
   failedAttempts            Int       @default(0) @map("failed_attempts")
   lockedUntil               DateTime? @map("locked_until") @db.Timestamptz
-  passwordChangedAt         DateTime? @map("password_changed_at") @db.Timestamptz
   // Step-up PIN for the Activity page: a 4-digit PIN (hashed, Argon2id) an admin sets to re-open the
   // read-only security page, with its own lockout counter. Password stays as a fallback. All nullable.
   activityPinHash           String?   @map("activity_pin_hash") @db.VarChar(255)
@@ -370,26 +258,22 @@ model User {
   createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt                 DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  company                 Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  company                 Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
   passwordResets          PasswordReset[]
   sessions                Session[]
   signInLogs              SignInLog[]
   auditLogs               AuditLog[]
-  ownedProjects           Project[]            @relation("ProjectOwner")
-  createdQuoteVersions    QuoteVersion[]       @relation("QuoteVersionCreatedBy")
-  createdContractVersions ContractVersion[]    @relation("ContractVersionCreatedBy")
-  linkedResources         Resource[]           @relation("ResourceUser")
-  assignmentsMade         ResourceAssignment[] @relation("AssignmentAssignedBy")
-  recordedPayments        Payment[]            @relation("PaymentRecordedBy")
-  ownedEnquiries          Enquiry[]            @relation("EnquiryOwner")
-  communications          Communication[]      @relation("CommunicationBy")
-  editedCommunications    Communication[]      @relation("CommunicationEditedBy")
-  uploadedFiles           File[]
-  requestedChanges        ChangeRequest[]      @relation("ChangeRequestedBy")
-  approvedChanges         ChangeRequest[]      @relation("ChangeApprovedBy")
-  completedWorkItems      WorkItem[]           @relation("WorkItemCompletedBy")
-  createdCalendarEvents   CalendarEvent[]      @relation("CalendarEventCreatedBy")
-  clientNotes             ClientNote[]         @relation("ClientNoteCreatedBy")
+  ownedProjects           Project[]         @relation("ProjectOwner")
+  createdQuoteVersions    QuoteVersion[]    @relation("QuoteVersionCreatedBy")
+  createdContractVersions ContractVersion[] @relation("ContractVersionCreatedBy")
+  recordedPayments        Payment[]         @relation("PaymentRecordedBy")
+  ownedEnquiries          Enquiry[]         @relation("EnquiryOwner")
+  communications          Communication[]   @relation("CommunicationBy")
+  editedCommunications    Communication[]   @relation("CommunicationEditedBy")
+  requestedChanges        ChangeRequest[]   @relation("ChangeRequestedBy")
+  approvedChanges         ChangeRequest[]   @relation("ChangeApprovedBy")
+  completedWorkItems      WorkItem[]        @relation("WorkItemCompletedBy")
+  createdCalendarEvents   CalendarEvent[]   @relation("CalendarEventCreatedBy")
 
   @@index([companyId])
   @@index([role])
@@ -455,46 +339,37 @@ model SignInLog {
 // ---------- CRM ----------
 
 model Client {
-  id                 String       @id @default(cuid()) @db.VarChar(30)
-  companyId          String       @map("company_id") @db.VarChar(30)
-  clientNumber       String?      @map("client_number") @db.VarChar(20) // human id C<YYYY><4d>, unique per company
-  type               ClientType   @default(INDIVIDUAL)
-  status             ClientStatus @default(PROSPECT)
-  source             ClientSource @default(MANUAL) // B2: khách đến từ đâu (dashboard)
-  displayName        String       @map("display_name") @db.VarChar(150)
-  legalName          String?      @map("legal_name") @db.VarChar(150)
-  firstName          String?      @map("first_name") @db.VarChar(80)
-  lastName           String?      @map("last_name") @db.VarChar(80)
-  email              String       @unique @db.Citext // dedupe tại enquiry (P1)
-  phone              String?      @db.VarChar(30)
-  street             String?      @db.VarChar(200)
-  suburb             String?      @db.VarChar(100)
-  state              String?      @db.VarChar(100)
-  postcode           String?      @db.VarChar(20)
-  country            String?      @db.VarChar(100)
-  partnerName        String?      @map("partner_name") @db.VarChar(150) // e.g. wedding partner, shown on the job Overview
-  preferredContact   String?      @map("preferred_contact") @db.VarChar(120) // how the client prefers to be reached
-  instagram          String?      @db.VarChar(100) // handle without the @
-  marketingConsent   Boolean      @default(false) @map("marketing_consent")
-  consentUpdatedAt   DateTime?    @map("consent_updated_at") @db.Timestamptz
-  anonymisedAt       DateTime?    @map("anonymised_at") @db.Timestamptz
-  notes              String?      @db.Text // ghi chú tự do, không giới hạn
-  portalToken        String?      @unique @map("portal_token") @db.VarChar(64) // unified client portal link
-  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt          DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  archivedAt         DateTime?    @map("archived_at") @db.Timestamptz
-  mergedIntoClientId String?      @map("merged_into_client_id") @db.VarChar(30) // B2: gộp trùng → bản giữ
+  id               String       @id @default(cuid()) @db.VarChar(30)
+  companyId        String       @map("company_id") @db.VarChar(30)
+  clientNumber     String?      @map("client_number") @db.VarChar(20) // human id C<YYYY><4d>, unique per company
+  type             ClientType   @default(INDIVIDUAL)
+  status           ClientStatus @default(PROSPECT)
+  source           ClientSource @default(MANUAL) // B2: khách đến từ đâu (dashboard)
+  displayName      String       @map("display_name") @db.VarChar(150)
+  legalName        String?      @map("legal_name") @db.VarChar(150)
+  firstName        String?      @map("first_name") @db.VarChar(80)
+  lastName         String?      @map("last_name") @db.VarChar(80)
+  email            String       @unique @db.Citext // dedupe tại enquiry (P1)
+  phone            String?      @db.VarChar(30)
+  street           String?      @db.VarChar(200)
+  suburb           String?      @db.VarChar(100)
+  state            String?      @db.VarChar(100)
+  postcode         String?      @db.VarChar(20)
+  country          String?      @db.VarChar(100)
+  partnerName      String?      @map("partner_name") @db.VarChar(150) // e.g. wedding partner, shown on the job Overview
+  preferredContact String?      @map("preferred_contact") @db.VarChar(120) // how the client prefers to be reached
+  instagram        String?      @db.VarChar(100) // handle without the @
+  notes            String?      @db.Text // ghi chú tự do, không giới hạn
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  archivedAt       DateTime?    @map("archived_at") @db.Timestamptz
 
   company                Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
   projects               Project[]
   convertedFromEnquiries Enquiry[]       @relation("EnquiryConvertedClient")
   enquiries              Enquiry[]       @relation("ClientEnquiries")
-  mergedInto             Client?         @relation("ClientMerge", fields: [mergedIntoClientId], references: [id], onDelete: SetNull)
-  mergedFrom             Client[]        @relation("ClientMerge")
-  contacts               Contact[]
   communications         Communication[]
   calendarEvents         CalendarEvent[]
-  noteEntries            ClientNote[]
 
   @@unique([companyId, clientNumber])
   @@index([companyId])
@@ -502,76 +377,37 @@ model Client {
   @@map("clients")
 }
 
-// ---------- CRM: Contact (F-CLIENT-02) ----------
-// 1 client ↔ nhiều contact (cặp đôi, người ký, billing...). Mỗi client nên có ≥1 contact PRIMARY.
-model Contact {
-  id              String      @id @default(cuid()) @db.VarChar(30)
-  clientId        String      @map("client_id") @db.VarChar(30)
-  name            String      @db.VarChar(150)
-  email           String?     @db.Citext
-  phone           String?     @db.VarChar(30)
-  role            ContactRole @default(PRIMARY)
-  isPrimary       Boolean     @default(false) @map("is_primary")
-  isBilling       Boolean     @default(false) @map("is_billing")
-  canAccessPortal Boolean     @default(true) @map("can_access_portal")
-  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-
-  @@index([clientId])
-  @@map("contacts")
-}
-
 // ---------- Project (operational case, bắt đầu từ enquiry) ----------
 
 model Project {
-  id                   String           @id @default(cuid()) @db.VarChar(30)
-  companyId            String           @map("company_id") @db.VarChar(30)
-  clientId             String           @map("client_id") @db.VarChar(30)
-  code                 String           @unique @db.VarChar(30)
-  name                 String           @db.VarChar(200)
-  ownerUserId          String?          @map("owner_user_id") @db.VarChar(30)
-  lifecycleStatus      ProjectLifecycle @default(ENQUIRY) @map("lifecycle_status")
-  // Optional custom status label (company-defined, Monday-style). The lifecycle enum above still
-  // drives all automation; this only overrides how the status reads on the board when set.
-  statusLabelId        String?          @map("status_label_id") @db.VarChar(60)
-  commercialStatus     CommercialStatus @default(UNQUOTED) @map("commercial_status") // derived
-  source               String?          @db.VarChar(50) // nguồn enquiry (I-6 taxonomy, TBD)
-  sourceDetail         String?          @map("source_detail") @db.VarChar(255)
-  packageId            String?          @map("package_id") @db.VarChar(30) // direct booking: gói đã chọn
-  sourceQuoteId        String?          @unique @map("source_quote_id") @db.VarChar(30) // docs/31: accepted quote that created this Job (1-1)
-  packagePriceSnapshot Decimal?         @map("package_price_snapshot") @db.Decimal(12, 2) // giá gói chốt lúc đặt
-  confirmToken         String?          @unique @map("confirm_token") @db.VarChar(64) // link khách xác nhận (thay quote/contract)
-  confirmedByClientAt  DateTime?        @map("confirmed_by_client_at") @db.Timestamptz
-  lostReason           DeclineReason?   @map("lost_reason") // vì sao dự án mất (F-QUOTE-03)
-  lostAt               DateTime?        @map("lost_at") @db.Timestamptz
-  enquiryReceivedAt    DateTime         @default(now()) @map("enquiry_received_at") @db.Timestamptz
-  enquiryNotes         String?          @map("enquiry_notes") @db.Text // ghi chú tự do, không giới hạn
-  firstRespondedAt     DateTime?        @map("first_responded_at") @db.Timestamptz // SLA
-  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt            DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  archivedAt           DateTime?        @map("archived_at") @db.Timestamptz
+  id                  String           @id @default(cuid()) @db.VarChar(30)
+  companyId           String           @map("company_id") @db.VarChar(30)
+  clientId            String           @map("client_id") @db.VarChar(30)
+  code                String           @unique @db.VarChar(30)
+  name                String           @db.VarChar(200)
+  ownerUserId         String?          @map("owner_user_id") @db.VarChar(30)
+  lifecycleStatus     ProjectLifecycle @default(BOOKING_REQUESTED) @map("lifecycle_status")
+  commercialStatus    CommercialStatus @default(UNQUOTED) @map("commercial_status") // derived
+  source              String?          @db.VarChar(50) // nguồn enquiry (I-6 taxonomy, TBD)
+  sourceQuoteId       String?          @unique @map("source_quote_id") @db.VarChar(30) // docs/31: accepted quote that created this Job (1-1)
+  confirmedByClientAt DateTime?        @map("confirmed_by_client_at") @db.Timestamptz // when the booking was confirmed (deposit paid / contract signed): anchors JOB_CONFIRMED tasks
+  enquiryReceivedAt   DateTime         @default(now()) @map("enquiry_received_at") @db.Timestamptz
+  createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   company                Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
   client                 Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
   owner                  User?                @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  package                Package?             @relation(fields: [packageId], references: [id], onDelete: SetNull)
   quotes                 Quote[]              @relation("ProjectQuotes")
   sourceQuote            Quote?               @relation("ProjectSourceQuote", fields: [sourceQuoteId], references: [id], onDelete: SetNull)
   contracts              Contract[]
-  bookings               Booking[]
   workItems              WorkItem[]
   invoices               Invoice[]
   payments               Payment[]
-  galleries              Gallery[]
   convertedFromEnquiries Enquiry[]            @relation("EnquiryConvertedProject")
   communications         Communication[]
-  files                  File[]
-  questionnaires         Questionnaire[]
   changeRequests         ChangeRequest[]
   requirements           ProjectRequirement[]
-  moodboardItems         MoodboardItem[]
   teamMembers            ProjectTeamMember[]
 
   @@index([companyId])
@@ -590,7 +426,6 @@ model Package {
   name             String   @db.VarChar(150)
   description      String?  @db.Text
   inclusions       String?  @db.Text // mỗi dòng 1 mục
-  durationHours    Int?     @map("duration_hours")
   basePriceInclGst Decimal  @default(0) @map("base_price_incl_gst") @db.Decimal(12, 2)
   isAddOn          Boolean  @default(false) @map("is_add_on") // add-on (film, super 8, album) vs base package
   active           Boolean  @default(true)
@@ -598,8 +433,7 @@ model Package {
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  projects Project[]
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
   @@index([companyId, active])
   @@map("packages")
@@ -639,7 +473,6 @@ model Enquiry {
   heardAbout           String?       @map("heard_about") @db.Text
   source               EnquirySource @default(WEBSITE)
   status               EnquiryStatus @default(NEW_ENQUIRY)
-  waitingOn            WaitingOn?    @map("waiting_on")
   lostReason           String?       @map("lost_reason") @db.VarChar(500)
   clientId             String?       @map("client_id") @db.VarChar(30) // the client this lead is about (SN "Primary Client Contact")
   convertedClientId    String?       @map("converted_client_id") @db.VarChar(30)
@@ -694,32 +527,27 @@ model Quote {
 }
 
 model QuoteVersion {
-  id                   String         @id @default(cuid()) @db.VarChar(30)
-  quoteId              String         @map("quote_id") @db.VarChar(30)
-  versionNumber        Int            @map("version_number")
-  status               QuoteStatus    @default(DRAFT)
-  currency             String         @default("AUD") @db.VarChar(3)
-  subtotal             Decimal        @default(0) @db.Decimal(12, 2)
-  discountTotal        Decimal        @default(0) @map("discount_total") @db.Decimal(12, 2)
-  taxTotal             Decimal        @default(0) @map("tax_total") @db.Decimal(12, 2)
-  total                Decimal        @default(0) @db.Decimal(12, 2)
-  // Presentation fields for a Studio-Ninja-style staff quote (docs/31): a covering note, an optional
-  // client PO reference, and free-form notes. Purely how the quote reads; do not affect totals.
-  introduction         String?        @db.Text
-  poNumber             String?        @map("po_number") @db.VarChar(60)
-  notes                String?        @db.Text
-  depositPercent       Int?           @map("deposit_percent") // docs/31: booking deposit %; balance = 100 - this
-  issueDate            DateTime?      @map("issue_date") @db.Timestamptz // required in the editor; the date the quote is issued
-  validUntil           DateTime?      @map("valid_until") @db.Timestamptz
-  createdByUserId      String?        @map("created_by_user_id") @db.VarChar(30)
-  sentToClientAt       DateTime?      @map("sent_to_client_at") @db.Timestamptz
-  viewedByClientAt     DateTime?      @map("viewed_by_client_at") @db.Timestamptz
-  acceptedByClientAt   DateTime?      @map("accepted_by_client_at") @db.Timestamptz
-  acceptedByClientName String?        @map("accepted_by_client_name") @db.VarChar(150) // tên khách gõ khi accept
-  acceptedByClientIp   String?        @map("accepted_by_client_ip") @db.VarChar(45)
-  declineReason        DeclineReason? @map("decline_reason") // khi version DECLINED (F-QUOTE-03)
-  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt            DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  id                 String      @id @default(cuid()) @db.VarChar(30)
+  quoteId            String      @map("quote_id") @db.VarChar(30)
+  versionNumber      Int         @map("version_number")
+  status             QuoteStatus @default(DRAFT)
+  currency           String      @default("AUD") @db.VarChar(3)
+  subtotal           Decimal     @default(0) @db.Decimal(12, 2)
+  discountTotal      Decimal     @default(0) @map("discount_total") @db.Decimal(12, 2)
+  taxTotal           Decimal     @default(0) @map("tax_total") @db.Decimal(12, 2)
+  total              Decimal     @default(0) @db.Decimal(12, 2)
+  // Presentation fields (docs/31): an optional client PO reference and free-form notes; never affect totals.
+  poNumber           String?     @map("po_number") @db.VarChar(60)
+  notes              String?     @db.Text
+  depositPercent     Int?        @map("deposit_percent") // docs/31: booking deposit %; balance = 100 - this
+  issueDate          DateTime?   @map("issue_date") @db.Timestamptz // required in the editor; the date the quote is issued
+  validUntil         DateTime?   @map("valid_until") @db.Timestamptz
+  createdByUserId    String?     @map("created_by_user_id") @db.VarChar(30)
+  sentToClientAt     DateTime?   @map("sent_to_client_at") @db.Timestamptz
+  viewedByClientAt   DateTime?   @map("viewed_by_client_at") @db.Timestamptz
+  acceptedByClientAt DateTime?   @map("accepted_by_client_at") @db.Timestamptz
+  createdAt          DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   quote          Quote           @relation("QuoteVersions", fields: [quoteId], references: [id], onDelete: Cascade)
   createdBy      User?           @relation("QuoteVersionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
@@ -782,7 +610,6 @@ model ContractVersion {
   contractId         String         @map("contract_id") @db.VarChar(30)
   versionNumber      Int            @map("version_number")
   status             ContractStatus @default(DRAFT)
-  documentReference  String?        @map("document_reference") @db.VarChar(255) // link/ref tới bản PDF
   termsSnapshot      Json           @map("terms_snapshot") // ảnh chụp: client, project code, dòng quote + tổng
   contentHash        String?        @map("content_hash") @db.VarChar(64) // hash snapshot chứng minh bản ký không đổi
   createdByUserId    String?        @map("created_by_user_id") @db.VarChar(30)
@@ -809,110 +636,36 @@ model ContractVersion {
 // bị qua ResourceAssignment; một resource không thể nhận hai assignment ACTIVE chồng thời gian
 // (EXCLUDE USING gist trong migration, cần extension btree_gist).
 
-model Booking {
-  id                String        @id @default(cuid()) @db.VarChar(30)
-  companyId         String        @map("company_id") @db.VarChar(30)
-  projectId         String        @map("project_id") @db.VarChar(30)
-  title             String?       @db.VarChar(200)
-  status            BookingStatus @default(TENTATIVE)
-  startsAt          DateTime      @map("starts_at") @db.Timestamptz
-  endsAt            DateTime      @map("ends_at") @db.Timestamptz
-  timezone          String        @default("Australia/Sydney") @db.VarChar(50)
-  location          String?       @db.VarChar(255)
-  notes             String?       @db.Text // ghi chú tự do, không giới hạn
-  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt         DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  cancelledAt       DateTime?     @map("cancelled_at") @db.Timestamptz
-  rescheduledFromId String?       @map("rescheduled_from_id") @db.VarChar(30)
-
-  company         Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  project         Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  assignments     ResourceAssignment[]
-  rescheduledFrom Booking?             @relation("BookingReschedule", fields: [rescheduledFromId], references: [id], onDelete: SetNull)
-  rescheduledTo   Booking[]            @relation("BookingReschedule")
-  workItems       WorkItem[]
-
-  @@index([projectId])
-  @@index([status])
-  @@index([startsAt])
-  @@map("bookings")
-}
-
-model Resource {
-  id           String       @id @default(cuid()) @db.VarChar(30)
-  companyId    String       @map("company_id") @db.VarChar(30)
-  resourceType ResourceType @map("resource_type")
-  name         String       @db.VarChar(150)
-  linkedUserId String?      @map("linked_user_id") @db.VarChar(30) // nếu resource là một nhân sự
-  status       String       @default("active") @db.VarChar(30)
-  metadata     Json?
-  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt    DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-
-  company     Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  linkedUser  User?                @relation("ResourceUser", fields: [linkedUserId], references: [id], onDelete: SetNull)
-  assignments ResourceAssignment[]
-  teamMembers ProjectTeamMember[]
-
-  @@index([companyId, resourceType])
-  @@map("resources")
-}
-
-model ResourceAssignment {
-  id               String           @id @default(cuid()) @db.VarChar(30)
-  bookingId        String           @map("booking_id") @db.VarChar(30)
-  resourceId       String           @map("resource_id") @db.VarChar(30)
-  role             String?          @db.VarChar(50)
-  startsAt         DateTime         @map("starts_at") @db.Timestamptz // = cửa sổ thời gian của booking
-  endsAt           DateTime         @map("ends_at") @db.Timestamptz
-  status           AssignmentStatus @default(ACTIVE)
-  assignedByUserId String?          @map("assigned_by_user_id") @db.VarChar(30)
-  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt        DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-
-  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Restrict)
-  assignedBy User?    @relation("AssignmentAssignedBy", fields: [assignedByUserId], references: [id], onDelete: SetNull)
-  // Invariant: một resource không nhận hai assignment ACTIVE chồng thời gian
-  // (EXCLUDE USING gist trên (resourceId, tstzrange(startsAt, endsAt)) WHERE status='ACTIVE').
-
-  @@index([resourceId])
-  @@index([bookingId])
-  @@map("resource_assignments")
-}
-
 // ---------- Finance (Domain 05) ----------
 // Hoá đơn xuất từ dự án CONFIRMED. amount_paid là cache; nguồn sự thật là PaymentTransaction
 // (append-only). Void thay vì xoá. Billing snapshot giữ tính toàn vẹn hoá đơn thuế theo thời điểm.
 // Stripe online để sau (env flag); slice này ghi nhận thanh toán thủ công (provider = manual).
 
 model Invoice {
-  id                   String        @id @default(cuid()) @db.VarChar(30)
-  projectId            String        @map("project_id") @db.VarChar(30)
-  invoiceNumber        String        @unique @map("invoice_number") @db.VarChar(30)
-  type                 InvoiceType
-  status               InvoiceStatus @default(DRAFT)
-  currency             String        @default("AUD") @db.VarChar(3)
-  subtotal             Decimal       @default(0) @db.Decimal(12, 2)
-  taxTotal             Decimal       @default(0) @map("tax_total") @db.Decimal(12, 2)
-  total                Decimal       @default(0) @db.Decimal(12, 2)
-  amountPaid           Decimal       @default(0) @map("amount_paid") @db.Decimal(12, 2) // cache; nguồn = transactions
-  dueAt                DateTime?     @map("due_at") @db.Timestamptz
-  issuedAt             DateTime?     @map("issued_at") @db.Timestamptz
-  billingNameSnapshot  String        @map("billing_name_snapshot") @db.VarChar(150)
-  billingEmailSnapshot String?       @map("billing_email_snapshot") @db.VarChar(255)
+  id                     String        @id @default(cuid()) @db.VarChar(30)
+  projectId              String        @map("project_id") @db.VarChar(30)
+  invoiceNumber          String        @unique @map("invoice_number") @db.VarChar(30)
+  type                   InvoiceType
+  status                 InvoiceStatus @default(ISSUED)
+  currency               String        @default("AUD") @db.VarChar(3)
+  subtotal               Decimal       @default(0) @db.Decimal(12, 2)
+  taxTotal               Decimal       @default(0) @map("tax_total") @db.Decimal(12, 2)
+  total                  Decimal       @default(0) @db.Decimal(12, 2)
+  amountPaid             Decimal       @default(0) @map("amount_paid") @db.Decimal(12, 2) // cache; nguồn = transactions
+  dueAt                  DateTime?     @map("due_at") @db.Timestamptz
+  issuedAt               DateTime?     @map("issued_at") @db.Timestamptz
+  billingNameSnapshot    String        @map("billing_name_snapshot") @db.VarChar(150)
+  billingEmailSnapshot   String?       @map("billing_email_snapshot") @db.VarChar(255)
   // Editable-on-the-invoice contact + job label snapshots (the New invoice form can override these per
   // invoice without touching the master Client). Null falls back to the client/project at display time.
-  billingPhoneSnapshot   String?     @map("billing_phone_snapshot") @db.VarChar(40)
-  billingJobNameSnapshot String?     @map("billing_job_name_snapshot") @db.VarChar(150)
-  voidedAt             DateTime?     @map("voided_at") @db.Timestamptz
-  voidReason           String?       @map("void_reason") @db.VarChar(500)
-  invoiceDate          DateTime?     @map("invoice_date") @db.Timestamptz // document date shown on the invoice
-  poNumber             String?       @map("po_number") @db.VarChar(60)
-  notes                String?       @db.Text // free-text notes printed on the invoice
-  accessToken          String?       @unique @map("access_token") @db.VarChar(64) // client portal link
-  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt            DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  billingPhoneSnapshot   String?       @map("billing_phone_snapshot") @db.VarChar(40)
+  billingJobNameSnapshot String?       @map("billing_job_name_snapshot") @db.VarChar(150)
+  invoiceDate            DateTime?     @map("invoice_date") @db.Timestamptz // document date shown on the invoice
+  poNumber               String?       @map("po_number") @db.VarChar(60)
+  notes                  String?       @db.Text // free-text notes printed on the invoice
+  accessToken            String?       @unique @map("access_token") @db.VarChar(64) // client portal link
+  createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt              DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   project     Project             @relation(fields: [projectId], references: [id], onDelete: Restrict)
   lines       InvoiceLine[]
@@ -933,7 +686,6 @@ model CreditNote {
   invoiceId      String   @map("invoice_id") @db.VarChar(30)
   amount         Decimal  @db.Decimal(12, 2)
   reason         String?  @db.VarChar(500)
-  status         String   @default("SUCCEEDED") @db.VarChar(20) // effective unless VOIDED
   issuedByUserId String?  @map("issued_by_user_id") @db.VarChar(30) // actor id (no FK; the AuditLog holds the trail)
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
 
@@ -944,14 +696,13 @@ model CreditNote {
 }
 
 /// A scheduled payment instalment on an invoice (Studio-Ninja "payment schedule"). The instalments
-/// sum to the invoice total; recorded Payments pay them down. Status is UNPAID | PAID (cache).
+/// sum to the invoice total; recorded Payments pay them down (paid / due state is derived, money.ts).
 model InvoiceInstalment {
   id        String    @id @default(cuid()) @db.VarChar(30)
   invoiceId String    @map("invoice_id") @db.VarChar(30)
   label     String?   @db.VarChar(100)
   dueAt     DateTime? @map("due_at") @db.Timestamptz
   amount    Decimal   @default(0) @db.Decimal(12, 2)
-  status    String    @default("UNPAID") @db.VarChar(20)
   sortOrder Int       @default(0) @map("sort_order")
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
@@ -959,36 +710,6 @@ model InvoiceInstalment {
 
   @@index([invoiceId])
   @@map("invoice_instalments")
-}
-
-/// A reusable set of invoice line items saved by the studio (Studio-Ninja "invoice template").
-/// A titled note on a client (Studio-Ninja "Client Notes" - a running list, not one field).
-model ClientNote {
-  id              String   @id @default(cuid()) @db.VarChar(30)
-  clientId        String   @map("client_id") @db.VarChar(30)
-  title           String?  @db.VarChar(150)
-  body            String   @db.Text
-  createdByUserId String?  @map("created_by_user_id") @db.VarChar(30)
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
-
-  client    Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  createdBy User?  @relation("ClientNoteCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-
-  @@index([clientId])
-  @@map("client_notes")
-}
-
-model InvoiceTemplate {
-  id        String   @id @default(cuid()) @db.VarChar(30)
-  companyId String   @map("company_id") @db.VarChar(30)
-  name      String   @db.VarChar(150)
-  linesJson String   @map("lines_json") @db.Text // JSON: [{description, quantity, unitPrice}]
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
-
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@index([companyId])
-  @@map("invoice_templates")
 }
 
 model InvoiceLine {
@@ -1015,7 +736,7 @@ model Payment {
   id               String        @id @default(cuid()) @db.VarChar(30)
   invoiceId        String        @map("invoice_id") @db.VarChar(30)
   projectId        String        @map("project_id") @db.VarChar(30)
-  status           PaymentStatus @default(PENDING) // derived từ transactions
+  status           PaymentStatus @default(PAID) // PAID, then PARTIALLY_REFUNDED / REFUNDED after refunds
   amount           Decimal       @db.Decimal(12, 2)
   currency         String        @default("AUD") @db.VarChar(3)
   paymentMethod    PaymentMethod @map("payment_method")
@@ -1036,17 +757,16 @@ model Payment {
 }
 
 model PaymentTransaction {
-  id                    String            @id @default(cuid()) @db.VarChar(30)
-  paymentId             String            @map("payment_id") @db.VarChar(30)
-  provider              String            @default("manual") @db.VarChar(30)
-  externalTransactionId String?           @map("external_transaction_id") @db.VarChar(100) // id từ gateway
+  id                    String          @id @default(cuid()) @db.VarChar(30)
+  paymentId             String          @map("payment_id") @db.VarChar(30)
+  provider              String          @default("manual") @db.VarChar(30)
+  externalTransactionId String?         @map("external_transaction_id") @db.VarChar(100) // id từ gateway
   type                  TransactionType
-  amount                Decimal           @db.Decimal(12, 2)
-  currency              String            @default("AUD") @db.VarChar(3)
-  status                TransactionStatus @default(SUCCEEDED)
-  processedAt           DateTime?         @map("processed_at") @db.Timestamptz
+  amount                Decimal         @db.Decimal(12, 2)
+  currency              String          @default("AUD") @db.VarChar(3)
+  processedAt           DateTime?       @map("processed_at") @db.Timestamptz
   metadata              Json?
-  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  createdAt             DateTime        @default(now()) @map("created_at") @db.Timestamptz
 
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   // APPEND-ONLY (trigger). uq(provider, externalTransactionId) khi external id có giá trị (idempotency).
@@ -1059,37 +779,6 @@ model PaymentTransaction {
 // Slice 5 subset: giao khách qua Gallery. Client mở gallery bằng accessToken (không login). Publish
 // gallery = đã giao → dự án COMPLETED. Asset/object storage, revisions, approvals để dành slice sau;
 // item hiện lưu URL ngoài (studio host ảnh ở nơi khác) thay vì tự lưu file.
-
-model Gallery {
-  id          String        @id @default(cuid()) @db.VarChar(30)
-  projectId   String        @map("project_id") @db.VarChar(30)
-  title       String        @db.VarChar(200)
-  status      GalleryStatus @default(DRAFT)
-  accessToken String        @unique @map("access_token") @db.VarChar(64) // client xem gallery qua link
-  publishedAt DateTime?     @map("published_at") @db.Timestamptz
-  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-
-  project Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  items   GalleryItem[]
-
-  @@index([projectId])
-  @@map("galleries")
-}
-
-model GalleryItem {
-  id        String   @id @default(cuid()) @db.VarChar(30)
-  galleryId String   @map("gallery_id") @db.VarChar(30)
-  caption   String   @db.VarChar(255)
-  url       String   @db.VarChar(2048) // link http/https tới ảnh/tài nguyên (validate ở app)
-  sortOrder Int      @default(0) @map("sort_order")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
-
-  gallery Gallery @relation(fields: [galleryId], references: [id], onDelete: Cascade)
-
-  @@index([galleryId])
-  @@map("gallery_items")
-}
 
 // ---------- Governance / Reliability ----------
 
@@ -1120,8 +809,6 @@ model OutboxEvent {
   eventType     String       @map("event_type") @db.VarChar(100)
   aggregateType String       @map("aggregate_type") @db.VarChar(50)
   aggregateId   String       @map("aggregate_id") @db.VarChar(30)
-  correlationId String?      @map("correlation_id") @db.VarChar(30)
-  causationId   String?      @map("causation_id") @db.VarChar(30)
   payload       Json
   status        OutboxStatus @default(PENDING)
   attemptCount  Int          @default(0) @map("attempt_count")
@@ -1137,12 +824,11 @@ model OutboxEvent {
 // (outbox processor) and time-driven (payment reminder scanner) notifications converge here (Rule N1).
 model NotificationDispatch {
   id                     String    @id @default(cuid()) @db.VarChar(30)
-  kind                   String    @db.VarChar(40) // payment_reminder | shoot_reminder | invoice_issued | ...
+  kind                   String    @db.VarChar(40) // payment_reminder | invoice_issued
   targetType             String    @map("target_type") @db.VarChar(30)
   targetId               String    @map("target_id") @db.VarChar(30)
-  milestone              String    @db.VarChar(40) // e.g. due_-3 / due_0 / shoot_-1
+  milestone              String    @db.VarChar(40) // e.g. due_-3 / due_0 / issued
   recipientHash          String    @map("recipient_hash") @db.VarChar(64)
-  scheduleVersion        Int       @default(1) @map("schedule_version") // bumped on reschedule (Rule N7)
   // UNIQUE: recreating (event re-processed, cron re-run) never inserts a duplicate (Rule N2).
   dedupeKey              String    @unique @map("dedupe_key") @db.VarChar(255)
   recipientEmail         String    @map("recipient_email") @db.VarChar(255)
@@ -1240,7 +926,6 @@ model WorkItem {
   dueOffsetDays     Int            @default(0) @map("due_offset_days") // days from the anchor (negative = before)
   dueDateFixed      DateTime?      @map("due_date_fixed") @db.Timestamptz // the date for anchor = FIXED
   dueOverrideAt     DateTime?      @map("due_override_at") @db.Timestamptz // staff manual override; null = follow the anchor
-  bookingId         String?        @map("booking_id") @db.VarChar(30) // for SHOOT tasks: which shoot (multi-shoot jobs)
   completedByUserId String?        @map("completed_by_user_id") @db.VarChar(30)
   completedAt       DateTime?      @map("completed_at") @db.Timestamptz
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz
@@ -1248,12 +933,10 @@ model WorkItem {
   company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   enquiry     Enquiry? @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
   project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  booking     Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
   completedBy User?    @relation("WorkItemCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
 
   @@index([enquiryId])
   @@index([projectId])
-  @@index([bookingId])
   @@map("work_items")
 }
 
@@ -1284,72 +967,17 @@ model CalendarEvent {
   @@map("calendar_events")
 }
 
-// Files on a project. v1 stores an external URL; real object storage is an env-flag later. Clients
-// only ever see CLIENT_VISIBLE files.
-model File {
-  id               String         @id @default(cuid()) @db.VarChar(30)
-  projectId        String         @map("project_id") @db.VarChar(30)
-  kind             FileKind
-  visibility       FileVisibility @default(INTERNAL)
-  name             String         @db.VarChar(255)
-  url              String         @db.VarChar(2048)
-  sizeBytes        Int?           @map("size_bytes")
-  uploadedByUserId String?        @map("uploaded_by_user_id") @db.VarChar(30)
-  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
-
-  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  uploadedBy User?   @relation(fields: [uploadedByUserId], references: [id], onDelete: SetNull)
-
-  @@index([projectId, visibility])
-  @@map("files")
-}
-
-// A questionnaire sent to the client to collect event details. The question set is Company config
-// (OQ-016, TBD); this stores whatever questions/answers are used.
-model Questionnaire {
-  id          String              @id @default(cuid()) @db.VarChar(30)
-  projectId   String              @map("project_id") @db.VarChar(30)
-  status      QuestionnaireStatus @default(PENDING)
-  accessToken String?             @unique @map("access_token") @db.VarChar(64) // client fill link
-  title       String?             @db.VarChar(150)
-  sentAt      DateTime?           @map("sent_at") @db.Timestamptz
-  completedAt DateTime?           @map("completed_at") @db.Timestamptz
-  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-
-  project Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  answers QuestionnaireAnswer[]
-
-  @@index([projectId])
-  @@map("questionnaires")
-}
-
-model QuestionnaireAnswer {
-  id              String   @id @default(cuid()) @db.VarChar(30)
-  questionnaireId String   @map("questionnaire_id") @db.VarChar(30)
-  question        String   @db.VarChar(500)
-  answer          String   @db.Text
-  sortOrder       Int      @default(0) @map("sort_order")
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
-
-  questionnaire Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
-
-  @@index([questionnaireId])
-  @@map("questionnaire_answers")
-}
-
 // Refund against a captured payment. Total refunds never exceed the captured amount (domain check);
 // the money movement is also written as a REFUND PaymentTransaction (append-only).
 model Refund {
-  id                String            @id @default(cuid()) @db.VarChar(30)
-  paymentId         String            @map("payment_id") @db.VarChar(30)
-  amount            Decimal           @db.Decimal(12, 2)
-  currency          String            @default("AUD") @db.VarChar(3)
-  reason            String?           @db.VarChar(500)
-  status            TransactionStatus @default(PENDING)
-  externalReference String?           @map("external_reference") @db.VarChar(100)
-  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz
-  processedAt       DateTime?         @map("processed_at") @db.Timestamptz
+  id                String    @id @default(cuid()) @db.VarChar(30)
+  paymentId         String    @map("payment_id") @db.VarChar(30)
+  amount            Decimal   @db.Decimal(12, 2)
+  currency          String    @default("AUD") @db.VarChar(3)
+  reason            String?   @db.VarChar(500)
+  externalReference String?   @map("external_reference") @db.VarChar(100)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  processedAt       DateTime? @map("processed_at") @db.Timestamptz
 
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
 
@@ -1375,7 +1003,7 @@ model ChangeRequest {
   payload                 Json?
   payloadVersion          Int                 @default(1) @map("payload_version")
   // Drift snapshot taken at assessment (Rule C4): apply re-reads and blocks if either changed.
-  assessedBookingVersion  String?             @map("assessed_booking_version") @db.VarChar(64)
+  assessedShootDate       String?             @map("assessed_shoot_date") @db.VarChar(64)
   assessedQuoteVersionId  String?             @map("assessed_quote_version_id") @db.VarChar(30)
   // Client agreement is a separate fact from internal approval and from application (Rule C1).
   clientAgreedVia         String?             @map("client_agreed_via") @db.VarChar(30)
@@ -1415,34 +1043,16 @@ model ProjectRequirement {
   @@map("project_requirements")
 }
 
-/// A moodboard image or reference link the client shared for a Job.
-model MoodboardItem {
+/// A person responsible for a Job (Lead Photographer, Editor, Coordinator, ...).
+model ProjectTeamMember {
   id        String   @id @default(cuid()) @db.VarChar(30)
   projectId String   @map("project_id") @db.VarChar(30)
-  url       String   @db.Text
-  caption   String?  @db.VarChar(200)
-  kind      String   @default("image") @db.VarChar(20) // image | link
+  name      String   @db.VarChar(150)
+  role      String   @db.VarChar(80)
   sortOrder Int      @default(0) @map("sort_order")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@index([projectId])
-  @@map("moodboard_items")
-}
-
-/// A person responsible for a Job (Lead Photographer, Editor, Coordinator, ...).
-model ProjectTeamMember {
-  id         String   @id @default(cuid()) @db.VarChar(30)
-  projectId  String   @map("project_id") @db.VarChar(30)
-  resourceId String?  @map("resource_id") @db.VarChar(30)
-  name       String   @db.VarChar(150)
-  role       String   @db.VarChar(80)
-  sortOrder  Int      @default(0) @map("sort_order")
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
-
-  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  resource Resource? @relation(fields: [resourceId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
   @@map("project_team_members")

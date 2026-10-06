@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { splitGstInclusive } from '@/lib/money'
 import { sydneyLocalToUtc, sydneyYmd, systemClock } from '@/lib/time'
+import { JOB_SHOOT_SELECT } from './deadline'
 import { sendComposedInvoiceEmail, type SendResult } from '@/lib/email'
 import type { CreateInvoiceInput, CreateInvoiceLinesInput, RecordPaymentInput } from '@/lib/validation/finance'
 import { invoiceObligation, invoicePaidNet, lockInvoiceRow, refreshInvoiceAmountPaid } from './invoice-ledger'
@@ -54,31 +55,9 @@ async function nextInvoiceNumber(tx: Tx, companyId: string, at: Date = systemClo
 }
 
 /**
- * Raise a draft invoice for a confirmed project. The amount is GST inclusive and becomes a single
- * line. Retries on the rare invoice-number collision so concurrency never surfaces as a user error.
- */
-export async function createInvoice(
-  projectId: string,
-  input: CreateInvoiceInput,
-  actorUserId: string | null,
-) {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await prisma.$transaction((tx) => createInvoiceTx(tx, projectId, input, actorUserId))
-    } catch (error) {
-      const isUnique =
-        error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
-      if (isUnique && attempt < 4) continue
-      throw error
-    }
-  }
-}
-
-/**
- * Transaction-aware core of {@link createInvoice}: one DRAFT single-line invoice + audit + outbox, no
- * retry loop. Callers pass their own transaction so a Change Request can issue an adjustment invoice
- * (a fee) together with a reschedule in ONE transaction (docs/25 Rule C5). An invoice-number collision
- * (P2002) aborts the caller's transaction; the public wrapper is the place that retries.
+ * One single-line invoice (GST inclusive amount) + audit + outbox, inside the caller's transaction, so a
+ * Change Request can issue its fee invoice together with the change in ONE transaction (docs/25 Rule
+ * C5). An invoice-number collision (P2002) aborts the caller's transaction, which retries.
  */
 export async function createInvoiceTx(
   tx: Tx,
@@ -96,7 +75,7 @@ export async function createInvoiceTx(
     select: { id: true, companyId: true, lifecycleStatus: true, client: { select: { displayName: true, email: true } } },
   })
   if (!project) throw new Error('Project not found.')
-  if (project.lifecycleStatus === 'CANCELLED' || project.lifecycleStatus === 'LOST') {
+  if (project.lifecycleStatus === 'CANCELLED') {
     throw new Error('This job is closed. Reopen it before invoicing.')
   }
 
@@ -179,7 +158,7 @@ export async function createInvoiceWithLines(
           select: { id: true, companyId: true, lifecycleStatus: true, client: { select: { displayName: true, email: true } } },
         })
         if (!project) throw new Error('Project not found.')
-        if (project.lifecycleStatus === 'CANCELLED' || project.lifecycleStatus === 'LOST') {
+        if (project.lifecycleStatus === 'CANCELLED') {
           throw new Error('This job is closed. Reopen it before invoicing.')
         }
 
@@ -221,11 +200,10 @@ export async function createInvoiceWithLines(
             label: it.label?.trim() || null,
             dueAt: it.dueAt ? sydneyLocalToUtc(`${it.dueAt}T00:00`) : null,
             amount: new Prisma.Decimal(it.amount),
-            status: 'UNPAID',
             sortOrder: i,
           }))
         } else {
-          instalmentData = [{ label: 'Full payment', dueAt: dueFromRule, amount: total, status: 'UNPAID', sortOrder: 0 }]
+          instalmentData = [{ label: 'Full payment', dueAt: dueFromRule, amount: total, sortOrder: 0 }]
         }
 
         // A multi-instalment schedule is due at its latest instalment; otherwise the form's rule applies.
@@ -355,11 +333,10 @@ export async function updateInvoiceWithLines(
         label: it.label?.trim() || null,
         dueAt: it.dueAt ? sydneyLocalToUtc(`${it.dueAt}T00:00`) : null,
         amount: new Prisma.Decimal(it.amount),
-        status: 'UNPAID',
         sortOrder: i,
       }))
     } else {
-      instalmentData = [{ label: 'Full payment', dueAt: dueFromRule, amount: total, status: 'UNPAID', sortOrder: 0 }]
+      instalmentData = [{ label: 'Full payment', dueAt: dueFromRule, amount: total, sortOrder: 0 }]
     }
 
     await tx.invoiceLine.deleteMany({ where: { invoiceId } })
@@ -425,15 +402,6 @@ export async function voidInvoice(invoiceId: string, actorUserId: string | null)
  * table is not read by the always-on writers (recordPayment/refund) so shipping this cannot break
  * payment recording on a database that has not yet run the credit_notes migration.
  */
-export async function issueCreditNote(
-  invoiceId: string,
-  amount: Prisma.Decimal | string | number,
-  reason: string | null,
-  actorUserId: string | null,
-) {
-  return prisma.$transaction((tx) => issueCreditNoteTx(tx, invoiceId, amount, reason, actorUserId))
-}
-
 /**
  * Transaction-aware core of {@link issueCreditNote}. Callers pass their own transaction so a Change
  * Request can issue a credit note (a price decrease) as part of its single apply transaction (docs/25
@@ -454,11 +422,9 @@ export async function issueCreditNoteTx(
     select: { id: true, projectId: true, total: true, status: true },
   })
   if (!invoice) throw new Error('Invoice not found.')
-  if (invoice.status === 'DRAFT' || invoice.status === 'VOID') {
-    throw new Error('Only an issued invoice can be credited.')
-  }
+  if (invoice.status === 'VOID') throw new Error('An uncollectible invoice cannot be credited.')
   const priorCredits = await tx.creditNote.findMany({
-    where: { invoiceId, NOT: { status: 'VOIDED' } },
+    where: { invoiceId },
     select: { amount: true },
   })
   const creditedTotal = priorCredits.reduce((s, c) => s.add(c.amount), new Prisma.Decimal(0))
@@ -466,7 +432,7 @@ export async function issueCreditNoteTx(
     throw new Error('Credit notes cannot exceed the invoice total.')
   }
   const creditNote = await tx.creditNote.create({
-    data: { invoiceId, amount: value, reason: reason ?? null, status: 'SUCCEEDED', issuedByUserId: actorUserId },
+    data: { invoiceId, amount: value, reason: reason ?? null, issuedByUserId: actorUserId },
   })
 
   // Re-derive status against the reduced obligation (paid ≥ obligation ⇒ settled). Never touches the
@@ -495,10 +461,9 @@ export async function issueCreditNoteTx(
 }
 
 /**
- * "Send invoice": email the client their private invoice link. A draft is issued first (the same
- * `invoice.issued` event as Issue invoice). Only a delivery the email provider ACCEPTED marks the invoice
- * Sent and logs `invoice.sent`; with no provider configured, or a failed send, it stays issued and the
- * outcome says so - never a fake "sent" (Rule N9).
+ * "Send invoice": email the client their private invoice link. Only a delivery the email provider
+ * ACCEPTED marks the invoice Sent and logs `invoice.sent`; with no provider configured, or a failed send,
+ * it stays issued and the outcome says so - never a fake "sent" (Rule N9).
  */
 export async function sendInvoice(
   invoiceId: string,
@@ -508,7 +473,6 @@ export async function sendInvoice(
   const inv = await prisma.invoice.findUnique({ where: { id: invoiceId }, select: { status: true, accessToken: true } })
   if (!inv) throw new Error('Invoice not found.')
   if (inv.status === 'VOID') throw new Error('This invoice is void, so it cannot be sent.')
-  if (inv.status === 'DRAFT') await issueInvoice(invoiceId, actorUserId)
   let token = inv.accessToken
   if (!token) {
     token = invoiceToken()
@@ -533,36 +497,6 @@ export async function sendInvoice(
     })
   }
   return { outcome: result.outcome }
-}
-
-/** Issue a draft invoice to the client. */
-export async function issueInvoice(invoiceId: string, actorUserId: string | null) {
-  const now = systemClock.now()
-  return prisma.$transaction(async (tx) => {
-    const invoice = await tx.invoice.findUnique({
-      where: { id: invoiceId },
-      select: { id: true, status: true },
-    })
-    if (!invoice) throw new Error('Invoice not found.')
-    if (invoice.status !== 'DRAFT') throw new Error('This invoice has already been issued.')
-
-    await tx.invoice.update({
-      where: { id: invoiceId },
-      data: { status: 'ISSUED', issuedAt: now },
-    })
-    await tx.auditLog.create({
-      data: { action: 'invoice.issued', entityType: 'Invoice', entityId: invoiceId, actorUserId },
-    })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'invoice.issued',
-        aggregateType: 'Invoice',
-        aggregateId: invoiceId,
-        payload: { invoiceId },
-      },
-    })
-    return { status: 'ISSUED' as const }
-  })
 }
 
 /**
@@ -666,7 +600,6 @@ export async function recordPayment(
               externalTransactionId: idempotencyKey,
               type: 'CHARGE',
               amount,
-              status: 'SUCCEEDED',
               processedAt: now,
               metadata: input.reference ? { reference: input.reference } : undefined,
             },
@@ -764,7 +697,7 @@ export async function getInvoiceByToken(token: string) {
     select: {
       invoiceNumber: true, type: true, status: true, total: true,
       amountPaid: true, invoiceDate: true, dueAt: true, poNumber: true, notes: true,
-      creditNotes: { where: { NOT: { status: 'VOIDED' } }, select: { amount: true } },
+      creditNotes: { select: { amount: true } },
       billingNameSnapshot: true, billingEmailSnapshot: true,
       lines: { orderBy: { sortOrder: 'asc' }, select: { itemName: true, description: true, quantity: true, unitPrice: true, discount: true, lineTotal: true } },
       project: {
@@ -772,13 +705,13 @@ export async function getInvoiceByToken(token: string) {
           name: true, code: true,
           client: { select: { phone: true, street: true, suburb: true, state: true, postcode: true, country: true } },
           company: { select: { name: true, abn: true, settings: true } },
-          bookings: { orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true, endsAt: true, location: true, title: true } },
+          ...JOB_SHOOT_SELECT,
         },
       },
     },
   })
   if (!inv) return null
-  // Fold effective credit notes into one credits total so the printable balance matches the ledger (bug #5).
+  // Fold credit notes into one credits total so the printable balance matches the ledger (bug #5).
   const creditsTotal = inv.creditNotes.reduce((s, c) => s.add(c.amount), new Prisma.Decimal(0))
   // This page is public (token link): hand the document ONLY the settings an invoice prints, never the
   // rest of Company Settings (e.g. the calendar subscription token).
@@ -789,31 +722,6 @@ export async function getInvoiceByToken(token: string) {
 
 const INVOICE_SETTINGS = ['website', 'businessAddress', 'businessEmail', 'businessPhone', 'paymentInstructions', 'accountName', 'bsb', 'accountNumber', 'payId'] as const
 
-/** Save the given line items as a reusable invoice template. */
-export async function saveInvoiceTemplate(name: string, lines: { itemName?: string; description: string; quantity: number; unitPrice: string }[]) {
-  const company = await prisma.company.findFirst({ select: { id: true } })
-  if (!company) throw new Error('No company configured.')
-  if (!name.trim()) throw new Error('Give the template a name.')
-  if (lines.length === 0) throw new Error('Add at least one item before saving a template.')
-  await prisma.invoiceTemplate.create({
-    data: { companyId: company.id, name: name.trim().slice(0, 150), linesJson: JSON.stringify(lines) },
-  })
-}
-
-export type InvoiceTemplateOption = { id: string; name: string; lines: { itemName?: string; description: string; quantity: number; unitPrice: string }[] }
-
-/** List saved invoice templates for the studio. */
-export async function listInvoiceTemplates(): Promise<InvoiceTemplateOption[]> {
-  const rows = await prisma.invoiceTemplate.findMany({ orderBy: { createdAt: 'desc' }, select: { id: true, name: true, linesJson: true } })
-  return rows.map((r) => {
-    let lines: InvoiceTemplateOption['lines'] = []
-    try {
-      const parsed = JSON.parse(r.linesJson)
-      if (Array.isArray(parsed)) lines = parsed
-    } catch { /* ignore malformed template */ }
-    return { id: r.id, name: r.name, lines }
-  })
-}
 
 /**
  * Mark outstanding invoices OVERDUE once their due date (the last scheduled payment) has passed and

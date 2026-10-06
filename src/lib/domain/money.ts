@@ -1,4 +1,4 @@
-import { Prisma, type InvoiceStatus, type TransactionType, type TransactionStatus } from '@prisma/client'
+import { Prisma, type InvoiceStatus, type TransactionType } from '@prisma/client'
 
 /**
  * Money foundation (docs/25 Part 1) — the single source of every "obligation / paid / owed / due /
@@ -8,8 +8,9 @@ import { Prisma, type InvoiceStatus, type TransactionType, type TransactionStatu
  * treats `invoice.amountPaid` or `instalment.status` as truth — those are caches refreshed from here.
  *
  * Reconciled with the current schema (docs/25 Rule M2b): `paidNet` is derived ONLY from the
- * PaymentTransaction ledger (SUCCEEDED CHARGE(+) − SUCCEEDED REFUND(−) − SUCCEEDED REVERSAL(−)). The
- * `Refund` model is metadata attached to a REFUND transaction and is never summed on top.
+ * PaymentTransaction ledger (CHARGE(+) − REFUND(−); every recorded transaction has succeeded - payments
+ * are recorded by staff after the money arrived). The `Refund` model is metadata attached to a REFUND
+ * transaction and is never summed on top.
  */
 
 type D = Prisma.Decimal
@@ -17,7 +18,7 @@ const ZERO = new Prisma.Decimal(0)
 const dMax = (a: D, b: D): D => (a.greaterThan(b) ? a : b)
 const dMin = (a: D, b: D): D => (a.lessThan(b) ? a : b)
 
-/** Invoice statuses that carry an obligation to pay. DRAFT and VOID carry none (Rule M1). */
+/** Invoice statuses that carry an obligation to pay. VOID (uncollectible) carries none (Rule M1). */
 const OBLIGATION_STATES: ReadonlySet<InvoiceStatus> = new Set<InvoiceStatus>([
   'ISSUED',
   'SENT',
@@ -26,9 +27,9 @@ const OBLIGATION_STATES: ReadonlySet<InvoiceStatus> = new Set<InvoiceStatus>([
   'OVERDUE',
 ])
 
-export type LedgerTxn = { type: TransactionType; status: TransactionStatus; amount: D }
-/** A credit note reduces obligation. Effective when SUCCEEDED (or when no status is given). */
-export type CreditNote = { amount: D; status?: TransactionStatus }
+export type LedgerTxn = { type: TransactionType; amount: D }
+/** A credit note reduces obligation. */
+export type CreditNote = { amount: D }
 export type InstalmentInput = { label: string | null; dueAt: Date | null; amount: D; sortOrder: number }
 
 export type InvoiceMoneyInput = {
@@ -60,8 +61,7 @@ export type InvoiceBalance = {
 }
 
 export type JobBalance = {
-  /** Known agreed value (accepted quote total, or a direct booking's package price snapshot); null =
-   *  unknown. Never derived from what has been invoiced — an unknown agreed value must not let the
+  /** Known agreed value (the job's accepted quote total); null = unknown. Never derived from what has been invoiced — an unknown agreed value must not let the
    *  system conclude the job is fully invoiced / settled (docs/25 Rule M4b). */
   agreedContractValue: D | null
   agreedValueKnown: boolean
@@ -78,19 +78,9 @@ export type JobBalance = {
   invoices: InvoiceBalance[]
 }
 
-const creditNoteIsEffective = (cn: CreditNote): boolean => cn.status === undefined || cn.status === 'SUCCEEDED'
-
-/**
- * Net cash held = SUCCEEDED CHARGE(+) − SUCCEEDED REFUND(−) − SUCCEEDED REVERSAL(−) (Rule M2b).
- * NOTE: REVERSAL is currently never produced anywhere in the app (only REFUND is, via refundPayment);
- * subtracting it is the conservative default matching the existing convention (dashboard collected-cash).
- * If a REVERSAL producer is ever added, confirm its sign/target before trusting this direction.
- */
+/** Net cash held = CHARGE(+) − REFUND(−) (Rule M2b). */
 export function computePaidNet(transactions: LedgerTxn[]): D {
-  return transactions.reduce((sum, t) => {
-    if (t.status !== 'SUCCEEDED') return sum
-    return t.type === 'CHARGE' ? sum.add(t.amount) : sum.sub(t.amount)
-  }, ZERO)
+  return transactions.reduce((sum, t) => (t.type === 'CHARGE' ? sum.add(t.amount) : sum.sub(t.amount)), ZERO)
 }
 
 /**
@@ -125,7 +115,7 @@ export function getInvoiceBalance(inv: InvoiceMoneyInput): InvoiceBalance {
   // Credits only reduce a live obligation: a void/draft invoice owes nothing, so its credit notes must not
   // turn into a phantom "overpayment" (nor may credits above an edited-down total), hence the floor at 0.
   const creditedTotal = OBLIGATION_STATES.has(inv.status)
-    ? inv.creditNotes.filter(creditNoteIsEffective).reduce((s, c) => s.add(c.amount), ZERO)
+    ? inv.creditNotes.reduce((s, c) => s.add(c.amount), ZERO)
     : ZERO
   const obligation = dMax(issuedTotal.sub(creditedTotal), ZERO)
   const paidNet = computePaidNet(inv.transactions)
@@ -160,8 +150,8 @@ export function nextPaymentDue(bal: InvoiceBalance): Date | null {
  * (Rule M3): an overpaid invoice never silently offsets an underpaid one. `netPosition` is a display
  * reference only.
  *
- * `agreedContractValue` is supplied by the caller as a KNOWN value — the accepted quote total, or a
- * direct booking's `Project.packagePriceSnapshot` — or `null` when neither exists. It is NEVER derived
+ * `agreedContractValue` is supplied by the caller as a KNOWN value — the accepted quote total — or
+ * `null` when there is none. It is NEVER derived
  * from what has been invoiced: an unknown agreed value leaves `uninvoicedRemainder = null` and
  * `isFullySettled = false`, so paying a deposit invoice can never masquerade as a settled job
  * (docs/25 Rule M4b).

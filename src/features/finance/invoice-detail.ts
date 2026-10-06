@@ -4,7 +4,7 @@
  * trail into the words and tones the page shows. Kept separate so it is unit-tested directly.
  */
 
-export type InvoiceStatusCode = 'DRAFT' | 'ISSUED' | 'SENT' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'VOID'
+export type InvoiceStatusCode = 'ISSUED' | 'SENT' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'VOID'
 
 /** Tone for the shared StatusPill (ui/StatusPill): neutral unless the state carries meaning. */
 export type Tone = 'neutral' | 'info' | 'good' | 'warn' | 'bad'
@@ -29,7 +29,7 @@ export type InstalmentStatus = { label: 'Paid' | 'Partially paid' | 'Overdue' | 
 
 /**
  * One schedule row's status. The allocation state comes from the backend ledger; this only adds the
- * date reading. A draft is never overdue (it has not been issued), and nothing on a void invoice is due.
+ * date reading. Nothing on a void (uncollectible) invoice is due.
  */
 export function instalmentStatus(
   state: InstalmentState,
@@ -38,9 +38,6 @@ export function instalmentStatus(
   invoiceStatus: InvoiceStatusCode,
 ): InstalmentStatus {
   if (invoiceStatus === 'VOID') return { label: 'Void', tone: 'neutral' }
-  // A draft owes nothing in the ledger yet (its obligation starts when issued), so its rows can read as
-  // "paid" to the allocator; nothing can have been paid on a draft.
-  if (invoiceStatus === 'DRAFT') return dueYmd && dueYmd > todayYmd ? { label: 'Upcoming', tone: 'neutral' } : { label: 'Unpaid', tone: 'neutral' }
   if (state === 'PAID') return { label: 'Paid', tone: 'good' }
   if (state === 'PARTIAL') return { label: 'Partially paid', tone: 'warn' }
   if (dueYmd && dueYmd < todayYmd) return { label: 'Overdue', tone: 'bad' }

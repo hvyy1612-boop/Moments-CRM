@@ -39,13 +39,12 @@ export type DispatchSpec = {
   targetId: string
   milestone: string
   recipientEmail: string
-  scheduleVersion?: number
   subject: string
   body: string
 }
 
 function dedupeKeyOf(s: DispatchSpec, recipientHash: string): string {
-  return `${s.kind}:${s.targetType}:${s.targetId}:${s.milestone}:${recipientHash}:${s.scheduleVersion ?? 1}`
+  return `${s.kind}:${s.targetType}:${s.targetId}:${s.milestone}:${recipientHash}`
 }
 
 /**
@@ -69,7 +68,6 @@ export async function enqueueDispatch(client: Client, spec: DispatchSpec): Promi
         targetId: spec.targetId,
         milestone: spec.milestone,
         recipientHash,
-        scheduleVersion: spec.scheduleVersion ?? 1,
         dedupeKey,
         recipientEmail: spec.recipientEmail,
         subject: spec.subject,
@@ -129,22 +127,12 @@ export async function releaseExpiredLeases(now: Date = systemClock.now()): Promi
 }
 
 /** Is this dispatch still worth sending right now? (Rule N11 fresh read.) A payment reminder is dropped
- *  once its instalment/invoice is settled or the invoice is VOID/DRAFT; a shoot reminder is dropped once
- *  its booking is cancelled or the shoot has already happened — so the worker never sends stale info even
- *  if a cancel path forgot to invalidate it up front. */
-async function isStillRelevant(
-  d: { kind: string; targetType: string; targetId: string; milestone: string },
-  now: Date,
-): Promise<boolean> {
+ *  once its invoice is settled or uncollectible, so the worker never sends stale info. */
+async function isStillRelevant(d: { kind: string; targetType: string; targetId: string }): Promise<boolean> {
   if (d.kind === 'payment_reminder' && d.targetType === 'Invoice') {
     const bal = await getInvoiceBalanceById(d.targetId)
     if (!bal) return false
     return bal.owed.greaterThan(0)
-  }
-  if (d.kind === 'shoot_reminder' && d.targetType === 'Booking') {
-    const b = await prisma.booking.findUnique({ where: { id: d.targetId }, select: { status: true, startsAt: true } })
-    if (!b || b.status === 'CANCELLED') return false
-    return b.startsAt.getTime() > now.getTime()
   }
   return true
 }
@@ -154,10 +142,6 @@ async function dispatchCompanyId(d: { targetType: string; targetId: string }): P
   if (d.targetType === 'Invoice') {
     const inv = await prisma.invoice.findUnique({ where: { id: d.targetId }, select: { project: { select: { companyId: true } } } })
     return inv?.project.companyId ?? null
-  }
-  if (d.targetType === 'Booking') {
-    const b = await prisma.booking.findUnique({ where: { id: d.targetId }, select: { project: { select: { companyId: true } } } })
-    return b?.project.companyId ?? null
   }
   return null
 }
@@ -180,7 +164,7 @@ export async function sendDispatch(
 
   // Fresh read (Rule N11): a payment recorded minutes ago cancels its reminder — record a terminal,
   // non-delivered state so it never re-sends.
-  if (!(await isStillRelevant(before, now))) {
+  if (!(await isStillRelevant(before))) {
     await prisma.notificationDispatch.update({ where: { id: dispatchId }, data: { sendState: 'SKIPPED_STALE' } })
     return { skipped: true }
   }
@@ -281,15 +265,6 @@ async function applyDeliveryToDispatch(dispatchId: string, recipientHash: string
       update: { reason: result === 'BOUNCED' ? 'bounced' : 'complained' },
     })
   }
-}
-
-/** Mark every unsent shoot reminder for a booking as invalidated (Rule N7) — used on reschedule/cancel. */
-export async function invalidateShootReminders(client: Client, bookingId: string): Promise<number> {
-  const res = await client.notificationDispatch.updateMany({
-    where: { kind: 'shoot_reminder', targetType: 'Booking', targetId: bookingId, sendState: 'PENDING' },
-    data: { sendState: 'SKIPPED_STALE' },
-  })
-  return res.count
 }
 
 export type ReminderImpactItem =
@@ -404,45 +379,21 @@ async function ensureOverdueFollowup(invoiceId: string, projectId: string, compa
 }
 
 /**
- * Outbox processor (Rule N1): reads PENDING business events and creates dispatches idempotently, then
- * marks each event PROCESSED once its dispatches durably exist — NOT when email is delivered. This is
- * how event-driven notifications converge on the same NotificationDispatch send unit as the scanner.
+ * Outbox processor (Rule N1): marks PENDING business events (quote sent / accepted, contract signed,
+ * change applied) PROCESSED, once each. No event sends an email today: staff send quotes and invoices
+ * themselves, and payment reminders come from the daily scanner.
  */
 export async function processOutboxOnce(now: Date = systemClock.now()): Promise<{ processed: number }> {
   const events = await prisma.outboxEvent.findMany({
     where: { status: 'PENDING', availableAt: { lte: now } },
     orderBy: { createdAt: 'asc' },
     take: 100,
+    select: { id: true },
   })
-  let processed = 0
   for (const evt of events) {
-    if (evt.eventType === 'invoice.issued') {
-      const invoiceId = (evt.payload as { invoiceId?: string } | null)?.invoiceId
-      if (invoiceId) {
-        const inv = await prisma.invoice.findUnique({
-          where: { id: invoiceId },
-          select: { id: true, invoiceNumber: true, billingEmailSnapshot: true, total: true, project: { select: { companyId: true, client: { select: { email: true } } } } },
-        })
-        const recipient = inv?.billingEmailSnapshot ?? inv?.project.client.email ?? null
-        // Client-facing dispatch only when the company has turned client emails on — otherwise the
-        // event is still marked PROCESSED (no reprocessing, no backfill burst when it is later enabled).
-        if (inv && recipient && (await getAutomationSettings(inv.project.companyId)).clientEmailsEnabled) {
-          await enqueueDispatch(prisma, {
-            kind: 'invoice_issued',
-            targetType: 'Invoice',
-            targetId: inv.id,
-            milestone: 'issued',
-            recipientEmail: recipient,
-            subject: `Invoice ${inv.invoiceNumber}`,
-            body: `Your invoice ${inv.invoiceNumber} for ${inv.total.toFixed(2)} is ready. Thank you - Moments Photography and Film.`,
-          })
-        }
-      }
-    }
     await prisma.outboxEvent.update({ where: { id: evt.id }, data: { status: 'PROCESSED', processedAt: now, attemptCount: { increment: 1 } } })
-    processed++
   }
-  return { processed }
+  return { processed: events.length }
 }
 
 /** Auto-resolve overdue-followup tasks whose invoice is now settled (Rule N-j: resolves on owed = 0). */

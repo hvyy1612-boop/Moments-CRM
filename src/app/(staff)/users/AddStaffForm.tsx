@@ -53,7 +53,6 @@ export function AddStaffForm({ csrf }: { csrf: string }) {
             className="h-11 rounded-md border border-line-strong bg-surface px-3 text-base text-ink outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <option value="STUDIO">Studio</option>
-            <option value="EDITOR">Editor</option>
             <option value="ADMIN">Admin</option>
           </select>
         </div>

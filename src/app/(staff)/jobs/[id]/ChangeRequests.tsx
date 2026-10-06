@@ -41,13 +41,11 @@ export function ChangeRequests({
   csrf,
   projectId,
   requests,
-  bookings,
   invoices,
 }: {
   csrf: string
   projectId: string
   requests: ChangeRequestView[]
-  bookings: Option[]
   invoices: Option[]
 }) {
   const [kind, setKind] = useState('reschedule')
@@ -84,7 +82,7 @@ export function ChangeRequests({
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-ink">Type of change</span>
             <Select name="kind" value={kind} onChange={(e) => setKind(e.target.value)}>
-              <option value="reschedule">Reschedule the shoot</option>
+              <option value="reschedule">Move the shoot date</option>
               <option value="scopeChange">Scope change (new agreed price)</option>
               <option value="priceDecrease">Price decrease (credit note)</option>
               <option value="production">Production revision</option>
@@ -93,13 +91,7 @@ export function ChangeRequests({
 
           {kind === 'reschedule' ? (
             <>
-              <label className="flex flex-col gap-1 text-sm"><span className="font-medium text-ink">Which shoot</span>
-                <Select name="bookingId">{bookings.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}</Select>
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="flex flex-col gap-1 text-sm"><span className="font-medium text-ink">New start</span><TextInput type="datetime-local" name="newStartsAt" /></label>
-                <label className="flex flex-col gap-1 text-sm"><span className="font-medium text-ink">New end</span><TextInput type="datetime-local" name="newEndsAt" /></label>
-              </div>
+              <label className="flex flex-col gap-1 text-sm"><span className="font-medium text-ink">New shoot date and time</span><TextInput type="datetime-local" name="newStartsAt" /></label>
               <label className="flex flex-col gap-1 text-sm"><span className="font-medium text-ink">Rescheduling fee (optional)</span><TextInput name="feeAmount" inputMode="decimal" placeholder="e.g. 300" /></label>
             </>
           ) : null}

@@ -18,18 +18,18 @@ export async function lockInvoiceRow(tx: Tx, invoiceId: string): Promise<void> {
   await tx.$queryRaw`SELECT id FROM invoices WHERE id = ${invoiceId} FOR UPDATE`
 }
 
-/** Ledger truth: SUCCEEDED CHARGE(+) − SUCCEEDED REFUND(−) − SUCCEEDED REVERSAL(−) over the invoice. */
+/** Ledger truth: CHARGE(+) − REFUND(−) over the invoice. */
 export async function invoicePaidNet(tx: Tx, invoiceId: string): Promise<Prisma.Decimal> {
   const txns = await tx.paymentTransaction.findMany({
-    where: { payment: { invoiceId }, status: 'SUCCEEDED' },
-    select: { type: true, status: true, amount: true },
+    where: { payment: { invoiceId } },
+    select: { type: true, amount: true },
   })
   return computePaidNet(txns)
 }
 
-/** Effective credit notes on the invoice (VOIDED excluded): price reductions the client no longer owes. */
+/** Credit notes on the invoice: price reductions the client no longer owes. */
 export async function invoiceCreditedTotal(tx: Tx, invoiceId: string): Promise<Prisma.Decimal> {
-  const credits = await tx.creditNote.findMany({ where: { invoiceId, NOT: { status: 'VOIDED' } }, select: { amount: true } })
+  const credits = await tx.creditNote.findMany({ where: { invoiceId }, select: { amount: true } })
   return credits.reduce((s, c) => s.add(c.amount), new Prisma.Decimal(0))
 }
 
@@ -40,7 +40,7 @@ export async function invoiceObligation(tx: Tx, invoiceId: string, total: Prisma
 
 /**
  * Recompute `invoice.amountPaid` from the ledger and set the payment status to match (never touching
- * DRAFT/VOID). Settled = paid at least the credit-aware obligation (total less credit notes), the same
+ * VOID). Settled = paid at least the credit-aware obligation (total less credit notes), the same
  * rule the Money foundation uses. Call this AFTER inserting/removing a transaction, inside the same locked
  * transaction, so the cache always equals the ledger. Returns the ledger `paidNet`.
  */
@@ -53,7 +53,7 @@ export async function refreshInvoiceAmountPaid(
   const paidNet = await invoicePaidNet(tx, invoiceId)
   const obligation = await invoiceObligation(tx, invoiceId, total)
   let status: InvoiceStatus = currentStatus
-  if (currentStatus !== 'VOID' && currentStatus !== 'DRAFT') {
+  if (currentStatus !== 'VOID') {
     if (paidNet.greaterThanOrEqualTo(obligation)) status = 'PAID'
     else if (paidNet.greaterThan(0)) status = 'PARTIALLY_PAID'
     else if (currentStatus === 'PAID' || currentStatus === 'PARTIALLY_PAID') status = 'ISSUED'

@@ -9,8 +9,6 @@ import { can } from '@/lib/auth/authz'
 import { getActionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { sydneyLocalToUtc } from '@/lib/time'
-import { assignResource, createBooking } from '@/lib/domain/booking'
-import { logCommunication } from '@/lib/domain/communication'
 import { closeJob } from '@/lib/domain/project'
 import { findOrCreateClient } from '@/lib/domain/client'
 import { convertEnquiry, createEnquiry } from '@/lib/domain/enquiry'
@@ -28,16 +26,11 @@ import {
 } from '@/lib/domain/project-workflow'
 import { enquirySchema } from '@/lib/validation/enquiry'
 import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/contract'
-import { addGalleryItem, createGallery, publishGallery } from '@/lib/domain/delivery'
-import { createInvoice, createInvoiceWithLines, deleteInvoice, issueInvoice, recordPayment, saveInvoiceTemplate, updateInvoiceWithLines, voidInvoice } from '@/lib/domain/finance'
+import { createInvoiceWithLines, deleteInvoice, recordPayment, updateInvoiceWithLines, voidInvoice } from '@/lib/domain/finance'
 import { refundPayment } from '@/lib/domain/refund'
-import { createPackage } from '@/lib/domain/package'
 import { createQuote, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
-import { createQuestionnaire } from '@/lib/domain/questionnaire'
 import { sendContractEmail, sendQuoteEmail } from '@/lib/email'
-import { assignResourceSchema, createBookingSchema } from '@/lib/validation/booking'
-import { addGalleryItemSchema, createGallerySchema } from '@/lib/validation/delivery'
-import { createInvoiceLinesSchema, createInvoiceSchema, recordPaymentSchema } from '@/lib/validation/finance'
+import { createInvoiceLinesSchema, recordPaymentSchema } from '@/lib/validation/finance'
 import { saveQuoteSchema } from '@/lib/validation/quote'
 
 export type QuoteActionState =
@@ -226,66 +219,6 @@ export async function sendContractAction(
   return { status: 'success' }
 }
 
-/** Schedule a shoot for a confirmed project. */
-export async function createBookingAction(
-  _prev: QuoteActionState,
-  formData: FormData,
-): Promise<QuoteActionState> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
-    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  }
-  const user = await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-
-  const parsed = createBookingSchema.safeParse({
-    title: formData.get('title') ?? '',
-    startsAt: formData.get('startsAt') ?? '',
-    endsAt: formData.get('endsAt') ?? '',
-    location: formData.get('location') ?? '',
-    notes: formData.get('notes') ?? '',
-  })
-  if (!parsed.success) {
-    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the booking.' }
-  }
-  try {
-    await createBooking(projectId, parsed.data, user.id)
-  } catch (error) {
-    return { status: 'error', message: error instanceof Error ? error.message : 'Could not schedule.' }
-  }
-  revalidatePath(`/jobs/${projectId}`)
-  return { status: 'success' }
-}
-
-/** Assign a resource to a booking; blocked if that resource clashes with an overlapping booking. */
-export async function assignResourceAction(
-  _prev: QuoteActionState,
-  formData: FormData,
-): Promise<QuoteActionState> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
-    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  }
-  const user = await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const bookingId = String(formData.get('bookingId') ?? '')
-
-  const parsed = assignResourceSchema.safeParse({
-    resourceId: formData.get('resourceId') ?? '',
-    role: formData.get('role') ?? '',
-  })
-  if (!parsed.success) {
-    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please pick a resource.' }
-  }
-  try {
-    await assignResource(bookingId, parsed.data, user.id)
-  } catch (error) {
-    return { status: 'error', message: error instanceof Error ? error.message : 'Could not assign.' }
-  }
-  revalidatePath(`/jobs/${projectId}`)
-  return { status: 'success' }
-}
-
 /** Raise a draft invoice for a confirmed project. */
 export async function createInvoiceLinesAction(
   _prev: QuoteActionState,
@@ -437,105 +370,6 @@ export async function voidInvoiceAction(formData: FormData): Promise<void> {
   if (projectId) revalidatePath(`/jobs/${projectId}`)
 }
 
-export async function createQuestionnaireAction(
-  _prev: QuoteActionState,
-  formData: FormData,
-): Promise<QuoteActionState> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
-    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  }
-  await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const title = String(formData.get('title') ?? '')
-  const questions = String(formData.get('questions') ?? '').split('\n')
-  try {
-    await createQuestionnaire(projectId, title, questions)
-  } catch (error) {
-    return { status: 'error', message: error instanceof Error ? error.message : 'Could not create the questionnaire.' }
-  }
-  revalidatePath(`/jobs/${projectId}`)
-  return { status: 'success' }
-}
-
-export async function saveInvoiceTemplateAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) throw new Error('Invalid request.')
-  await requireStaff()
-  let lines: unknown = []
-  try {
-    lines = JSON.parse(String(formData.get('lines') ?? '[]'))
-  } catch {
-    return
-  }
-  if (!Array.isArray(lines) || lines.length === 0) return
-  await saveInvoiceTemplate(
-    String(formData.get('name') ?? ''),
-    lines as { itemName?: string; description: string; quantity: number; unitPrice: string }[],
-  )
-  const projectId = String(formData.get('projectId') ?? '')
-  if (projectId) revalidatePath(`/jobs/${projectId}`)
-}
-
-/** Save a one-off custom charge back to the reusable package catalogue ("Save this item for reuse"). */
-export async function saveReusableItemAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  const user = await requireStaff()
-  const name = String(formData.get('name') ?? '').trim()
-  const price = String(formData.get('unitPrice') ?? '').trim()
-  if (!name || !/^\d+(\.\d{1,2})?$/.test(price)) return
-  const description = String(formData.get('description') ?? '').trim()
-  await createPackage({ name, inclusions: description || null, basePriceInclGst: price }, user.id)
-  revalidatePath('/finance')
-}
-
-export async function createInvoiceAction(
-  _prev: QuoteActionState,
-  formData: FormData,
-): Promise<QuoteActionState> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
-    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  }
-  const user = await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-
-  const parsed = createInvoiceSchema.safeParse({
-    type: formData.get('type') ?? '',
-    description: formData.get('description') ?? '',
-    amount: formData.get('amount') ?? '',
-  })
-  if (!parsed.success) {
-    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the invoice.' }
-  }
-  try {
-    await createInvoice(projectId, parsed.data, user.id)
-  } catch (error) {
-    return { status: 'error', message: error instanceof Error ? error.message : 'Could not raise the invoice.' }
-  }
-  revalidatePath(`/jobs/${projectId}`)
-  return { status: 'success' }
-}
-
-/** Issue a draft invoice. Plain form action; the button only shows on a draft. */
-export async function issueInvoiceAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  const user = await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const invoiceId = String(formData.get('invoiceId') ?? '')
-  if (!invoiceId) return
-  try {
-    await issueInvoice(invoiceId, user.id)
-  } catch {
-    // A double submit ("already issued") is a no-op here; the re-render shows the real state.
-  }
-  revalidatePath(`/jobs/${projectId}`)
-  revalidatePath('/finance')
-  revalidatePath(`/finance/${invoiceId}`)
-}
-
 /** Delete a draft/unpaid invoice. Refused if it has payments (domain guards this). */
 export async function deleteInvoiceAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
@@ -591,76 +425,6 @@ export async function recordPaymentAction(
   revalidatePath('/finance')
   revalidatePath(`/finance/${invoiceId}`)
   return { status: 'success' }
-}
-
-/** Start a draft gallery for a confirmed project. */
-export async function createGalleryAction(
-  _prev: QuoteActionState,
-  formData: FormData,
-): Promise<QuoteActionState> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
-    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  }
-  const user = await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-
-  const parsed = createGallerySchema.safeParse({ title: formData.get('title') ?? '' })
-  if (!parsed.success) {
-    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the gallery.' }
-  }
-  try {
-    await createGallery(projectId, parsed.data, user.id)
-  } catch (error) {
-    return { status: 'error', message: error instanceof Error ? error.message : 'Could not create the gallery.' }
-  }
-  revalidatePath(`/jobs/${projectId}`)
-  return { status: 'success' }
-}
-
-/** Add an item (caption + link) to a draft gallery. */
-export async function addGalleryItemAction(
-  _prev: QuoteActionState,
-  formData: FormData,
-): Promise<QuoteActionState> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
-    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  }
-  const user = await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const galleryId = String(formData.get('galleryId') ?? '')
-
-  const parsed = addGalleryItemSchema.safeParse({
-    caption: formData.get('caption') ?? '',
-    url: formData.get('url') ?? '',
-  })
-  if (!parsed.success) {
-    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the item.' }
-  }
-  try {
-    await addGalleryItem(galleryId, parsed.data, user.id)
-  } catch (error) {
-    return { status: 'error', message: error instanceof Error ? error.message : 'Could not add the item.' }
-  }
-  revalidatePath(`/jobs/${projectId}`)
-  return { status: 'success' }
-}
-
-/** Publish a gallery to the client and complete the project. Plain form action. */
-export async function publishGalleryAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  const user = await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const galleryId = String(formData.get('galleryId') ?? '')
-  if (!galleryId) return
-  try {
-    await publishGallery(galleryId, user.id)
-  } catch {
-    // The button only shows on a draft with items; a double submit is a no-op here.
-  }
-  revalidatePath(`/jobs/${projectId}`)
 }
 
 /** Combine the form's date (yyyy-mm-dd) and time (HH:mm) into a UTC instant, read as Sydney wall-clock
@@ -824,39 +588,6 @@ export async function moveProjectTaskAction(formData: FormData): Promise<void> {
   revalidatePath(`/jobs/${projectId}`)
 }
 
-/** Staff records a reply sent to the client on a project (outbound Communication). */
-export async function sendProjectReplyAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  const user = await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const body = String(formData.get('body') ?? '').trim()
-  if (!projectId || !body) return
-  await logCommunication(projectId, {
-    type: 'CLIENT_MESSAGE',
-    direction: 'outbound',
-    body,
-    byUserId: user.id,
-  })
-  revalidatePath(`/jobs/${projectId}`)
-}
-
-/** Staff records a message received from the client on a project (inbound Communication). */
-export async function logProjectClientReplyAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const body = String(formData.get('body') ?? '').trim()
-  if (!projectId || !body) return
-  await logCommunication(projectId, {
-    type: 'CLIENT_MESSAGE',
-    direction: 'inbound',
-    body,
-  })
-  revalidatePath(`/jobs/${projectId}`)
-}
-
 export type StaffEnquiryState =
   | { status: 'idle' }
   | {
@@ -966,65 +697,17 @@ export async function deleteRequirementAction(formData: FormData): Promise<void>
   revalidatePath(`/jobs/${projectId}`)
 }
 
-/** Promote a client message into a confirmed requirement ("Add to requirements"). */
-export async function addMessageToRequirementsAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const communicationId = String(formData.get('communicationId') ?? '')
-  if (!projectId || !communicationId) return
-  const message = await prisma.communication.findFirst({ where: { id: communicationId, projectId }, select: { body: true } })
-  if (!message) return
-  const sortOrder = await prisma.projectRequirement.count({ where: { projectId } })
-  await prisma.projectRequirement.create({ data: { projectId, label: 'Client request', detail: message.body, sortOrder } })
-  revalidatePath(`/jobs/${projectId}`)
-}
-
-/** Add a moodboard image or reference link to a job. */
-export async function addMoodboardItemAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const url = String(formData.get('url') ?? '').trim()
-  const caption = String(formData.get('caption') ?? '').trim() || null
-  const kind = String(formData.get('kind') ?? 'image') === 'link' ? 'link' : 'image'
-  if (!projectId || !url) return
-  const sortOrder = await prisma.moodboardItem.count({ where: { projectId } })
-  await prisma.moodboardItem.create({ data: { projectId, url, caption, kind, sortOrder } })
-  revalidatePath(`/jobs/${projectId}`)
-}
-
-/** Remove a moodboard item. */
-export async function deleteMoodboardItemAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const id = String(formData.get('itemId') ?? '')
-  if (!projectId || !id) return
-  await prisma.moodboardItem.deleteMany({ where: { id, projectId } })
-  revalidatePath(`/jobs/${projectId}`)
-}
-
-/** Add a team member (optionally linked to a resource) with a role. */
+/** Add a team member (a name and a role, e.g. "Jane - Lead Photographer") to a job. */
 export async function addTeamMemberAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
   if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
   await requireStaff()
   const projectId = String(formData.get('projectId') ?? '')
-  const role = String(formData.get('role') ?? '').trim()
-  const resourceId = String(formData.get('resourceId') ?? '').trim() || null
-  let name = String(formData.get('name') ?? '').trim()
-  if (!projectId || !role) return
-  if (resourceId && !name) {
-    const resource = await prisma.resource.findFirst({ where: { id: resourceId }, select: { name: true } })
-    name = resource?.name ?? ''
-  }
-  if (!name) return
+  const role = String(formData.get('role') ?? '').trim().slice(0, 80)
+  const name = String(formData.get('name') ?? '').trim().slice(0, 150)
+  if (!projectId || !role || !name) return
   const sortOrder = await prisma.projectTeamMember.count({ where: { projectId } })
-  await prisma.projectTeamMember.create({ data: { projectId, resourceId, name, role, sortOrder } })
+  await prisma.projectTeamMember.create({ data: { projectId, name, role, sortOrder } })
   revalidatePath(`/jobs/${projectId}`)
 }
 

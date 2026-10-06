@@ -28,7 +28,7 @@ export type AddStaffState =
 
 const addStaffSchema = z.object({
   name: z.string().trim().min(1, 'Enter the staff member’s name').max(150, 'Name is too long'),
-  role: z.enum(['ADMIN', 'STUDIO', 'EDITOR']),
+  role: z.enum(['ADMIN', 'STUDIO']),
 })
 
 /** Create a staff account: auto-generate the Staff ID + a temp password, force a change on first login. */

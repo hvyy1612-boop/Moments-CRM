@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
-import { mergeClients } from '@/lib/domain/client'
 import {
   convertEnquiry,
   createEnquiry,
@@ -70,26 +69,6 @@ describe('enquiry backbone (integration, real DB)', () => {
   it('a reason is required to mark an enquiry lost', async () => {
     const e = await createEnquiry({ name: 'NoReason', email: email() })
     await expect(markEnquiryLost(e.id, '   ')).rejects.toThrow()
-  })
-
-  it('merge moves projects to the survivor; a later enquiry resolves to the survivor', async () => {
-    const mailB = email()
-    const a = await convertEnquiry((await createEnquiry({ name: 'Client A', email: email() })).id)
-    const b = await convertEnquiry((await createEnquiry({ name: 'Client B', email: mailB })).id)
-
-    const res = await mergeClients(a.clientId!, b.clientId!)
-    expect(res.movedProjects).toBeGreaterThanOrEqual(1)
-
-    const dup = await prisma.client.findUnique({ where: { id: b.clientId! } })
-    expect(dup?.mergedIntoClientId).toBe(a.clientId)
-    expect(dup?.status).toBe('ARCHIVED')
-
-    const movedProject = await prisma.project.findUnique({ where: { id: b.projectId! } })
-    expect(movedProject?.clientId).toBe(a.clientId)
-
-    // A new enquiry with the merged duplicate's old email converts into the survivor.
-    const c3 = await convertEnquiry((await createEnquiry({ name: 'Returns', email: mailB })).id)
-    expect(c3.clientId).toBe(a.clientId)
   })
 
   it('findClientMatches suggests by name/phone, with no exact-email match for a stranger', async () => {

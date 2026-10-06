@@ -7,6 +7,7 @@ import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { SentToast } from '@/components/ui/SentToast'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { JOB_SHOOT_SELECT, shootDateOfJob, shootHasTime } from '@/lib/domain/deadline'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyDateTime, sydneyDateTimeParts } from '@/lib/time'
 import { getProjectBoard } from '@/lib/domain/project-workflow'
@@ -115,25 +116,11 @@ export async function CaseDetail({
         orderBy: { createdAt: 'desc' },
         include: { currentVersion: true },
       },
-      bookings: {
-        orderBy: { startsAt: 'asc' },
-        include: {
-          assignments: {
-            where: { status: 'ACTIVE' },
-            include: { resource: { select: { name: true } } },
-          },
-        },
-      },
+      // The job's shoot date (its Shoot task, else the lead's event date) and the lead's venue.
+      ...JOB_SHOOT_SELECT,
       invoices: { select: { ...INVOICE_MONEY_SELECT, id: true } },
-      galleries: {
-        orderBy: { createdAt: 'desc' },
-        include: { items: { orderBy: { sortOrder: 'asc' } } },
-      },
       requirements: { orderBy: { sortOrder: 'asc' } },
-      teamMembers: {
-        orderBy: { sortOrder: 'asc' },
-        include: { resource: { include: { linkedUser: { select: { email: true } } } } },
-      },
+      teamMembers: { orderBy: { sortOrder: 'asc' } },
     },
   })
   if (!project) notFound()
@@ -143,10 +130,8 @@ export async function CaseDetail({
   const contract = project.contracts[0]
   const contractVersion = contract?.currentVersion ?? null
   const quoteAccepted = version?.status === 'ACCEPTED'
-  const isConfirmed = (['CONFIRMED', 'IN_PRODUCTION', 'COMPLETED'] as const).some(
-    (s) => s === project.lifecycleStatus,
-  )
-  const canInvoice = project.lifecycleStatus !== 'CANCELLED' && project.lifecycleStatus !== 'LOST'
+  const isConfirmed = (['CONFIRMED', 'COMPLETED'] as const).some((s) => s === project.lifecycleStatus)
+  const canInvoice = project.lifecycleStatus !== 'CANCELLED'
 
   const board = await getProjectBoard(project.id)
   const taskOverrides = await prisma.workItem.findMany({
@@ -168,13 +153,6 @@ export async function CaseDetail({
       by: { select: { name: true } },
       editedBy: { select: { name: true } },
     },
-  })
-
-  // Active resources for the "Assigned team" picker (independent of booking confirmation).
-  const teamResourceOptions = await prisma.resource.findMany({
-    where: { companyId: project.companyId, status: 'active' },
-    orderBy: { name: 'asc' },
-    select: { id: true, name: true },
   })
 
   const history: HistoryEntry[] = (
@@ -212,11 +190,11 @@ export async function CaseDetail({
     isAddOn: p.isAddOn,
   }))
 
-  // Header facts: shoot date + location come from the first LIVE booking (the shoot), when one exists. A
-  // cancelled booking (e.g. the old date after a reschedule) never stands in for the shoot.
-  const shootBooking = project.bookings.find((b) => b.status !== 'CANCELLED') ?? null
-  const shootDateLabel = shootBooking ? formatSydneyDateTime(shootBooking.startsAt) : null
-  const shootLocation = shootBooking?.location ?? null
+  // Header facts: the job's shoot date (set on its Shoot task, else the lead's event date) and the venue
+  // the lead gave.
+  const shootAt = shootDateOfJob(project)
+  const shootDateLabel = shootAt ? (shootHasTime(project) ? formatSydneyDateTime(shootAt) : formatSydneyDate(shootAt)) : null
+  const shootLocation = project.convertedFromEnquiries[0]?.ceremonyLocation?.split('\n')[0]?.trim() || null
 
   // "Phase N of M": position of the active core stage in the production sequence, +1 for Complete.
   const hasBoard = Boolean(board && board.stages.length > 0)
@@ -258,7 +236,7 @@ export async function CaseDetail({
     editedByName: n.editedBy?.name ?? null,
     editedLabel: n.editedAt ? formatSydneyDateTime(n.editedAt) : null,
   }))
-  const overviewTeam = project.teamMembers.map((t) => ({ id: t.id, name: t.name, role: t.role, email: t.resource?.linkedUser?.email ?? null }))
+  const overviewTeam = project.teamMembers.map((t) => ({ id: t.id, name: t.name, role: t.role }))
 
   return (
     <AppShell user={user} csrf={csrf} active={section} bareHeader>
@@ -376,7 +354,6 @@ export async function CaseDetail({
                     requirements={overviewRequirements}
                     notes={overviewNotes}
                     team={overviewTeam}
-                    resources={teamResourceOptions}
                   />
                 }
               />
@@ -452,7 +429,7 @@ export async function CaseDetail({
                       <span className="tabular-nums text-ink">{formatAud(version.total)}</span>
                     </div>
                     {version.acceptedByClientAt ? (
-                      <p className="mt-2 text-sm text-ink">Accepted by {version.acceptedByClientName} on {formatSydneyDate(version.acceptedByClientAt)}.</p>
+                      <p className="mt-2 text-sm text-ink">Accepted on {formatSydneyDate(version.acceptedByClientAt)}.</p>
                     ) : null}
                   </div>
                 )}

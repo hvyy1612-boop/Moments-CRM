@@ -149,7 +149,7 @@ export async function declineQuoteAction(formData: FormData): Promise<void> {
   const quoteId = str(formData, 'quoteId')
   if (!quoteId) return
   try {
-    await declineQuote(quoteId, 'OTHER', user.id)
+    await declineQuote(quoteId, user.id)
   } catch (error) {
     redirect(`/quotes/${quoteId}?declineError=${encodeURIComponent(error instanceof Error ? error.message : 'Could not decline the quote.')}`)
   }

@@ -6,6 +6,7 @@ import { notFound } from 'next/navigation'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { JOB_SHOOT_SELECT, shootDateOfJob } from '@/lib/domain/deadline'
 import { quoteDisplayNumber } from '@/lib/domain/quote'
 import { quoteView } from '@/features/quotes/status'
 import { computeDeposit } from '@/lib/domain/pricing'
@@ -74,14 +75,14 @@ export default async function QuoteDetailPage({
     where: { id },
     include: {
       currentVersion: { include: { lines: { orderBy: { sortOrder: 'asc' } } } },
-      enquiry: { select: { id: true, name: true, eventType: true, client: { select: { displayName: true } } } },
+      enquiry: { select: { id: true, name: true, eventType: true, eventDate: true, client: { select: { displayName: true } } } },
       project: {
         select: {
           id: true,
           client: { select: { displayName: true } },
           contracts: { select: { currentVersion: { select: { status: true } } } },
           invoices: { select: { id: true, invoiceNumber: true, type: true, status: true, total: true } },
-          bookings: { where: { status: { not: 'CANCELLED' } }, orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true } },
+          ...JOB_SHOOT_SELECT,
         },
       },
     },
@@ -91,7 +92,7 @@ export default async function QuoteDetailPage({
   const view = quoteView(quote.status)
   const clientName = quote.enquiry?.client?.displayName ?? quote.enquiry?.name ?? quote.project?.client?.displayName ?? 'Unknown'
   const jobName = quote.enquiry?.eventType ?? 'Photography'
-  const shootDate = quote.project?.bookings[0]?.startsAt ?? null
+  const shootDate = quote.project ? shootDateOfJob(quote.project) : (quote.enquiry?.eventDate ?? null)
 
   const dep = v.depositPercent != null ? computeDeposit(v.total, v.depositPercent) : null
 

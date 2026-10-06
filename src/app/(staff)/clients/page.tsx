@@ -53,9 +53,9 @@ export default async function ClientsPage({
   const jobs = sp.jobs ?? ''
   const tab: 'active' | 'archived' = sp.tab === 'archived' ? 'archived' : 'active'
 
-  // Clients page = profile management: merged duplicates never show; archived clients live in their own
-  // tab, so an archived client is always reachable (and restorable) instead of vanishing.
-  const where: Prisma.ClientWhereInput = { mergedIntoClientId: null, archivedAt: tab === 'archived' ? { not: null } : null }
+  // Clients page = profile management: archived clients live in their own tab, so an archived client is
+  // always reachable (and restorable) instead of vanishing.
+  const where: Prisma.ClientWhereInput = { archivedAt: tab === 'archived' ? { not: null } : null }
   if (q) {
     where.OR = [
       { displayName: { contains: q, mode: 'insensitive' } },

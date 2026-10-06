@@ -12,7 +12,7 @@ import { sydneyDateTimeParts } from '@/lib/time'
 export { ADDABLE_TASK_TYPES } from '@/features/enquiries/workflow'
 export type { TaskType } from '@/features/enquiries/workflow'
 
-export type ProjectFacts = { shootScheduled: boolean; gallerySent: boolean; finalPaid: boolean; deliveryComplete: boolean }
+export type ProjectFacts = { finalPaid: boolean }
 
 type StageDef = { key: string; label: string; color: string; optional?: boolean }
 
@@ -45,11 +45,10 @@ export function stageLabel(key: string): string {
  */
 export const AUTO_MILESTONES: { stage: string; key: string; title: string; fact: keyof ProjectFacts; note: string }[] = [
   { stage: 'delivery', key: 'final_payment_received', title: 'Final payment received', fact: 'finalPaid', note: 'Confirmed automatically when the balance is paid in full.' },
-  { stage: 'delivery', key: 'delivery_complete', title: 'Delivery complete', fact: 'deliveryComplete', note: 'Confirmed automatically once the gallery is delivered and paid.' },
 ]
 
 /** The production workflow seeded for a new Job: staff (manual) tasks only, action-oriented names
- *  (Verb + Object). System milestones (Final payment received / Delivery complete) are NOT seeded here -
+ *  (Verb + Object). The system milestone (Final payment received) is NOT seeded here -
  *  they are read-only rows derived from real records (see AUTO_MILESTONES). "Shoot scheduled" is a staff
  *  task (staff confirm it), NOT a system milestone. Optional add-on stages (video/film/album) start empty
  *  and are added per package. */

@@ -2,7 +2,6 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
 import { lockInvoiceRow, refreshInvoiceAmountPaid } from './invoice-ledger'
-import { invalidateShootReminders } from './notifications'
 
 /**
  * Cancellation and refunds (F-FIN-02). Financial records are never hard-deleted - a refund is a new
@@ -11,21 +10,11 @@ import { invalidateShootReminders } from './notifications'
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
-/** Cancel a project: mark it CANCELLED and free any tentative/confirmed bookings and their crew. */
-export async function cancelProject(
-  projectId: string,
-  reason: string | null = null,
-  actorUserId: string | null = null,
-) {
-  return prisma.$transaction((tx) => cancelProjectTx(tx, projectId, reason, actorUserId))
-}
-
 /**
- * The cancellation itself, inside the caller's transaction (e.g. "Cancel job" on a confirmed lead), so a
- * cancelled job never leaves its shoots on the calendar or its crew blocked for those times.
+ * Cancel a job inside the caller's transaction (e.g. "Cancel job" on a confirmed lead, or a lead declined
+ * while awaiting its deposit). Its invoices and payments stay as they are - money is never deleted.
  */
 export async function cancelProjectTx(tx: Tx, projectId: string, reason: string | null = null, actorUserId: string | null = null) {
-  const now = systemClock.now()
   const project = await tx.project.findUnique({ where: { id: projectId } })
   if (!project) throw new Error('Project not found.')
   if (project.lifecycleStatus === 'CANCELLED') return project
@@ -34,22 +23,6 @@ export async function cancelProjectTx(tx: Tx, projectId: string, reason: string 
     where: { id: projectId },
     data: { lifecycleStatus: 'CANCELLED', commercialStatus: 'CANCELLED' },
   })
-  await tx.resourceAssignment.updateMany({
-    where: { booking: { projectId }, status: 'ACTIVE' },
-    data: { status: 'CANCELLED' },
-  })
-  // Capture the bookings being cancelled so their unsent shoot reminders can be invalidated below.
-  const cancelledBookings = await tx.booking.findMany({
-    where: { projectId, status: { in: ['TENTATIVE', 'CONFIRMED'] } },
-    select: { id: true },
-  })
-  await tx.booking.updateMany({
-    where: { projectId, status: { in: ['TENTATIVE', 'CONFIRMED'] } },
-    data: { status: 'CANCELLED', cancelledAt: now },
-  })
-  // Rule N7 (docs/25 Part 4): a cancelled shoot's unsent reminders are invalidated so no old-schedule
-  // notice is sent. The send worker also re-checks the booking status before sending (defence in depth).
-  for (const b of cancelledBookings) await invalidateShootReminders(tx, b.id)
   await tx.auditLog.create({
     data: {
       companyId: project.companyId,
@@ -86,14 +59,14 @@ export async function refundPayment(
     // F-1: serialise with concurrent payments/refunds/void on this invoice, then read the ledger.
     await lockInvoiceRow(tx, payment.invoiceId)
     const txns = await tx.paymentTransaction.findMany({
-      where: { paymentId, status: 'SUCCEEDED' },
+      where: { paymentId },
       select: { type: true, amount: true },
     })
     const captured = txns
       .filter((t) => t.type === 'CHARGE')
       .reduce((sum, t) => sum.add(t.amount), new Prisma.Decimal(0))
     const alreadyRefunded = txns
-      .filter((t) => t.type === 'REFUND' || t.type === 'REVERSAL')
+      .filter((t) => t.type === 'REFUND')
       .reduce((sum, t) => sum.add(t.amount), new Prisma.Decimal(0))
     if (alreadyRefunded.add(refundAmount).greaterThan(captured)) {
       throw new Error('Refund exceeds the amount captured on this payment.')
@@ -105,7 +78,6 @@ export async function refundPayment(
         amount: refundAmount,
         currency: payment.currency,
         reason: input.reason ?? null,
-        status: 'SUCCEEDED',
         externalReference: input.externalReference ?? null,
         processedAt: now,
       },
@@ -117,7 +89,6 @@ export async function refundPayment(
         type: 'REFUND',
         amount: refundAmount,
         currency: payment.currency,
-        status: 'SUCCEEDED',
         processedAt: now,
       },
     })

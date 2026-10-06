@@ -8,18 +8,7 @@ import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getActionUser } from '@/lib/auth/guard'
 import { parseCsv } from '@/lib/csv'
 import { prisma } from '@/lib/db'
-import {
-  addClientNote,
-  archiveClient,
-  clientHasHistory,
-  createClient,
-  deleteClientNote,
-  deleteEmptyClients,
-  restoreClient,
-  setClientConsent,
-  updateClient,
-  updateClientNotes,
-} from '@/lib/domain/client'
+import { archiveClient, clientHasHistory, createClient, deleteEmptyClients, restoreClient, updateClient } from '@/lib/domain/client'
 import { createEnquiry } from '@/lib/domain/enquiry'
 import { clientSchema } from '@/lib/validation/client'
 import type { ClientFormValues } from './ClientForm'
@@ -244,19 +233,6 @@ export async function updateClientFormAction(_prev: ClientFormState, formData: F
   redirect(`/clients/${clientId}`)
 }
 
-/** Archive a client (safe when they have projects). */
-export async function archiveClientAction(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  // Archiving a client with history is ADMIN only, the same rule removeClientAction enforces (docs/33 §1).
-  if (user.role !== 'ADMIN') return
-  const clientId = String(formData.get('clientId') ?? '')
-  if (!clientId) return
-  await archiveClient(clientId, user.id)
-  revalidatePath('/clients')
-  revalidatePath(`/clients/${clientId}`)
-}
-
 /** Restore an archived client to the active list. */
 export async function restoreClientAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
@@ -311,43 +287,3 @@ export async function deleteClientsAction(formData: FormData): Promise<void> {
   revalidatePath('/clients')
 }
 
-/** Add a titled note to a client's notes list. */
-export async function addClientNoteAction(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const clientId = String(formData.get('clientId') ?? '')
-  if (!clientId) return
-  await addClientNote(clientId, String(formData.get('title') ?? ''), String(formData.get('body') ?? ''), user.id)
-  revalidatePath(`/clients/${clientId}`)
-}
-
-/** Delete one client note. */
-export async function deleteClientNoteAction(formData: FormData): Promise<void> {
-  await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const noteId = String(formData.get('noteId') ?? '')
-  const clientId = String(formData.get('clientId') ?? '')
-  if (!noteId) return
-  await deleteClientNote(noteId)
-  if (clientId) revalidatePath(`/clients/${clientId}`)
-}
-
-/** Record or withdraw a client's marketing consent. */
-export async function setClientConsentAction(formData: FormData): Promise<void> {
-  await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const clientId = String(formData.get('clientId') ?? '')
-  if (!clientId) return
-  await setClientConsent(clientId, formData.get('consent') === 'true')
-  revalidatePath(`/clients/${clientId}`)
-}
-
-/** Save the free-text note on a client (inline on the client page). */
-export async function updateClientNotesAction(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const clientId = String(formData.get('clientId') ?? '')
-  if (!clientId) return
-  await updateClientNotes(clientId, String(formData.get('notes') ?? ''), user.id)
-  revalidatePath(`/clients/${clientId}`)
-}

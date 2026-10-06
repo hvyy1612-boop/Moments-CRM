@@ -18,13 +18,13 @@ type Prefill = { date: string; startTime?: string }
 
 function catClass(item: CalItem): string {
   // Colour by CATEGORY so it reads against the filter tabs: Enquiries = purple, Job tasks = soft red,
-  // Payments = peach, Events = grey. Shoots (bookings) keep their own green so the shoot day stands out.
+  // Payments = peach, Events = grey. Shoots keep their own green so the shoot day stands out.
   // Overdue adds a subtle ring rather than a loud fill. All tokens are the globals.css family.
   const base =
     item.category === 'payment' ? 'bg-peach text-ink'
     : item.category === 'event' ? 'bg-sunk text-ink'
     : item.category === 'lead' ? 'bg-lav text-ink'
-    : item.kind === 'booking' ? 'bg-sage text-ink'
+    : item.kind === 'shoot' ? 'bg-sage text-ink'
     : 'bg-lost text-ink'
   return item.tone === 'overdue' ? `${base} ring-1 ring-lost-ink/40` : base
 }
@@ -77,10 +77,10 @@ export function CalendarClient({
   }, [])
 
   const doMove = useCallback((item: CalItem, dateKey: string, startMin: number | null) => {
-    if (item.kind !== 'booking' && item.kind !== 'event') return
+    if (item.kind !== 'event') return
     if (item.dayKey === dateKey && item.startMin === startMin) return
     const fd = new FormData()
-    fd.set('csrf', csrf); fd.set('kind', item.kind); fd.set('refId', item.refId)
+    fd.set('csrf', csrf); fd.set('refId', item.refId)
     fd.set('date', dateKey); fd.set('startMin', startMin === null ? '' : String(startMin))
     setMoveErr(null)
     startMove(async () => {

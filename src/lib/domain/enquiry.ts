@@ -93,7 +93,6 @@ async function runCreateEnquiry(input: CreateEnquiryInput, actorUserId: string |
         styleReason: input.styleReason ?? null,
         heardAbout: input.heardAbout ?? null,
         source: input.source ?? 'WEBSITE',
-        waitingOn: 'STUDIO',
       },
     })
     await tx.auditLog.create({
@@ -147,7 +146,7 @@ export async function markEnquiryLost(
         const accepted = await tx.quote.findMany({ where: { enquiryId, status: 'ACCEPTED' }, select: { id: true, currentVersionId: true } })
         for (const q of accepted) {
           await tx.quote.update({ where: { id: q.id }, data: { status: 'DECLINED' } })
-          if (q.currentVersionId) await tx.quoteVersion.update({ where: { id: q.currentVersionId }, data: { status: 'DECLINED', declineReason: 'OTHER' } })
+          if (q.currentVersionId) await tx.quoteVersion.update({ where: { id: q.currentVersionId }, data: { status: 'DECLINED' } })
         }
         cancelledJobId = job.id
       }
@@ -158,7 +157,6 @@ export async function markEnquiryLost(
       data: {
         status: 'DECLINED',
         lostReason: reason,
-        waitingOn: null,
         ...(cancelledJobId ? { convertedProjectId: null, convertedAt: null } : {}),
       },
     })
@@ -187,7 +185,7 @@ export async function reopenEnquiry(enquiryId: string, actorUserId: string | nul
     }
     const updated = await tx.enquiry.update({
       where: { id: enquiryId },
-      data: { status: 'CONTACTED', lostReason: null, waitingOn: 'STUDIO' },
+      data: { status: 'CONTACTED', lostReason: null },
     })
     // Bring the checklist back to life so staff can keep working the returning lead.
     await tx.workItem.updateMany({ where: { enquiryId, status: 'CANCELLED' }, data: { status: 'PENDING' } })
@@ -259,13 +257,9 @@ export async function convertEnquiryCore(
 
     // Every lead belongs to a client: use the one it is LINKED to first (its email may have been corrected on
     // the client since the lead was logged). Only an unlinked lead (website form) falls back to the email,
-    // else a new client is created. Follow a merge pointer so a merged-away duplicate resolves to its
-    // survivor instead of being revived (F-ENQ-05).
+    // else a new client is created.
     let client = enquiry.clientId ? await tx.client.findUnique({ where: { id: enquiry.clientId } }) : null
     if (!client) client = await tx.client.findUnique({ where: { email: enquiry.email } })
-    while (client?.mergedIntoClientId) {
-      client = await tx.client.findUnique({ where: { id: client.mergedIntoClientId } })
-    }
     if (!client) {
       client = await tx.client.create({
         data: {
@@ -301,7 +295,6 @@ export async function convertEnquiryCore(
         source: enquiry.source,
         ownerUserId: enquiry.ownerUserId ?? actorUserId,
         enquiryReceivedAt: enquiry.createdAt,
-        enquiryNotes: enquiry.message,
       },
     })
 
@@ -312,7 +305,6 @@ export async function convertEnquiryCore(
       where: { id: enquiry.id },
       data: {
         status: 'AWAITING_BOOKING_CONFIRMATION',
-        waitingOn: null,
         clientId: enquiry.clientId ?? client.id, // a website lead becomes linked to its client here
         convertedClientId: client.id,
         convertedProjectId: project.id,
@@ -357,7 +349,7 @@ export async function cancelBooking(enquiryId: string, actorUserId: string | nul
     // Spec §3: cancelling a CONFIRMED booking is a JOB-lifecycle event. The Job is cancelled, but the
     // enquiry KEEPS its BOOKING_CONFIRMED history and its link to the Job - it was a successful
     // conversion and must not be rewritten to DECLINED (that would corrupt conversion reporting).
-    // Full job cancellation (docs/33: one cancel path): the Job, its shoots, crew and shoot reminders.
+    // One cancel path for every job (docs/33); its invoices and payments are kept.
     if (enquiry.convertedProjectId) await cancelProjectTx(tx, enquiry.convertedProjectId, 'Booking cancelled', actorUserId)
     await tx.auditLog.create({
       data: {

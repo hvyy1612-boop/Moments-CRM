@@ -44,7 +44,6 @@ const STAFF_CRM: Permission[] = [
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ADMIN: [...STAFF_CRM, 'USER_MANAGE', 'AUTH_LOG_VIEW', 'AUDIT_LOG_VIEW', 'SETTINGS_EDIT', 'MONEY_ADMIN'],
   STUDIO: STAFF_CRM,
-  EDITOR: ['ENQUIRY_VIEW', 'PROJECT_VIEW', 'CLIENT_VIEW', 'QUOTE_VIEW', 'FINANCE_VIEW', 'CALENDAR_VIEW'],
 }
 
 /** True when the user's role grants the permission. Returns false for a missing user. */

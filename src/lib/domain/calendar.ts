@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { daysUntilSydney, formatSydneyTime, sydneyLocalToUtc, sydneyYmd, systemClock } from '@/lib/time'
 import { addDays, ENQUIRY_TASK_SCHEDULE } from '@/features/enquiries/workflow'
-import { makeShootDateOf, resolveTaskDueDate, type BookingLike, type DueAnchor } from './deadline'
+import { JOB_SHOOT_SELECT, resolveTaskDueDate, shootDateOfJob, shootHasTime, type DueAnchor } from './deadline'
 import { CLOSED_PROJECT, OPEN_ENQUIRY } from './today'
 
 // Only work that is still live belongs on the calendar: open leads and jobs that are not cancelled or
@@ -16,7 +16,8 @@ const LIVE_WORK: Prisma.WorkItemWhereInput[] = [
 /**
  * Calendar aggregation (BR-CAL). The calendar is DERIVED - it lays what staff already entered onto a
  * Month or Week grid so nothing is typed twice:
- *   - Shoots come from Booking; workflow appointments from APPOINTMENT work items (lead or job),
+ *   - Shoots are each live job's shoot date (its Shoot task, else the lead's event date); workflow
+ *     appointments come from APPOINTMENT work items (lead or job),
  *     using the same anchored due dates as the board; standalone entries from CalendarEvent.
  * Every position (which day, which hour) is computed in the Sydney zone so a late event lands on the
  * right day/slot regardless of the server's own time zone. Overlapping shoots are flagged as a
@@ -29,7 +30,7 @@ export type CalendarView = 'month' | 'week'
 
 export type CalItem = {
   id: string // stable dom id, e.g. b_<id>
-  kind: 'booking' | 'event' | 'appointment' | 'task'
+  kind: 'shoot' | 'event' | 'appointment' | 'task'
   refId: string // underlying row id, for move actions
   dayKey: string // YYYY-MM-DD in Sydney (which cell/column)
   startMin: number | null // minutes from Sydney midnight; null = all-day / undated
@@ -40,9 +41,9 @@ export type CalItem = {
   tone: 'overdue' | 'today' | 'soon' | null
   timeLabel: string | null
   href: string | null
-  editable: boolean // draggable (bookings + standalone events)
+  editable: boolean // draggable (standalone events only; a shoot date is changed on the job's Shoot task)
   location: string | null
-  status: string | null // booking status (tentative/confirmed)
+  status: string | null // invoice status for payment items
   conflict: boolean
   done: boolean
 }
@@ -124,9 +125,9 @@ function tone(dueMs: number | null, done: boolean, nowMs: number): CalItem['tone
 
 /**
  * A work item's effective calendar date. Leads anchor to the enquiry date + schedule offset (manual
- * dueAt wins). Jobs go through the one deadline resolver (docs/25 Rule D0): shoot-anchored tasks appear
- * only once a shoot is booked, so an un-booked job's checklist stays quiet. `timed` marks a manually
- * dated item (which carries a time-of-day) vs an anchored all-day marker.
+ * dueAt wins). Jobs go through the one deadline resolver (docs/25 Rule D0): shoot-anchored tasks follow
+ * the job's shoot date. `timed` marks a manually dated item (which carries a time-of-day) vs an anchored
+ * all-day marker.
  */
 type CalWorkItem = {
   title: string
@@ -135,9 +136,10 @@ type CalWorkItem = {
   dueOffsetDays: number
   dueDateFixed: Date | null
   dueOverrideAt: Date | null
-  bookingId: string | null
   enquiry: { createdAt: Date } | null
-  project: { confirmedByClientAt: Date | null; bookings: BookingLike[] } | null
+  project:
+    | ({ confirmedByClientAt: Date | null } & Parameters<typeof shootDateOfJob>[0])
+    | null
 }
 
 function resolveCalendarDate(w: CalWorkItem): { date: Date | null; timed: boolean } {
@@ -147,7 +149,7 @@ function resolveCalendarDate(w: CalWorkItem): { date: Date | null; timed: boolea
     return { date, timed: Boolean(w.dueAt) }
   }
   const date = resolveTaskDueDate(w, {
-    shootDateOf: makeShootDateOf(w.project?.bookings ?? []),
+    shootDate: w.project ? shootDateOfJob(w.project) : null,
     jobConfirmedAt: w.project?.confirmedByClientAt ?? null,
   })
   return { date, timed: Boolean(w.dueOverrideAt) }
@@ -158,21 +160,23 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
   const want = (c: CalCategory) => filter === 'all' || filter === c
   const items: CalItem[] = []
 
-  // Shoots (bookings) - category job.
+  // Shoots - category job: each live job's shoot date (set on its Shoot task, else the lead's date).
   if (want('job')) {
-    const bookings = await prisma.booking.findMany({
-      where: { startsAt: { gte: startUtc, lt: endUtc }, status: { not: 'CANCELLED' } },
-      select: { id: true, title: true, startsAt: true, endsAt: true, status: true, location: true,
-        project: { select: { id: true, client: { select: { displayName: true } } } } },
+    const jobs = await prisma.project.findMany({
+      where: { lifecycleStatus: { notIn: ['CANCELLED', 'CLOSED'] } },
+      select: { id: true, client: { select: { displayName: true } }, ...JOB_SHOOT_SELECT },
     })
-    for (const b of bookings) {
+    for (const j of jobs) {
+      const at = shootDateOfJob(j)
+      if (!at || at.getTime() < startUtc.getTime() || at.getTime() >= endUtc.getTime()) continue
+      const timed = shootHasTime(j)
       items.push({
-        id: `b_${b.id}`, kind: 'booking', refId: b.id, dayKey: sydneyDateKey(b.startsAt),
-        startMin: sydneyMinutes(b.startsAt), endMin: b.endsAt ? sydneyMinutes(b.endsAt) : null,
-        primary: b.project.client.displayName, secondary: b.title?.trim() || 'Shoot',
-        category: 'job', tone: null, timeLabel: formatSydneyTime(b.startsAt),
-        href: `/jobs/${b.project.id}`, editable: true, location: b.location ?? null,
-        status: b.status, conflict: false, done: false,
+        id: `s_${j.id}`, kind: 'shoot', refId: j.id, dayKey: sydneyDateKey(at),
+        startMin: timed ? sydneyMinutes(at) : null, endMin: null,
+        primary: j.client.displayName, secondary: 'Shoot',
+        category: 'job', tone: null, timeLabel: timed ? formatSydneyTime(at) : null,
+        href: `/jobs/${j.id}`, editable: false, location: null,
+        status: null, conflict: false, done: false,
       })
     }
   }
@@ -182,10 +186,9 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
     const appts = await prisma.workItem.findMany({
       where: { type: 'APPOINTMENT', status: { in: ['PENDING', 'COMPLETED'] }, OR: LIVE_WORK },
       select: { id: true, title: true, dueAt: true, status: true,
-        dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true, bookingId: true,
+        dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true,
         enquiry: { select: { id: true, name: true, createdAt: true } },
-        project: { select: { id: true, confirmedByClientAt: true, client: { select: { displayName: true } },
-          bookings: { select: { id: true, startsAt: true, status: true, rescheduledFromId: true } } } } },
+        project: { select: { id: true, confirmedByClientAt: true, client: { select: { displayName: true } }, ...JOB_SHOOT_SELECT } } },
     })
     for (const w of appts) {
       const isLead = Boolean(w.enquiry)
@@ -214,9 +217,9 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
     const tasks = await prisma.workItem.findMany({
       where: { type: { notIn: ['APPOINTMENT', 'AUTO'] }, status: 'PENDING', OR: LIVE_WORK },
       select: { id: true, title: true, dueAt: true,
-        dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true, bookingId: true,
+        dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true,
         enquiry: { select: { id: true, name: true, createdAt: true } },
-        project: { select: { id: true, confirmedByClientAt: true, client: { select: { displayName: true } }, bookings: { select: { id: true, startsAt: true, status: true, rescheduledFromId: true } } } } },
+        project: { select: { id: true, confirmedByClientAt: true, client: { select: { displayName: true } }, ...JOB_SHOOT_SELECT } } },
     })
     for (const w of tasks) {
       const isLead = Boolean(w.enquiry)
@@ -281,18 +284,11 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
   return items
 }
 
-/** Two shoots on the same day whose [start,end) overlap are a double-booking. */
+/** Two jobs shooting on the same day are a possible double-booking (a wedding studio's classic clash). */
 function flagConflicts(items: CalItem[]): void {
-  const shoots = items.filter((i) => i.kind === 'booking' && i.startMin !== null)
-  for (let a = 0; a < shoots.length; a++) {
-    for (let b = a + 1; b < shoots.length; b++) {
-      const x = shoots[a], y = shoots[b]
-      if (!x || !y || x.dayKey !== y.dayKey || x.startMin === null || y.startMin === null) continue
-      const xEnd = x.endMin ?? x.startMin + 60
-      const yEnd = y.endMin ?? y.startMin + 60
-      if (x.startMin < yEnd && y.startMin < xEnd) { x.conflict = true; y.conflict = true }
-    }
-  }
+  const byDay = new Map<string, CalItem[]>()
+  for (const i of items) if (i.kind === 'shoot') byDay.set(i.dayKey, [...(byDay.get(i.dayKey) ?? []), i])
+  for (const same of byDay.values()) if (same.length > 1) for (const i of same) i.conflict = true
 }
 
 export async function getCalendarView(
@@ -372,52 +368,22 @@ export async function createCalendarEvent(input: CreateCalendarEventInput): Prom
   })
 }
 
-/** Move a booking or standalone event to a new Sydney day/time (drag-to-reschedule). Duration is kept. */
-export async function moveCalendarItem(
-  kind: 'booking' | 'event',
-  refId: string,
-  dateKey: string,
-  startMin: number | null,
-  actorUserId: string | null = null,
-): Promise<void> {
+/** Move a standalone calendar event to a new Sydney day/time (drag-to-reschedule). Duration is kept. A
+ *  job's shoot date is changed on its Shoot task (or by a change request), never by dragging. */
+export async function moveCalendarEvent(refId: string, dateKey: string, startMin: number | null): Promise<void> {
   const hh = startMin === null ? '00' : pad(Math.floor(startMin / 60))
   const mm = startMin === null ? '00' : pad(startMin % 60)
   const newStart = sydneyLocalToUtc(`${dateKey}T${hh}:${mm}`)
-  if (kind === 'booking') {
-    // A shoot keeps its identity and status, but its crew's booked windows move WITH it (clash-checked),
-    // otherwise the old window stays reserved and the new time can be double-booked.
-    await prisma.$transaction(async (tx) => {
-      const b = await tx.booking.findUniqueOrThrow({
-        where: { id: refId },
-        select: { startsAt: true, endsAt: true, status: true, assignments: { where: { status: 'ACTIVE' }, select: { id: true, resourceId: true } } },
-      })
-      if (b.status === 'CANCELLED') throw new Error('A cancelled shoot cannot be moved.')
-      const newEnd = new Date(newStart.getTime() + Math.max(b.endsAt.getTime() - b.startsAt.getTime(), 0))
-      for (const a of b.assignments) {
-        const clash = await tx.resourceAssignment.findFirst({
-          where: { resourceId: a.resourceId, status: 'ACTIVE', id: { not: a.id }, startsAt: { lt: newEnd }, endsAt: { gt: newStart } },
-          select: { id: true },
-        })
-        if (clash) throw new Error('Someone on this shoot is already booked at the new time.')
-      }
-      await tx.booking.update({ where: { id: refId }, data: { startsAt: newStart, endsAt: newEnd } })
-      await tx.resourceAssignment.updateMany({ where: { bookingId: refId, status: 'ACTIVE' }, data: { startsAt: newStart, endsAt: newEnd } })
-      await tx.auditLog.create({
-        data: { action: 'booking.moved', entityType: 'Booking', entityId: refId, actorUserId, beforeData: { startsAt: b.startsAt.toISOString(), endsAt: b.endsAt.toISOString() }, afterData: { startsAt: newStart.toISOString(), endsAt: newEnd.toISOString() } },
-      })
-    })
-  } else {
-    const e = await prisma.calendarEvent.findUniqueOrThrow({ where: { id: refId }, select: { startsAt: true, endsAt: true, allDay: true } })
-    const duration = e.endsAt ? e.endsAt.getTime() - e.startsAt.getTime() : null
-    await prisma.calendarEvent.update({
-      where: { id: refId },
-      data: {
-        startsAt: newStart,
-        endsAt: duration !== null ? new Date(newStart.getTime() + duration) : null,
-        allDay: startMin === null ? true : false,
-      },
-    })
-  }
+  const e = await prisma.calendarEvent.findUniqueOrThrow({ where: { id: refId }, select: { startsAt: true, endsAt: true } })
+  const duration = e.endsAt ? e.endsAt.getTime() - e.startsAt.getTime() : null
+  await prisma.calendarEvent.update({
+    where: { id: refId },
+    data: {
+      startsAt: newStart,
+      endsAt: duration !== null ? new Date(newStart.getTime() + duration) : null,
+      allDay: startMin === null,
+    },
+  })
 }
 
 /** Stable per-company iCal subscription token, stored in company.settings (no migration needed). */
@@ -504,10 +470,10 @@ export async function getIcsForToken(token: string): Promise<string | null> {
   const start = new Date(now.getTime() - 30 * 86_400_000)
   const end = new Date(now.getTime() + 365 * 86_400_000)
 
-  const [bookings, events, appts] = await Promise.all([
-    prisma.booking.findMany({
-      where: { companyId: company.id, startsAt: { gte: start, lt: end }, status: { not: 'CANCELLED' } },
-      select: { id: true, title: true, startsAt: true, endsAt: true, location: true, project: { select: { client: { select: { displayName: true } } } } },
+  const [jobs, events, appts] = await Promise.all([
+    prisma.project.findMany({
+      where: { companyId: company.id, lifecycleStatus: { notIn: ['CANCELLED', 'CLOSED'] } },
+      select: { id: true, client: { select: { displayName: true } }, ...JOB_SHOOT_SELECT },
     }),
     prisma.calendarEvent.findMany({
       where: { companyId: company.id, startsAt: { gte: start, lt: end } },
@@ -515,13 +481,18 @@ export async function getIcsForToken(token: string): Promise<string | null> {
     }),
     prisma.workItem.findMany({
       where: { companyId: company.id, type: 'APPOINTMENT', status: { in: ['PENDING', 'COMPLETED'] }, OR: LIVE_WORK },
-      select: { id: true, title: true, dueAt: true, dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true, bookingId: true, enquiry: { select: { name: true, createdAt: true } }, project: { select: { confirmedByClientAt: true, client: { select: { displayName: true } }, bookings: { select: { id: true, startsAt: true, status: true, rescheduledFromId: true } } } } },
+      select: { id: true, title: true, dueAt: true, dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true, enquiry: { select: { name: true, createdAt: true } }, project: { select: { confirmedByClientAt: true, client: { select: { displayName: true } }, ...JOB_SHOOT_SELECT } } },
     }),
   ])
 
   const dtstamp = icsStamp(now)
   const lines: string[] = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Moments//Calendar//EN', 'CALSCALE:GREGORIAN', `X-WR-CALNAME:${icsEscape(company.name)}`]
-  for (const b of bookings) lines.push(...vevent(`b_${b.id}`, dtstamp, b.startsAt, b.endsAt, false, `${b.project.client.displayName} - ${b.title?.trim() || 'Shoot'}`, b.location))
+  for (const j of jobs) {
+    const at = shootDateOfJob(j)
+    if (!at || at.getTime() < start.getTime() || at.getTime() >= end.getTime()) continue
+    const timed = shootHasTime(j)
+    lines.push(...vevent(`s_${j.id}`, dtstamp, at, timed ? new Date(at.getTime() + 60 * 60_000) : null, !timed, `${j.client.displayName} - Shoot`, null))
+  }
   for (const e of events) lines.push(...vevent(`e_${e.id}`, dtstamp, e.startsAt, e.endsAt, e.allDay, e.title, e.location))
   for (const w of appts) {
     const isLead = Boolean(w.enquiry)

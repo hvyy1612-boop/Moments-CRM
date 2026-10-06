@@ -9,13 +9,6 @@
 
 import { daysUntilSydney, sydneyDateTimeParts } from '@/lib/time'
 
-export function currentActionText(waitingOn: string | null, pendingTitle: string | null): string {
-  if (waitingOn === 'CLIENT') return 'Waiting for client reply'
-  if (pendingTitle) return `Staff needs to: ${pendingTitle.toLowerCase()}`
-  if (waitingOn === 'STUDIO') return 'Staff needs to act'
-  return '-'
-}
-
 export type TaskType = 'TODO' | 'AUTO_EMAIL' | 'APPOINTMENT' | 'SHOOT' | 'AUTO'
 
 export const TASK_TYPE_LABEL: Record<TaskType, string> = {

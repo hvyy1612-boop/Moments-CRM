@@ -80,7 +80,6 @@ export default async function EnquiryDetailPage({
       heardAbout: true,
       message: true,
       status: true,
-      waitingOn: true,
       convertedProjectId: true,
     },
   })
@@ -158,7 +157,7 @@ export default async function EnquiryDetailPage({
           {open ? (
             <>
               {' · Waiting for: '}
-              <span className="font-bold text-ink">{waitingLabel(enquiry.waitingOn)}</span>
+              <span className="font-bold text-ink">{waitingLabel(enquiry.status)}</span>
             </>
           ) : null}
         </p>

@@ -16,12 +16,10 @@ const fee = z.object({
   reason: z.string().trim().max(500).optional().nullable(),
 })
 
-/** Move a shoot; optionally charge a rescheduling fee. */
+/** Move the job's shoot to a new date and time; optionally charge a rescheduling fee. */
 const reschedule = z.object({
   kind: z.literal('reschedule'),
-  bookingId: z.string().min(1),
-  newStartsAt: z.string().min(1),
-  newEndsAt: z.string().min(1),
+  newStartsAt: z.string().min(1, 'Choose the new shoot date and time.'),
   fee: fee.optional(),
 })
 

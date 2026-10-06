@@ -10,10 +10,8 @@ import { join } from 'node:path'
 const SRC = 'src'
 // globals.css is the design-token source of truth. email.ts is allowlisted because HTML email
 // requires inline literal colours/sizes — email clients do not support CSS variables, external
-// stylesheets, or Tailwind classes, so the tokens cannot be referenced there. GoogleMark.tsx is the
-// one documented colour exception (D-016 / §8.5): Google's brand guidelines require the exact hex
-// values of the official mark, so that single component may carry them.
-const ALLOW = new Set(['src/app/globals.css', 'src/lib/email.ts', 'src/components/auth/GoogleMark.tsx', 'src/components/QuotePdf.tsx'])
+// stylesheets, or Tailwind classes, so the tokens cannot be referenced there.
+const ALLOW = new Set(['src/app/globals.css', 'src/lib/email.ts', 'src/components/QuotePdf.tsx'])
 const PATTERNS = [
   { name: 'hex colour', re: /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})\b/ },
   { name: 'colour function', re: /\b(?:rgb|rgba|hsl|hsla|oklch|oklab|lab|lch)\s*\(/ },

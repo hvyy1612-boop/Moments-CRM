@@ -49,14 +49,15 @@ export function isOpenEnquiry(status: string): boolean {
   return OPEN_STATUSES.has(status)
 }
 
+/** Open lead stages where the studio owes the next move (no quote sent yet). */
+export const STUDIO_TO_ACT = ['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION'] as const
+
 /**
- * Who owes the next response, in plain words. `waitingOn` is NOT a lifecycle stage (spec §8) - it is off
- * the Enquiries list, but still supports the conversation state on the detail page.
+ * Who owes the next move on an open lead, read from its stage: before a quote goes out the studio does;
+ * once it is sent the client does (accept it, then pay the deposit).
  */
-export function waitingLabel(waitingOn: string | null): string {
-  if (waitingOn === 'STUDIO') return 'You'
-  if (waitingOn === 'CLIENT') return 'Client'
-  return '-'
+export function waitingLabel(status: string): string {
+  return (STUDIO_TO_ACT as readonly string[]).includes(status) ? 'You' : 'Client'
 }
 
 /**

@@ -5,7 +5,7 @@
  */
 
 // Roles that can log in. Clients have no login and reach their records by token (`token`).
-export type Role = 'ADMIN' | 'STUDIO' | 'EDITOR'
+export type Role = 'ADMIN' | 'STUDIO'
 
 export type RoutePermission =
   | { public: true }
@@ -22,16 +22,13 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   // Resend delivery webhook: guarded by the Svix signature (RESEND_WEBHOOK_SECRET) inside the route.
   '/api/webhooks/resend': { secret: true },
   '/api/calendar/feed': { token: true },
-  // Google staff sign-in OAuth: reached before a session exists; guarded internally by OAuth state.
-  '/api/auth/google': { public: true },
-  '/api/auth/google/callback': { public: true },
   // Staff entrance and account recovery: public by necessity (not signed in yet / token-authorised).
   // Accounts are admin-provisioned, so there is no public /register.
   '/login': { public: true },
   '/forgot': { public: true },
   '/reset/[token]': { public: true },
   // Forced first-login password change: any signed-in staff member, before any role-gated area.
-  '/change-password': { roles: ['ADMIN', 'STUDIO', 'EDITOR'] },
+  '/change-password': { roles: ['ADMIN', 'STUDIO'] },
   // Staff workspace: the dashboard, leads (DB Enquiry), jobs (DB Project) and their detail pages.
   '/dashboard': { roles: ['ADMIN', 'STUDIO'] },
   '/leads': { roles: ['ADMIN', 'STUDIO'] },
@@ -46,13 +43,11 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/quotes/[id]': { roles: ['ADMIN', 'STUDIO'] },
   '/quotes/[id]/edit': { roles: ['ADMIN', 'STUDIO'] },
   '/quotes/[id]/preview': { roles: ['ADMIN', 'STUDIO'] },
-  '/jobs/[id]/invoice/[invoiceId]': { roles: ['ADMIN', 'STUDIO'] },
   '/finance/new': { roles: ['ADMIN', 'STUDIO'] },
   '/finance/report': { roles: ['ADMIN', 'STUDIO'] },
   '/finance/[invoiceId]': { roles: ['ADMIN', 'STUDIO'] },
   '/finance/[invoiceId]/edit': { roles: ['ADMIN', 'STUDIO'] },
   '/clients': { roles: ['ADMIN', 'STUDIO'] },
-  '/clients/new': { roles: ['ADMIN', 'STUDIO'] },
   '/clients/import': { roles: ['ADMIN', 'STUDIO'] },
   '/clients/export': { roles: ['ADMIN', 'STUDIO'] },
   '/clients/[id]': { roles: ['ADMIN', 'STUDIO'] },
@@ -73,8 +68,5 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   // Client-facing, reached by a token only. No session, no account.
   '/quote/[token]': { token: true },
   '/contract/[token]': { token: true },
-  '/gallery/[token]': { token: true },
   '/invoice/[token]': { token: true },
-  '/questionnaire/[token]': { token: true },
-  '/portal/[token]': { token: true },
 }

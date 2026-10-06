@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
 import { convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
-import { createInvoice, recordPayment } from '@/lib/domain/finance'
+import { recordPayment } from '@/lib/domain/finance'
+import { createInvoice } from './helpers'
 import { acceptQuote, createQuote, createQuoteForEnquiry, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 
 /** Lead -> Job logic made consistent (Studio Ninja model), 2026-10-06. */

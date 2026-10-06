@@ -13,8 +13,6 @@ import { syncEnquiryStageFromTasks } from './enquiry-stage'
 /** Interactive-transaction client type. */
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
-const OPEN = new Set(['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION'])
-
 /** Runs inside createEnquiry's transaction: store the client's first message and seed the default flow. */
 export async function seedEnquiryWorkflow(
   tx: Tx,
@@ -91,50 +89,6 @@ export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> 
     completedAt: w.completedAt ?? null,
   }))
   return buildEnquiryBoard(tasks, formatSydneyDate, enquiry?.createdAt ?? null, new Date(), booked, enquiry?.owner?.name ?? null)
-}
-
-/** Staff sends a reply: records an outbound message and moves the ball to the client. A brand-new lead
- *  advances to CONTACTED (does not demote a later stage). */
-export async function sendStaffReply(enquiryId: string, body: string, actorUserId: string) {
-  const text = body.trim()
-  if (!text) throw new Error('A reply cannot be empty.')
-  return prisma.$transaction(async (tx) => {
-    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Lead not found.')
-    if (!OPEN.has(enquiry.status)) throw new Error('This lead is already closed.')
-
-    await tx.communication.create({
-      data: { enquiryId, type: 'CLIENT_MESSAGE', direction: 'outbound', body: text, byUserId: actorUserId },
-    })
-    await tx.enquiry.update({
-      where: { id: enquiryId },
-      data: { status: enquiry.status === 'NEW_ENQUIRY' ? 'CONTACTED' : enquiry.status, waitingOn: 'CLIENT' },
-    })
-    await tx.auditLog.create({
-      data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.replied', entityType: 'Enquiry', entityId: enquiryId },
-    })
-    return enquiry
-  })
-}
-
-/** Record a message from the client: the ball moves back to the studio. */
-export async function logClientReply(enquiryId: string, body: string, actorUserId: string) {
-  const text = body.trim()
-  if (!text) throw new Error('The client message cannot be empty.')
-  return prisma.$transaction(async (tx) => {
-    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Lead not found.')
-    if (!OPEN.has(enquiry.status)) throw new Error('This lead is already closed.')
-
-    await tx.communication.create({
-      data: { enquiryId, type: 'CLIENT_MESSAGE', direction: 'inbound', body: text, byUserId: null },
-    })
-    await tx.enquiry.update({ where: { id: enquiryId }, data: { waitingOn: 'STUDIO' } })
-    await tx.auditLog.create({
-      data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.client_replied', entityType: 'Enquiry', entityId: enquiryId },
-    })
-    return enquiry
-  })
 }
 
 /** Add an internal team note to a lead (never client-facing). Allowed at any status. */

@@ -2,14 +2,18 @@ import { randomUUID } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
 import { createEnquiry, convertEnquiry } from '@/lib/domain/enquiry'
-import { createInvoice, createInvoiceWithLines, deleteInvoice, issueCreditNote, markOverdueInvoices, recordPayment, voidInvoice } from '@/lib/domain/finance'
+import { createInvoiceWithLines, deleteInvoice, markOverdueInvoices, recordPayment, voidInvoice } from '@/lib/domain/finance'
+import { createInvoice, issueCreditNote } from './helpers'
 import { sydneyLocalToUtc } from '@/lib/time'
 import { closeJob } from '@/lib/domain/project'
 import { seedProjectWorkflow } from '@/lib/domain/project-workflow'
 import { refundPayment } from '@/lib/domain/refund'
-import { getInvoiceBalanceById, getJobBalanceByProjectId } from '@/lib/domain/invoice-money'
+import { getInvoiceBalanceById, INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
+import { getJobBalance } from '@/lib/domain/money'
 
 const email = () => `money-${randomUUID()}@moments.test`
+const jobBalanceOf = async (projectId: string) =>
+  getJobBalance((await prisma.invoice.findMany({ where: { projectId }, select: INVOICE_MONEY_SELECT })).map(toInvoiceMoneyInput), null)
 
 beforeAll(async () => {
   const company = await prisma.company.findFirst()
@@ -99,15 +103,15 @@ describe('Money foundation against a real DB (docs/25 Part 1)', () => {
     await pay(a, '1000') // owed 0
     const b = await issuedInvoice(projectId, '1000', 'BALANCE')
     await pay(b, '500') // owed 500
-    const job = await getJobBalanceByProjectId(projectId)
+    const job = await jobBalanceOf(projectId)
     expect(job.outstanding.toString()).toBe('500')
     expect(job.overpaymentToResolve.toString()).toBe('0')
-    expect(job.agreedContractValue).toBeNull() // no accepted quote, no package snapshot
+    expect(job.agreedContractValue).toBeNull() // no accepted quote
     expect(job.isFullySettled).toBe(false)
   })
 
   const chargeCount = (invoiceId: string) =>
-    prisma.paymentTransaction.count({ where: { payment: { invoiceId }, type: 'CHARGE', status: 'SUCCEEDED' } })
+    prisma.paymentTransaction.count({ where: { payment: { invoiceId }, type: 'CHARGE' } })
 
   describe('F-1: concurrency + idempotency for money writers (fixed; regression)', () => {
     it('two concurrent full payments on a $1000 invoice → exactly one succeeds; ledger == cache == 1000', async () => {
@@ -208,18 +212,10 @@ describe('Money foundation against a real DB (docs/25 Part 1)', () => {
       await expect(issueCreditNote(invId, '1001', null, null)).rejects.toThrow(/exceed the invoice total/i)
     })
 
-    it('a draft invoice cannot be credited', async () => {
-      const projectId = await newProject()
-      const draft = await createInvoice(projectId, { type: 'DEPOSIT', description: 'Coverage', amount: '1000' }, null)
-      // New invoices are never drafts; a legacy DRAFT row (still in the enum for history) must stay uncreditable.
-      await prisma.invoice.update({ where: { id: draft.id }, data: { status: 'DRAFT' } })
-      await expect(issueCreditNote(draft.id, '100', null, null)).rejects.toThrow(/issued invoice/i)
-    })
-
     it('a void invoice cannot be credited', async () => {
       const invId = await issuedInvoice(await newProject(), '1000')
       await voidInvoice(invId, null) // no money on it, so the void succeeds
-      await expect(issueCreditNote(invId, '100', null, null)).rejects.toThrow(/issued invoice/i)
+      await expect(issueCreditNote(invId, '100', null, null)).rejects.toThrow(/uncollectible/i)
     })
   })
 

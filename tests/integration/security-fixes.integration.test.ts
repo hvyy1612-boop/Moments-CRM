@@ -7,7 +7,8 @@ import { requestPasswordReset } from '@/lib/auth/password-reset'
 import { getIcsForToken, getOrCreateFeedToken, rotateFeedToken } from '@/lib/domain/calendar'
 import { signContractByToken } from '@/lib/domain/contract'
 import { convertEnquiry, createEnquiry } from '@/lib/domain/enquiry'
-import { createInvoice, getInvoiceByToken } from '@/lib/domain/finance'
+import { getInvoiceByToken } from '@/lib/domain/finance'
+import { createInvoice } from './helpers'
 
 /** Bug-scan 2026-10-05: security fixes against the real (test) database. */
 
@@ -88,11 +89,11 @@ describe('signing a contract never revives or rewinds a job', () => {
     expect((await prisma.project.findUnique({ where: { id: projectId } }))?.lifecycleStatus).toBe('CANCELLED')
   })
 
-  it('a job already in production stays in production', async () => {
+  it('a delivered job stays delivered', async () => {
     const { projectId, signToken } = await sentContract()
-    await prisma.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'IN_PRODUCTION' } })
+    await prisma.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'COMPLETED' } })
     await signContractByToken(signToken, 'Client', '1.1.1.1')
-    expect((await prisma.project.findUnique({ where: { id: projectId } }))?.lifecycleStatus).toBe('IN_PRODUCTION')
+    expect((await prisma.project.findUnique({ where: { id: projectId } }))?.lifecycleStatus).toBe('COMPLETED')
   })
 
   it('a provisional booking is confirmed by the signature', async () => {

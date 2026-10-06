@@ -7,18 +7,13 @@ describe('invoice detail - schedule row status', () => {
     expect(instalmentStatus('PAID', '2026-09-01', today, 'PARTIALLY_PAID').label).toBe('Paid')
     expect(instalmentStatus('PARTIAL', '2026-09-01', today, 'PARTIALLY_PAID').label).toBe('Partially paid')
   })
-  it('marks an unpaid past-due row overdue, but never on a draft', () => {
+  it('marks an unpaid past-due row overdue', () => {
     expect(instalmentStatus('UNPAID', '2026-09-28', today, 'SENT').label).toBe('Overdue')
-    expect(instalmentStatus('UNPAID', '2026-09-28', today, 'DRAFT').label).toBe('Unpaid')
   })
   it('separates due today from later instalments', () => {
     expect(instalmentStatus('UNPAID', today, today, 'SENT').label).toBe('Unpaid')
     expect(instalmentStatus('UNPAID', '2026-10-29', today, 'SENT').label).toBe('Upcoming')
     expect(instalmentStatus('UNPAID', null, today, 'SENT').label).toBe('Unpaid')
-  })
-  it('never shows a draft as paid (the ledger owes nothing until it is issued)', () => {
-    expect(instalmentStatus('PAID', null, today, 'DRAFT').label).toBe('Unpaid')
-    expect(instalmentStatus('PAID', '2026-10-29', today, 'DRAFT').label).toBe('Upcoming')
   })
   it('shows nothing due on a void invoice', () => {
     expect(instalmentStatus('UNPAID', '2026-01-01', today, 'VOID').label).toBe('Void')

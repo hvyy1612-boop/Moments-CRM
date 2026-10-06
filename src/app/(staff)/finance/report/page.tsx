@@ -40,11 +40,10 @@ export default async function PaymentsReportPage({ searchParams }: { searchParam
             project: {
               select: {
                 client: { select: { displayName: true } },
-                package: { select: { name: true } },
                 convertedFromEnquiries: { select: { eventType: true }, take: 1 },
               },
             },
-            payments: { select: { transactions: { select: { type: true, status: true, amount: true, createdAt: true } } } },
+            payments: { select: { transactions: { select: { type: true, amount: true, createdAt: true } } } },
           },
         })
       : Promise.resolve([]),
@@ -54,19 +53,18 @@ export default async function PaymentsReportPage({ searchParams }: { searchParam
   let totalNum = 0
   const rows: ReportRow[] = invoices.map((inv) => {
     const isPaid = inv.status === 'PAID'
-    const isDraft = inv.status === 'DRAFT'
-    const charges = inv.payments.flatMap((p) => p.transactions).filter((t) => t.status === 'SUCCEEDED' && t.type === 'CHARGE')
+    const charges = inv.payments.flatMap((p) => p.transactions).filter((t) => t.type === 'CHARGE')
     const paidAt = charges.length ? new Date(Math.max(...charges.map((c) => c.createdAt.getTime()))) : inv.issuedAt
     // Same rule as the Payments list: dated by the next payment due, overdue only once that Sydney day is over.
-    const nextDue = isPaid || isDraft ? null : (nextPaymentDue(getInvoiceBalance(toInvoiceMoneyInput(inv))) ?? inv.dueAt)
+    const nextDue = isPaid ? null : (nextPaymentDue(getInvoiceBalance(toInvoiceMoneyInput(inv))) ?? inv.dueAt)
     const overdue = nextDue != null && sydneyDateTimeParts(nextDue).date < today
-    const status = isPaid ? 'Paid' : isDraft ? 'Draft' : overdue ? 'Overdue' : 'Due'
-    const dateSource = isPaid ? paidAt : isDraft ? null : nextDue
+    const status = isPaid ? 'Paid' : overdue ? 'Overdue' : 'Due'
+    const dateSource = isPaid ? paidAt : nextDue
     totalNum += inv.total.toNumber()
     return {
       number: inv.invoiceNumber,
       client: inv.project.client.displayName,
-      service: titleCase(inv.project.convertedFromEnquiries[0]?.eventType ?? inv.project.package?.name ?? 'Photography'),
+      service: titleCase(inv.project.convertedFromEnquiries[0]?.eventType ?? 'Photography'),
       status,
       date: dateSource ? formatSydneyDate(dateSource) : '-',
       amount: formatAud(inv.total),

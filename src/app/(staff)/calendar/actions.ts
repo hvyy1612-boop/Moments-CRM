@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getActionUser } from '@/lib/auth/guard'
-import { createCalendarEvent, moveCalendarItem, rotateFeedToken } from '@/lib/domain/calendar'
+import { createCalendarEvent, moveCalendarEvent, rotateFeedToken } from '@/lib/domain/calendar'
 import { toggleEnquiryTask } from '@/lib/domain/enquiry-workflow'
 import { toggleProjectTask } from '@/lib/domain/project-workflow'
 import { prisma } from '@/lib/db'
@@ -54,13 +54,12 @@ export async function createCalendarEventAction(_prev: CalendarActionState, form
 }
 
 const moveSchema = z.object({
-  kind: z.enum(['booking', 'event']),
   refId: z.string().min(1),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   startMin: z.coerce.number().int().min(0).max(1439).nullable(),
 })
 
-/** Drag-to-reschedule: move a booking or standalone event to a new day/time. */
+/** Drag-to-reschedule: move a standalone calendar event to a new day/time. */
 export async function moveCalendarItemAction(formData: FormData): Promise<CalendarActionState> {
   const user = await getActionUser()
   if (!user || !can(user, 'CALENDAR_MANAGE')) return { status: 'error', message: 'Not authorised.' }
@@ -69,15 +68,14 @@ export async function moveCalendarItemAction(formData: FormData): Promise<Calend
 
   const raw = formData.get('startMin')
   const parsed = moveSchema.safeParse({
-    kind: formData.get('kind'), refId: formData.get('refId'), date: formData.get('date'),
+    refId: formData.get('refId'), date: formData.get('date'),
     startMin: raw === '' || raw === null ? null : raw,
   })
   if (!parsed.success) return { status: 'error', message: 'Could not move the event.' }
   try {
-    await moveCalendarItem(parsed.data.kind, parsed.data.refId, parsed.data.date, parsed.data.startMin, user.id)
-  } catch (error) {
-    const overlap = error instanceof Error && /exclusion|overlap|conflicting key/i.test(error.message)
-    return { status: 'error', message: overlap ? 'Someone on this shoot is already booked at the new time.' : error instanceof Error ? error.message : 'Could not move the event.' }
+    await moveCalendarEvent(parsed.data.refId, parsed.data.date, parsed.data.startMin)
+  } catch {
+    return { status: 'error', message: 'Could not move the event.' }
   }
   revalidatePath('/calendar')
   return { status: 'success' }

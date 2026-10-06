@@ -46,16 +46,11 @@ function summarise(payload: Payload, fallback: string): string {
 }
 
 export async function ChangeRequestsSection({ projectId, csrf }: { projectId: string; csrf: string }) {
-  const [rows, bookings, invoices] = await Promise.all([
+  const [rows, invoices] = await Promise.all([
     prisma.changeRequest.findMany({
       where: { projectId },
       orderBy: { createdAt: 'desc' },
       select: { id: true, type: true, status: true, payload: true, description: true, requestedByType: true, createdAt: true, clientAgreedAt: true, commercialImpact: true },
-    }),
-    prisma.booking.findMany({
-      where: { projectId, status: { not: 'CANCELLED' } },
-      orderBy: { startsAt: 'asc' },
-      select: { id: true, title: true, startsAt: true },
     }),
     prisma.invoice.findMany({
       where: { projectId, status: { in: ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'OVERDUE'] } },
@@ -81,8 +76,7 @@ export async function ChangeRequestsSection({ projectId, csrf }: { projectId: st
     }
   })
 
-  const bookingOpts = bookings.map((b) => ({ id: b.id, label: `${b.title?.trim() || 'Shoot'} · ${formatSydneyDate(b.startsAt)}` }))
   const invoiceOpts = invoices.map((i) => ({ id: i.id, label: `${i.invoiceNumber} · ${i.status.toLowerCase().replace(/_/g, ' ')}` }))
 
-  return <ChangeRequests csrf={csrf} projectId={projectId} requests={requests} bookings={bookingOpts} invoices={invoiceOpts} />
+  return <ChangeRequests csrf={csrf} projectId={projectId} requests={requests} invoices={invoiceOpts} />
 }

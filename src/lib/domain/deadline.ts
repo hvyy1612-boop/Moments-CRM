@@ -4,9 +4,9 @@ import { sydneyYmd } from '@/lib/time'
 /**
  * Deadline foundation (docs/25 Part 2) — the ONE place a job task's effective due date and due-state
  * are computed. The board, the Today cockpit and the cron reminders all read through
- * `resolveTaskDueDate` + `getTaskDueState`; no caller re-finds a booking or re-adds an offset of its
- * own (Rule D0). Rescheduling never shifts a stored date — it moves the anchor source (the active
- * booking) and the next resolve yields the new dates (Rule D2).
+ * `resolveTaskDueDate` + `getTaskDueState`; no caller re-adds an offset of its own (Rule D0).
+ * Rescheduling never shifts a stored date - it moves the anchor (the job's shoot date) and the next
+ * resolve yields the new dates (Rule D2).
  *
  * Scope: PROJECT/job tasks (the three anchors below). Enquiry/lead tasks are a separate funnel anchored
  * to the enquiry date and are resolved by the enquiry workflow, not here.
@@ -21,19 +21,48 @@ export type DeadlineTask = {
   dueOffsetDays: number
   dueDateFixed: Date | null
   dueOverrideAt: Date | null
-  /** For SHOOT tasks: which shoot this task depends on (multi-shoot jobs). null = the job's primary shoot. */
-  bookingId: string | null
 }
 
 export type DeadlineContext = {
-  /**
-   * The active (non-cancelled) shoot date for a booking id, or the job's primary (earliest active)
-   * shoot when `bookingId` is null. Never "the latest by startsAt" (Rule D3): a multi-shoot job
-   * resolves each SHOOT task against its own booking; an unlinked task falls back to the primary shoot.
-   */
-  shootDateOf: (bookingId: string | null) => Date | null
-  /** When the job was confirmed (contract signed / client confirmed), or null. */
+  /** The job's shoot date ({@link jobShootDate}), or null when neither staff nor the lead gave one. */
+  shootDate: Date | null
+  /** When the booking was confirmed (deposit paid / contract signed), or null while provisional. */
   jobConfirmedAt: Date | null
+}
+
+/** The workflow task type that carries the shoot date (the "Mark shoot completed" step). */
+export const SHOOT_TASK_TYPE = 'SHOOT'
+
+/**
+ * The job's shoot date (Studio Ninja: the job date) - ONE rule for the board, Today, the calendar,
+ * reminders and every list: the date staff set on the job's Shoot task; until they set one, the wedding /
+ * event date the lead gave. Shoot-anchored tasks follow it, so changing it moves them all.
+ */
+export function jobShootDate(
+  tasks: { type: string; status?: string; dueOverrideAt: Date | null }[],
+  eventDate: Date | null | undefined,
+): Date | null {
+  const set = tasks.find((t) => t.type === SHOOT_TASK_TYPE && t.status !== 'CANCELLED' && t.dueOverrideAt)
+  return set?.dueOverrideAt ?? eventDate ?? null
+}
+
+/** What a project query selects to know its shoot date (pass the row to {@link shootDateOfJob}). */
+export const JOB_SHOOT_SELECT = {
+  workItems: { where: { type: SHOOT_TASK_TYPE }, select: { type: true, status: true, dueOverrideAt: true } },
+  convertedFromEnquiries: { select: { eventDate: true, ceremonyLocation: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+} as const
+
+/** The shoot date of a project row fetched with {@link JOB_SHOOT_SELECT}. */
+export function shootDateOfJob(p: {
+  workItems: { type: string; status: string; dueOverrideAt: Date | null }[]
+  convertedFromEnquiries: { eventDate: Date | null }[]
+}): Date | null {
+  return jobShootDate(p.workItems, p.convertedFromEnquiries[0]?.eventDate)
+}
+
+/** True when the shoot date carries a time staff set (an event date from the lead is a day only). */
+export function shootHasTime(p: { workItems: { type: string; status: string; dueOverrideAt: Date | null }[] }): boolean {
+  return p.workItems.some((t) => t.type === SHOOT_TASK_TYPE && t.status !== 'CANCELLED' && t.dueOverrideAt != null)
 }
 
 /** The task's effective due date (Rule D0). Override wins; then the anchor; else null. */
@@ -44,10 +73,8 @@ export function resolveTaskDueDate(task: DeadlineTask, ctx: DeadlineContext): Da
       return task.dueDateFixed
     case 'JOB_CONFIRMED':
       return ctx.jobConfirmedAt ? addDays(ctx.jobConfirmedAt, task.dueOffsetDays) : null
-    case 'SHOOT': {
-      const shoot = ctx.shootDateOf(task.bookingId)
-      return shoot ? addDays(shoot, task.dueOffsetDays) : null
-    }
+    case 'SHOOT':
+      return ctx.shootDate ? addDays(ctx.shootDate, task.dueOffsetDays) : null
     default:
       return null
   }
@@ -80,35 +107,4 @@ export function getTaskDueState(
 ): { dueAt: Date | null; tone: DueTone } {
   const dueAt = resolveTaskDueDate(task, ctx)
   return { dueAt, tone: dueToneFor(dueAt, now) }
-}
-
-/**
- * Build a `shootDateOf` from a job's bookings. Cancelled bookings are excluded; a cancelled booking
- * that was rescheduled resolves to its active successor's date, so a SHOOT task linked to the old
- * booking id automatically follows the reschedule (Rule D3/D5) even before its `bookingId` is repointed.
- * `null` returns the job's primary (earliest active) shoot.
- */
-export type BookingLike = {
-  id: string
-  startsAt: Date
-  status: string
-  rescheduledFromId: string | null
-}
-
-export function makeShootDateOf(bookings: BookingLike[]): (bookingId: string | null) => Date | null {
-  const active = bookings.filter((b) => b.status !== 'CANCELLED')
-  const activeById = new Map(active.map((b) => [b.id, b]))
-  // successor lookup: old booking id -> the active booking that replaced it
-  const successorOf = new Map<string, BookingLike>()
-  for (const b of active) {
-    if (b.rescheduledFromId) successorOf.set(b.rescheduledFromId, b)
-  }
-  const primary = active.slice().sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())[0] ?? null
-  return (bookingId: string | null): Date | null => {
-    if (bookingId === null) return primary ? primary.startsAt : null
-    const direct = activeById.get(bookingId)
-    if (direct) return direct.startsAt
-    const successor = successorOf.get(bookingId)
-    return successor ? successor.startsAt : null
-  }
 }

@@ -15,7 +15,7 @@ import { PageContainer } from '@/components/PageContainer'
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Staff roster - Moments' }
 
-const ROLE_NAME: Record<string, string> = { ADMIN: 'Admin', STUDIO: 'Studio', EDITOR: 'Editor' }
+const ROLE_NAME: Record<string, string> = { ADMIN: 'Admin', STUDIO: 'Studio' }
 
 export default async function StaffRosterPage({ params }: { params: Promise<{ team: string }> }) {
   const user = await requireRole('/users/roster/[team]')

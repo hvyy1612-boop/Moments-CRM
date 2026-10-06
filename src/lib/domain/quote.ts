@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { Prisma, type DeclineReason } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { sydneyDateTimeParts, systemClock } from '@/lib/time'
 import type { QuoteLineInput } from '@/lib/validation/quote'
@@ -186,30 +186,13 @@ export async function markQuoteViewed(viewToken: string) {
 // accepting an enquiry-stage quote by token created no Job and permanently deadlocked the enquiry.
 
 /**
- * Client (or staff) declines the current quote with a reason (F-QUOTE-03). The version → DECLINED,
- * recording the reason. The job is NOT lost by a declined quote - abandoning a job is an explicit
- * cancelJob() decision (docs/24 Increment 1). Idempotent if already declined.
+ * Staff record that the client declined the current quote (F-QUOTE-03): the version and the quote become
+ * DECLINED. A declined quote is a quote-level fact - it never declines the lead or cancels a job (docs/24
+ * Increment 1). Idempotent if already declined.
  */
-export async function declineQuote(
-  quoteId: string,
-  reason: DeclineReason,
-  actorUserId: string | null = null,
-) {
-  return runDeclineQuote({ id: quoteId }, reason, actorUserId, 'staff.quote')
-}
-
-export async function declineQuoteByToken(viewToken: string, reason: DeclineReason) {
-  return runDeclineQuote({ viewToken }, reason, null, 'client.quote')
-}
-
-async function runDeclineQuote(
-  where: Prisma.QuoteWhereUniqueInput,
-  reason: DeclineReason,
-  actorUserId: string | null,
-  source: string,
-) {
+export async function declineQuote(quoteId: string, actorUserId: string | null = null) {
   return prisma.$transaction(async (tx) => {
-    const quote = await tx.quote.findUnique({ where, include: { currentVersion: true } })
+    const quote = await tx.quote.findUnique({ where: { id: quoteId }, include: { currentVersion: true } })
     if (!quote || !quote.currentVersion) throw new Error('Quote not found.')
     const version = quote.currentVersion
     if (version.status === 'DECLINED') return { alreadyDeclined: true }
@@ -220,7 +203,7 @@ async function runDeclineQuote(
 
     await tx.quoteVersion.update({
       where: { id: version.id },
-      data: { status: 'DECLINED', declineReason: reason },
+      data: { status: 'DECLINED' },
     })
     await tx.quote.update({ where: { id: quote.id }, data: { status: 'DECLINED' } })
     // A declined quote is a quote-level fact; it does not lose the job (docs/24 Increment 1).
@@ -230,8 +213,7 @@ async function runDeclineQuote(
         entityType: 'Quote',
         entityId: quote.id,
         actorUserId,
-        source,
-        afterData: { reason },
+        source: 'staff.quote',
       },
     })
     await tx.outboxEvent.create({
@@ -239,7 +221,7 @@ async function runDeclineQuote(
         eventType: 'quote.declined',
         aggregateType: 'Quote',
         aggregateId: quote.id,
-        payload: { quoteId: quote.id, projectId: quote.projectId, reason },
+        payload: { quoteId: quote.id, projectId: quote.projectId },
       },
     })
     return { alreadyDeclined: false }
