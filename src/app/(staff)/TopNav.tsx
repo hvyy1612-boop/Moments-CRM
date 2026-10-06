@@ -86,8 +86,14 @@ export function TopNav({
               <div className="truncate text-xs capitalize text-ink-muted">{userRole.toLowerCase()}</div>
             </div>
             <div className="py-1">
-              <Link href="/settings" role="menuitem" onClick={() => setMenuOpen(false)} className="block px-4 py-2 text-sm text-ink hover:bg-paper">
-                Settings
+              {/* Settings is admin only (the page 404s for other roles); everyone can change their own password. */}
+              {userRole === 'ADMIN' ? (
+                <Link href="/settings" role="menuitem" onClick={() => setMenuOpen(false)} className="block px-4 py-2 text-sm text-ink hover:bg-paper">
+                  Settings
+                </Link>
+              ) : null}
+              <Link href="/change-password" role="menuitem" onClick={() => setMenuOpen(false)} className="block px-4 py-2 text-sm text-ink hover:bg-paper">
+                Change password
               </Link>
               <form action={signOut}>
                 <input type="hidden" name="csrf" value={csrf} />
