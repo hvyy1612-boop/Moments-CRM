@@ -342,6 +342,6 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
 }
 
 function titleCaseSource(s: string): string {
-  const map: Record<string, string> = { WEBSITE: 'Website', REFERRAL: 'Referral', INSTAGRAM: 'Instagram', MANUAL: 'Manual', OTHER: 'Other' }
+  const map: Record<string, string> = { WEBSITE: 'Website', MANUAL: 'Added by staff' }
   return map[s] ?? s
 }

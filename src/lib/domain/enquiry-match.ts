@@ -12,14 +12,7 @@ export function normalizePhone(phone: string | null | undefined): string {
 
 /** When a lead converts, the new client's acquisition source follows the lead's channel. */
 export function clientSourceFromEnquiry(source: EnquirySource): ClientSource {
-  switch (source) {
-    case 'REFERRAL':
-      return 'REFERRAL'
-    case 'MANUAL':
-      return 'MANUAL'
-    default:
-      return 'ENQUIRY'
-  }
+  return source === 'MANUAL' ? 'MANUAL' : 'ENQUIRY'
 }
 
 export type ClientMatch = {

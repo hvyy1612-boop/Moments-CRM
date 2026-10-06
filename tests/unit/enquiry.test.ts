@@ -24,11 +24,8 @@ describe('normalizePhone (dedup tier 2)', () => {
 
 describe('clientSourceFromEnquiry', () => {
   it('carries referral and manual through; every other channel is ENQUIRY', () => {
-    expect(clientSourceFromEnquiry('REFERRAL')).toBe('REFERRAL')
     expect(clientSourceFromEnquiry('MANUAL')).toBe('MANUAL')
     expect(clientSourceFromEnquiry('WEBSITE')).toBe('ENQUIRY')
-    expect(clientSourceFromEnquiry('INSTAGRAM')).toBe('ENQUIRY')
-    expect(clientSourceFromEnquiry('OTHER')).toBe('ENQUIRY')
   })
 })
 

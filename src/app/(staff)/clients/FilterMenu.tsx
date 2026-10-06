@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 
-const SOURCES: [string, string][] = [['', 'All sources'], ['DIRECT_BOOKING', 'Direct booking'], ['ENQUIRY', 'Enquiry'], ['REFERRAL', 'Referral'], ['MANUAL', 'Manual'], ['OTHER', 'Other']]
+const SOURCES: [string, string][] = [['', 'All sources'], ['ENQUIRY', 'Enquiry'], ['REFERRAL', 'Referral'], ['MANUAL', 'Manual'], ['OTHER', 'Other']]
 const TYPES: [string, string][] = [['', 'All types'], ['INDIVIDUAL', 'Individual'], ['BUSINESS', 'Company']]
 const JOBS: [string, string][] = [['', 'Any'], ['none', 'No jobs'], ['has', 'Has jobs'], ['2plus', '2+ jobs']]
 

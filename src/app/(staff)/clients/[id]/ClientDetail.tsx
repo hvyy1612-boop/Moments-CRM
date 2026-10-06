@@ -56,7 +56,7 @@ function label(value: string): string {
   return value ? value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ') : value
 }
 
-const SOURCE_OPTIONS = ['DIRECT_BOOKING', 'ENQUIRY', 'REFERRAL', 'MANUAL', 'OTHER']
+const SOURCE_OPTIONS = ['ENQUIRY', 'REFERRAL', 'MANUAL', 'OTHER']
 // Archived is not offered inline: archiving is the admin-only Remove action, and Restore brings it back.
 const STATUS_OPTIONS = ['PROSPECT', 'ACTIVE']
 const CONTACT_OPTIONS = ['Email', 'Phone', 'Text message']

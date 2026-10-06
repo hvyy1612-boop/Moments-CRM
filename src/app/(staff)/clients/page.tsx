@@ -21,7 +21,7 @@ export const metadata: Metadata = { title: 'Clients - Moments' }
 
 const RECENT_ADD_MS = 10 * 60 * 1000
 const SORTS: SortValue[] = ['newest', 'oldest', 'name-asc', 'name-desc', 'most-jobs', 'fewest-jobs']
-const SOURCES: ClientSource[] = ['DIRECT_BOOKING', 'ENQUIRY', 'REFERRAL', 'MANUAL', 'OTHER']
+const SOURCES: ClientSource[] = ['ENQUIRY', 'REFERRAL', 'MANUAL', 'OTHER']
 const TYPES: ClientType[] = ['INDIVIDUAL', 'BUSINESS']
 
 function orderFor(sort: SortValue): Prisma.ClientOrderByWithRelationInput {

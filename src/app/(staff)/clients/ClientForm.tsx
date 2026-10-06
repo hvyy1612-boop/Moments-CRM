@@ -22,7 +22,7 @@ export type ClientFormValues = {
 export type ContactErrors = { firstName?: string; lastName?: string; email?: string; phone?: string }
 
 /** Shared client form. With `showEnquiryFields`, it doubles as the single intake: adding the client
- *  also opens an enquiry (event type / date / source / note feed the new lead).
+ *  also opens an enquiry (event type / date / how they heard / note feed the new lead).
  *
  *  Two layouts from one field set: the default is the full-page Carbon grid form (/clients/new and the
  *  edit page - group headings left, content-sized fields right); `bare` is the compact box layout with

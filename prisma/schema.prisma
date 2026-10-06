@@ -150,16 +150,14 @@ enum WorkItemStatus {
   CANCELLED
 }
 
+// Where a lead came from: the website form, or staff adding it (Add lead / Add client / Add job).
+// How the client heard about the studio is the free-text `heardAbout`, not this field.
 enum EnquirySource {
   WEBSITE
-  REFERRAL
-  INSTAGRAM
   MANUAL
-  OTHER
 }
 
 enum ClientSource {
-  DIRECT_BOOKING
   ENQUIRY
   REFERRAL
   MANUAL
@@ -418,8 +416,8 @@ model Project {
 }
 
 // ---------- Commercial: Package (F-PKG, B2) ----------
-// Gói dịch vụ giá cố định (GST-inclusive). Direct booking chọn gói → Project snapshot giá. Đổi giá gói
-// sau KHÔNG đổi record cũ (pricing history = snapshot trên Project/Quote/Invoice).
+// Gói dịch vụ giá cố định (GST-inclusive), dùng làm dòng có sẵn khi soạn quote / hoá đơn. Đổi giá gói
+// sau KHÔNG đổi record cũ (giá đã copy vào dòng quote / hoá đơn).
 model Package {
   id               String   @id @default(cuid()) @db.VarChar(30)
   companyId        String   @map("company_id") @db.VarChar(30)
@@ -447,7 +445,7 @@ model Package {
 model Enquiry {
   id                   String        @id @default(cuid()) @db.VarChar(30)
   companyId            String        @map("company_id") @db.VarChar(30)
-  enquiryNumber        String?       @map("enquiry_number") @db.VarChar(20) // human id E<YYYY><4d>, unique per company
+  enquiryNumber        String?       @map("enquiry_number") @db.VarChar(20) // human id L<YYYY><4d>, unique per company
   ownerUserId          String?       @map("owner_user_id") @db.VarChar(30)
   name                 String        @db.VarChar(150)
   firstName            String?       @map("first_name") @db.VarChar(80)
@@ -631,11 +629,6 @@ model ContractVersion {
   @@map("contract_versions")
 }
 
-// ---------- Scheduling (Domain 06) ----------
-// Một dự án CONFIRMED có thể có nhiều buổi chụp (engagement, ngày cưới...). Mỗi buổi gán ekip/thiết
-// bị qua ResourceAssignment; một resource không thể nhận hai assignment ACTIVE chồng thời gian
-// (EXCLUDE USING gist trong migration, cần extension btree_gist).
-
 // ---------- Finance (Domain 05) ----------
 // Hoá đơn xuất từ dự án CONFIRMED. amount_paid là cache; nguồn sự thật là PaymentTransaction
 // (append-only). Void thay vì xoá. Billing snapshot giữ tính toàn vẹn hoá đơn thuế theo thời điểm.
@@ -775,11 +768,6 @@ model PaymentTransaction {
   @@map("payment_transactions")
 }
 
-// ---------- Production / Delivery (Domain 08) ----------
-// Slice 5 subset: giao khách qua Gallery. Client mở gallery bằng accessToken (không login). Publish
-// gallery = đã giao → dự án COMPLETED. Asset/object storage, revisions, approvals để dành slice sau;
-// item hiện lưu URL ngoài (studio host ảnh ở nơi khác) thay vì tự lưu file.
-
 // ---------- Governance / Reliability ----------
 
 model AuditLog {
@@ -879,7 +867,7 @@ model NotificationSuppression {
 
 // ---------- Backlog: collaboration, changes, finance edges (docs/16 E-J) ----------
 
-// What has been exchanged with the client on a project (call, email, note, message from the portal).
+// A lead's first message from the website form, and the team's internal notes on a lead or job.
 model Communication {
   id             String            @id @default(cuid()) @db.VarChar(30)
   projectId      String?           @map("project_id") @db.VarChar(30)
@@ -941,7 +929,7 @@ model WorkItem {
 }
 
 /// A calendar entry staff add directly, outside the workflow: an appointment, an extra shoot, or
-/// another studio event. Workflow shoots come from Booking and workflow appointments from WorkItem;
+/// another studio event. Job shoots come from each job's Shoot task and appointments from WorkItem;
 /// this model covers everything staff want on the calendar without opening a case (BR-CAL).
 model CalendarEvent {
   id              String    @id @default(cuid()) @db.VarChar(30)
@@ -986,7 +974,7 @@ model Refund {
 }
 
 // A post-confirmation change request, routed by type. Never edits records in place: a commercial
-// change spawns a new quote version, operational a new booking, data an audited client edit.
+// change spawns a new quote version, a reschedule moves the job's Shoot task date, data an audited client edit.
 model ChangeRequest {
   id                      String              @id @default(cuid()) @db.VarChar(30)
   projectId               String              @map("project_id") @db.VarChar(30)

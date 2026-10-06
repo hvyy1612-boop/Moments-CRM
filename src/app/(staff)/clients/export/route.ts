@@ -7,7 +7,7 @@ import { formatSydneyDate } from '@/lib/time'
 
 export const runtime = 'nodejs'
 
-const SOURCES: ClientSource[] = ['DIRECT_BOOKING', 'ENQUIRY', 'REFERRAL', 'MANUAL', 'OTHER']
+const SOURCES: ClientSource[] = ['ENQUIRY', 'REFERRAL', 'MANUAL', 'OTHER']
 const TYPES: ClientType[] = ['INDIVIDUAL', 'BUSINESS']
 
 /** Download the current (filtered) client list as a CSV. Mirrors the list's own filters. */

@@ -1,6 +1,6 @@
 'use server'
 
-import { EnquirySource, Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -109,10 +109,6 @@ export async function createClientFormAction(_prev: ClientFormState, formData: F
     const name = [data.firstName, data.lastName].filter(Boolean).join(' ') || data.company || data.email
     const eventDateRaw = String(formData.get('eventDate') ?? '').trim()
     const eventDate = eventDateRaw ? new Date(eventDateRaw) : null
-    const sourceRaw = String(formData.get('source') ?? '').toUpperCase()
-    const source = (Object.values(EnquirySource) as string[]).includes(sourceRaw)
-      ? (sourceRaw as EnquirySource)
-      : EnquirySource.MANUAL
 
     const enquiry = await createEnquiry(
       {
@@ -130,7 +126,7 @@ export async function createClientFormAction(_prev: ClientFormState, formData: F
         isCompany: data.isCompany ?? false,
         eventDate,
         message: data.notes ?? null,
-        source,
+        source: 'MANUAL',
         ...extras,
       },
       user.id,
