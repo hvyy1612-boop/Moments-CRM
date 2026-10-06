@@ -1,6 +1,5 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import { systemClock } from '@/lib/time'
 import { lockInvoiceRow, refreshInvoiceAmountPaid } from './invoice-ledger'
 
 /**
@@ -47,7 +46,6 @@ export async function refundPayment(
 ) {
   const refundAmount = new Prisma.Decimal(amount)
   if (refundAmount.lessThanOrEqualTo(0)) throw new Error('Refund amount must be positive.')
-  const now = systemClock.now()
 
   return prisma.$transaction(async (tx) => {
     const payment = await tx.payment.findUnique({
@@ -79,7 +77,6 @@ export async function refundPayment(
         currency: payment.currency,
         reason: input.reason ?? null,
         externalReference: input.externalReference ?? null,
-        processedAt: now,
       },
     })
     await tx.paymentTransaction.create({
@@ -89,7 +86,6 @@ export async function refundPayment(
         type: 'REFUND',
         amount: refundAmount,
         currency: payment.currency,
-        processedAt: now,
       },
     })
 

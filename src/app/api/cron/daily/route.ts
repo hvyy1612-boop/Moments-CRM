@@ -7,7 +7,6 @@ import { getProjectBoard } from '@/lib/domain/project-workflow'
 import { markOverdueInvoices } from '@/lib/domain/finance'
 import { sendTaskDigestEmail } from '@/lib/email'
 import {
-  processOutboxOnce,
   reconcileBufferedEvents,
   releaseExpiredLeases,
   resolveSettledOverdueFollowups,
@@ -34,14 +33,10 @@ export async function GET(req: Request): Promise<Response> {
   const overdueInvoices = await markOverdueInvoices()
 
   // Notification pipeline (docs/25 Part 4). Reminders converge on NotificationDispatch and are sent
-  // through one lease-guarded worker; with no RESEND provider configured every send is
+  // through one lease-guarded worker; with no email provider configured every send is
   // SKIPPED_NO_PROVIDER (Rule N9) — the reminders are still recorded, never faked as delivered.
   await releaseExpiredLeases()
   await reconcileBufferedEvents()
-  let outboxGuard = 0
-  while ((await processOutboxOnce()).processed > 0 && outboxGuard++ < 50) {
-    /* drain the business-event backlog into dispatches */
-  }
   const reminderScan = await scanPaymentReminders()
   const reminders = { enqueued: reminderScan.enqueued, followups: reminderScan.followups }
   await resolveSettledOverdueFollowups()

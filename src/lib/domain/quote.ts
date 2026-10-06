@@ -137,14 +137,6 @@ export async function sendQuote(quoteId: string, actorUserId: string | null) {
     await tx.auditLog.create({
       data: { action: 'quote.sent', entityType: 'Quote', entityId: quoteId, actorUserId },
     })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'quote.sent',
-        aggregateType: 'Quote',
-        aggregateId: quoteId,
-        payload: { quoteId, viewToken: quote.viewToken },
-      },
-    })
     return { viewToken: quote.viewToken }
   })
 }
@@ -167,7 +159,6 @@ export async function clientVisibleQuoteVersionId(quoteId: string): Promise<stri
 }
 
 export async function markQuoteViewed(viewToken: string) {
-  const now = systemClock.now()
   const quote = await prisma.quote.findUnique({
     where: { viewToken },
     include: { currentVersion: true },
@@ -175,7 +166,7 @@ export async function markQuoteViewed(viewToken: string) {
   if (quote?.currentVersion?.status === 'SENT') {
     await prisma.quoteVersion.update({
       where: { id: quote.currentVersion.id },
-      data: { status: 'VIEWED', viewedByClientAt: now },
+      data: { status: 'VIEWED' },
     })
   }
 }
@@ -214,14 +205,6 @@ export async function declineQuote(quoteId: string, actorUserId: string | null =
         entityId: quote.id,
         actorUserId,
         source: 'staff.quote',
-      },
-    })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'quote.declined',
-        aggregateType: 'Quote',
-        aggregateId: quote.id,
-        payload: { quoteId: quote.id, projectId: quote.projectId },
       },
     })
     return { alreadyDeclined: false }
@@ -399,11 +382,9 @@ export async function acceptQuote(quoteId: string, actorUserId: string | null = 
           await tx.quote.update({ where: { id: quote.id }, data: { status: 'ACCEPTED' } })
           // The job's other open quotes were alternatives to this one (same rule as on a lead).
           await tx.quote.deleteMany({ where: { projectId: job.id, enquiryId: null, NOT: { id: quote.id }, status: { in: ['DRAFT', 'SENT', 'VIEWED'] } } })
-          await tx.project.update({ where: { id: job.id }, data: { sourceQuoteId: quote.id } })
           // Commercial status only moves forward: a job already paid keeps "paid".
           await tx.project.updateMany({ where: { id: job.id, commercialStatus: { in: ['UNQUOTED', 'QUOTED'] } }, data: { commercialStatus: 'ACCEPTED' } })
           await tx.auditLog.create({ data: { action: 'quote.accepted', entityType: 'Quote', entityId: quote.id, actorUserId, afterData: { projectId: job.id } } })
-          await tx.outboxEvent.create({ data: { eventType: 'quote.accepted', aggregateType: 'Quote', aggregateId: quote.id, payload: { quoteId: quote.id, projectId: job.id } } })
           return { quoteId: quote.id, projectId: job.id }
         }
         if (quote.enquiry.status === 'DECLINED') throw new Error('Reopen the lead before accepting a quote.')
@@ -424,11 +405,10 @@ export async function acceptQuote(quoteId: string, actorUserId: string | null = 
         // Convert the enquiry into a Job (idempotent) and link both ways.
         const conv = await convertEnquiryCore(tx, quote.enquiryId, actorUserId, now)
         if (!conv.projectId) throw new Error('Converting the lead did not produce a job.')
-        await tx.project.update({ where: { id: conv.projectId }, data: { sourceQuoteId: quote.id, commercialStatus: 'ACCEPTED' } })
+        await tx.project.update({ where: { id: conv.projectId }, data: { commercialStatus: 'ACCEPTED' } })
         await tx.quote.update({ where: { id: quote.id }, data: { projectId: conv.projectId } })
 
         await tx.auditLog.create({ data: { action: 'quote.accepted', entityType: 'Quote', entityId: quote.id, actorUserId, afterData: { enquiryId: quote.enquiryId, projectId: conv.projectId } } })
-        await tx.outboxEvent.create({ data: { eventType: 'quote.accepted', aggregateType: 'Quote', aggregateId: quote.id, payload: { quoteId: quote.id, enquiryId: quote.enquiryId, projectId: conv.projectId } } })
         return { quoteId: quote.id, projectId: conv.projectId }
       })
     } catch (error) {
@@ -504,10 +484,10 @@ export async function deleteQuotes(ids: string[]): Promise<{ deleted: number; sk
   if (unique.length === 0) return { deleted: 0, skipped: 0 }
   const quotes = await prisma.quote.findMany({
     where: { id: { in: unique } },
-    select: { id: true, status: true, projectId: true, sourcedProject: { select: { id: true } } },
+    select: { id: true, status: true, projectId: true },
   })
   const deletable = quotes
-    .filter((q) => q.status !== 'ACCEPTED' && !q.projectId && !q.sourcedProject)
+    .filter((q) => q.status !== 'ACCEPTED' && !q.projectId)
     .map((q) => q.id)
   if (deletable.length > 0) {
     await prisma.quote.deleteMany({ where: { id: { in: deletable } } })

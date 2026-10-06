@@ -44,7 +44,6 @@ describe('acceptQuote — enquiry-stage quote → job (docs/31, integration)', (
     expect(quote?.projectId).toBe(res.projectId) // legacy link set on accept
     expect(enquiry?.status).toBe('AWAITING_BOOKING_CONFIRMATION') // booked only once the deposit is paid
     expect(enquiry?.convertedProjectId).toBe(res.projectId)
-    expect(project?.sourceQuoteId).toBe(quoteId)
     expect(project?.lifecycleStatus).toBe('BOOKING_REQUESTED')
     expect(project?.commercialStatus).toBe('ACCEPTED')
   })

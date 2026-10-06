@@ -21,7 +21,7 @@ export async function nextProjectCode(tx: Tx, companyId: string, at: Date = syst
 /**
  * Close a delivered job: COMPLETED -> CLOSED. Allowed only once the job is delivered, fully settled
  * (no outstanding balance across its non-void invoices) and has no blocking staff tasks left. Guarded
- * and idempotent; records an audit row and an outbox event (docs/24 Increment 2). This is the
+ * and idempotent; records an audit row (docs/24 Increment 2). This is the
  * DELIVERED != CLOSED distinction: a job stays "Delivered" (visible, maybe with a balance) until it is
  * explicitly closed.
  */
@@ -83,14 +83,6 @@ export async function closeJob(projectId: string, actorUserId: string | null = n
         entityType: 'Project',
         entityId: projectId,
         source: 'staff.board',
-      },
-    })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'project.closed',
-        aggregateType: 'Project',
-        aggregateId: projectId,
-        payload: { projectId },
       },
     })
     return { alreadyClosed: false }

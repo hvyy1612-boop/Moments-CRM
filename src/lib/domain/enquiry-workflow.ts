@@ -25,7 +25,6 @@ export async function seedEnquiryWorkflow(
         type: 'CLIENT_MESSAGE',
         direction: 'inbound',
         body: enquiry.message,
-        channel: enquiry.source === 'WEBSITE' ? 'WEBSITE' : (enquiry.source ?? null),
       },
     })
   }

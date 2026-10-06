@@ -7,9 +7,8 @@ import { getInvoiceBalanceById } from './invoice-money'
 import { getAutomationSettings, type AutomationSettings } from './automation'
 
 /**
- * Notifications & reminders (docs/25 Part 4). NotificationDispatch is the ONE send-retry unit: both
- * event-driven (outbox processor) and time-driven (payment reminder scanner) notifications converge
- * here (Rule N1). This module owns dedupe (N2), the worker lease + compare-and-set result write (N3),
+ * Notifications & reminders (docs/25 Part 4). NotificationDispatch is the ONE send-retry unit: the
+ * payment reminder scanner queues every automatic email here (Rule N1). This module owns dedupe (N2), the worker lease + compare-and-set result write (N3),
  * provider idempotency (N4), the in-doubt policy (N5), send-state vs delivery-result (N7), the webhook
  * reconcile (N8), the "no provider ⇒ SKIPPED, never SENT" rule (N9), Sydney-time catch-up (N10), the
  * fresh read before send (N11) and per-instalment targeting (N12).
@@ -376,24 +375,6 @@ async function ensureOverdueFollowup(invoiceId: string, projectId: string, compa
     // is exactly the desired end state, so this is a no-op (never a duplicate).
   }
   return !existing
-}
-
-/**
- * Outbox processor (Rule N1): marks PENDING business events (quote sent / accepted, contract signed,
- * change applied) PROCESSED, once each. No event sends an email today: staff send quotes and invoices
- * themselves, and payment reminders come from the daily scanner.
- */
-export async function processOutboxOnce(now: Date = systemClock.now()): Promise<{ processed: number }> {
-  const events = await prisma.outboxEvent.findMany({
-    where: { status: 'PENDING', availableAt: { lte: now } },
-    orderBy: { createdAt: 'asc' },
-    take: 100,
-    select: { id: true },
-  })
-  for (const evt of events) {
-    await prisma.outboxEvent.update({ where: { id: evt.id }, data: { status: 'PROCESSED', processedAt: now, attemptCount: { increment: 1 } } })
-  }
-  return { processed: events.length }
 }
 
 /** Auto-resolve overdue-followup tasks whose invoice is now settled (Rule N-j: resolves on owed = 0). */

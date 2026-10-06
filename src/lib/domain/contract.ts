@@ -63,7 +63,7 @@ export function contractContentHash(snapshot: ContractTermsSnapshot): string {
 
 /**
  * Create a draft contract (version 1) from the project's accepted quote. One contract per project for
- * now; amendments become new versions in a later slice. Writes an audit row and an outbox event.
+ * now; amendments become new versions in a later slice. Writes an audit row.
  */
 export async function createContractFromAcceptedQuote(projectId: string, createdByUserId: string | null) {
   return prisma.$transaction(async (tx) => {
@@ -128,14 +128,6 @@ export async function createContractFromAcceptedQuote(projectId: string, created
         afterData: { projectId, total: snapshot.total },
       },
     })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'contract.created',
-        aggregateType: 'Contract',
-        aggregateId: contract.id,
-        payload: { contractId: contract.id, projectId },
-      },
-    })
 
     return { contractId: contract.id, versionId: version.id, signToken: contract.signToken }
   })
@@ -160,14 +152,6 @@ export async function sendContract(contractId: string, actorUserId: string | nul
         entityType: 'Contract',
         entityId: contractId,
         actorUserId,
-      },
-    })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'contract.sent',
-        aggregateType: 'Contract',
-        aggregateId: contractId,
-        payload: { contractId, signToken: contract.signToken },
       },
     })
     return { signToken: contract.signToken }
@@ -217,14 +201,6 @@ export async function signContractByToken(signToken: string, signedName: string,
         entityId: contract.id,
         source: 'client.contract',
         afterData: { signedName },
-      },
-    })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'contract.signed',
-        aggregateType: 'Contract',
-        aggregateId: contract.id,
-        payload: { contractId: contract.id, projectId: contract.projectId },
       },
     })
     return { alreadySigned: false }

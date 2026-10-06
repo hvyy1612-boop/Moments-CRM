@@ -110,7 +110,6 @@ export async function createChangeRequest(
         description: describe(payload),
         reason: meta.reason ?? null,
         payload: payload as unknown as Prisma.InputJsonValue,
-        payloadVersion: 1,
       },
     })
     await tx.auditLog.create({
@@ -151,7 +150,6 @@ export async function assessChangeRequest(changeRequestId: string, actorUserId: 
       data: {
         status: 'IMPACT_ASSESSMENT',
         commercialImpact: commercialAmount(payload),
-        scheduleImpact: payload.kind === 'reschedule',
         assessedShootDate,
         assessedQuoteVersionId,
       },
@@ -299,9 +297,6 @@ export async function applyChangeRequest(changeRequestId: string, actorUserId: s
     await tx.auditLog.create({
       data: { companyId: cr.project.companyId, action: 'change_request.applied', entityType: 'ChangeRequest', entityId: changeRequestId, actorUserId, afterData: { kind: payload.kind, resultingQuoteVersionId } },
     })
-    await tx.outboxEvent.create({
-      data: { eventType: 'change_request.applied', aggregateType: 'ChangeRequest', aggregateId: changeRequestId, payload: { changeRequestId, projectId: cr.projectId, kind: payload.kind } },
-    })
     return updated
   })
 }
@@ -310,7 +305,6 @@ export async function applyChangeRequest(changeRequestId: string, actorUserId: s
 async function issueAdjustmentInvoiceTx(tx: Tx, projectId: string, amount: string, description: string, actorUserId: string | null, now: Date) {
   const invoice = await createInvoiceTx(tx, projectId, { type: 'SUPPLEMENTARY', description, amount }, actorUserId)
   await tx.invoice.update({ where: { id: invoice.id }, data: { status: 'ISSUED', issuedAt: now } })
-  await tx.outboxEvent.create({ data: { eventType: 'invoice.issued', aggregateType: 'Invoice', aggregateId: invoice.id, payload: { invoiceId: invoice.id } } })
   return invoice
 }
 

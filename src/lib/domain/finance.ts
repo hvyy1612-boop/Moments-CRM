@@ -55,7 +55,7 @@ async function nextInvoiceNumber(tx: Tx, companyId: string, at: Date = systemClo
 }
 
 /**
- * One single-line invoice (GST inclusive amount) + audit + outbox, inside the caller's transaction, so a
+ * One single-line invoice (GST inclusive amount) + audit, inside the caller's transaction, so a
  * Change Request can issue its fee invoice together with the change in ONE transaction (docs/25 Rule
  * C5). An invoice-number collision (P2002) aborts the caller's transaction, which retries.
  */
@@ -107,14 +107,6 @@ export async function createInvoiceTx(
       entityId: invoice.id,
       actorUserId,
       afterData: { invoiceNumber: invoice.invoiceNumber, total: total.toString() },
-    },
-  })
-  await tx.outboxEvent.create({
-    data: {
-      eventType: 'invoice.created',
-      aggregateType: 'Invoice',
-      aggregateId: invoice.id,
-      payload: { invoiceId: invoice.id, projectId },
     },
   })
   return invoice
@@ -242,9 +234,6 @@ export async function createInvoiceWithLines(
             actorUserId,
             afterData: { invoiceNumber: invoice.invoiceNumber, total: total.toString(), lines: input.lines.length },
           },
-        })
-        await tx.outboxEvent.create({
-          data: { eventType: 'invoice.created', aggregateType: 'Invoice', aggregateId: invoice.id, payload: { invoiceId: invoice.id, projectId } },
         })
         return invoice
       })
@@ -600,7 +589,6 @@ export async function recordPayment(
               externalTransactionId: idempotencyKey,
               type: 'CHARGE',
               amount,
-              processedAt: now,
               metadata: input.reference ? { reference: input.reference } : undefined,
             },
           },
@@ -667,14 +655,6 @@ export async function recordPayment(
         entityId: payment.id,
         actorUserId,
         afterData: { invoiceId, amount: amount.toString() },
-      },
-    })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'payment.recorded',
-        aggregateType: 'Payment',
-        aggregateId: payment.id,
-        payload: { paymentId: payment.id, invoiceId, projectId: invoice.projectId },
       },
     })
 

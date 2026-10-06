@@ -106,14 +106,6 @@ async function runCreateEnquiry(input: CreateEnquiryInput, actorUserId: string |
         afterData: { email: enquiry.email },
       },
     })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'enquiry.created',
-        aggregateType: 'Enquiry',
-        aggregateId: enquiry.id,
-        payload: { enquiryId: enquiry.id, email: enquiry.email },
-      },
-    })
     // Store the client's first message as a Communication and open the first work item.
     await seedEnquiryWorkflow(tx, enquiry)
     return enquiry
@@ -156,8 +148,7 @@ export async function markEnquiryLost(
       where: { id: enquiryId },
       data: {
         status: 'DECLINED',
-        lostReason: reason,
-        ...(cancelledJobId ? { convertedProjectId: null, convertedAt: null } : {}),
+        ...(cancelledJobId ? { convertedProjectId: null } : {}),
       },
     })
     await cancelOpenWorkItems(tx, enquiryId)
@@ -185,7 +176,7 @@ export async function reopenEnquiry(enquiryId: string, actorUserId: string | nul
     }
     const updated = await tx.enquiry.update({
       where: { id: enquiryId },
-      data: { status: 'CONTACTED', lostReason: null },
+      data: { status: 'CONTACTED' },
     })
     // Bring the checklist back to life so staff can keep working the returning lead.
     await tx.workItem.updateMany({ where: { enquiryId, status: 'CANCELLED' }, data: { status: 'PENDING' } })
@@ -308,7 +299,6 @@ export async function convertEnquiryCore(
         clientId: enquiry.clientId ?? client.id, // a website lead becomes linked to its client here
         convertedClientId: client.id,
         convertedProjectId: project.id,
-        convertedAt: now,
       },
     })
     await cancelOpenWorkItems(tx, enquiry.id)
@@ -321,14 +311,6 @@ export async function convertEnquiryCore(
         entityId: enquiry.id,
         actorUserId,
         afterData: { clientId: client.id, projectId: project.id, code: project.code },
-      },
-    })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'enquiry.converted',
-        aggregateType: 'Enquiry',
-        aggregateId: enquiry.id,
-        payload: { enquiryId: enquiry.id, clientId: client.id, projectId: project.id },
       },
     })
 

@@ -2,7 +2,7 @@
 // Company, auth (User/Session/PasswordReset/SignInLog), Client, Enquiry (lead), Project (job),
 // Quote/QuoteVersion/QuoteLine, Contract/ContractVersion, Invoice/InvoiceLine/InvoiceInstalment/
 // CreditNote/Payment/PaymentTransaction/Refund, WorkItem (tasks), Communication, CalendarEvent,
-// ChangeRequest, ProjectRequirement, ProjectTeamMember, notifications, AuditLog, OutboxEvent.
+// ChangeRequest, ProjectRequirement, ProjectTeamMember, notifications, AuditLog.
 // Only what the running app uses (unused models and values removed 2026-10-06).
 //
 // Naming: code = camelCase field + PascalCase model; database = snake_case column + snake_case
@@ -22,7 +22,7 @@ datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
   directUrl  = env("DIRECT_URL")
-  extensions = [citext, btree_gist]
+  extensions = [citext]
 }
 
 // ---------- Enums ----------
@@ -126,11 +126,6 @@ enum TransactionType {
   REFUND
 }
 
-enum OutboxStatus {
-  PENDING
-  PROCESSED
-}
-
 // B2: acquisition layer — lead (Enquiry) tách khỏi Client. Xem docs/18-crm-flow-reference.md.
 enum EnquiryStatus {
   NEW_ENQUIRY
@@ -190,7 +185,6 @@ model Company {
   id        String   @id @default(cuid()) @db.VarChar(30)
   name      String   @db.VarChar(150)
   abn       String?  @db.VarChar(20) // OQ-007 placeholder cho tới khi xác nhận
-  timezone  String   @default("Australia/Sydney") @db.VarChar(50)
   currency  String   @default("AUD") @db.VarChar(3)
   settings  Json     @default("{}")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
@@ -387,7 +381,6 @@ model Project {
   lifecycleStatus     ProjectLifecycle @default(BOOKING_REQUESTED) @map("lifecycle_status")
   commercialStatus    CommercialStatus @default(UNQUOTED) @map("commercial_status") // derived
   source              String?          @db.VarChar(50) // nguồn enquiry (I-6 taxonomy, TBD)
-  sourceQuoteId       String?          @unique @map("source_quote_id") @db.VarChar(30) // docs/31: accepted quote that created this Job (1-1)
   confirmedByClientAt DateTime?        @map("confirmed_by_client_at") @db.Timestamptz // when the booking was confirmed (deposit paid / contract signed): anchors JOB_CONFIRMED tasks
   enquiryReceivedAt   DateTime         @default(now()) @map("enquiry_received_at") @db.Timestamptz
   createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz
@@ -397,7 +390,6 @@ model Project {
   client                 Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
   owner                  User?                @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   quotes                 Quote[]              @relation("ProjectQuotes")
-  sourceQuote            Quote?               @relation("ProjectSourceQuote", fields: [sourceQuoteId], references: [id], onDelete: SetNull)
   contracts              Contract[]
   workItems              WorkItem[]
   invoices               Invoice[]
@@ -471,11 +463,9 @@ model Enquiry {
   heardAbout           String?       @map("heard_about") @db.Text
   source               EnquirySource @default(WEBSITE)
   status               EnquiryStatus @default(NEW_ENQUIRY)
-  lostReason           String?       @map("lost_reason") @db.VarChar(500)
   clientId             String?       @map("client_id") @db.VarChar(30) // the client this lead is about (SN "Primary Client Contact")
   convertedClientId    String?       @map("converted_client_id") @db.VarChar(30)
-  convertedProjectId   String?       @map("converted_project_id") @db.VarChar(30)
-  convertedAt          DateTime?     @map("converted_at") @db.Timestamptz
+  convertedProjectId   String?       @unique @map("converted_project_id") @db.VarChar(30) // one lead per job
   viewedAt             DateTime?     @map("viewed_at") @db.Timestamptz // Gmail-style read state: null = new/unread until a staff opens the detail
   createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
@@ -505,7 +495,7 @@ model Quote {
   // therefore nullable now. seq = per-company sequential number for the display id (Q-0001).
   enquiryId        String?     @map("enquiry_id") @db.VarChar(30)
   projectId        String?     @map("project_id") @db.VarChar(30)
-  seq              Int?
+  seq              Int?        @unique // per-company display number; quote creation retries on a clash
   reference        String?     @db.VarChar(60) // editable, required Quote ID shown to the client (defaults to Q-seq)
   viewToken        String      @unique @map("view_token") @db.VarChar(64) // client xem quote qua link
   status           QuoteStatus @default(DRAFT) // cache của current version
@@ -515,7 +505,6 @@ model Quote {
 
   enquiry        Enquiry?       @relation("EnquiryQuotes", fields: [enquiryId], references: [id], onDelete: SetNull)
   project        Project?       @relation("ProjectQuotes", fields: [projectId], references: [id], onDelete: Restrict)
-  sourcedProject Project?       @relation("ProjectSourceQuote")
   currentVersion QuoteVersion?  @relation("QuoteCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
   versions       QuoteVersion[] @relation("QuoteVersions")
 
@@ -542,7 +531,6 @@ model QuoteVersion {
   validUntil         DateTime?   @map("valid_until") @db.Timestamptz
   createdByUserId    String?     @map("created_by_user_id") @db.VarChar(30)
   sentToClientAt     DateTime?   @map("sent_to_client_at") @db.Timestamptz
-  viewedByClientAt   DateTime?   @map("viewed_by_client_at") @db.Timestamptz
   acceptedByClientAt DateTime?   @map("accepted_by_client_at") @db.Timestamptz
   createdAt          DateTime    @default(now()) @map("created_at") @db.Timestamptz
   updatedAt          DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
@@ -757,7 +745,6 @@ model PaymentTransaction {
   type                  TransactionType
   amount                Decimal         @db.Decimal(12, 2)
   currency              String          @default("AUD") @db.VarChar(3)
-  processedAt           DateTime?       @map("processed_at") @db.Timestamptz
   metadata              Json?
   createdAt             DateTime        @default(now()) @map("created_at") @db.Timestamptz
 
@@ -792,24 +779,8 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-model OutboxEvent {
-  id            String       @id @default(cuid()) @db.VarChar(30)
-  eventType     String       @map("event_type") @db.VarChar(100)
-  aggregateType String       @map("aggregate_type") @db.VarChar(50)
-  aggregateId   String       @map("aggregate_id") @db.VarChar(30)
-  payload       Json
-  status        OutboxStatus @default(PENDING)
-  attemptCount  Int          @default(0) @map("attempt_count")
-  availableAt   DateTime     @default(now()) @map("available_at") @db.Timestamptz
-  processedAt   DateTime?    @map("processed_at") @db.Timestamptz
-  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz
-
-  @@index([status, availableAt])
-  @@map("outbox_events")
-}
-
-// One notification to one recipient (docs/25 Part 4). The single send-retry unit: both event-driven
-// (outbox processor) and time-driven (payment reminder scanner) notifications converge here (Rule N1).
+// One notification to one recipient (docs/25 Part 4). The single send-retry unit: the payment reminder
+// scanner queues every automatic email here (Rule N1).
 model NotificationDispatch {
   id                     String    @id @default(cuid()) @db.VarChar(30)
   kind                   String    @db.VarChar(40) // payment_reminder | invoice_issued
@@ -881,7 +852,6 @@ model Communication {
   byUserId       String?           @map("by_user_id") @db.VarChar(30) // null khi do client/hệ thống
   editedByUserId String?           @map("edited_by_user_id") @db.VarChar(30) // staff who last edited (internal notes)
   editedAt       DateTime?         @map("edited_at") @db.Timestamptz
-  channel        String?           @db.VarChar(50)
   createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz
 
   project  Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -958,14 +928,13 @@ model CalendarEvent {
 // Refund against a captured payment. Total refunds never exceed the captured amount (domain check);
 // the money movement is also written as a REFUND PaymentTransaction (append-only).
 model Refund {
-  id                String    @id @default(cuid()) @db.VarChar(30)
-  paymentId         String    @map("payment_id") @db.VarChar(30)
-  amount            Decimal   @db.Decimal(12, 2)
-  currency          String    @default("AUD") @db.VarChar(3)
-  reason            String?   @db.VarChar(500)
-  externalReference String?   @map("external_reference") @db.VarChar(100)
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  processedAt       DateTime? @map("processed_at") @db.Timestamptz
+  id                String   @id @default(cuid()) @db.VarChar(30)
+  paymentId         String   @map("payment_id") @db.VarChar(30)
+  amount            Decimal  @db.Decimal(12, 2)
+  currency          String   @default("AUD") @db.VarChar(3)
+  reason            String?  @db.VarChar(500)
+  externalReference String?  @map("external_reference") @db.VarChar(100)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
 
@@ -985,11 +954,9 @@ model ChangeRequest {
   description             String              @db.Text
   reason                  String?             @db.VarChar(500)
   commercialImpact        Decimal?            @map("commercial_impact") @db.Decimal(12, 2)
-  scheduleImpact          Boolean             @default(false) @map("schedule_impact")
   // Typed composite payload + its version (docs/25 Rule C2); a payload edited after approval bumps the
   // version and invalidates the prior approval/assessment.
   payload                 Json?
-  payloadVersion          Int                 @default(1) @map("payload_version")
   // Drift snapshot taken at assessment (Rule C4): apply re-reads and blocks if either changed.
   assessedShootDate       String?             @map("assessed_shoot_date") @db.VarChar(64)
   assessedQuoteVersionId  String?             @map("assessed_quote_version_id") @db.VarChar(30)

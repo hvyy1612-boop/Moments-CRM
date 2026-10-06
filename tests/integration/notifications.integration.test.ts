@@ -9,7 +9,6 @@ import { setAutomationSettings } from '@/lib/domain/automation'
 import {
   claimDispatch,
   enqueueDispatch,
-  processOutboxOnce,
   recipientHashOf,
   reconcileBufferedEvents,
   recordDeliveryEvent,
@@ -215,20 +214,6 @@ describe('Notifications & reminders against a real DB (docs/25 Part 4)', () => {
     await recordPayment(invId, { paymentMethod: 'BANK_TRANSFER', amount: '1000' }, null)
     expect(await resolveSettledOverdueFollowups()).toBeGreaterThanOrEqual(1)
     expect(await prisma.workItem.count({ where: { projectId, kind: 'OVERDUE_FOLLOWUP', status: 'PENDING' } })).toBe(0)
-  })
-
-  it('N-1: the outbox processor marks each business event PROCESSED exactly once', async () => {
-    const evt = await prisma.outboxEvent.create({
-      data: { eventType: 'quote.sent', aggregateType: 'Quote', aggregateId: `q${randomUUID().slice(0, 20)}`, payload: {} },
-    })
-    let guard = 0
-    while ((await processOutboxOnce()).processed > 0 && guard++ < 200) {
-      /* drain the shared backlog */
-    }
-    const row = await prisma.outboxEvent.findUniqueOrThrow({ where: { id: evt.id } })
-    expect(row.status).toBe('PROCESSED')
-    expect(row.attemptCount).toBe(1)
-    expect((await processOutboxOnce()).processed).toBe(0) // nothing left: idempotent
   })
 
   it('N-n: a duplicate webhook (same providerEventId) is applied only once', async () => {

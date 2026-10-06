@@ -36,7 +36,6 @@ describe("a job's own quote is accepted in place", () => {
     const res = await acceptQuote(first, null)
     expect(res.projectId).toBe(projectId)
     const job = await prisma.project.findUniqueOrThrow({ where: { id: projectId! } })
-    expect(job.sourceQuoteId).toBe(first)
     expect(job.commercialStatus).toBe('ACCEPTED')
     expect((await prisma.quote.findUniqueOrThrow({ where: { id: first } })).status).toBe('ACCEPTED')
     // The other open quote on the job was an alternative, so it is removed (same rule as on a lead).

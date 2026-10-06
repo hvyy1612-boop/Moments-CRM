@@ -16,7 +16,6 @@ async function main() {
     create: {
       id: 'company_moments',
       name: 'Moments Photography and Film',
-      timezone: 'Australia/Sydney',
       currency: 'AUD',
     },
   })
