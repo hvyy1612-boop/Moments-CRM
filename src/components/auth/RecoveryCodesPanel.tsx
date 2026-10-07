@@ -73,12 +73,9 @@ export function RecoveryCodesPanel({
         </div>
       ) : null}
 
-      <div className="text-base text-ink">
-        <p>
-          Your <strong>recovery codes</strong> let you set a new password if you forget it. Each code works once.
-        </p>
-        <p className="mt-2">They are the only way to reset it yourself, so store them safely.</p>
-      </div>
+      <p className="text-base text-ink">
+        Your <strong>recovery codes</strong> let you set a new password if you forget it. Each code works once.
+      </p>
 
       {/* Download box (the ProtonMail pattern): file preview, name + size, round download button. */}
       <div className="flex items-center gap-4 rounded-xl border border-line-strong p-4">
@@ -131,7 +128,7 @@ export function RecoveryCodesPanel({
 
       <label className="flex cursor-pointer items-start gap-3 text-base text-ink">
         <input type="checkbox" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-ink" />
-        <span>I understand that if I lose these codes and forget my password, an admin has to reset it.</span>
+        <span>I have saved my recovery codes somewhere safe and will not share them with anyone.</span>
       </label>
 
       {understood ? (
