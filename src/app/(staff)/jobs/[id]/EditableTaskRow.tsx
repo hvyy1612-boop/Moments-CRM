@@ -139,6 +139,7 @@ export function EditableTaskRow({
       <button
         type="button"
         onClick={toggle}
+        data-write="lock"
         aria-label={done ? 'Reopen task' : 'Mark done'}
         aria-pressed={done}
         className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-xs transition-colors ${

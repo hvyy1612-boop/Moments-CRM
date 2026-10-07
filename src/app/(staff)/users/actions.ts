@@ -2,6 +2,7 @@
 
 import { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
+import { setSignupOpen } from '@/lib/auth/register'
 import { cookies } from 'next/headers'
 import { z } from 'zod'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
@@ -28,7 +29,7 @@ export type AddStaffState =
 
 const addStaffSchema = z.object({
   name: z.string().trim().min(1, 'Enter the staff member’s name').max(150, 'Name is too long'),
-  role: z.enum(['ADMIN', 'STUDIO']),
+  role: z.enum(['ADMIN', 'STUDIO', 'SUPERVISOR']),
 })
 
 /** Create a staff account: auto-generate the Staff ID + a temp password, force a change on first login. */
@@ -179,5 +180,17 @@ export async function removeStaffAction(formData: FormData): Promise<void> {
     })
   })
   await revokeAllSessions(target.id)
+  revalidatePath('/users')
+}
+
+// ---------------------------------------------------------------- Sign-up switch
+
+/** Open or close staff self sign-up (/register). ADMIN only. */
+export async function setSignupOpenAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!verifyCsrf(cookieStore.get(CSRF_COOKIE)?.value, formData.get('csrf'))) return
+  const admin = await requireAdmin()
+  if (!admin) return
+  await setSignupOpen(String(formData.get('open') ?? '') === '1', admin.id)
   revalidatePath('/users')
 }

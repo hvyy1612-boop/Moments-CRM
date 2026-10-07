@@ -48,6 +48,7 @@ export function AddClientButton({ csrf }: { csrf: string }) {
     <>
       <button
         type="button"
+        data-write="hide"
         onClick={() => {
           setErrors({})
           setOpen(true)

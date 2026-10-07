@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
-import { TEAMS } from '@/lib/auth/teams'
+import { ROLE_LABEL, TEAMS } from '@/lib/auth/teams'
 import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
 import { PageHeader } from '@/components/PageHeader'
@@ -10,16 +10,18 @@ import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { AddStaffForm } from './AddStaffForm'
+import { signupOptions } from '@/lib/auth/register'
+import { setSignupOpenAction } from './actions'
 import { StaffTeams, type StaffRowData, type TeamGroup } from './StaffTeams'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Staff - Moments' }
 
-const ROLE_LABEL: Record<string, string> = { ADMIN: 'Admin', STUDIO: 'Studio' }
 
 /**
- * Staff account management (ADMIN only). Accounts are provisioned here - the system issues a Staff ID
- * and a one-time password; there is no public sign-up. Accounts are grouped by team; admins can reset a
+ * Staff account management (ADMIN only). Accounts are added here (the system issues a login ID and a
+ * one-time password) or by people signing up at /register while sign-up is open (switch below; the Admin
+ * role is never offered there once an Admin exists). Accounts are grouped by team; admins can reset a
  * password, disable (revokes sessions), or remove (soft-delete: hidden here, kept in the database). Each
  * team exports a printable roster of its active accounts (Download PDF).
  */
@@ -50,6 +52,7 @@ export default async function UsersPage() {
   }).filter((t) => t.members.length > 0)
 
   const totalActive = teams.reduce((n, t) => n + t.activeCount, 0)
+  const signup = await signupOptions()
 
   return (
     <AppShell user={user} csrf={csrf} active="users">
@@ -62,6 +65,22 @@ export default async function UsersPage() {
         <section className="rounded-md border border-line bg-surface p-5">
           <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Add staff</h2>
           <AddStaffForm csrf={csrf} />
+        </section>
+
+        <section className="mt-4 flex flex-col gap-3 rounded-md border border-line bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-wide text-muted">Staff sign-up</h2>
+            <p className="mt-1 text-base text-ink">
+              {signup.open ? 'Open: anyone with the link can create a Staff or Supervisor account at /register.' : 'Closed: only an admin can add accounts.'}
+            </p>
+          </div>
+          <form action={setSignupOpenAction}>
+            <input type="hidden" name="csrf" value={csrf} />
+            <input type="hidden" name="open" value={signup.open ? '0' : '1'} />
+            <button type="submit" className="rounded border border-line bg-surface px-4 py-2 text-sm font-medium text-ink hover:bg-paper">
+              {signup.open ? 'Close sign-up' : 'Open sign-up'}
+            </button>
+          </form>
         </section>
 
         <div className="mt-6 mb-1 flex items-center justify-between">

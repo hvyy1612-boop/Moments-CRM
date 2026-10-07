@@ -19,6 +19,7 @@ import type { Role } from './permissions'
 export const LOGIN_ID_FORMAT: Record<Role, { prefix: string; domain: string }> = {
   ADMIN: { prefix: 'a', domain: 'admin.moments.com' },
   STUDIO: { prefix: 's', domain: 'staff.moments.com' },
+  SUPERVISOR: { prefix: 'v', domain: 'supervisor.moments.com' },
 }
 
 /** Every domain the app issues login IDs on (older m000123@staff.moments.com IDs included). */

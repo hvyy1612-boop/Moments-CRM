@@ -21,7 +21,7 @@ export function LeadNotes({ enquiryId, csrf, notes }: { enquiryId: string; csrf:
   return (
     <SidebarCard
       title="Notes"
-      action={!adding ? <IconButton label="Add note" tone="accent" icon={PlusIcon} onClick={() => setAdding(true)} /> : undefined}
+      action={!adding ? <IconButton label="Add note" data-write="hide" tone="accent" icon={PlusIcon} onClick={() => setAdding(true)} /> : undefined}
     >
       {adding ? (
         <form

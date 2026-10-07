@@ -19,6 +19,7 @@ export function AddJobButton({ csrf }: { csrf: string }) {
     <>
       <button
         type="button"
+        data-write="hide"
         onClick={() => setOpen(true)}
         className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
       >

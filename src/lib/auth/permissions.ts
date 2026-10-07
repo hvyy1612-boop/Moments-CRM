@@ -5,7 +5,7 @@
  */
 
 // Roles that can log in. Clients have no login and reach their records by token (`token`).
-export type Role = 'ADMIN' | 'STUDIO'
+export type Role = 'ADMIN' | 'STUDIO' | 'SUPERVISOR'
 
 export type RoutePermission =
   | { public: true }
@@ -22,40 +22,43 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   // Resend delivery webhook: guarded by the Svix signature (RESEND_WEBHOOK_SECRET) inside the route.
   '/api/webhooks/resend': { secret: true },
   '/api/calendar/feed': { token: true },
-  // Staff entrance and account recovery: public by necessity (not signed in yet / token-authorised).
-  // Accounts are admin-provisioned, so there is no public /register.
+  // Staff entrance, sign-up and account recovery: public by necessity (not signed in yet). Sign-up can be
+  // switched off by an Admin (Users page) and never offers the Admin role once an Admin exists.
   '/login': { public: true },
+  '/register': { public: true },
   '/forgot': { public: true },
   '/reset/[token]': { public: true },
   // Forced first-login password change: any signed-in staff member, before any role-gated area.
-  '/change-password': { roles: ['ADMIN', 'STUDIO'] },
+  '/change-password': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   // Staff workspace: the dashboard, leads (DB Enquiry), jobs (DB Project) and their detail pages.
-  '/dashboard': { roles: ['ADMIN', 'STUDIO'] },
-  '/leads': { roles: ['ADMIN', 'STUDIO'] },
-  '/leads/report': { roles: ['ADMIN', 'STUDIO'] },
-  '/leads/[id]': { roles: ['ADMIN', 'STUDIO'] },
-  '/jobs': { roles: ['ADMIN', 'STUDIO'] },
-  '/jobs/report': { roles: ['ADMIN', 'STUDIO'] },
-  '/jobs/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  // SUPERVISOR (read-only) may open every viewing page; pages that exist only to create or edit
+  // (new quote, quote/invoice/client edit, new invoice, client import) stay ADMIN / STUDIO.
+  '/dashboard': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/leads': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/leads/report': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/leads/[id]': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/jobs': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/jobs/report': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/jobs/[id]': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   // Enquiry-stage quotes (docs/31): the Quotes record list, create flow, and detail/builder.
-  '/quotes': { roles: ['ADMIN', 'STUDIO'] },
+  '/quotes': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   '/quotes/new': { roles: ['ADMIN', 'STUDIO'] },
-  '/quotes/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  '/quotes/[id]': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   '/quotes/[id]/edit': { roles: ['ADMIN', 'STUDIO'] },
-  '/quotes/[id]/preview': { roles: ['ADMIN', 'STUDIO'] },
+  '/quotes/[id]/preview': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   '/finance/new': { roles: ['ADMIN', 'STUDIO'] },
-  '/finance/report': { roles: ['ADMIN', 'STUDIO'] },
-  '/finance/[invoiceId]': { roles: ['ADMIN', 'STUDIO'] },
+  '/finance/report': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/finance/[invoiceId]': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   '/finance/[invoiceId]/edit': { roles: ['ADMIN', 'STUDIO'] },
-  '/clients': { roles: ['ADMIN', 'STUDIO'] },
+  '/clients': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   '/clients/import': { roles: ['ADMIN', 'STUDIO'] },
-  '/clients/export': { roles: ['ADMIN', 'STUDIO'] },
-  '/clients/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  '/clients/export': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/clients/[id]': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   '/clients/[id]/edit': { roles: ['ADMIN', 'STUDIO'] },
-  '/calendar': { roles: ['ADMIN', 'STUDIO'] },
-  '/finance': { roles: ['ADMIN', 'STUDIO'] },
+  '/calendar': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/finance': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   // Interactive price calculator: build a quote estimate from the fixed-price catalogue.
-  '/pricing': { roles: ['ADMIN', 'STUDIO'] },
+  '/pricing': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   // Company configuration is owner-level, not a day-to-day staff workflow.
   '/settings': { roles: ['ADMIN'] },
   // Notification automation go-live control (docs/25 Part 4): switch client emails / follow-ups on.

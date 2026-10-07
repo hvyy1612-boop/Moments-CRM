@@ -7,6 +7,7 @@ import type { Alert } from '@/lib/domain/alerts'
 import { ToastProvider } from '@/components/ui/ToastProvider'
 import { Sidebar, type SidebarItem } from './Sidebar'
 import { TopNav } from './TopNav'
+import { ReadOnlyGuard } from '@/components/auth/ReadOnlyGuard'
 
 const COLLAPSE_KEY = 'sidebar.collapsed'
 
@@ -64,6 +65,7 @@ export function AppChrome({
 
   return (
     <ToastProvider>
+    <ReadOnlyGuard active={userRole === 'SUPERVISOR'} />
     <div className="min-h-screen bg-paper">
       <TopNav
         collapsed={collapsed}

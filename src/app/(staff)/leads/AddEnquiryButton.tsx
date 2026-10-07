@@ -86,10 +86,11 @@ export function AddEnquiryButton({
   return (
     <>
       {trigger === 'icon' ? (
-        <IconButton label="Add lead" tone="accent" icon={<IconEnquiryPlus />} onClick={openModal} />
+        <IconButton label="Add lead" data-write="hide" tone="accent" icon={<IconEnquiryPlus />} onClick={openModal} />
       ) : (
         <button
           type="button"
+          data-write="hide"
           onClick={openModal}
           className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
         >

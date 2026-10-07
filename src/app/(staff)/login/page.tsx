@@ -1,10 +1,12 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
+import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { Alert } from '@/components/ui/Alert'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
+import { signupOptions } from '@/lib/auth/register'
 import { LoginForm } from './LoginForm'
 
 // Auth pages pin the Node runtime for @node-rs/argon2 and node:crypto (D-006).
@@ -29,6 +31,7 @@ export default async function LoginPage({
   if (user) redirect('/dashboard')
 
   const { reset, codes } = await searchParams
+  const { open: signupOpen } = await signupOptions()
   const codesLeft = codes !== undefined && /^\d$/.test(codes) ? Number(codes) : null
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
@@ -92,6 +95,11 @@ export default async function LoginPage({
           ) : null}
 
           <LoginForm csrf={csrf} />
+          {signupOpen ? (
+            <p className="login-signup">
+              New to Moments? <Link href="/register" className="login-link">Create an account</Link>
+            </p>
+          ) : null}
         </div>
       </div>
     </main>

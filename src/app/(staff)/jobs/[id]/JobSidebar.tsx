@@ -96,7 +96,7 @@ export function JobSidebar({
       <Card
         icon={<IconClient className="h-4 w-4" />}
         title="Client information"
-        action={<IconButton label="Edit client" tone="accent" icon={PENCIL} onClick={() => setEditContact(true)} />}
+        action={<IconButton label="Edit client" data-write="hide" tone="accent" icon={PENCIL} onClick={() => setEditContact(true)} />}
       >
         <dl className="flex flex-col gap-2 text-sm">
           <InfoRow label="Primary contact" value={client.displayName} />
@@ -146,6 +146,7 @@ export function JobSidebar({
         action={
           <IconButton
             label={noteView === 'requirements' ? 'Add requirement' : 'Add note'}
+            data-write="hide"
             tone="accent"
             icon={<IconPlus className="h-4 w-4" />}
             onClick={() => (noteView === 'requirements' ? setAddReq(true) : setAddingNote(true))}
@@ -211,7 +212,7 @@ export function JobSidebar({
       <Card
         icon={<IconUsers className="h-4 w-4" />}
         title="Assigned team"
-        action={<IconButton label="Add member" tone="accent" icon={<IconPlus className="h-4 w-4" />} onClick={() => setAddMember(true)} />}
+        action={<IconButton label="Add member" data-write="hide" tone="accent" icon={<IconPlus className="h-4 w-4" />} onClick={() => setAddMember(true)} />}
       >
         {team.length === 0 ? (
           <p className="text-sm text-ink-muted">No team assigned yet.</p>

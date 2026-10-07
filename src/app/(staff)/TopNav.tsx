@@ -7,6 +7,8 @@ import { CommandPalette } from '@/components/CommandPalette'
 import { NotificationBell } from '@/components/NotificationBell'
 import type { Alert } from '@/lib/domain/alerts'
 import { signOut } from './actions'
+import { ROLE_LABEL } from '@/lib/auth/teams'
+import type { Role } from '@/lib/auth/permissions'
 
 /**
  * Global top navigation, shared by every authenticated page. Left: sidebar toggle + Moments wordmark.
@@ -65,6 +67,11 @@ export function TopNav({
       <div className="flex-1" />
 
       <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+      {userRole === 'SUPERVISOR' ? (
+        <span className="hidden rounded-full border border-line bg-surface px-2.5 py-0.5 text-xs font-medium text-ink-muted sm:inline" title="Supervisor accounts can view everything but cannot change anything">
+          Read only
+        </span>
+      ) : null}
       <CommandPalette />
       <NotificationBell alerts={alerts} canViewActivity={userRole === 'ADMIN'} />
 
@@ -83,7 +90,7 @@ export function TopNav({
           <div role="menu" className="absolute right-0 top-11 z-50 w-52 overflow-hidden rounded-lg border border-line bg-surface shadow-lg">
             <div className="border-b border-line px-4 py-3">
               <div className="truncate text-sm font-medium text-ink">{userName}</div>
-              <div className="truncate text-xs capitalize text-ink-muted">{userRole.toLowerCase()}</div>
+              <div className="truncate text-xs text-ink-muted">{ROLE_LABEL[userRole as Role] ?? userRole}</div>
             </div>
             <div className="py-1">
               {/* Settings is admin only (the page 404s for other roles); everyone can change their own password. */}
@@ -95,7 +102,7 @@ export function TopNav({
               <Link href="/change-password" role="menuitem" onClick={() => setMenuOpen(false)} className="block px-4 py-2 text-sm text-ink hover:bg-paper">
                 Change password
               </Link>
-              <form action={signOut}>
+              <form action={signOut} data-allow-readonly>
                 <input type="hidden" name="csrf" value={csrf} />
                 <button type="submit" role="menuitem" className="block w-full px-4 py-2 text-left text-sm text-ink hover:bg-paper">
                   Sign out

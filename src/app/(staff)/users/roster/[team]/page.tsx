@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
-import { teamBySlug } from '@/lib/auth/teams'
+import { ROLE_LABEL, teamBySlug } from '@/lib/auth/teams'
 import { PrintButton } from '@/components/PrintButton'
 import { StaffRosterDoc, type RosterRow } from '@/components/StaffRosterDoc'
 import { prisma } from '@/lib/db'
@@ -15,7 +15,6 @@ import { PageContainer } from '@/components/PageContainer'
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Staff roster - Moments' }
 
-const ROLE_NAME: Record<string, string> = { ADMIN: 'Admin', STUDIO: 'Studio' }
 
 export default async function StaffRosterPage({ params }: { params: Promise<{ team: string }> }) {
   const user = await requireRole('/users/roster/[team]')
@@ -42,7 +41,7 @@ export default async function StaffRosterPage({ params }: { params: Promise<{ te
   const rows: RosterRow[] = users.map((u) => ({
     name: u.name,
     loginId: u.email,
-    roleLabel: ROLE_NAME[u.role] ?? u.role,
+    roleLabel: ROLE_LABEL[u.role] ?? u.role,
     lastLogin: u.lastLoginAt ? formatSydneyDate(u.lastLoginAt) : 'Never signed in',
   }))
 

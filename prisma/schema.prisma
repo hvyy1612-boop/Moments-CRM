@@ -27,9 +27,12 @@ datasource db {
 
 // ---------- Enums ----------
 
+// ADMIN = owner (everything); STUDIO = staff (day-to-day CRM work); SUPERVISOR = read-only reviewer
+// (sees the CRM pages, every write is refused, no Activity / Settings / Users).
 enum UserRole {
   ADMIN
   STUDIO
+  SUPERVISOR
 }
 
 enum SecurityOutcome {

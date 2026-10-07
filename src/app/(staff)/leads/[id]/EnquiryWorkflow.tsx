@@ -165,7 +165,7 @@ export function EnquiryWorkflow({
                 </button>
                 {stage.custom && !readOnly ? (
                   <div className="flex shrink-0 items-center gap-1">
-                    <button type="button" onClick={() => setRenamingStage(stage.key)} aria-label="Rename stage" className="rounded p-1 text-ink-muted transition-colors hover:bg-sunk hover:text-ink">
+                    <button type="button" data-write="hide" onClick={() => setRenamingStage(stage.key)} aria-label="Rename stage" className="rounded p-1 text-ink-muted transition-colors hover:bg-sunk hover:text-ink">
                       <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h4l10-10-4-4L4 16v4z" /><path d="m13.5 6.5 4 4" /></svg>
                     </button>
                     <form action={deleteEnquiryStageAction} onSubmit={(e) => { if (!window.confirm(`Delete the "${stage.label}" stage and its tasks?`)) e.preventDefault() }}>
@@ -327,6 +327,7 @@ export function EnquiryWorkflow({
                     ) : (
                       <button
                         type="button"
+                        data-write="hide"
                         onClick={() => { setAddErrors({}); setAddingStage(stage.key) }}
                         className="rounded py-1 text-sm font-bold text-accent-ink hover:underline"
                       >
@@ -367,6 +368,7 @@ export function EnquiryWorkflow({
       ) : (
         <button
           type="button"
+          data-write="hide"
           onClick={() => setAddingStageNew(true)}
           className="self-start rounded py-1 text-sm font-bold text-accent-ink hover:underline"
         >

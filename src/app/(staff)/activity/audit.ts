@@ -37,9 +37,11 @@ const SPECIAL: Record<string, string> = {
   'auth.staff_disabled': 'Staff account disabled',
   'auth.login_id_changed': 'Login ID changed',
   'auth.user_registered': 'User account registered',
+  'auth.staff_registered': 'Staff signed up',
+  'auth.signup_opened': 'Staff sign-up opened',
+  'auth.signup_closed': 'Staff sign-up closed',
   'automation.settings_changed': 'Notification settings changed',
   'client.deleted': 'Client deleted',
-  'client.merged': 'Clients merged',
   'client.restored': 'Client restored',
   // Leads (DB `Enquiry`; the codes are kept as recorded, only the wording is staff-facing).
   'enquiry.created': 'Lead created',
