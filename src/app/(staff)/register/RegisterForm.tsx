@@ -13,11 +13,7 @@ import { registerAction, type RegisterState } from './actions'
 
 const INITIAL: RegisterState = { status: 'idle' }
 
-const ROLE_INFO: Record<Role, { title: string; body: string }> = {
-  STUDIO: { title: 'Staff', body: 'Day-to-day CRM work' },
-  SUPERVISOR: { title: 'Supervisor', body: 'Read only, no changes' },
-  ADMIN: { title: 'Admin', body: 'Everything + users, settings, Activity' },
-}
+const ROLE_TITLE: Record<Role, string> = { STUDIO: 'Staff', SUPERVISOR: 'Supervisor', ADMIN: 'Admin' }
 
 export function RegisterForm({ csrf, roles }: { csrf: string; roles: Role[] }) {
   const [state, action, pending] = useActionState(registerAction, INITIAL)
@@ -36,8 +32,8 @@ export function RegisterForm({ csrf, roles }: { csrf: string; roles: Role[] }) {
 
   return (
     <>
-    <AuthTitle title="Create an account" subtitle="Choose your role and a password. We will give you a login ID and recovery codes." />
-    <form action={action} className="flex flex-col gap-5">
+    <AuthTitle title="Create an account" subtitle="You will get a login ID and recovery codes." />
+    <form action={action} className="flex flex-col gap-4">
       {state.status === 'error' && state.message ? <Alert tone="danger" title={state.message} /> : null}
       <input type="hidden" name="csrf" value={csrf} />
 
@@ -47,16 +43,13 @@ export function RegisterForm({ csrf, roles }: { csrf: string; roles: Role[] }) {
 
       <fieldset>
         <legend className="mb-1.5 text-sm font-medium text-ink">Role</legend>
-        <div className="grid grid-cols-2 gap-2">
-        {roles.map((role) => (
-          <label key={role} className="flex cursor-pointer items-start gap-2.5 rounded-md border border-line bg-surface p-3 has-[:checked]:border-ink">
-            <input type="radio" name="role" value={role} aria-label={ROLE_INFO[role].title} defaultChecked={values.role ? values.role === role : role === 'STUDIO'} className="mt-1 accent-ink" />
-            <span>
-              <span className="block text-base font-medium text-ink">{ROLE_INFO[role].title}</span>
-              <span className="block text-sm text-ink-muted">{ROLE_INFO[role].body}</span>
-            </span>
-          </label>
-        ))}
+        <div className="flex gap-2">
+          {roles.map((role) => (
+            <label key={role} className="flex h-10 flex-1 cursor-pointer items-center gap-2 rounded-md border border-line bg-surface px-3 text-base text-ink has-[:checked]:border-ink">
+              <input type="radio" name="role" value={role} defaultChecked={values.role ? values.role === role : role === 'STUDIO'} className="accent-ink" />
+              {ROLE_TITLE[role]}
+            </label>
+          ))}
         </div>
         {errors.role ? <p className="mt-1 text-sm text-danger">{errors.role}</p> : null}
       </fieldset>

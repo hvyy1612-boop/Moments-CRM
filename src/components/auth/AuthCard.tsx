@@ -24,7 +24,7 @@ export function AuthCard({ children }: { children: ReactNode }) {
 /** The card's bold, left-aligned title with an optional grey subtitle. */
 export function AuthTitle({ title, subtitle }: { title: string; subtitle?: ReactNode }) {
   return (
-    <div className="mb-7">
+    <div className="mb-6">
       <h1 className="auth-title">{title}</h1>
       {subtitle ? <p className="auth-subtitle">{subtitle}</p> : null}
     </div>

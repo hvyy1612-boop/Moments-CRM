@@ -15,7 +15,7 @@ export function RecoverPasswordForm({ csrf }: { csrf: string }) {
   const errors = state.status === 'error' ? (state.errors ?? {}) : {}
 
   return (
-    <form action={action} className="flex flex-col gap-5">
+    <form action={action} className="flex flex-col gap-4">
       {state.status === 'error' && state.message ? <Alert tone="danger" title={state.message} /> : null}
       <input type="hidden" name="csrf" value={csrf} />
 
@@ -32,7 +32,7 @@ export function RecoverPasswordForm({ csrf }: { csrf: string }) {
         />
       </Field>
 
-      <Field label="Recovery code" htmlFor="code" hint="One of the 6 codes you saved, e.g. ABCDE-FGHJK. Each code works once.">
+      <Field label="Recovery code" htmlFor="code" hint="e.g. ABCDE-FGHJK. Each code works once.">
         <TextInput id="code" name="code" autoComplete="one-time-code" autoCapitalize="characters" spellCheck={false} className="font-mono tracking-wider" required />
       </Field>
 
@@ -41,9 +41,12 @@ export function RecoverPasswordForm({ csrf }: { csrf: string }) {
       <Button type="submit" loading={pending} className="w-full">
         Set new password
       </Button>
-      <Link href="/login" className="text-sm font-bold text-accent-ink hover:underline">
-        Back to sign in
-      </Link>
+      <p className="flex justify-between gap-3 text-sm text-ink-muted">
+        <span>No codes left? Ask your admin.</span>
+        <Link href="/login" className="font-bold text-accent-ink hover:underline">
+          Back to sign in
+        </Link>
+      </p>
     </form>
   )
 }

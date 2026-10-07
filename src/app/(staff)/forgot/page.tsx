@@ -14,10 +14,7 @@ export default async function ForgotPasswordPage() {
 
   return (
     <AuthCard>
-      <AuthTitle
-        title="Reset your password"
-        subtitle="Enter your login ID and one of the recovery codes you saved. No codes left, or forgot your login ID? Ask your admin to reset your password."
-      />
+      <AuthTitle title="Reset your password" subtitle="Use your login ID and one of your saved recovery codes." />
       <RecoverPasswordForm csrf={csrf} />
     </AuthCard>
   )

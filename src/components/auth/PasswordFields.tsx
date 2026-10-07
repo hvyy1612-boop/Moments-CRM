@@ -115,7 +115,7 @@ export function NewPasswordFields({
           </div>
         </Field>
 
-        <ul className="flex flex-col gap-1.5 rounded-md border border-line bg-paper px-3 py-2.5">
+        <ul className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-md border border-line bg-paper px-3 py-2">
           {PASSWORD_RULES.map((rule) => (
             <RuleRow key={rule.id} met={rule.test(password)}>
               {rule.label}

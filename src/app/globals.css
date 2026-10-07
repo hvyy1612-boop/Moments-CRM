@@ -246,22 +246,22 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 20px 16px 48px;
+  padding: 16px 16px 24px;
   background: var(--color-paper);
 }
 .auth-brand {
   align-self: stretch;
-  padding: 4px 8px 24px;
+  padding: 0 8px 8px;
 }
 .auth-wordmark {
   display: block;
   width: auto;
-  height: 30px;
+  height: 26px;
 }
 .auth-card {
   width: min(480px, 100%);
   margin: auto 0;
-  padding: 44px;
+  padding: 36px 40px;
   background: var(--color-surface);
   border: 1px solid var(--color-line);
   border-radius: 24px;
