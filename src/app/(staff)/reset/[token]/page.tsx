@@ -12,7 +12,7 @@ export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Set a new password - Moments' }
 
 const ERROR_MESSAGE: Record<string, string> = {
-  invalid: 'This reset link is invalid or has expired. Please request a new one.',
+  invalid: 'This reset link is invalid or has expired. Ask your admin for a new one, or use a recovery code.',
   weak: 'Use at least 8 characters with a letter, a number, and a special character.',
   too_common: 'That password is too common. Choose something less predictable.',
 }
@@ -40,10 +40,10 @@ export default async function ResetPasswordPage({
         {!valid ? (
           <div className="mt-6 flex flex-col gap-5">
             <Alert tone="danger" title="This link is invalid or has expired">
-              Reset links last 60 minutes and can be used once. Request a new one to continue.
+              Reset links last 60 minutes and can be used once. Ask your admin for a new one, or use a recovery code.
             </Alert>
             <Link href="/forgot" className="text-sm font-bold text-accent-ink hover:underline">
-              Request a new link
+              Use a recovery code
             </Link>
           </div>
         ) : (

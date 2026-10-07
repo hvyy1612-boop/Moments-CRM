@@ -2,36 +2,41 @@
 
 import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { appBaseUrl } from '@/lib/app-url'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { requestPasswordReset } from '@/lib/auth/password-reset'
-import { isInternalLoginId } from '@/lib/auth/staff'
-import { sendPasswordResetEmail } from '@/lib/email'
+import { checkPasswordPolicy } from '@/lib/auth/password'
+import { resetPasswordWithRecoveryCode } from '@/lib/auth/recovery-codes'
 
-async function clientIp(): Promise<string> {
-  const h = await headers()
-  return h.get('x-forwarded-for')?.split(',')[0]?.trim() || '0.0.0.0'
-}
+export type RecoverState =
+  | { status: 'idle' }
+  | { status: 'error'; message?: string; errors?: { password?: string; confirm?: string }; loginId: string }
+
+const NO_MATCH =
+  'That login ID and recovery code do not match, or the code was already used. Check both and try again, or ask your admin to reset your password.'
 
 /**
- * Request a reset link. Always redirects to the same confirmation, whether or not an account exists,
- * so the response never reveals which emails are registered (OWASP account-existence protection).
+ * Self-service reset with a recovery code (a staff login ID is not a mailbox, so there is no email link).
+ * One generic message for every failure, so the page never reveals which login IDs exist (OWASP).
  */
-export async function requestResetAction(formData: FormData): Promise<void> {
-  const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value
-  if (verifyCsrf(cookieValue, formData.get('csrf'))) {
-    const email = String(formData.get('email') ?? '').trim().toLowerCase()
-    // An app-issued login ID (s264831@staff.moments.com ...) is not a mailbox, and moments.com is not the
-    // studio's domain: a reset link must never be mailed there. Staff ask an admin to reset it in Users;
-    // the page shows the same confirmation either way.
-    if (email && !isInternalLoginId(email)) {
-      const ip = await clientIp()
-      const result = await requestPasswordReset(email, ip)
-      if (result) {
-        const origin = await appBaseUrl()
-        await sendPasswordResetEmail({ to: email, resetLink: `${origin}/reset/${result.token}` })
-      }
-    }
+export async function recoverPasswordAction(_prev: RecoverState, formData: FormData): Promise<RecoverState> {
+  const loginId = String(formData.get('loginId') ?? '').trim()
+  if (!verifyCsrf((await cookies()).get(CSRF_COOKIE)?.value, formData.get('csrf'))) {
+    return { status: 'error', message: 'Your session expired. Refresh and try again.', loginId }
   }
-  redirect('/forgot?sent=1')
+  const code = String(formData.get('code') ?? '')
+  const password = String(formData.get('password') ?? '')
+  const confirm = String(formData.get('confirm') ?? '')
+
+  if (!loginId || !code.trim()) return { status: 'error', message: 'Please enter your login ID and one recovery code.', loginId }
+  const policy = checkPasswordPolicy(password)
+  if (policy === 'too_common') return { status: 'error', errors: { password: 'That password is too common. Choose something less predictable.' }, loginId }
+  if (policy) return { status: 'error', errors: { password: 'Your password does not meet all the requirements listed below.' }, loginId }
+  if (password !== confirm) return { status: 'error', errors: { confirm: 'The two passwords do not match.' }, loginId }
+
+  const h = await headers()
+  const result = await resetPasswordWithRecoveryCode(
+    { loginId, code, newPassword: password },
+    { ipAddress: h.get('x-forwarded-for')?.split(',')[0]?.trim() || '0.0.0.0', userAgent: h.get('user-agent') },
+  )
+  if (!result.ok) return { status: 'error', message: NO_MATCH, loginId }
+  redirect(`/login?reset=done&codes=${result.codesLeft}`)
 }

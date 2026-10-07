@@ -254,6 +254,7 @@ model User {
   passwordResets          PasswordReset[]
   sessions                Session[]
   signInLogs              SignInLog[]
+  recoveryCodes           RecoveryCode[]
   auditLogs               AuditLog[]
   ownedProjects           Project[]         @relation("ProjectOwner")
   createdQuoteVersions    QuoteVersion[]    @relation("QuoteVersionCreatedBy")
@@ -287,6 +288,21 @@ model PasswordReset {
   @@index([userId])
   @@index([tokenHash])
   @@map("password_resets")
+}
+
+/// One-time password recovery code. A staff login ID is not a mailbox, so a forgotten password is reset
+/// with one of these instead of an email link: six are issued when the staff member sets their own
+/// password (shown once, downloadable), only the Argon2id hash is stored, and a used code is deleted.
+model RecoveryCode {
+  id        String   @id @default(cuid()) @db.VarChar(30)
+  userId    String   @map("user_id") @db.VarChar(30)
+  codeHash  String   @map("code_hash") @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("recovery_codes")
 }
 
 model Session {

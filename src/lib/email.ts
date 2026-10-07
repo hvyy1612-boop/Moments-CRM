@@ -239,16 +239,3 @@ export async function sendTaskDigestEmail(email: TaskDigestEmail): Promise<void>
   )
   await deliver({ to: email.to, subject: 'Moments - tasks due today', html, event: 'email.task_digest' })
 }
-
-export type PasswordResetEmail = { to: string; resetLink: string }
-
-/** Sends the staff member their single-use password reset link. */
-export async function sendPasswordResetEmail(email: PasswordResetEmail): Promise<void> {
-  const html = shell(
-    'Reset your password',
-    `<p>We received a request to reset your Moments password. This link works once and expires in 60 minutes.</p>
-     <p>${button(email.resetLink, 'Set a new password')}</p>
-     <p style="color:#9c948b;font-size:13px">If you did not request this, you can safely ignore this email.</p>`,
-  )
-  await deliver({ to: email.to, subject: 'Reset your Moments password', html, event: 'email.password_reset_sent', devLink: email.resetLink })
-}
