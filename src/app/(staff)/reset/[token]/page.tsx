@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
+import { AuthCard, AuthTitle } from '@/components/auth/AuthCard'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Field, TextInput } from '@/components/ui/form'
@@ -32,13 +33,11 @@ export default async function ResetPasswordPage({
   const valid = await isResetTokenValid(token)
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm">
-        <p className="text-sm text-ink-muted">Moments Photography and Film</p>
-        <h1 className="mt-1 text-2xl">Set a new password</h1>
+    <AuthCard>
+        <AuthTitle title="Set a new password" subtitle={valid ? 'Your admin sent you this link. Choose a new password to sign in.' : undefined} />
 
         {!valid ? (
-          <div className="mt-6 flex flex-col gap-5">
+          <div className="flex flex-col gap-5">
             <Alert tone="danger" title="This link is invalid or has expired">
               Reset links last 60 minutes and can be used once. Ask your admin for a new one, or use a recovery code.
             </Alert>
@@ -47,7 +46,7 @@ export default async function ResetPasswordPage({
             </Link>
           </div>
         ) : (
-          <form action={resetPasswordAction} className="mt-6 flex flex-col gap-5">
+          <form action={resetPasswordAction} className="flex flex-col gap-5">
             {error ? (
               <Alert tone="danger" title={ERROR_MESSAGE[error] ?? 'This reset link is invalid or has expired.'} />
             ) : null}
@@ -72,7 +71,6 @@ export default async function ResetPasswordPage({
             </Link>
           </form>
         )}
-      </div>
-    </main>
+    </AuthCard>
   )
 }

@@ -15,7 +15,7 @@ export function RecoverPasswordForm({ csrf }: { csrf: string }) {
   const errors = state.status === 'error' ? (state.errors ?? {}) : {}
 
   return (
-    <form action={action} className="mt-6 flex flex-col gap-5">
+    <form action={action} className="flex flex-col gap-5">
       {state.status === 'error' && state.message ? <Alert tone="danger" title={state.message} /> : null}
       <input type="hidden" name="csrf" value={csrf} />
 

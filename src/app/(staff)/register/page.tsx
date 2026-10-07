@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { AuthCard, AuthTitle } from '@/components/auth/AuthCard'
 import { Alert } from '@/components/ui/Alert'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
@@ -19,17 +20,13 @@ export default async function RegisterPage() {
   const { open, roles } = await signupOptions()
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm">
-        <p className="text-sm text-ink-muted">Moments Photography and Film</p>
-        <h1 className="mt-1 text-2xl">Create an account</h1>
-        {open ? (
-          <>
-            <p className="mt-2 text-base text-ink-muted">Choose your role and a password. We will give you a login ID and recovery codes.</p>
-            <RegisterForm csrf={csrf} roles={roles} />
-          </>
-        ) : (
-          <div className="mt-6 flex flex-col gap-5">
+    <AuthCard>
+      {open ? (
+        <RegisterForm csrf={csrf} roles={roles} />
+      ) : (
+        <>
+          <AuthTitle title="Create an account" />
+          <div className="flex flex-col gap-5">
             <Alert tone="info" title="Sign-up is closed">
               Please ask your admin to create an account for you.
             </Alert>
@@ -37,8 +34,8 @@ export default async function RegisterPage() {
               Back to sign in
             </Link>
           </div>
-        )}
-      </div>
-    </main>
+        </>
+      )}
+    </AuthCard>
   )
 }

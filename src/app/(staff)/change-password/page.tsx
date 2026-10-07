@@ -27,7 +27,7 @@ export default async function ChangePasswordPage() {
   const codesLeft = forced ? 0 : await recoveryCodesLeft(user.id)
 
   return (
-    <AuthCard heading={forced ? 'Set a new password' : 'Password and recovery codes'} subtitle={forced ? 'Choose your own password to finish signing in.' : 'Enter your current password, then choose a new one. Your other signed-in devices will be signed out.'}>
+    <AuthCard>
       <ChangePasswordForm csrf={csrf} requireCurrent={!forced} />
       {forced ? null : <RecoveryCodesSection csrf={csrf} codesLeft={codesLeft} />}
     </AuthCard>

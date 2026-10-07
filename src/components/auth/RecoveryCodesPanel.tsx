@@ -2,90 +2,147 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { Alert } from '@/components/ui/Alert'
 import { Button, buttonClass } from '@/components/ui/Button'
 import { recoveryCodesFileText } from '@/lib/auth/recovery-code-format'
 
 const SVG = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' } as const
 
 /**
- * The six recovery codes, shown ONCE right after they are created, with Download (.txt) and Copy - the
- * ProtonMail pattern, so the staff member keeps them somewhere outside the app.
+ * The six recovery codes, right after they are created - ProtonMail's "Secure your account" step: a
+ * download box (.txt), "copy as text", an "I understand" tick that unlocks Continue. The codes themselves
+ * stay folded behind "Show codes" so the card stays short. Shown once; only hashes are stored.
  */
 export function RecoveryCodesPanel({
   loginId,
   codes,
   createdLabel,
   continueHref,
-  continueLabel,
+  continueLabel = 'Continue',
+  showLoginId = false,
 }: {
   loginId: string
   codes: string[]
   createdLabel: string
-  continueHref?: string
+  continueHref: string
   continueLabel?: string
+  /** Show the login ID row (sign-up: the system just made it). */
+  showLoginId?: boolean
 }) {
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'id' | 'codes' | null>(null)
+  const [shown, setShown] = useState(false)
+  const [understood, setUnderstood] = useState(false)
   const fileText = recoveryCodesFileText(loginId, codes, createdLabel)
+  const fileName = `moments-recovery-codes-${loginId.split('@')[0]}.txt`
+  const fileSize = `${(new TextEncoder().encode(fileText).length / 1024).toFixed(2)} KB`
+
+  const copy = async (text: string, what: 'id' | 'codes') => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(what)
+      setTimeout(() => setCopied(null), 2500)
+    } catch {
+      setCopied(null)
+    }
+  }
 
   const download = () => {
-    const blob = new Blob([fileText], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
+    const url = URL.createObjectURL(new Blob([fileText], { type: 'text/plain;charset=utf-8' }))
     const a = document.createElement('a')
     a.href = url
-    a.download = `moments-recovery-codes-${loginId.split('@')[0]}.txt`
+    a.download = fileName
     document.body.appendChild(a)
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
   }
 
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(fileText)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2500)
-    } catch {
-      setCopied(false)
-    }
-  }
-
   return (
-    <div className="flex flex-col gap-4">
-      <Alert tone="warning" title="Save your recovery codes now">
-        If you forget your password, use your login ID and one of these codes on the &quot;Forgot password&quot; page.
-        Each code works once. They will not be shown again.
-      </Alert>
+    <div className="flex flex-col gap-5">
+      {showLoginId ? (
+        <div>
+          <p className="text-sm font-medium text-ink">Your login ID</p>
+          <div className="mt-1 flex items-center justify-between gap-3 rounded-md border border-line bg-paper px-3 py-2">
+            <span className="min-w-0 font-mono text-base text-ink">
+              {loginId.split('@')[0]}@<wbr />
+              {loginId.split('@')[1]}
+            </span>
+            <button type="button" onClick={() => copy(loginId, 'id')} className="shrink-0 text-sm font-bold text-accent-ink hover:underline">
+              {copied === 'id' ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
-      <ol className="grid grid-cols-2 gap-2 rounded-md border border-line bg-paper p-4" aria-label="Recovery codes">
-        {codes.map((code) => (
-          <li key={code} className="tabular rounded bg-surface px-3 py-2 text-center font-mono text-base tracking-wider text-ink">
-            {code}
-          </li>
-        ))}
-      </ol>
-
-      <div className="grid grid-cols-2 gap-3">
-        <Button type="button" variant="secondary" className="w-full" onClick={download}>
-          <svg viewBox="0 0 24 24" {...SVG} className="h-4 w-4" aria-hidden="true">
-            <path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14" />
-          </svg>
-          Download
-        </Button>
-        <Button type="button" variant="secondary" className="w-full" onClick={copy}>
-          <svg viewBox="0 0 24 24" {...SVG} className="h-4 w-4" aria-hidden="true">
-            <rect x="9" y="9" width="12" height="12" rx="2" />
-            <path d="M5 15V5a2 2 0 0 1 2-2h10" />
-          </svg>
-          {copied ? 'Copied' : 'Copy'}
-        </Button>
+      <div className="text-base text-ink">
+        <p>
+          Your <strong>recovery codes</strong> let you set a new password if you forget it. Each code works once.
+        </p>
+        <p className="mt-2">They are the only way to reset it yourself, so store them safely.</p>
       </div>
 
-      {continueHref ? (
-        <Link href={continueHref} className={`${buttonClass('primary')} w-full`}>
-          {continueLabel ?? 'Continue'}
-        </Link>
+      {/* Download box (the ProtonMail pattern): file preview, name + size, round download button. */}
+      <div className="flex items-center gap-4 rounded-xl border border-line-strong p-4">
+        <svg viewBox="0 0 40 48" className="h-14 w-12 shrink-0 text-ink-muted" aria-hidden="true">
+          <rect x="1" y="1" width="38" height="46" rx="4" fill="var(--color-paper)" stroke="currentColor" strokeWidth="1.5" />
+          {[10, 15, 20, 25].map((y) => (
+            <rect key={y} x="7" y={y} width={y === 25 ? 16 : 26} height="2" rx="1" fill="currentColor" opacity="0.55" />
+          ))}
+          <rect x="7" y="33" width="26" height="6" rx="2" fill="var(--color-accent)" opacity="0.35" />
+        </svg>
+        <div className="min-w-0 flex-1">
+          <p className="text-base font-semibold text-ink">Download codes</p>
+          <p className="break-all text-sm text-ink-muted">
+            {fileName}
+          </p>
+          <p className="text-sm text-ink-muted">{fileSize}</p>
+        </div>
+        <button
+          type="button"
+          onClick={download}
+          aria-label={`Download ${fileName}`}
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-ink text-surface transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <svg viewBox="0 0 24 24" {...SVG} className="h-5 w-5" aria-hidden="true">
+            <path d="M12 4v11m0 0-4-4m4 4 4-4M6 20h12" />
+          </svg>
+        </button>
+      </div>
+
+      <p className="-mt-2 text-sm text-ink">
+        Or{' '}
+        <button type="button" onClick={() => copy(fileText, 'codes')} className="font-medium text-accent-ink underline underline-offset-2">
+          {copied === 'codes' ? 'copied' : 'copy the codes'}
+        </button>{' '}
+        as text ·{' '}
+        <button type="button" onClick={() => setShown((v) => !v)} aria-expanded={shown} className="font-medium text-accent-ink underline underline-offset-2">
+          {shown ? 'hide codes' : 'show codes'}
+        </button>
+      </p>
+
+      {shown ? (
+        <ol className="-mt-2 grid grid-cols-2 gap-2 rounded-md border border-line bg-paper p-3" aria-label="Recovery codes">
+          {codes.map((code) => (
+            <li key={code} className="tabular rounded bg-surface px-2 py-1.5 text-center font-mono text-sm tracking-wider text-ink">
+              {code}
+            </li>
+          ))}
+        </ol>
       ) : null}
+
+      <label className="flex cursor-pointer items-start gap-3 text-base text-ink">
+        <input type="checkbox" checked={understood} onChange={(e) => setUnderstood(e.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-ink" />
+        <span>I understand that if I lose these codes and forget my password, an admin has to reset it.</span>
+      </label>
+
+      {understood ? (
+        <Link href={continueHref} className={`${buttonClass('primary', 'lg')} w-full`}>
+          {continueLabel}
+        </Link>
+      ) : (
+        <Button type="button" size="lg" disabled className="w-full">
+          {continueLabel}
+        </Button>
+      )}
     </div>
   )
 }
