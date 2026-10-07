@@ -281,6 +281,24 @@ body {
   line-height: 1.5;
   color: var(--color-ink-muted);
 }
+/* Same ProtonMail-style focus halo for the account pages' text fields (overrides the 1px ring). */
+.auth-card input:not([type='checkbox']):not([type='radio']) {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.auth-card input:not([type='checkbox']):not([type='radio']):focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 4px rgba(160, 106, 103, 0.2);
+}
+.auth-card input.border-danger:focus {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px rgba(178, 59, 52, 0.18);
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-field,
+  .auth-card input {
+    transition: none;
+  }
+}
 @media (max-width: 480px) {
   .auth-card {
     padding: 28px 22px;
@@ -333,6 +351,8 @@ body {
   --login-field-border: rgba(59, 58, 51, 0.16);
   --login-btn: #6d6f4d;
   --login-btn-hover: #5e6041;
+  /* Soft focus halo around a sign-in field (the login button olive, translucent). */
+  --login-focus-glow: rgba(109, 111, 77, 0.22);
   --login-cream: #f4f1e9;
 }
 
@@ -476,14 +496,23 @@ body {
   border: 1px solid var(--login-field-border);
   border-radius: 6px;
   box-sizing: border-box;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 .login-field::placeholder {
   color: var(--login-muted);
 }
-.login-field:focus-visible {
+/* ProtonMail-style focus: coloured border plus a soft halo around the field. */
+.login-field:focus {
   outline: none;
+  background: #ffffff;
   border-color: var(--login-btn);
+  box-shadow: 0 0 0 4px var(--login-focus-glow);
+}
+.login-field-wrap:focus-within .login-field-icon {
+  color: var(--login-btn);
+}
+.login-field.has-error:focus {
+  box-shadow: 0 0 0 3px rgba(178, 59, 52, 0.18);
 }
 .login-field.pw {
   padding-right: 42px;
