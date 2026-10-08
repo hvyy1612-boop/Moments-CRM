@@ -2,14 +2,13 @@
 
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
 import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getActionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { sydneyLocalToUtc } from '@/lib/time'
 import { findOrCreateClient } from '@/lib/domain/client'
-import { cancelBooking, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
+import { cancelBooking, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
 import { enquirySchema } from '@/lib/validation/enquiry'
 import {
   addEnquiryNote,
@@ -22,7 +21,6 @@ import {
   toggleEnquiryTask,
   updateEnquiryTask,
 } from '@/lib/domain/enquiry-workflow'
-import { seedProjectWorkflow } from '@/lib/domain/project-workflow'
 
 async function requireStaff() {
   const user = await getActionUser()
@@ -309,18 +307,6 @@ export async function addEnquiryNoteAction(formData: FormData): Promise<void> {
   if (!enquiryId || !body.trim()) return
   await addEnquiryNote(enquiryId, body, user.id)
   revalidatePath(`/leads/${enquiryId}`)
-}
-
-/** Convert an enquiry into a client + project, then open the new project. */
-export async function convertEnquiryAction(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const enquiryId = String(formData.get('enquiryId') ?? '')
-  if (!enquiryId) throw new Error('Missing enquiry.')
-  const result = await convertEnquiry(enquiryId, user.id)
-  if (result.projectId) await seedProjectWorkflow(result.projectId)
-  revalidatePath('/leads')
-  redirect(`/jobs/${result.projectId}?toast=job-created`)
 }
 
 

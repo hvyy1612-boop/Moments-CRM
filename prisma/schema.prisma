@@ -449,7 +449,7 @@ model Package {
 }
 
 // ---------- Acquisition: Enquiry = "Lead" in the UI (like Project = "Job") ----------
-// A potential booking from first enquiry to a paid deposit. Convert (accept quote / Create Job) upserts
+// A potential booking from first enquiry to a paid deposit. Convert (its quote accepted, or Add job) upserts
 // the Client by email + creates a provisional Job and links it (convertedProjectId); the lead then moves
 // AWAITING_BOOKING_CONFIRMATION -> BOOKING_CONFIRMED on the deposit. Never deleted: DECLINED is kept and
 // can be reopened. Email is NOT unique (one person can enquire several times). See docs/GLOSSARY.md.

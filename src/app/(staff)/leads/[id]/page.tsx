@@ -22,7 +22,7 @@ import { quoteView } from '@/features/quotes/status'
 import { auditLabel } from '../../activity/audit'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
-import { convertEnquiryAction, updateEnquiryAction } from '../actions'
+import { updateEnquiryAction } from '../actions'
 import { createQuoteForEnquiryAction } from '../../quotes/actions'
 import { HistoryLog, type HistoryRow } from '../../finance/[invoiceId]/HistoryLog'
 import { EnquiryWorkflow } from './EnquiryWorkflow'
@@ -124,8 +124,8 @@ export default async function EnquiryDetailPage({
     details: '',
   }))
 
-  // A Job exists once the lead is accepted/converted (Awaiting or Confirmed). "open" = a live lead with
-  // no Job yet, so only those stages offer Create quote / Create Job.
+  // A Job exists once the lead's quote is accepted (Awaiting, then Confirmed on the deposit) - there is no
+  // manual "Create Job": ticking tasks never books a lead. "open" = a live lead with no Job yet.
   const hasJob = enquiry.convertedProjectId != null
   const confirmed = enquiry.status === 'BOOKING_CONFIRMED'
   const open = isOpenEnquiry(enquiry.status) && !hasJob
@@ -187,13 +187,9 @@ export default async function EnquiryDetailPage({
             <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
               {open ? (
                 <>
-                  <form action={convertEnquiryAction}>
-                    <input type="hidden" name="csrf" value={csrf} />
-                    <input type="hidden" name="enquiryId" value={enquiry.id} />
-                    <button type="submit" className="rounded-md bg-ink px-3 py-1.5 text-sm font-bold text-surface transition-opacity hover:opacity-90">
-                      Create Job
-                    </button>
-                  </form>
+                  <p className="mr-auto text-sm text-ink-muted">
+                    To book this lead, create a quote and mark it accepted when the client agrees.
+                  </p>
                   <form action={updateEnquiryAction}>
                     <input type="hidden" name="csrf" value={csrf} />
                     <input type="hidden" name="enquiryId" value={enquiry.id} />
