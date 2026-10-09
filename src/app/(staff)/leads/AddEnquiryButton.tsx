@@ -182,14 +182,19 @@ export function AddEnquiryButton({
                 <legend className="mb-1.5 text-sm font-medium text-ink">
                   Job type<span className="text-danger"> *</span>
                 </legend>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup">
+                {/* Segmented control: one bar divided into equal segments, the selected one filled. */}
+                <div
+                  role="radiogroup"
+                  className={`flex w-full gap-0.5 rounded-md border p-0.5 ${errors.jobType ? 'border-danger' : 'border-line-strong'} bg-surface`}
+                >
                   {JOB_TYPES.map((t) => {
                     const checked = jobType === t.value
                     return (
                       <label
                         key={t.value}
-                        className={`flex min-h-14 cursor-pointer flex-col items-center justify-center rounded border px-2 py-2 text-center transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${
-                          checked ? 'border-ink bg-ink text-surface' : `${errors.jobType ? 'border-danger' : 'border-line-strong'} bg-surface text-ink hover:bg-sunk`
+                        title={'detail' in t ? t.detail : undefined}
+                        className={`flex min-h-9 flex-1 cursor-pointer items-center justify-center rounded px-2 py-1.5 text-center text-sm font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${
+                          checked ? 'bg-ink text-surface' : 'text-ink hover:bg-sunk'
                         }`}
                       >
                         <input
@@ -200,8 +205,7 @@ export function AddEnquiryButton({
                           onChange={() => setJobType(t.value)}
                           className="sr-only"
                         />
-                        <span className="text-sm font-medium">{t.label}</span>
-                        {'detail' in t ? <span className={`text-xs ${checked ? 'text-surface/80' : 'text-ink-muted'}`}>{t.detail}</span> : null}
+                        {t.label}
                       </label>
                     )
                   })}
