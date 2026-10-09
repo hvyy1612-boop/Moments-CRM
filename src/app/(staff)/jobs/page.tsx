@@ -229,7 +229,7 @@ export default async function JobsPage({
         <div className="mt-4">
           {rows.length === 0 ? (
             <p className="py-16 text-center text-sm text-ink-muted">
-              {q || status || task
+              {q || task
                 ? 'No jobs match these filters.'
                 : tab === 'completed'
                   ? 'No completed jobs yet.'

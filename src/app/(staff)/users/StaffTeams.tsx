@@ -67,7 +67,7 @@ function StaffRow({ staff, csrf, isSelf }: { staff: StaffRowData; csrf: string; 
             <form
               action={removeStaffAction}
               onSubmit={(e) => {
-                if (!confirm(`Remove ${staff.name}? They will lose access immediately and be taken off the team list.`)) {
+                if (!window.confirm(`Remove ${staff.name}? They will lose access immediately and be taken off the team list.`)) {
                   e.preventDefault()
                 }
               }}

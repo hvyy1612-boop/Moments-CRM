@@ -27,6 +27,10 @@ const config = [
     rules: {
       // The brief bans `any` outright (§12.1).
       '@typescript-eslint/no-explicit-any': 'error',
+      // Browser globals (window.status, window.name, ...) type-check everywhere because lib.dom declares
+      // them, but they do not exist on the server: a stray `status` crashed /jobs whenever the list was empty.
+      // Write window.x in client code when it is really meant.
+      'no-restricted-globals': ['error', 'addEventListener', 'blur', 'close', 'closed', 'confirm', 'event', 'external', 'find', 'focus', 'frames', 'history', 'innerHeight', 'innerWidth', 'length', 'location', 'name', 'onerror', 'onload', 'open', 'opener', 'outerHeight', 'outerWidth', 'parent', 'print', 'removeEventListener', 'screen', 'scroll', 'scrollBy', 'scrollTo', 'scrollX', 'scrollY', 'self', 'status', 'stop', 'top'],
     },
   },
 ]
