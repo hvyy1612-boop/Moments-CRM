@@ -3,9 +3,8 @@
 import { type FormEvent, type ReactNode, useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Alert } from '@/components/ui/Alert'
-import { Button } from '@/components/ui/Button'
 import { IconButton } from '@/components/ui/IconButton'
-import { Modal } from '@/components/ui/Modal'
+import { Modal, ModalFooter, modalCancelBtn, modalPrimaryBtn } from '@/components/ui/Modal'
 import { Checkbox, Field, Select, TextInput, Textarea } from '@/components/ui/form'
 import { JOB_TYPES, LEAD_SOURCES, LEAD_WORKFLOWS, parseNewLead } from '@/features/enquiries/new-lead'
 import { addEnquiryAction, type AddEnquiryState, type AddLeadErrors } from './actions'
@@ -113,7 +112,7 @@ export function AddEnquiryButton({
   return (
     <>
       {trigger === 'icon' ? (
-        <IconButton label="Add lead" data-write="hide" tone="accent" icon={<IconEnquiryPlus />} onClick={openModal} />
+        <IconButton label="Add Lead" data-write="hide" tone="accent" icon={<IconEnquiryPlus />} onClick={openModal} />
       ) : (
         <button
           type="button"
@@ -122,14 +121,14 @@ export function AddEnquiryButton({
           className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-          Add lead
+          Add Lead
         </button>
       )}
 
       <Modal
         open={open}
         onClose={close}
-        title="Add lead"
+        title="Add Lead"
         description="The lead shows in Leads once you save it."
         size="md"
         headerBorder={false}
@@ -289,10 +288,10 @@ export function AddEnquiryButton({
             </Field>
           </div>
 
-          <div className="flex items-center gap-3 border-t border-line px-6 py-4">
-            <Button type="submit" size="xl" loading={pending}>Save lead</Button>
-            <Button type="button" variant="secondary" size="lg" onClick={close}>Cancel</Button>
-          </div>
+          <ModalFooter>
+            <button type="button" onClick={close} className={modalCancelBtn}>Cancel</button>
+            <button type="submit" disabled={pending} className={modalPrimaryBtn}>{pending ? 'Saving…' : 'Save Lead'}</button>
+          </ModalFooter>
         </form>
       </Modal>
     </>
