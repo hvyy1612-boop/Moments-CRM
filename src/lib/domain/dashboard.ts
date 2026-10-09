@@ -323,3 +323,33 @@ function titleCaseSource(s: string): string {
   const map: Record<string, string> = { WEBSITE: 'Website', MANUAL: 'Added by staff' }
   return map[s] ?? titleCase(s.replace(/_/g, ' ').toLowerCase())
 }
+
+/**
+ * Built-in SAMPLE dataset for the dashboard preview (`/dashboard?preview=1`). It writes nothing to the
+ * database - it is display-only, so a studio with no real bookings yet can still see and screenshot a
+ * full dashboard. The default dashboard always uses the real `getDashboardData`. Numbers mirror the
+ * approved mockup; they are clearly flagged as a sample in the UI.
+ */
+export function sampleDashboardData(): DashboardData {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const booked = [28, 26, 38, 52, 61, 47, 44, 50, 63, 69, 41, 55]
+  const bookingsCt = [4, 3, 6, 9, 12, 8, 7, 9, 13, 14, 6, 8]
+  return {
+    period: 'month',
+    service: 'all',
+    services: ['Wedding', 'Engagement', 'Anniversary', 'Portrait', 'Event'],
+    kpi: { income: 486200, incomeDeltaPct: 12, collected: 447800, collectedDeltaPct: 9, outstanding: 38400, unpaidCount: 7, totalBookings: 92, bookingsDeltaPct: 9 },
+    revenueSeries: months.map((label, i) => ({ label, booked: booked[i]! * 1000, collected: Math.round(booked[i]! * 1000 * 0.9), bookings: bookingsCt[i]! })),
+    jobStages: [{ label: 'Pre-shoot', value: 8 }, { label: 'Shoot', value: 5 }, { label: 'Editing', value: 11 }, { label: 'Delivery', value: 7 }],
+    activeJobs: 31,
+    bookingsBySource: [{ label: 'Referral', value: 34 }, { label: 'Instagram', value: 26 }, { label: 'Website', value: 16 }, { label: 'Wedding fair', value: 10 }, { label: 'Google', value: 6 }],
+    revenueByOccasion: [{ label: 'Wedding', value: 310000 }, { label: 'Engagement', value: 70000 }, { label: 'Anniversary', value: 42000 }, { label: 'Portrait', value: 36000 }, { label: 'Event', value: 28000 }],
+    revenueByService: [{ label: 'Photography', value: 204000 }, { label: 'Both', value: 185000 }, { label: 'Videography', value: 97000 }],
+    invoiceAging: { current: 19000, d1: 9000, d8: 6400, d30: 4000, total: 38400 },
+    pipeline: [
+      { label: 'New enquiry', value: 120 }, { label: 'Contacted', value: 86 }, { label: 'Consultation', value: 54 },
+      { label: 'Quote sent', value: 38 }, { label: 'Awaiting booking confirmation', value: 22 }, { label: 'Booking confirmed', value: 92 },
+    ],
+    recentEnquiries: [],
+  }
+}

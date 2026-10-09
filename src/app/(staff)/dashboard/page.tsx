@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
-import { getDashboardData, type DashboardPeriod } from '@/lib/domain/dashboard'
+import { getDashboardData, sampleDashboardData, type DashboardPeriod } from '@/lib/domain/dashboard'
 import { ClusteredColumns, Column, ComboChart, Donut, Funnel, HBars, PieChart } from '@/components/dashboard/DashCharts'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
@@ -75,14 +75,17 @@ function Empty({ children }: { children: ReactNode }) {
   return <p className="py-6 text-center text-sm text-ink-muted">{children}</p>
 }
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ period?: string; service?: string; from?: string; to?: string }> }) {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ period?: string; service?: string; from?: string; to?: string; preview?: string }> }) {
   const user = await requireRole('/dashboard')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
   const sp = await searchParams
   const period = (PERIODS.includes(sp.period ?? '') ? sp.period : '7d') as DashboardPeriod
   const service = sp.service ?? 'all'
-  const d = await getDashboardData({ period, service, from: sp.from, to: sp.to })
+  // `?preview=1` renders a built-in sample dataset (no database read) so an empty studio can still
+  // show a full dashboard for a demo or a report. The default view always uses real data.
+  const preview = sp.preview === '1'
+  const d = preview ? sampleDashboardData() : await getDashboardData({ period, service, from: sp.from, to: sp.to })
 
   const revenueEmpty = d.revenueSeries.every((p) => p.booked === 0 && p.collected === 0 && p.bookings === 0)
   const aging = [
@@ -96,7 +99,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     <AppShell user={user} csrf={csrf} active="dashboard" bareHeader>
       <PageContainer variant="wide">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <h1 className="font-semibold text-3xl leading-none text-ink">Dashboard</h1>
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="font-semibold text-3xl leading-none text-ink">Dashboard</h1>
+              {preview ? <span className="rounded-sm bg-accent-tint px-2 py-0.5 text-xs font-semibold text-accent-ink">Sample preview</span> : null}
+            </div>
+            <p className="mt-1.5 text-sm text-ink-muted">Moments Photography and Film, analytics report</p>
+          </div>
           <DashboardFilters period={period} service={service} services={d.services} from={sp.from} to={sp.to} />
         </div>
 
@@ -112,24 +121,24 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-12">
           {/* Row 1 */}
           <div className="lg:col-span-8">
-            <Card title="Income and bookings by month">
+            <Card title="Income and bookings by month" right="Income, volume and growth">
               {revenueEmpty ? <Empty>No revenue data for this period</Empty> : <ComboChart series={d.revenueSeries} />}
             </Card>
           </div>
           <div className="lg:col-span-4">
-            <Card title="Billed versus collected">
+            <Card title="Billed versus collected" right="Balance">
               {revenueEmpty ? <Empty>No revenue data for this period</Empty> : <ClusteredColumns series={d.revenueSeries} />}
             </Card>
           </div>
 
           {/* Row 2 */}
           <div className="lg:col-span-4">
-            <Card title="Revenue by occasion">
+            <Card title="Revenue by occasion" right="Income mix">
               {d.revenueByOccasion.length === 0 ? <Empty>No revenue in this period</Empty> : <Column bars={d.revenueByOccasion} colors={OCCASION_COLORS} format={kShort} />}
             </Card>
           </div>
           <div className="lg:col-span-4">
-            <Card title="Revenue by service">
+            <Card title="Revenue by service" right={<span className="rounded-sm bg-accent-tint px-1.5 py-0.5 text-xs font-semibold uppercase text-accent-ink">New</span>}>
               {d.revenueByService.length === 0 ? <Empty>No revenue in this period</Empty> : <PieChart segments={d.revenueByService} colors={SERVICE_COLORS} format={kShort} />}
             </Card>
           </div>

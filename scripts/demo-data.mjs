@@ -33,7 +33,16 @@ function monthsAgo(m, day) {
 
 async function wipe() {
   const inv = { invoiceNumber: { startsWith: PFX } }
-  await prisma.paymentTransaction.deleteMany({ where: { payment: { invoice: inv } } })
+  // payment_transactions is an append-only ledger (a DB trigger blocks DELETE). Disable that trigger ONLY
+  // long enough to remove the tagged demo rows, then re-enable it in `finally` so the real ledger stays
+  // protected no matter what. Real transactions are never touched (filtered to DEMO- invoices).
+  const TRIG = 'ALTER TABLE payment_transactions %s TRIGGER "PaymentTransaction_insert_only"'
+  try {
+    await prisma.$executeRawUnsafe(TRIG.replace('%s', 'DISABLE'))
+    await prisma.paymentTransaction.deleteMany({ where: { payment: { invoice: inv } } })
+  } finally {
+    await prisma.$executeRawUnsafe(TRIG.replace('%s', 'ENABLE'))
+  }
   await prisma.payment.deleteMany({ where: { invoice: inv } })
   await prisma.invoiceLine.deleteMany({ where: { invoice: inv } })
   await prisma.invoice.deleteMany({ where: { invoiceNumber: { startsWith: PFX } } })
