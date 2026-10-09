@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
-import { convertEnquiry, createEnquiry } from '@/lib/domain/enquiry'
+import { convertEnquiry, createEnquiry, LEAD_WHERE } from '@/lib/domain/enquiry'
 import { findOrCreateClient } from '@/lib/domain/client'
 import { recordPayment } from '@/lib/domain/finance'
 import { JOB_WHERE } from '@/lib/domain/project'
@@ -104,6 +104,28 @@ describe('lead-job model (integration, real DB) - docs/24', () => {
     const job = await prisma.project.findUniqueOrThrow({ where: { id: b.projectId! }, include: { client: true } })
     expect(job.client.displayName).toBe('Sam Lee')
     expect(job.name).toBe('Wedding')
+  })
+
+  it('a job added directly is never a lead; unticking "Job accepted" makes it one (Studio Ninja)', async () => {
+    const e = await createEnquiry({ name: 'Already Booked', email: email(), source: 'MANUAL', createdAsJob: true })
+    const { projectId } = await convertEnquiry(e.id)
+    await confirmDirectBooking(projectId!, null)
+    const isLead = async () => (await prisma.enquiry.count({ where: { ...LEAD_WHERE, id: e.id } })) === 1
+    expect(await isLead()).toBe(false) // not in Leads, search, alerts or the lead dashboard
+    expect(await prisma.project.count({ where: { AND: [JOB_WHERE, { id: projectId! }] } })).toBe(1) // it is a Job
+
+    await moveJobBackToLead(projectId!, null)
+    expect(await isLead()).toBe(true)
+    expect((await prisma.enquiry.findUniqueOrThrow({ where: { id: e.id } })).status).toBe('AWAITING_BOOKING_CONFIRMATION')
+  })
+
+  it('a lead from the sales process stays a lead record after its deposit (history kept)', async () => {
+    const e = await createEnquiry({ name: 'Sales Lead', email: email() })
+    const { projectId } = await convertEnquiry(e.id)
+    const inv = await createInvoice(projectId!, { type: 'DEPOSIT', description: 'Deposit', amount: '1000' }, null)
+    await recordPayment(inv.id, { paymentMethod: 'BANK_TRANSFER', amount: '1000' }, null)
+    const lead = await prisma.enquiry.findFirstOrThrow({ where: { ...LEAD_WHERE, id: e.id } })
+    expect(lead.status).toBe('BOOKING_CONFIRMED') // Leads > Booking confirmed tab, out of Active
   })
 
   it('unticking "Job accepted" turns an unpaid job back into a lead waiting for its deposit', async () => {

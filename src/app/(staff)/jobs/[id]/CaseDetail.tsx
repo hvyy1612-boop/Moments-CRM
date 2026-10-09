@@ -65,11 +65,11 @@ function historyActionType(action: string): string {
   const base = action.replace(/^project\./, '').replace(/_/g, ' ')
   return base.charAt(0).toUpperCase() + base.slice(1)
 }
-function historyDetails(action: string, after: unknown): string {
+function historyDetails(action: string, after: unknown, addedDirectly: boolean): string {
   const title = (after && typeof after === 'object' && 'title' in after ? String((after as { title?: unknown }).title ?? '') : '') || 'a task'
   if (action === 'project.task_completed') return `${title} was completed.`
   if (action === 'project.task_reopened') return `${title} was reopened.`
-  if (action === 'enquiry.converted') return 'Job was created from a lead.'
+  if (action === 'enquiry.converted') return addedDirectly ? 'Job was added as an already confirmed booking.' : 'Job was created from a lead.'
   if (action === 'project.moved_back_to_lead') return 'Job accepted was unticked; it went back to Leads.'
   return historyActionType(action)
 }
@@ -181,7 +181,7 @@ export async function CaseDetail({
     actionType: historyActionType(r.action),
     dateLabel: formatSydneyDateTime(r.createdAt),
     user: r.actor?.name ?? 'System',
-    details: historyDetails(r.action, r.afterData),
+    details: historyDetails(r.action, r.afterData, project.convertedFromEnquiries[0]?.createdAsJob === true),
   }))
 
   const invoiceCount = project.invoices.length
@@ -279,8 +279,9 @@ export async function CaseDetail({
               <span className="flex items-center gap-1.5"><IconUsers className="h-4 w-4" /> {project.client.displayName}</span>
               {shootDateLabel ? <span className="flex items-center gap-1.5"><IconCalendar className="h-4 w-4" /> {shootDateLabel}</span> : null}
               {shootLocation ? <span className="flex items-center gap-1.5"><IconPin className="h-4 w-4" /> {shootLocation}</span> : null}
-              {/* The lead this job was booked from (its enquiry details, quote history and notes). */}
-              {lead ? (
+              {/* The lead this job was booked from (its enquiry details, quote history and notes). A job added
+                  directly (Add job) never was a lead, so it has no link. */}
+              {lead && !lead.createdAsJob ? (
                 <Link href={`/leads/${lead.id}`} className="hover:text-ink hover:underline">
                   From lead {lead.enquiryNumber ?? ''}
                 </Link>

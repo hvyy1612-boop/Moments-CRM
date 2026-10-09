@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db'
+import { LEAD_WHERE } from './enquiry'
 
 export type Alert = {
   id: string
@@ -18,6 +19,7 @@ export type Alert = {
 export async function getRecentAlerts(limit = 8): Promise<Alert[]> {
   const [enquiries, payments] = await Promise.all([
     prisma.enquiry.findMany({
+      where: LEAD_WHERE,
       orderBy: { createdAt: 'desc' },
       take: limit,
       select: { id: true, name: true, createdAt: true },

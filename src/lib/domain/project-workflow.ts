@@ -109,7 +109,8 @@ export async function moveJobBackToLead(projectId: string, actorUserId: string |
 
     // Back to a booking file: not a Job anywhere (JOB_WHERE / isBookingFile) until it is confirmed again.
     await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'BOOKING_REQUESTED', confirmedByClientAt: null } })
-    await tx.enquiry.update({ where: { id: lead.id }, data: { status: 'AWAITING_BOOKING_CONFIRMATION' } })
+    // A job added directly (Add job) becomes a real lead now, listed in Leads like any other.
+    await tx.enquiry.update({ where: { id: lead.id }, data: { status: 'AWAITING_BOOKING_CONFIRMATION', createdAsJob: false } })
     // The lead tasks closed out on confirmation become workable again (same as Reopen).
     await tx.workItem.updateMany({ where: { enquiryId: lead.id, status: 'CANCELLED' }, data: { status: 'PENDING' } })
     await tx.auditLog.create({

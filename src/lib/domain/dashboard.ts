@@ -4,6 +4,7 @@ import { sydneyLocalToUtc, sydneyYmd } from '@/lib/time'
 import { getInvoiceBalance } from './money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
 import { titleCase } from '@/lib/text'
+import { LEAD_WHERE } from './enquiry'
 
 // A job carries its lead's details. `eventType` is the occasion (Wedding, Portrait, ...) and drives the
 // service filter; `coverage` is the job type (Photography / Videography / Both); `source` is the channel.
@@ -167,7 +168,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; occasion
   const matchLead = (lead: LeadLite): boolean => (!occ || serviceOf(lead) === occ) && (!cov || coverageOf(lead) === cov)
 
   const [enquiries, invoices, payments, projects, serviceRows, recentRaw, confirmedProjects] = await Promise.all([
-    prisma.enquiry.findMany({ where: { createdAt: { gte: prevStart } }, select: { status: true, source: true, createdAt: true } }),
+    prisma.enquiry.findMany({ where: { ...LEAD_WHERE, createdAt: { gte: prevStart } }, select: { status: true, source: true, createdAt: true } }),
     prisma.invoice.findMany({
       where: { status: { in: INVOICE_COUNTED as unknown as string[] } as never },
       select: { issuedAt: true, createdAt: true, project: { select: SERVICE_SELECT }, ...INVOICE_MONEY_SELECT },
@@ -188,6 +189,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; occasion
     prisma.enquiry.findMany({ where: { convertedProjectId: { not: null } }, select: { eventType: true }, distinct: ['eventType'] }),
     // Recent enquiries across all channels (latest first) - real records for the dashboard table.
     prisma.enquiry.findMany({
+      where: LEAD_WHERE,
       orderBy: { createdAt: 'desc' },
       take: 6,
       select: { id: true, name: true, eventType: true, source: true, status: true, createdAt: true },

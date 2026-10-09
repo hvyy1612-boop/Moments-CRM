@@ -492,6 +492,10 @@ model Enquiry {
   clientId             String?       @map("client_id") @db.VarChar(30) // the client this lead is about (SN "Primary Client Contact")
   convertedClientId    String?       @map("converted_client_id") @db.VarChar(30)
   convertedProjectId   String?       @unique @map("converted_project_id") @db.VarChar(30) // one lead per job
+  // Add job (a booking already confirmed outside the app): this row only holds the job's lead details (job
+  // type, source, main shoot). It was never a lead, so it is never listed or counted as one (LEAD_WHERE).
+  // Unticking "Job accepted" on that job turns it into a real lead (false).
+  createdAsJob         Boolean       @default(false) @map("created_as_job")
   viewedAt             DateTime?     @map("viewed_at") @db.Timestamptz // Gmail-style read state: null = new/unread until a staff opens the detail
   createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz

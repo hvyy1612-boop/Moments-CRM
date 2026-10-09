@@ -21,6 +21,9 @@ import type { EnquiryRowData } from './EnquiryRow'
 const DATE_FMT = new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
 const createdLabel = (ms: number) => DATE_FMT.format(new Date(ms))
 
+// Active = leads still being worked on. A booked lead (now a Job) and a declined one keep their own tabs.
+const inProgress = (r: { status: string }) => r.status !== 'DECLINED' && r.status !== 'BOOKING_CONFIRMED'
+
 /**
  * Broad service category (Type column) derived from the enquiry's Event. The schema has one event field,
  * so Type is derived here rather than stored twice - the smallest correct solution for two columns.
@@ -49,13 +52,13 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
   const { selectedIds, selection } = useRowSelection<EnquiryRowData>()
 
   const counts = useMemo(() => {
-    const map: Record<string, number> = { all: rows.filter((r) => r.status !== 'DECLINED').length }
+    const map: Record<string, number> = { all: rows.filter(inProgress).length }
     for (const t of ENQUIRY_STAGE_TABS) map[t.key] = rows.filter((r) => r.status === t.key).length
     return map
   }, [rows])
 
   const visible = useMemo(() => {
-    let out = tab === 'all' ? rows.filter((r) => r.status !== 'DECLINED') : rows.filter((r) => r.status === tab)
+    let out = tab === 'all' ? rows.filter(inProgress) : rows.filter((r) => r.status === tab)
     out = [...out]
     if (sort === 'newest') out.sort((a, b) => b.createdMs - a.createdMs)
     else if (sort === 'oldest') out.sort((a, b) => a.createdMs - b.createdMs)
@@ -64,7 +67,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
   }, [rows, tab, sort])
 
   const sortLabel = SORTS.find((s) => s.key === sort)!.label
-  const TABS: { key: TabKey; label: string }[] = [{ key: 'all', label: 'All' }, ...ENQUIRY_STAGE_TABS]
+  const TABS: { key: TabKey; label: string }[] = [{ key: 'all', label: 'Active' }, ...ENQUIRY_STAGE_TABS]
 
   // Exactly six information columns (spec §9): Lead ID | Created | Client | Event | Type | Stage.
   // Column sizing: an EVEN Carbon-style rhythm across the full width (no single column absorbing the

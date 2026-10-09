@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { StatusTag } from '@/components/ui/StatusTag'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
@@ -91,11 +91,14 @@ export default async function EnquiryDetailPage({
       message: true,
       status: true,
       convertedProjectId: true,
+      createdAsJob: true,
       client: { select: { displayName: true } },
     },
   })
   // /leads/[id] loads the Enquiry (lead) entity ONLY - it never guesses a Project id (docs/24 FIX 11).
   if (!enquiry) notFound()
+  // A job added directly (Add job) was never a lead: its details live on the job.
+  if (enquiry.createdAsJob && enquiry.convertedProjectId) redirect(`/jobs/${enquiry.convertedProjectId}`)
 
   const [activity, quotes, invoices, noteComms, contract] = await Promise.all([
     prisma.auditLog.findMany({
@@ -221,8 +224,9 @@ export default async function EnquiryDetailPage({
           <div className="mt-6">
             {awaiting ? (
               <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">
-                Quote accepted. The date is not held yet: this lead becomes a job once the deposit is paid. Raise
-                the deposit invoice under Invoices{quoteAccepted ? ', and send the contract if needed' : ''}.
+                {/* No accepted quote = a job whose "Job accepted" was unticked (e.g. added directly by mistake). */}
+                {quoteAccepted ? 'Quote accepted.' : 'Waiting for the deposit.'} The date is not held yet: this lead becomes a
+                job once the deposit is paid. Raise the deposit invoice under Invoices{quoteAccepted ? ', and send the contract if needed' : ''}.
               </div>
             ) : confirmed ? (
               <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">

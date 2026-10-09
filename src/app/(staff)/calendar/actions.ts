@@ -11,6 +11,7 @@ import { toggleEnquiryTask } from '@/lib/domain/enquiry-workflow'
 import { toggleProjectTask } from '@/lib/domain/project-workflow'
 import { prisma } from '@/lib/db'
 import { JOB_WHERE } from '@/lib/domain/project'
+import { LEAD_WHERE } from '@/lib/domain/enquiry'
 
 export type CalendarActionState = { status: 'idle' | 'success' | 'error'; message?: string }
 
@@ -118,7 +119,7 @@ export async function searchEntitiesAction(query: string): Promise<SearchHit[]> 
       ? prisma.client.findMany({ where: { archivedAt: null, OR: [{ displayName: contains }, { email: contains }] }, take: 5, select: { id: true, displayName: true, email: true } })
       : Promise.resolve([]),
     can(user, 'ENQUIRY_VIEW')
-      ? prisma.enquiry.findMany({ where: { OR: [{ name: contains }, { email: contains }] }, take: 5, select: { id: true, name: true, eventType: true } })
+      ? prisma.enquiry.findMany({ where: { ...LEAD_WHERE, OR: [{ name: contains }, { email: contains }] }, take: 5, select: { id: true, name: true, eventType: true } })
       : Promise.resolve([]),
     can(user, 'PROJECT_VIEW')
       ? prisma.project.findMany({ where: { AND: [JOB_WHERE, { OR: [{ name: contains }, { code: contains }, { client: { displayName: contains } }] }] }, take: 5, select: { id: true, name: true, code: true, client: { select: { displayName: true } } } })

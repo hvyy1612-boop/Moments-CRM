@@ -132,6 +132,8 @@ async function addEnquiry(formData: FormData, kind: 'lead' | 'job'): Promise<Add
       heardAbout: lead.heardAbout,
       message: lead.message,
       source: 'MANUAL',
+      // Add job: a confirmed booking, never shown or counted as a lead (LEAD_WHERE).
+      createdAsJob: kind === 'job',
     },
     user.id,
   )

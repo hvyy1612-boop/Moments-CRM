@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { LEAD_WHERE } from '@/lib/domain/enquiry'
 import { formatSydneyDate } from '@/lib/time'
 import { titleCase } from '@/lib/text'
 import { AppShell } from '../AppShell'
@@ -21,6 +22,7 @@ export default async function EnquiriesPage() {
   // can be corrected by hand - both persist through the enquiry backend commands (docs/24). The detailed
   // per-case checklist lives on the enquiry page, not here.
   const enquiries = await prisma.enquiry.findMany({
+    where: LEAD_WHERE, // a job added directly was never a lead
     orderBy: { updatedAt: 'asc' }, // oldest-waiting first (the default sort)
     select: {
       id: true,

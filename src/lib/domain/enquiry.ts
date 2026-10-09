@@ -21,6 +21,13 @@ import { cancelProjectTx } from './refund'
  * deleted: DECLINED leads are kept and can be reopened. Stage rules: docs/23 §4, docs/33.
  */
 
+/**
+ * Enquiry rows that are LEADS, for every list, count, search and report that shows leads. Leaves out the
+ * row behind an Add job (a booking already confirmed outside the app, `createdAsJob`): it only holds that
+ * job's details and was never a lead (Studio Ninja greys the lead stage out on a job created directly).
+ */
+export const LEAD_WHERE = { createdAsJob: false } satisfies Prisma.EnquiryWhereInput
+
 export type CreateEnquiryInput = {
   name: string
   firstName?: string | null
@@ -53,6 +60,8 @@ export type CreateEnquiryInput = {
   weddingDetails?: string | null
   styleReason?: string | null
   heardAbout?: string | null
+  // Add job: the booking is already confirmed, so this row is never a lead (see LEAD_WHERE).
+  createdAsJob?: boolean
 }
 
 /** Capture an enquiry (public form or staff). actorUserId is set when a staff member logs it.
@@ -96,6 +105,7 @@ async function runCreateEnquiry(input: CreateEnquiryInput, actorUserId: string |
         eventEndTime: input.eventEndTime ?? null,
         eventLocation: input.eventLocation ?? null,
         message: input.message ?? null,
+        createdAsJob: input.createdAsJob ?? false,
         partnerName: input.partnerName ?? null,
         coverage: input.coverage ?? null,
         coverageNote: input.coverageNote ?? null,
