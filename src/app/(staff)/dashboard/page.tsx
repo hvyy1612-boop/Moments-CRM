@@ -12,7 +12,7 @@ import { DashboardFilters } from './DashboardFilters'
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Dashboard - Moments' }
 
-const PERIODS = ['today', '7d', 'month', 'custom']
+const PERIODS = ['today', '7d', 'month', 'year', 'custom']
 
 // Dashboard chart palettes (the --color-dash-* tokens). A business concept keeps a stable colour.
 const OCCASION_COLORS = ['var(--color-dash-blue)', 'var(--color-dash-peach)', 'var(--color-dash-steel)', 'var(--color-dash-sand)', 'var(--color-dash-mauve)', 'var(--color-dash-grey)']
@@ -75,17 +75,18 @@ function Empty({ children }: { children: ReactNode }) {
   return <p className="py-6 text-center text-sm text-ink-muted">{children}</p>
 }
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ period?: string; service?: string; from?: string; to?: string; preview?: string }> }) {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ period?: string; occasion?: string; coverage?: string; from?: string; to?: string; preview?: string }> }) {
   const user = await requireRole('/dashboard')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
   const sp = await searchParams
   const period = (PERIODS.includes(sp.period ?? '') ? sp.period : '7d') as DashboardPeriod
-  const service = sp.service ?? 'all'
+  const occasion = sp.occasion ?? 'all'
+  const coverage = sp.coverage ?? 'all'
   // `?preview=1` renders a built-in sample dataset (no database read) so an empty studio can still
   // show a full dashboard for a demo or a report. The default view always uses real data.
   const preview = sp.preview === '1'
-  const d = preview ? sampleDashboardData() : await getDashboardData({ period, service, from: sp.from, to: sp.to })
+  const d = preview ? sampleDashboardData() : await getDashboardData({ period, occasion, coverage, from: sp.from, to: sp.to })
 
   const revenueEmpty = d.revenueSeries.every((p) => p.booked === 0 && p.collected === 0 && p.bookings === 0)
   const aging = [
@@ -106,7 +107,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </div>
             <p className="mt-1.5 text-sm text-ink-muted">Moments Photography and Film, analytics report</p>
           </div>
-          <DashboardFilters period={period} service={service} services={d.services} from={sp.from} to={sp.to} />
+          <DashboardFilters period={d.period} occasion={d.occasion} coverage={d.coverage} occasions={d.occasions} coverages={d.coverages} from={sp.from} to={sp.to} />
         </div>
 
         {/* KPI row: income / cash / balance / growth / bookings */}

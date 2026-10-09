@@ -23,7 +23,7 @@ const coverageOf = (p: LeadLite): string =>
  * shoot with no published gallery) simply drop out of the average and surface an empty state instead.
  */
 
-export type DashboardPeriod = 'today' | '7d' | 'month' | 'custom'
+export type DashboardPeriod = 'today' | '7d' | 'month' | 'year' | 'custom'
 const SYDNEY = 'Australia/Sydney'
 
 export type Bar = { label: string; value: number; sub?: string }
@@ -32,8 +32,10 @@ export type RecentEnquiry = { id: string; name: string; service: string | null; 
 
 export type DashboardData = {
   period: DashboardPeriod
-  service: string
-  services: string[]
+  occasion: string
+  coverage: string
+  occasions: string[]
+  coverages: string[]
   kpi: {
     income: number
     incomeDeltaPct: number | null
@@ -95,6 +97,10 @@ function resolveRange(period: DashboardPeriod, from: string | undefined, to: str
 
   if (period === 'today') return { start: sydneyLocalToUtc(`${ymdKey(t.year, t.month, t.day)}T00:00`), end: endOfToday }
   if (period === 'month') return { start: sydneyLocalToUtc(`${ymdKey(t.year, t.month, 1)}T00:00`), end: endOfToday }
+  if (period === 'year') {
+    const yearAgo = shiftDays(t.year, t.month, t.day, -364)
+    return { start: sydneyLocalToUtc(`${ymdKey(yearAgo.y, yearAgo.m, yearAgo.d)}T00:00`), end: endOfToday }
+  }
   if (period === 'custom' && from && to) {
     const toNext = nextDayKey(to)
     if (/^\d{4}-\d{2}-\d{2}$/.test(from) && toNext) {
@@ -145,12 +151,15 @@ function buckets(start: Date, end: Date): { label: string; from: number; to: num
 
 const num = (d: { toNumber(): number } | null | undefined): number => (d ? d.toNumber() : 0)
 
-export async function getDashboardData(opts: { period: DashboardPeriod; service: string; from?: string; to?: string }): Promise<DashboardData> {
+export async function getDashboardData(opts: { period: DashboardPeriod; occasion: string; coverage: string; from?: string; to?: string }): Promise<DashboardData> {
   const now = new Date()
   const { start, end } = resolveRange(opts.period, opts.from, opts.to, now)
   const prevStart = new Date(start.getTime() - (end.getTime() - start.getTime()))
-  const svc = opts.service && opts.service !== 'all' ? opts.service : null
-  const matchesSvc = (service: string): boolean => !svc || service === svc
+  // Two independent slicers: occasion (event type) and service type (coverage). A lead matches when it
+  // satisfies both.
+  const occ = opts.occasion && opts.occasion !== 'all' ? opts.occasion : null
+  const cov = opts.coverage && opts.coverage !== 'all' ? opts.coverage : null
+  const matchLead = (lead: LeadLite): boolean => (!occ || serviceOf(lead) === occ) && (!cov || coverageOf(lead) === cov)
 
   const [enquiries, invoices, payments, projects, serviceRows, recentRaw, confirmedProjects] = await Promise.all([
     prisma.enquiry.findMany({ where: { createdAt: { gte: prevStart } }, select: { status: true, source: true, createdAt: true } }),
@@ -186,7 +195,8 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
     }),
   ])
 
-  const services = [...new Set(serviceRows.map((r) => serviceOf({ convertedFromEnquiries: [r] })))].sort()
+  const occasions = [...new Set(serviceRows.map((r) => serviceOf({ convertedFromEnquiries: [r] })))].sort()
+  const coverages = ['Photography', 'Videography', 'Both']
 
   // --- Lead pipeline (enquiries created in the window, grouped by stage) ---
   const inPeriodEnq = enquiries.filter((e) => e.createdAt >= start && e.createdAt < end)
@@ -201,7 +211,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   const pipeline: Bar[] = PIPE.map((p) => ({ label: p.label, value: inPeriodEnq.filter((e) => e.status === p.s).length }))
 
   // --- Revenue (invoices) ---
-  const svcInvoices = invoices.filter((i) => matchesSvc(serviceOf(i.project)))
+  const svcInvoices = invoices.filter((i) => matchLead(i.project))
   const inv = (i: (typeof invoices)[number]) => (i.issuedAt ?? i.createdAt)
   // Booked = what the client actually owes on the invoice: its total less any credit notes (a price
   // decrease must lower booked revenue, the same credit-aware figure every money decision uses).
@@ -240,7 +250,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   }
 
   // --- Bookings (projects confirmed in the window) ---
-  const svcConfirmed = confirmedProjects.filter((p) => matchesSvc(serviceOf(p)))
+  const svcConfirmed = confirmedProjects.filter((p) => matchLead(p))
   const inPeriodConfirmed = svcConfirmed.filter((p) => p.confirmedByClientAt && p.confirmedByClientAt >= start && p.confirmedByClientAt < end)
   const totalBookings = inPeriodConfirmed.length
   const prevBookings = svcConfirmed.filter((p) => p.confirmedByClientAt && p.confirmedByClientAt >= prevStart && p.confirmedByClientAt < start).length
@@ -254,7 +264,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   const bookingsBySource: Bar[] = [...srcMap.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value)
 
   // --- Collected cash + revenue series (billed, collected net, bookings count per bucket) ---
-  const svcPayments = payments.filter((p) => matchesSvc(serviceOf(p.payment?.invoice?.project)))
+  const svcPayments = payments.filter((p) => matchLead(p.payment?.invoice?.project))
   // Collected cash is NET: a CHARGE adds, a REFUND subtracts (refunds are stored positive) - docs/24 Inc 3b.
   const collectedNet = (p: (typeof svcPayments)[number]) => (p.type === 'CHARGE' ? num(p.amount) : -num(p.amount))
   const collected = svcPayments.filter((p) => p.createdAt >= start && p.createdAt < end).reduce((s, p) => s + collectedNet(p), 0)
@@ -269,7 +279,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   }))
 
   // --- Job stages (active jobs by current workflow stage) ---
-  const svcProjects = projects.filter((p) => matchesSvc(serviceOf(p)))
+  const svcProjects = projects.filter((p) => matchLead(p))
   const stageMap = new Map<string, number>()
   for (const p of svcProjects) {
     // The job's stage = the earliest workflow stage that still has a pending task, by the workflow's own
@@ -295,8 +305,10 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
 
   return {
     period: opts.period,
-    service: opts.service,
-    services,
+    occasion: opts.occasion,
+    coverage: opts.coverage,
+    occasions,
+    coverages,
     kpi: {
       income: bookedRevenue,
       incomeDeltaPct: bookedDeltaPct,
@@ -335,9 +347,11 @@ export function sampleDashboardData(): DashboardData {
   const booked = [28, 26, 38, 52, 61, 47, 44, 50, 63, 69, 41, 55]
   const bookingsCt = [4, 3, 6, 9, 12, 8, 7, 9, 13, 14, 6, 8]
   return {
-    period: 'month',
-    service: 'all',
-    services: ['Wedding', 'Engagement', 'Anniversary', 'Portrait', 'Event'],
+    period: 'year',
+    occasion: 'all',
+    coverage: 'all',
+    occasions: ['Wedding', 'Engagement', 'Anniversary', 'Portrait', 'Event'],
+    coverages: ['Photography', 'Videography', 'Both'],
     kpi: { income: 486200, incomeDeltaPct: 12, collected: 447800, collectedDeltaPct: 9, outstanding: 38400, unpaidCount: 7, totalBookings: 92, bookingsDeltaPct: 9 },
     revenueSeries: months.map((label, i) => ({ label, booked: booked[i]! * 1000, collected: Math.round(booked[i]! * 1000 * 0.9), bookings: bookingsCt[i]! })),
     jobStages: [{ label: 'Pre-shoot', value: 8 }, { label: 'Shoot', value: 5 }, { label: 'Editing', value: 11 }, { label: 'Delivery', value: 7 }],

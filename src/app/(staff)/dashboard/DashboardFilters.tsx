@@ -1,17 +1,15 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-const PERIODS: { value: string; label: string }[] = [
+const PERIOD_OPTIONS = [
   { value: 'today', label: 'Today' },
   { value: '7d', label: '7 days' },
   { value: 'month', label: 'Month' },
+  { value: 'year', label: 'Year' },
   { value: 'custom', label: 'Custom' },
 ]
-
-const segClass = (active: boolean) =>
-  `rounded-md px-3 py-1.5 text-sm transition-colors ${active ? 'bg-surface font-medium text-ink shadow-sm' : 'text-ink-muted hover:text-ink'}`
 
 /** "2026-09-01" -> "01 Sep" (noon parse avoids a timezone day-shift on the label). */
 function dayMonth(key: string): string {
@@ -21,10 +19,10 @@ function dayMonth(key: string): string {
 }
 
 /**
- * Service filter as a custom dropdown so the trigger stays compact (fits the selected label + chevron)
- * while the menu is free to expand wider than the trigger and show long service names in full.
+ * One slicer, rendered as a compact pill with a coloured dot, a muted label and the selected value, plus
+ * a drop-down menu. The menu can grow wider than the trigger so long names (occasions) read in full.
  */
-function ServiceSelect({ value, options, onChange }: { value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }) {
+function Slicer({ label, dot, value, options, onPick }: { label: string; dot: string; value: string; options: { value: string; label: string }[]; onPick: (v: string) => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const current = options.find((o) => o.value === value) ?? options[0] ?? { value, label: value }
@@ -52,16 +50,16 @@ function ServiceSelect({ value, options, onChange }: { value: string; options: {
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label="Service"
-        className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm text-ink outline-none transition-colors hover:border-line-strong focus:border-accent"
+        aria-label={label}
+        className="inline-flex h-9 items-center gap-2 rounded-md border border-card-border bg-surface px-3 text-sm text-ink outline-none transition-colors hover:border-ink-muted focus:border-accent"
       >
-        <span className="whitespace-nowrap">{current.label}</span>
-        <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="m6 9 6 6 6-6" />
-        </svg>
+        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: dot }} aria-hidden="true" />
+        <span className="whitespace-nowrap text-ink-muted">{label}:</span>
+        <span className="whitespace-nowrap font-medium">{current.label}</span>
+        <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-ink-muted" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
       </button>
       {open ? (
-        <div role="listbox" className="absolute right-0 z-50 mt-1 max-h-80 w-max min-w-full max-w-sm overflow-y-auto rounded-lg border border-line bg-surface py-1 shadow-lg">
+        <div role="listbox" className="absolute right-0 z-50 mt-1 max-h-80 w-max min-w-full max-w-sm overflow-y-auto rounded-md border border-line bg-surface py-1 shadow-lg">
           {options.map((o) => {
             const selected = o.value === value
             return (
@@ -71,17 +69,13 @@ function ServiceSelect({ value, options, onChange }: { value: string; options: {
                 role="option"
                 aria-selected={selected}
                 onClick={() => {
-                  onChange(o.value)
+                  onPick(o.value)
                   setOpen(false)
                 }}
                 className={`flex w-full items-center gap-2 whitespace-nowrap px-3 py-1.5 text-left text-sm ${selected ? 'bg-sunk text-ink' : 'text-ink-muted hover:bg-paper hover:text-ink'}`}
               >
                 <span className="flex w-4 shrink-0 items-center justify-center text-accent-ink">
-                  {selected ? (
-                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M20 6 9 17l-5-5" />
-                    </svg>
-                  ) : null}
+                  {selected ? <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg> : null}
                 </span>
                 <span>{o.label}</span>
               </button>
@@ -93,9 +87,9 @@ function ServiceSelect({ value, options, onChange }: { value: string; options: {
   )
 }
 
-const dateInput = 'h-9 rounded-md border border-line bg-surface px-2.5 text-sm text-ink outline-none transition-colors focus:border-accent'
+const dateInput = 'h-9 rounded-md border border-card-border bg-surface px-2.5 text-sm text-ink outline-none transition-colors focus:border-accent'
 
-export function DashboardFilters({ period, service, services, from, to }: { period: string; service: string; services: string[]; from?: string; to?: string }) {
+export function DashboardFilters({ period, occasion, coverage, occasions, coverages, from, to }: { period: string; occasion: string; coverage: string; occasions: string[]; coverages: string[]; from?: string; to?: string }) {
   const router = useRouter()
   const params = useSearchParams()
   const [customOpen, setCustomOpen] = useState(false)
@@ -103,14 +97,11 @@ export function DashboardFilters({ period, service, services, from, to }: { peri
   const [toDate, setToDate] = useState(to ?? '')
   const [err, setErr] = useState<string | null>(null)
 
-  // Keep the inputs in sync if the applied range changes from elsewhere.
   useEffect(() => {
     setFromDate(from ?? '')
     setToDate(to ?? '')
   }, [from, to])
 
-  // Escape closes the inline custom row (it lives in normal flow, so no click-outside dismissal -
-  // that would fight the native date picker's own popup).
   useEffect(() => {
     if (!customOpen) return
     const onKey = (e: KeyboardEvent) => {
@@ -120,7 +111,7 @@ export function DashboardFilters({ period, service, services, from, to }: { peri
     return () => window.removeEventListener('keydown', onKey)
   }, [customOpen])
 
-  // Mutate the query string, preserving the other filters (so the range works with the service filter).
+  // Mutate the query string, preserving the other filters (and ?preview=1) so slicers compose.
   function pushParams(mut: (p: URLSearchParams) => void) {
     const p = new URLSearchParams(params.toString())
     mut(p)
@@ -128,10 +119,10 @@ export function DashboardFilters({ period, service, services, from, to }: { peri
     router.push(qs ? `/dashboard?${qs}` : '/dashboard')
   }
 
-  function selectPeriod(value: string) {
+  function pickPeriod(value: string) {
     if (value === 'custom') {
       setErr(null)
-      setCustomOpen((o) => !o)
+      setCustomOpen(true)
       return
     }
     setCustomOpen(false)
@@ -173,47 +164,24 @@ export function DashboardFilters({ period, service, services, from, to }: { peri
     })
   }
 
-  const rangeLabel = period === 'custom' && from && to ? `${dayMonth(from)} – ${dayMonth(to)}` : null
-  const serviceOptions = [{ value: 'all', label: 'All services' }, ...services.map((s) => ({ value: s, label: s }))]
+  const periodValue = customOpen ? 'custom' : period
+  const rangeLabel = period === 'custom' && from && to ? `${dayMonth(from)} - ${dayMonth(to)}` : null
+  const periodOptions: { value: string; label: string }[] = PERIOD_OPTIONS.map((o) => (o.value === 'custom' && rangeLabel ? { value: 'custom', label: rangeLabel } : o))
+
+  const coverageOptions = [{ value: 'all', label: 'All' }, ...coverages.map((c) => ({ value: c, label: c }))]
+  const occasionOptions = [{ value: 'all', label: 'All' }, ...occasions.map((o) => ({ value: o, label: o }))]
+
+  const row: ReactNode = (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <Slicer label="Period" dot="var(--color-dash-steel)" value={periodValue} options={periodOptions} onPick={pickPeriod} />
+      <Slicer label="Service" dot="var(--color-dash-blue)" value={coverage} options={coverageOptions} onPick={(v) => pushParams((p) => (v === 'all' ? p.delete('coverage') : p.set('coverage', v)))} />
+      <Slicer label="Occasion" dot="var(--color-dash-peach)" value={occasion} options={occasionOptions} onPick={(v) => pushParams((p) => (v === 'all' ? p.delete('occasion') : p.set('occasion', v)))} />
+    </div>
+  )
 
   return (
-    // A vertical, right-aligned stack: the filter row, and - only when Custom is active - an inline
-    // date-range row directly beneath it. Both sit in normal document flow, so opening Custom grows the
-    // header and pushes the KPI cards down instead of floating over them.
     <div className="flex flex-col items-end gap-2">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <div className="flex items-center rounded-lg bg-sunk p-0.5">
-          {PERIODS.map((p) => {
-            // While the custom editor is open, "Custom" is the highlighted segment (not the underlying
-            // applied period) so the control matches what the user is doing.
-            const active = p.value === 'custom' ? period === 'custom' || customOpen : period === p.value && !customOpen
-            return (
-              <button
-                key={p.value}
-                type="button"
-                onClick={() => selectPeriod(p.value)}
-                aria-pressed={active}
-                aria-expanded={p.value === 'custom' ? customOpen : undefined}
-                className={segClass(active)}
-              >
-                {p.label}
-                {p.value === 'custom' && rangeLabel ? <span className="ml-1.5 font-normal text-ink-muted">{rangeLabel}</span> : null}
-              </button>
-            )
-          })}
-        </div>
-        <ServiceSelect
-          value={service}
-          options={serviceOptions}
-          onChange={(v) =>
-            pushParams((p) => {
-              if (v === 'all') p.delete('service')
-              else p.set('service', v)
-            })
-          }
-        />
-      </div>
-
+      {row}
       {customOpen ? (
         <div role="group" aria-label="Custom date range" className="flex flex-col items-end gap-1">
           <div className="flex flex-wrap items-end justify-end gap-2">
@@ -225,12 +193,8 @@ export function DashboardFilters({ period, service, services, from, to }: { peri
               <span className="text-xs font-medium text-muted">To date</span>
               <input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} aria-label="To date" className={dateInput} />
             </label>
-            <button type="button" onClick={clearCustom} className="h-9 rounded-md px-3 text-sm font-medium text-ink-muted transition-colors hover:text-ink">
-              Clear
-            </button>
-            <button type="button" onClick={applyCustom} className="h-9 rounded-md bg-ink px-3 text-sm font-medium text-surface transition-opacity hover:opacity-90">
-              Apply
-            </button>
+            <button type="button" onClick={clearCustom} className="h-9 rounded-md px-3 text-sm font-medium text-ink-muted transition-colors hover:text-ink">Clear</button>
+            <button type="button" onClick={applyCustom} className="h-9 rounded-md bg-ink px-3 text-sm font-medium text-surface transition-opacity hover:opacity-90">Apply</button>
           </div>
           {err ? <p className="text-xs text-danger">{err}</p> : null}
         </div>
