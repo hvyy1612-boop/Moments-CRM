@@ -37,7 +37,7 @@ import { EnquiryWorkflow } from './EnquiryWorkflow'
 import { LeadNotes } from './LeadNotes'
 import { SidebarCard } from './SidebarCard'
 import { LeadJobAcceptedRow } from './LeadJobAcceptedRow'
-import { JobCompleteRow } from '../../jobs/[id]/JobCompleteRow'
+import { LeadJobCompleteRow } from './LeadJobCompleteRow'
 import { MarkEnquiryViewed } from './MarkEnquiryViewed'
 
 export const runtime = 'nodejs'
@@ -95,6 +95,7 @@ export default async function EnquiryDetailPage({
       message: true,
       status: true,
       convertedProjectId: true,
+      jobCompleteAt: true,
       client: { select: { displayName: true } },
     },
   })
@@ -281,9 +282,16 @@ export default async function EnquiryDetailPage({
                       jobId={confirmed ? enquiry.convertedProjectId : null}
                       readOnly={declined}
                     />
-                    {/* Shown greyed out so "Job accepted" (starts the job) is never mistaken for "Job complete"
-                        (ends it, on the job page). */}
-                    <JobCompleteRow done={false} onLead />
+                    {/* "Job complete": staff tick it when the work is done; unlike "Job accepted" above it, the
+                        lead stays in Leads. A booked lead's completion lives on its job. */}
+                    {confirmed ? null : (
+                      <LeadJobCompleteRow
+                        csrf={csrf}
+                        enquiryId={enquiry.id}
+                        completedLabel={enquiry.jobCompleteAt ? formatSydneyDate(enquiry.jobCompleteAt) : null}
+                        readOnly={declined}
+                      />
+                    )}
                   </>
                 )}
                 {confirmed ? (

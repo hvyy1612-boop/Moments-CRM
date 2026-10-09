@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
-import { convertEnquiry, createEnquiry, markEnquiryLost } from '@/lib/domain/enquiry'
+import { convertEnquiry, createEnquiry, markEnquiryLost, setLeadJobComplete } from '@/lib/domain/enquiry'
 import { findOrCreateClient } from '@/lib/domain/client'
 import { recordPayment } from '@/lib/domain/finance'
 import { JOB_WHERE } from '@/lib/domain/project'
@@ -120,6 +120,17 @@ describe('lead-job model (integration, real DB) - docs/24', () => {
     const archived = await createEnquiry({ name: 'Went Elsewhere', email: email() })
     await markEnquiryLost(archived.id, 'Archived', null)
     await expect(acceptLeadAsJob(archived.id, null)).rejects.toThrow(/Restore/)
+  })
+
+  it('"Job complete" on a lead is recorded and the lead stays in Leads (only Job accepted moves it)', async () => {
+    const lead = await createEnquiry({ name: 'Mini Session', email: email() })
+    const ticked = await setLeadJobComplete(lead.id, true, null)
+    expect(ticked.jobCompleteAt).not.toBeNull()
+    expect(ticked.status).toBe('NEW_ENQUIRY') // still a lead
+    expect(ticked.convertedProjectId).toBeNull() // no job made
+    expect((await setLeadJobComplete(lead.id, false, null)).jobCompleteAt).toBeNull()
+    await markEnquiryLost(lead.id, 'Archived', null)
+    await expect(setLeadJobComplete(lead.id, true, null)).rejects.toThrow(/Restore/)
   })
 
   it('the deposit must reach 20% of the accepted quote; a quote, an invoice or a small payment never books', async () => {

@@ -239,6 +239,31 @@ export async function reopenEnquiry(enquiryId: string, actorUserId: string | nul
 }
 
 /**
+ * Tick or untick "Job complete" on a lead (Studio Ninja): it records that the work is done, and the lead
+ * STAYS in Leads - only "Job accepted" moves a lead to Jobs. Not on an archived lead (restore it first) or a
+ * booked one (its job has its own "Job complete").
+ */
+export async function setLeadJobComplete(enquiryId: string, done: boolean, actorUserId: string | null = null) {
+  return prisma.$transaction(async (tx) => {
+    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId }, select: { status: true, companyId: true } })
+    if (!enquiry) throw new Error('Lead not found.')
+    if (enquiry.status === 'DECLINED') throw new Error('Restore this lead first.')
+    if (enquiry.status === 'BOOKING_CONFIRMED') throw new Error('This lead is a job now: use Job complete on the job.')
+    const updated = await tx.enquiry.update({ where: { id: enquiryId }, data: { jobCompleteAt: done ? new Date() : null } })
+    await tx.auditLog.create({
+      data: {
+        companyId: enquiry.companyId,
+        action: done ? 'enquiry.job_complete' : 'enquiry.job_complete_cleared',
+        entityType: 'Enquiry',
+        entityId: enquiryId,
+        actorUserId,
+      },
+    })
+    return updated
+  })
+}
+
+/**
  * Convert a lead: upsert the Client by email (dedup tier 1 - a returning enquirer never duplicates)
  * and create a BOOKING_REQUESTED Project. Idempotent: converting an already-converted enquiry returns the
  * existing client/project. Retries on a unique collision (per-year project code) like createProject.

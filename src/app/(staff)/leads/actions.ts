@@ -8,7 +8,7 @@ import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getActionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { LEAD_DUE_ANCHORS, parseTaskForm } from '@/features/tasks/due'
-import { cancelBooking, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
+import { cancelBooking, createEnquiry, setLeadJobComplete, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
 import { acceptLeadAsJob, createDirectJob } from '@/lib/domain/project-workflow'
 import { parseNewLead, type NewLeadErrors } from '@/features/enquiries/new-lead'
 import {
@@ -189,6 +189,16 @@ export async function acceptLeadAsJobAction(formData: FormData): Promise<void> {
   revalidatePath('/jobs')
   revalidatePath(`/leads/${enquiryId}`)
   redirect(`/jobs/${projectId}?toast=job-added`)
+}
+
+/** Tick / untick "Job complete" on a lead: recorded, the lead stays in Leads. */
+export async function toggleLeadJobCompleteAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  if (!enquiryId) return
+  await setLeadJobComplete(enquiryId, formData.get('done') === 'true', user.id)
+  revalidatePath(`/leads/${enquiryId}`)
 }
 
 /** Outcomes that close or reopen a lead (contract docs/23). Convert/Lost leave the active queue;

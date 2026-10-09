@@ -1,0 +1,47 @@
+import { CheckBox } from '../../jobs/[id]/EditableTaskRow'
+import { toggleLeadJobCompleteAction } from '../actions'
+
+/**
+ * "Job complete" on a lead (Studio Ninja): staff tick it when the work is done and the lead STAYS in Leads -
+ * unlike "Job accepted" just above it, which moves the lead to Jobs. Unticking clears it. Read-only on an
+ * archived or booked lead.
+ */
+export function LeadJobCompleteRow({
+  csrf,
+  enquiryId,
+  completedLabel,
+  readOnly,
+}: {
+  csrf: string
+  enquiryId: string
+  /** When it was ticked, or null while not ticked. */
+  completedLabel: string | null
+  readOnly: boolean
+}) {
+  const done = completedLabel !== null
+  return (
+    <section className="rounded-md border border-line-strong">
+      <form action={toggleLeadJobCompleteAction} className="flex items-center gap-3 px-3 py-3">
+        <input type="hidden" name="csrf" value={csrf} />
+        <input type="hidden" name="enquiryId" value={enquiryId} />
+        <input type="hidden" name="done" value={done ? 'false' : 'true'} />
+        <button
+          type="submit"
+          role="checkbox"
+          aria-checked={done}
+          aria-label={done ? 'Untick "Job complete"' : 'Tick "Job complete"'}
+          disabled={readOnly}
+          data-write="lock"
+          className="shrink-0 rounded p-0.5 outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed"
+        >
+          <CheckBox done={done} />
+        </button>
+        <div className="min-w-0 flex-1">
+          <span className="text-base text-ink">Job complete</span>
+          <span className="block text-sm text-muted">The end of the job: tick it when the work is done. The lead stays in Leads.</span>
+        </div>
+        {completedLabel ? <span className="whitespace-nowrap text-sm text-muted">{completedLabel}</span> : null}
+      </form>
+    </section>
+  )
+}
