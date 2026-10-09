@@ -37,6 +37,7 @@ export function ProjectWorkflow({
   history = [],
   rail,
   bookingRow,
+  completeRow,
 }: {
   board: ProjectBoard
   projectId: string
@@ -47,8 +48,10 @@ export function ProjectWorkflow({
   history?: HistoryEntry[]
   /** Extra cards rendered in the right rail, under "Next action" (the job's Client / Notes / Team). */
   rail?: ReactNode
-  /** The "Job accepted" milestone shown above the phases (see JobAcceptedRow). */
+  /** The "Job accepted" milestone shown above the phases (see JobAcceptedRow): it STARTS the job. */
   bookingRow?: ReactNode
+  /** The "Job complete" milestone shown after the phases (see JobCompleteRow): it ENDS the job. */
+  completeRow?: ReactNode
 }) {
   const { stages, allDone, attentionCount, nextAction } = board
 
@@ -402,6 +405,8 @@ export function ProjectWorkflow({
             + Add stage
           </button>
         )}
+
+        {completeRow}
       </div>
 
       {/* RAIL: Next action + the job's Client / Notes / Team cards (5/16 of the row) */}

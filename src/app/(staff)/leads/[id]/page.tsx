@@ -37,6 +37,7 @@ import { EnquiryWorkflow } from './EnquiryWorkflow'
 import { LeadNotes } from './LeadNotes'
 import { SidebarCard } from './SidebarCard'
 import { LeadJobAcceptedRow } from './LeadJobAcceptedRow'
+import { JobCompleteRow } from '../../jobs/[id]/JobCompleteRow'
 import { MarkEnquiryViewed } from './MarkEnquiryViewed'
 
 export const runtime = 'nodejs'
@@ -273,12 +274,17 @@ export default async function EnquiryDetailPage({
                 {/* "Job accepted" (Studio Ninja): ticks itself on the 20% deposit; staff may tick it (with a
                     confirm) once the client has confirmed - the lead then becomes a job and leaves Leads. */}
                 {declined ? null : (
-                  <LeadJobAcceptedRow
-                    csrf={csrf}
-                    enquiryId={enquiry.id}
-                    jobId={confirmed ? enquiry.convertedProjectId : null}
-                    readOnly={declined}
-                  />
+                  <>
+                    <LeadJobAcceptedRow
+                      csrf={csrf}
+                      enquiryId={enquiry.id}
+                      jobId={confirmed ? enquiry.convertedProjectId : null}
+                      readOnly={declined}
+                    />
+                    {/* Shown greyed out so "Job accepted" (starts the job) is never mistaken for "Job complete"
+                        (ends it, on the job page). */}
+                    <JobCompleteRow done={false} onLead />
+                  </>
                 )}
                 {confirmed ? (
                   // A confirmed booking that falls through is a JOB cancellation (the lead keeps its history).

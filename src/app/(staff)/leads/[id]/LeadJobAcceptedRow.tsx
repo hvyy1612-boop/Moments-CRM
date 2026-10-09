@@ -58,7 +58,7 @@ export function LeadJobAcceptedRow({
         <div className="min-w-0 flex-1">
           <span className="text-base text-ink">Job accepted</span>
           <span className="block text-sm text-muted">
-            Ticks itself when the 20% deposit is received. Tick it when the client has confirmed: the lead becomes a job.
+            The start of the job: ticks itself when the 20% deposit is received. Tick it when the client has confirmed, and the lead becomes a job.
           </span>
         </div>
         {booked ? (

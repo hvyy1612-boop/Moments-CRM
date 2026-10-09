@@ -54,7 +54,7 @@ export function JobAcceptedRow({
         </button>
         <div className="min-w-0 flex-1">
           <span className="text-base text-ink">Job accepted</span>
-          <span className="block text-sm text-muted">Ticked when the deposit is paid, or when the job is added as already confirmed.</span>
+          <span className="block text-sm text-muted">The start of the job: ticked when the 20% deposit is received, when Job accepted is ticked on the lead, or when the job is added as already confirmed.</span>
         </div>
         {acceptedLabel ? <span className="whitespace-nowrap text-sm text-muted">{acceptedLabel}</span> : null}
       </div>

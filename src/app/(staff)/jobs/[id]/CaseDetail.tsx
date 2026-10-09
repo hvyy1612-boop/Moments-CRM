@@ -30,6 +30,7 @@ import type { HistoryEntry } from './HistoryLogModal'
 import { JobSidebar } from './JobSidebar'
 import { ProjectWorkflow } from './ProjectWorkflow'
 import { JobAcceptedRow } from './JobAcceptedRow'
+import { JobCompleteRow } from './JobCompleteRow'
 import { dueSpecOf, type DueSpec } from '@/features/tasks/due'
 import { QuoteBuilder } from './QuoteBuilder'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
@@ -200,6 +201,17 @@ export async function CaseDetail({
     : null
 
   const isDelivered = project.lifecycleStatus === 'COMPLETED'
+  // "Job complete" (the end of the job, SN-style): the job was completed - automatically once every task is
+  // done and it is fully paid - or has been closed since. The date is when it was completed.
+  const jobComplete = isDelivered || project.lifecycleStatus === 'CLOSED'
+  const completedAt = jobComplete
+    ? (await prisma.auditLog.findFirst({
+        where: { entityType: 'Project', entityId: project.id, action: 'project.auto_completed' },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      }))?.createdAt ?? null
+    : null
+  const completedLabel = completedAt ? formatSydneyDate(completedAt) : null
   const isClosed = project.lifecycleStatus === 'CLOSED'
   const blockingCount = isDelivered
     ? await prisma.workItem.count({ where: { projectId: project.id, status: 'PENDING', type: { not: 'AUTO' } } })
@@ -389,6 +401,7 @@ export async function CaseDetail({
                     />
                   ) : null
                 }
+                completeRow={<JobCompleteRow key="job-complete" done={jobComplete} dateLabel={completedLabel} />}
                 rail={
                   // Keyed for the same reason as the nav icons: rendered by the client board beside its own cards.
                   <JobSidebar
