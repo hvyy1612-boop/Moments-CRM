@@ -350,25 +350,28 @@ function titleCaseSource(s: string): string {
  */
 export function sampleDashboardData(): DashboardData {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-  const booked = [28, 26, 38, 52, 61, 47, 44, 50, 63, 69, 41, 55]
-  const bookingsCt = [4, 3, 6, 9, 12, 8, 7, 9, 13, 14, 6, 8]
+  // Strong month-to-month variation so the columns and the line read clearly (a dip in winter, peaks in
+  // the autumn wedding season). Values in $k.
+  const booked = [24, 38, 31, 52, 44, 68, 57, 79, 63, 92, 71, 88]
+  const collected = [20, 32, 28, 45, 40, 60, 52, 70, 56, 82, 64, 80]
+  const bookingsCt = [3, 6, 5, 9, 7, 12, 10, 15, 11, 18, 13, 16]
   return {
     period: 'year',
     occasion: 'all',
     coverage: 'all',
     occasions: OCCASION_CHOICES,
     coverages: ['Photography', 'Videography', 'Both'],
-    kpi: { income: 486200, incomeDeltaPct: 12, collected: 447800, collectedDeltaPct: 9, outstanding: 38400, unpaidCount: 7, totalBookings: 92, bookingsDeltaPct: 9 },
-    revenueSeries: months.map((label, i) => ({ label, booked: booked[i]! * 1000, collected: Math.round(booked[i]! * 1000 * 0.9), bookings: bookingsCt[i]! })),
-    jobStages: [{ label: 'Pre-shoot', value: 8 }, { label: 'Shoot', value: 5 }, { label: 'Editing', value: 11 }, { label: 'Delivery', value: 7 }],
-    activeJobs: 31,
-    bookingsBySource: [{ label: 'Referral', value: 34 }, { label: 'Instagram', value: 26 }, { label: 'Website', value: 16 }, { label: 'Wedding fair', value: 10 }, { label: 'Google', value: 6 }],
-    revenueByOccasion: [{ label: 'Wedding', value: 310000 }, { label: 'Engagement', value: 70000 }, { label: 'Anniversary', value: 42000 }, { label: 'Portrait', value: 36000 }, { label: 'Event', value: 28000 }],
-    revenueByService: [{ label: 'Photography', value: 204000 }, { label: 'Both', value: 185000 }, { label: 'Videography', value: 97000 }],
-    invoiceAging: { current: 19000, d1: 9000, d8: 6400, d30: 4000, total: 38400 },
+    kpi: { income: 707000, incomeDeltaPct: 14, collected: 629000, collectedDeltaPct: 11, outstanding: 48000, unpaidCount: 9, totalBookings: 125, bookingsDeltaPct: 12 },
+    revenueSeries: months.map((label, i) => ({ label, booked: booked[i]! * 1000, collected: collected[i]! * 1000, bookings: bookingsCt[i]! })),
+    jobStages: [{ label: 'Pre-shoot', value: 9 }, { label: 'Shoot', value: 4 }, { label: 'Editing', value: 13 }, { label: 'Delivery', value: 6 }],
+    activeJobs: 32,
+    bookingsBySource: [{ label: 'Referral', value: 42 }, { label: 'Instagram', value: 31 }, { label: 'Website', value: 24 }, { label: 'Wedding fair', value: 16 }, { label: 'Google', value: 12 }],
+    revenueByOccasion: [{ label: 'Wedding', value: 240000 }, { label: 'Engagement', value: 165000 }, { label: 'Anniversary', value: 120000 }, { label: 'Portrait', value: 102000 }, { label: 'Event', value: 80000 }],
+    revenueByService: [{ label: 'Photography', value: 297000 }, { label: 'Both', value: 269000 }, { label: 'Videography', value: 141000 }],
+    invoiceAging: { current: 24000, d1: 12000, d8: 7500, d30: 4500, total: 48000 },
     pipeline: [
-      { label: 'New enquiry', value: 120 }, { label: 'Contacted', value: 86 }, { label: 'Consultation', value: 54 },
-      { label: 'Quote sent', value: 38 }, { label: 'Awaiting booking confirmation', value: 22 }, { label: 'Booking confirmed', value: 92 },
+      { label: 'New enquiry', value: 140 }, { label: 'Contacted', value: 98 }, { label: 'Consultation', value: 61 },
+      { label: 'Quote sent', value: 42 }, { label: 'Awaiting booking confirmation', value: 24 }, { label: 'Booking confirmed', value: 88 },
     ],
     recentEnquiries: [],
   }
