@@ -268,7 +268,9 @@ export async function addProjectStageBlock(projectId: string, stage: string, act
   })
 }
 
-const ADDABLE = new Set(['TODO', 'AUTO_EMAIL', 'APPOINTMENT', 'SHOOT'])
+// What staff can add to a job (features/enquiries JOB_TASK_TYPES). Never SHOOT: that is the job's one main
+// shoot task, whose date is the shoot date - another shoot is an EXTRA_SHOOT and leaves it alone.
+const ADDABLE = new Set(['TODO', 'EXTRA_SHOOT', 'APPOINTMENT'])
 
 /** Add a task to a stage of a project's workflow. */
 export async function addProjectTask(

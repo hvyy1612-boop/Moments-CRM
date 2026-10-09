@@ -1,13 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { ADDABLE_TASK_TYPES, type EnqStage } from '@/features/enquiries/workflow'
+import { LEAD_TASK_TYPES, type EnqStage, type TaskType } from '@/features/enquiries/workflow'
+import { TASK_TITLE_PLACEHOLDER, TaskTypePicker } from '../../jobs/[id]/TaskTypePicker'
 import {
   checkTaskForm,
   TaskDueDateTimeFields,
   taskBorderFor,
   taskInputBase,
-  taskInputClass,
   type TaskFormErrors,
 } from '@/components/ui/TaskDateTimeFields'
 import {
@@ -47,6 +47,8 @@ export function EnquiryWorkflow({
 }) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [addingStage, setAddingStage] = useState<string | null>(null)
+  // What "+ Add task" is adding: a to-do, an appointment, or (on a job) an extra shoot.
+  const [addType, setAddType] = useState<TaskType>('TODO')
   const [addingStageNew, setAddingStageNew] = useState(false)
   const [renamingStage, setRenamingStage] = useState<string | null>(null)
   const [editErrors, setEditErrors] = useState<TaskFormErrors>({})
@@ -297,11 +299,12 @@ export function EnquiryWorkflow({
                         <input type="hidden" name="csrf" value={csrf} />
                         <input type="hidden" name="enquiryId" value={enquiryId} />
                         <input type="hidden" name="stage" value={stage.key} />
+                        <TaskTypePicker options={LEAD_TASK_TYPES} value={addType} onChange={setAddType} />
                         <div className="flex flex-col gap-1">
                           <input
                             className={`${taskInputBase} ${taskBorderFor(Boolean(addErrors.title))}`}
                             name="title"
-                            placeholder="New task"
+                            placeholder={TASK_TITLE_PLACEHOLDER[addType] ?? 'New task'}
                             autoFocus
                             aria-label="Task title"
                             onInput={() => clearAdd('title')}
@@ -309,14 +312,6 @@ export function EnquiryWorkflow({
                           {addErrors.title ? <p className="text-sm text-danger">{addErrors.title}</p> : null}
                         </div>
                         <div className="flex flex-wrap items-end gap-3">
-                          <label className="flex flex-col gap-1 text-xs font-bold text-muted">
-                            <span>Type</span>
-                            <select className={`${taskInputClass} max-w-40`} name="type" defaultValue="TODO" aria-label="Task type">
-                              {ADDABLE_TASK_TYPES.map((o) => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                              ))}
-                            </select>
-                          </label>
                           <TaskDueDateTimeFields errors={addErrors} onClear={clearAdd} />
                         </div>
                         <div className="flex items-center gap-2">
@@ -328,7 +323,7 @@ export function EnquiryWorkflow({
                       <button
                         type="button"
                         data-write="hide"
-                        onClick={() => { setAddErrors({}); setAddingStage(stage.key) }}
+                        onClick={() => { setAddErrors({}); setAddType('TODO'); setAddingStage(stage.key) }}
                         className="rounded py-1 text-sm font-bold text-accent-ink hover:underline"
                       >
                         + Add task

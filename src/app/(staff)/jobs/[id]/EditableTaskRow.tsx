@@ -58,6 +58,13 @@ export function OwnerCell({ name, system = false }: { name: string | null; syste
 }
 
 /** A read-only checkbox glyph (system milestones and the disabled state). */
+/** A small tag after a task's title saying what kind of task it is (Main shoot, Extra shoot, Appointment);
+ *  plain to-dos have no tag. */
+export function TaskTypeTag({ label }: { label: string }) {
+  if (!label) return null
+  return <span className="shrink-0 whitespace-nowrap rounded-full bg-sunk px-2 py-0.5 text-xs font-medium text-ink-muted">{label}</span>
+}
+
 export function CheckBox({ done, muted = false }: { done: boolean; muted?: boolean }) {
   return (
     <span
@@ -153,6 +160,7 @@ export function EditableTaskRow({
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <span className={`truncate text-base ${done ? 'text-ink-muted line-through' : 'text-ink'}`}>{task.title}</span>
+          <TaskTypeTag label={task.typeLabel} />
           {attention ? <AttentionDot /> : null}
         </div>
         {task.note ? <span className="block truncate text-sm text-muted">{task.note}</span> : null}

@@ -9,22 +9,38 @@
 
 import { daysUntilSydney, sydneyDateTimeParts } from '@/lib/time'
 
-export type TaskType = 'TODO' | 'AUTO_EMAIL' | 'APPOINTMENT' | 'SHOOT' | 'AUTO'
+// SHOOT = the job's MAIN shoot task (its date is the job's shoot date). EXTRA_SHOOT = an additional shoot
+// staff add to a job; it shows in the calendar but never changes the main shoot date. AUTO_EMAIL is only
+// kept to label old rows - no email automation is built, so it cannot be added.
+export type TaskType = 'TODO' | 'AUTO_EMAIL' | 'APPOINTMENT' | 'SHOOT' | 'EXTRA_SHOOT' | 'AUTO'
 
 export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   TODO: '',
   AUTO_EMAIL: 'Auto email',
   APPOINTMENT: 'Appointment',
-  SHOOT: 'Shoot',
+  SHOOT: 'Main shoot',
+  EXTRA_SHOOT: 'Extra shoot',
   AUTO: 'Auto',
 }
 
-/** Types a staff member can pick when adding a task (AUTO is system-only). */
-export const ADDABLE_TASK_TYPES: { value: TaskType; label: string }[] = [
-  { value: 'TODO', label: 'To-do' },
-  { value: 'AUTO_EMAIL', label: 'Auto email' },
-  { value: 'APPOINTMENT', label: 'Appointment' },
-  { value: 'SHOOT', label: 'Shoot' },
+/** One choice in "Add task" (Studio Ninja's "Add a New Workflow Task", without Automation for now). */
+export type AddableTaskType = { value: TaskType; label: string; detail: string }
+
+const TODO_TYPE: AddableTaskType = { value: 'TODO', label: 'To-do', detail: 'A task you tick when it is done.' }
+const APPOINTMENT_TYPE: AddableTaskType = {
+  value: 'APPOINTMENT',
+  label: 'Appointment',
+  detail: 'A meeting or call with the client. Shows in the calendar.',
+}
+
+/** What staff can add to a LEAD's workflow (a lead has no shoot booked yet). */
+export const LEAD_TASK_TYPES: AddableTaskType[] = [TODO_TYPE, APPOINTMENT_TYPE]
+
+/** What staff can add to a JOB's workflow. */
+export const JOB_TASK_TYPES: AddableTaskType[] = [
+  TODO_TYPE,
+  { value: 'EXTRA_SHOOT', label: 'Extra shoot', detail: 'Another shoot for this job. Shows in the calendar.' },
+  APPOINTMENT_TYPE,
 ]
 
 type StageDef = { key: string; label: string; color: string }

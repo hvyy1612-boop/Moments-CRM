@@ -9,7 +9,7 @@ import { dueToneFor, TASK_TYPE_LABEL, type DueTone, type TaskType } from '@/feat
 import type { DueAnchor } from '@/lib/domain/deadline'
 import { sydneyDateTimeParts } from '@/lib/time'
 
-export { ADDABLE_TASK_TYPES } from '@/features/enquiries/workflow'
+export { JOB_TASK_TYPES } from '@/features/enquiries/workflow'
 export type { TaskType } from '@/features/enquiries/workflow'
 
 export type ProjectFacts = { finalPaid: boolean }

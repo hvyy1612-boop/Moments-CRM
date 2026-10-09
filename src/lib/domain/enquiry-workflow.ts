@@ -114,7 +114,8 @@ async function loadTask(taskId: string) {
 }
 
 /** Add a task to a stage of the enquiry workflow. */
-const ADDABLE = new Set(['TODO', 'AUTO_EMAIL', 'APPOINTMENT', 'SHOOT'])
+// What staff can add to a lead (features/enquiries LEAD_TASK_TYPES): no shoots before it is booked.
+const ADDABLE = new Set(['TODO', 'APPOINTMENT'])
 
 export async function addEnquiryTask(
   enquiryId: string,

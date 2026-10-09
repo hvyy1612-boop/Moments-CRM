@@ -7,7 +7,6 @@ export type TaskFormErrors = { title?: string; date?: string; time?: string }
 
 export const taskInputBase =
   'h-9 w-full rounded border bg-surface px-2.5 text-base text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
-export const taskInputClass = `${taskInputBase} border-line-strong`
 export const taskBorderFor = (hasError: boolean) => (hasError ? 'border-danger' : 'border-line-strong')
 
 /** The required checks the server also runs, done in the browser so a blank starred field shows a red

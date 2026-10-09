@@ -3,7 +3,7 @@
 import { useOptimistic, useRef, useTransition } from 'react'
 import type { EnqTaskRow } from '@/features/enquiries/workflow'
 import { deleteEnquiryTaskAction, moveEnquiryTaskAction, toggleWorkItemAction } from '../actions'
-import { AttentionDot, OwnerCell, StatusBadge } from '../../jobs/[id]/EditableTaskRow'
+import { AttentionDot, OwnerCell, StatusBadge, TaskTypeTag } from '../../jobs/[id]/EditableTaskRow'
 import { IconMore } from '../../jobs/[id]/icons'
 
 // Fixed workflow row grid: checkbox | Task | Due date | Owner | Status | action. Task is the one flexible
@@ -89,6 +89,7 @@ export function EnquiryTaskRow({
       <div className="min-w-0">
         <div className="flex items-center gap-1.5">
           <span className={`truncate text-base font-medium ${done ? 'text-ink-muted line-through' : 'text-ink'}`}>{task.title}</span>
+          <TaskTypeTag label={task.typeLabel} />
           {attention ? <AttentionDot /> : null}
         </div>
         {task.note ? <span className="mt-0.5 block truncate text-sm text-muted">{task.note}</span> : null}

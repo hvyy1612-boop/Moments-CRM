@@ -181,6 +181,27 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
         status: null, conflict: false, done: false,
       })
     }
+    // Extra shoots staff added to a job's workflow: shoots too (and checked for same-day clashes).
+    const extras = await prisma.workItem.findMany({
+      where: {
+        type: 'EXTRA_SHOOT',
+        status: { in: ['PENDING', 'COMPLETED'] },
+        dueOverrideAt: { gte: startUtc, lt: endUtc },
+        project: { lifecycleStatus: { notIn: ['BOOKING_REQUESTED', 'CANCELLED', 'CLOSED'] } },
+      },
+      select: { id: true, title: true, dueOverrideAt: true, status: true, project: { select: { id: true, client: { select: { displayName: true } } } } },
+    })
+    for (const w of extras) {
+      const at = w.dueOverrideAt!
+      items.push({
+        id: `x_${w.id}`, kind: 'shoot', refId: w.id, dayKey: sydneyDateKey(at),
+        startMin: sydneyMinutes(at), endMin: null,
+        primary: w.project!.client.displayName, secondary: w.title,
+        category: 'job', tone: null, timeLabel: formatSydneyTime(at),
+        href: `/jobs/${w.project!.id}`, editable: false, location: null,
+        status: null, conflict: false, done: w.status === 'COMPLETED',
+      })
+    }
   }
 
   // Appointments (APPOINTMENT work items) - lead or job.
@@ -214,10 +235,10 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
   // Upcoming workflow tasks (to-dos with a due date) - HoneyBook / Google-Tasks style. A task the
   // staff gave an explicit date AND time (a manual override) sits in that time slot; an anchored task
   // with no set time stays an informational all-day marker. Overdue is toned red. APPOINTMENT (shown
-  // above) and AUTO (system rows) are excluded. Job tasks only appear once they have a resolvable date.
+  // above), EXTRA_SHOOT (shown as shoots) and AUTO (system rows) are excluded. Job tasks only appear once they have a resolvable date.
   if (want('lead') || want('job')) {
     const tasks = await prisma.workItem.findMany({
-      where: { type: { notIn: ['APPOINTMENT', 'AUTO'] }, status: 'PENDING', OR: LIVE_WORK },
+      where: { type: { notIn: ['APPOINTMENT', 'AUTO', 'EXTRA_SHOOT'] }, status: 'PENDING', OR: LIVE_WORK },
       select: { id: true, title: true, dueAt: true,
         dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true,
         enquiry: { select: { id: true, name: true, createdAt: true } },
@@ -472,7 +493,7 @@ export async function getIcsForToken(token: string): Promise<string | null> {
   const start = new Date(now.getTime() - 30 * 86_400_000)
   const end = new Date(now.getTime() + 365 * 86_400_000)
 
-  const [jobs, events, appts] = await Promise.all([
+  const [jobs, events, appts, extras] = await Promise.all([
     prisma.project.findMany({
       where: { companyId: company.id, lifecycleStatus: { notIn: ['BOOKING_REQUESTED', 'CANCELLED', 'CLOSED'] } },
       select: { id: true, client: { select: { displayName: true } }, ...JOB_SHOOT_SELECT },
@@ -485,6 +506,16 @@ export async function getIcsForToken(token: string): Promise<string | null> {
       where: { companyId: company.id, type: 'APPOINTMENT', status: { in: ['PENDING', 'COMPLETED'] }, OR: LIVE_WORK },
       select: { id: true, title: true, dueAt: true, dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true, enquiry: { select: { name: true, createdAt: true } }, project: { select: { confirmedByClientAt: true, client: { select: { displayName: true } }, ...JOB_SHOOT_SELECT } } },
     }),
+    prisma.workItem.findMany({
+      where: {
+        companyId: company.id,
+        type: 'EXTRA_SHOOT',
+        status: { in: ['PENDING', 'COMPLETED'] },
+        dueOverrideAt: { gte: start, lt: end },
+        project: { lifecycleStatus: { notIn: ['BOOKING_REQUESTED', 'CANCELLED', 'CLOSED'] } },
+      },
+      select: { id: true, title: true, dueOverrideAt: true, project: { select: { client: { select: { displayName: true } } } } },
+    }),
   ])
 
   const dtstamp = icsStamp(now)
@@ -494,6 +525,10 @@ export async function getIcsForToken(token: string): Promise<string | null> {
     if (!at || at.getTime() < start.getTime() || at.getTime() >= end.getTime()) continue
     const timed = shootHasTime(j)
     lines.push(...vevent(`s_${j.id}`, dtstamp, at, timed ? new Date(at.getTime() + 60 * 60_000) : null, !timed, `${j.client.displayName} - Shoot`, null))
+  }
+  for (const w of extras) {
+    const at = w.dueOverrideAt!
+    lines.push(...vevent(`x_${w.id}`, dtstamp, at, new Date(at.getTime() + 60 * 60_000), false, `${w.project!.client.displayName} - ${w.title}`, null))
   }
   for (const e of events) lines.push(...vevent(`e_${e.id}`, dtstamp, e.startsAt, e.endsAt, e.allDay, e.title, e.location))
   for (const w of appts) {
