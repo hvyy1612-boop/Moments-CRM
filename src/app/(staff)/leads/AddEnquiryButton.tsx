@@ -4,7 +4,8 @@ import { type FormEvent, type ReactNode, useActionState, useEffect, useState } f
 import { useRouter } from 'next/navigation'
 import { Alert } from '@/components/ui/Alert'
 import { IconButton } from '@/components/ui/IconButton'
-import { Modal, ModalFooter, modalCancelBtn, modalPrimaryBtn } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 import { Checkbox, Field, Select, TextInput, Textarea } from '@/components/ui/form'
 import { JOB_TYPES, LEAD_SOURCES, LEAD_WORKFLOWS, parseNewLead } from '@/features/enquiries/new-lead'
 import { addEnquiryAction, type AddEnquiryState, type AddLeadErrors } from './actions'
@@ -288,10 +289,11 @@ export function AddEnquiryButton({
             </Field>
           </div>
 
-          <ModalFooter>
-            <button type="button" onClick={close} className={modalCancelBtn}>Cancel</button>
-            <button type="submit" disabled={pending} className={modalPrimaryBtn}>{pending ? 'Saving…' : 'Save Lead'}</button>
-          </ModalFooter>
+          {/* Two moderate, equal-size buttons (not oversized, not a full-width split bar). */}
+          <div className="flex items-center gap-3 border-t border-line px-6 py-4">
+            <Button type="submit" size="md" loading={pending}>Save Lead</Button>
+            <Button type="button" variant="secondary" size="md" onClick={close}>Cancel</Button>
+          </div>
         </form>
       </Modal>
     </>
