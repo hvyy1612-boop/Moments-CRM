@@ -10,13 +10,10 @@ import { getActionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { JOB_DUE_ANCHORS, parseTaskForm } from '@/features/tasks/due'
 import { closeJob } from '@/lib/domain/project'
-import { findOrCreateClient } from '@/lib/domain/client'
-import { convertEnquiry, createEnquiry } from '@/lib/domain/enquiry'
 import {
   addProjectStage,
   addProjectStageBlock,
   addProjectTask,
-  confirmDirectBooking,
   deleteProjectStage,
   moveJobBackToLead,
   deleteProjectTask,
@@ -25,7 +22,6 @@ import {
   toggleProjectTask,
   updateProjectTask,
 } from '@/lib/domain/project-workflow'
-import { enquirySchema } from '@/lib/validation/enquiry'
 import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/contract'
 import { createInvoiceWithLines, deleteInvoice, recordPayment, updateInvoiceWithLines, voidInvoice } from '@/lib/domain/finance'
 import { refundPayment } from '@/lib/domain/refund'
@@ -612,85 +608,6 @@ export async function moveProjectTaskAction(formData: FormData): Promise<void> {
     // no-op on stale id
   }
   revalidatePath(`/jobs/${projectId}`)
-}
-
-export type StaffEnquiryState =
-  | { status: 'idle' }
-  | {
-      status: 'error'
-      message?: string
-      errors?: { name?: string; email?: string; phone?: string; message?: string }
-    }
-
-/**
- * "Add job" (Studio Ninja "create a job directly", docs/33 decision 3): a booking the client has ALREADY
- * confirmed outside the app (e.g. a returning client who rang to book). The client is found or created, a
- * lead is logged for them and converted, and the job is confirmed at once - it skips the lead stage and the
- * deposit wait. No payment or contract is invented; the deposit invoice is raised on the job as usual.
- */
-export async function createStaffEnquiryAction(
-  _prev: StaffEnquiryState,
-  formData: FormData,
-): Promise<StaffEnquiryState> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
-    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  }
-  const user = await requireStaff()
-
-  const parsed = enquirySchema.safeParse({
-    name: formData.get('name'),
-    email: formData.get('email'),
-    phone: formData.get('phone') ?? '',
-    eventType: formData.get('eventType') ?? '',
-    message: formData.get('message') ?? '',
-    source: 'staff',
-  })
-  if (!parsed.success) {
-    const fields = parsed.error.flatten().fieldErrors
-    return {
-      status: 'error',
-      errors: {
-        name: fields.name?.[0],
-        email: fields.email?.[0],
-        phone: fields.phone?.[0],
-        message: fields.message?.[0],
-      },
-    }
-  }
-
-  let projectId: string
-  try {
-    const { name, email, phone, eventType, message } = parsed.data
-    const parts = name.trim().split(/\s+/)
-    const client = await findOrCreateClient(
-      { email, firstName: parts[0], lastName: parts.slice(1).join(' ') || undefined, phone: phone || undefined },
-      user.id,
-    )
-    const lead = await createEnquiry(
-      {
-        clientId: client.id,
-        name: client.displayName,
-        firstName: client.firstName,
-        lastName: client.lastName,
-        email: client.email,
-        phone: client.phone,
-        eventType: eventType || null,
-        message: message || null,
-        source: 'MANUAL',
-      },
-      user.id,
-    )
-    const converted = await convertEnquiry(lead.id, user.id)
-    if (!converted.projectId) throw new Error('No job was created.')
-    projectId = converted.projectId
-    await confirmDirectBooking(projectId, user.id)
-  } catch {
-    return { status: 'error', message: 'Could not create the job. Please try again.' }
-  }
-  revalidatePath('/jobs')
-  revalidatePath('/leads')
-  redirect(`/jobs/${projectId}?toast=job-added`)
 }
 
 // ---------------------------------------------------------------------------

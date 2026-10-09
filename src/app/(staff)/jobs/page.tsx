@@ -17,7 +17,7 @@ import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { JobsTable, type JobRow } from './JobsTable'
 import { JobSortSelect, JOB_DEFAULT_SORT, type JobSortValue } from './JobSortSelect'
 import { JobFilterMenu } from './JobFilterMenu'
-import { AddJobButton } from './AddJobButton'
+import { AddEnquiryButton } from '../leads/AddEnquiryButton'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Jobs - Moments' }
@@ -198,7 +198,7 @@ export default async function JobsPage({
         <PageHeader
           breadcrumb={[DASHBOARD_CRUMB, { label: 'Jobs' }]}
           title="Jobs"
-          actions={canEdit ? <AddJobButton csrf={csrf} /> : null}
+          actions={canEdit ? <AddEnquiryButton kind="job" csrf={csrf} /> : null}
         />
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">

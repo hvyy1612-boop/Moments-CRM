@@ -79,6 +79,19 @@ describe('lead-job model (integration, real DB) - docs/24', () => {
     expect(await prisma.contract.count({ where: { projectId: projectId! } })).toBe(0)
   })
 
+  it('the main shoot date and time typed on Add job become the job shoot; a date alone stays a day', async () => {
+    const timed = await createEnquiry({ name: 'Timed Shoot', email: email(), source: 'MANUAL', eventDate: new Date('2027-03-14T00:00:00Z'), eventStartTime: '14:30' })
+    const a = await convertEnquiry(timed.id)
+    await confirmDirectBooking(a.projectId!, null)
+    const shoot = await prisma.workItem.findFirstOrThrow({ where: { projectId: a.projectId!, type: 'SHOOT' } })
+    expect(shoot.dueOverrideAt?.toISOString()).toBe('2027-03-14T03:30:00.000Z') // 2:30 pm Sydney (AEDT)
+
+    const dayOnly = await createEnquiry({ name: 'All Day Shoot', email: email(), source: 'MANUAL', eventDate: new Date('2027-03-14T00:00:00Z') })
+    const b = await convertEnquiry(dayOnly.id)
+    await confirmDirectBooking(b.projectId!, null)
+    expect((await prisma.workItem.findFirstOrThrow({ where: { projectId: b.projectId!, type: 'SHOOT' } })).dueOverrideAt).toBeNull()
+  })
+
   it('the job takes the name staff gave the lead; a lead named after its client keeps the event type', async () => {
     const staff = await prisma.user.findFirstOrThrow({ select: { id: true } })
     const jenny = await findOrCreateClient({ email: email(), firstName: 'Jenny', lastName: 'Smith' }, staff.id)

@@ -29,6 +29,18 @@ async function seedIfNeeded(tx: Tx, projectId: string, companyId: string) {
     where: { entityType: 'Project', entityId: projectId, action: SEED_ACTION },
   })
   if (seeded > 0) return
+  // The main shoot keeps the date AND time staff entered on the lead (Add job / Add lead "Main shoot"): it
+  // becomes the Shoot task's set time, so the job, the Jobs list and the calendar show the shoot in its slot.
+  // A lead with a date but no time (or "All day") leaves the task on the lead's day, as before.
+  const lead = await tx.enquiry.findFirst({
+    where: { convertedProjectId: projectId },
+    orderBy: { createdAt: 'desc' },
+    select: { eventDate: true, eventStartTime: true },
+  })
+  const shootAt =
+    lead?.eventDate && lead.eventStartTime
+      ? projectDueData({ kind: 'absolute', date: lead.eventDate.toISOString().slice(0, 10), time: lead.eventStartTime }).dueOverrideAt
+      : null
   await tx.workItem.createMany({
     data: DEFAULT_PROJECT_TASKS.map((t, i) => ({
       companyId,
@@ -43,6 +55,7 @@ async function seedIfNeeded(tx: Tx, projectId: string, companyId: string) {
       // stored on the row (from PROJECT_TASK_SCHEDULE) so a rename never breaks the schedule.
       dueAnchor: 'SHOOT' as const,
       dueOffsetDays: PROJECT_TASK_SCHEDULE[t.title] ?? 0,
+      dueOverrideAt: t.type === 'SHOOT' ? shootAt : null,
     })),
   })
   await tx.auditLog.create({
