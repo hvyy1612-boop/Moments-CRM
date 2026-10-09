@@ -22,7 +22,7 @@ describe('enquiry sales lifecycle', () => {
     expect(ENQUIRY_STAGE_LABEL.QUOTE_SENT).toBe('Quote sent')
     expect(ENQUIRY_STAGE_LABEL.AWAITING_BOOKING_CONFIRMATION).toBe('Awaiting booking confirmation')
     expect(ENQUIRY_STAGE_LABEL.BOOKING_CONFIRMED).toBe('Booking confirmed')
-    expect(ENQUIRY_STAGE_LABEL.DECLINED).toBe('Declined')
+    expect(ENQUIRY_STAGE_LABEL.DECLINED).toBe('Archived') // Studio Ninja's word; the DB value stays DECLINED
     // The retired technical vocabulary must be gone.
     expect(Object.values(ENQUIRY_STAGE_LABEL)).not.toContain('Booked')
     expect(Object.values(ENQUIRY_STAGE_LABEL)).not.toContain('Quoting')
@@ -37,8 +37,8 @@ describe('enquiry sales lifecycle', () => {
     expect(isOpenEnquiry('DECLINED')).toBe(false)
   })
 
-  it('offers All + one filter tab per stage', () => {
-    expect(ENQUIRY_STAGE_TABS.map((t) => t.key)).toEqual([...STAGE_ORDER, 'DECLINED'])
+  it('offers one filter tab per lead stage + Archived; a booked lead is a job, not listed in Leads', () => {
+    expect(ENQUIRY_STAGE_TABS.map((t) => t.key)).toEqual([...STAGE_ORDER.filter((s) => s !== 'BOOKING_CONFIRMED'), 'DECLINED'])
   })
 
   it('only the three early stages are derived from the checklist; later stages are event-driven', () => {

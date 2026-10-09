@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
-import { convertEnquiry, createEnquiry } from '@/lib/domain/enquiry'
+import { convertEnquiry, createEnquiry, markEnquiryLost } from '@/lib/domain/enquiry'
 import { findOrCreateClient } from '@/lib/domain/client'
 import { recordPayment } from '@/lib/domain/finance'
 import { JOB_WHERE } from '@/lib/domain/project'
-import { confirmDirectBooking, createDirectJob, getProjectBoard, moveJobBackToLead } from '@/lib/domain/project-workflow'
+import { acceptLeadAsJob, confirmDirectBooking, createDirectJob, getProjectBoard, moveJobBackToLead } from '@/lib/domain/project-workflow'
 import { createInvoice } from './helpers'
 import { acceptQuote, createQuoteForEnquiry, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 
@@ -103,6 +103,23 @@ describe('lead-job model (integration, real DB) - docs/24', () => {
     expect(lead).toMatchObject({ status: 'AWAITING_BOOKING_CONFIRMATION', convertedProjectId: job.id, name: 'Bella & Tom', coverage: 'Both', eventStartTime: '14:30', eventLocation: 'Gunners Barracks' })
     expect((await prisma.project.findUniqueOrThrow({ where: { id: job.id } })).lifecycleStatus).toBe('BOOKING_REQUESTED')
     expect(await prisma.project.count({ where: { AND: [JOB_WHERE, { id: job.id }] } })).toBe(0)
+  })
+
+  it('ticking "Job accepted" on a lead (after the confirm) makes it a job at once; an archived lead cannot', async () => {
+    const lead = await createEnquiry({ name: 'Confirmed By Phone', email: email(), eventDate: new Date('2027-08-01T00:00:00Z'), eventStartTime: '15:00', coverage: 'Photography' })
+    const { projectId } = await acceptLeadAsJob(lead.id, null)
+    const job = await prisma.project.findUniqueOrThrow({ where: { id: projectId } })
+    expect(job.lifecycleStatus).toBe('CONFIRMED')
+    expect(job).toMatchObject({ coverage: 'Photography', shootStartTime: '15:00' }) // the lead's details came across
+    expect(await prisma.project.count({ where: { AND: [JOB_WHERE, { id: projectId }] } })).toBe(1)
+    expect((await prisma.enquiry.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe('BOOKING_CONFIRMED') // leaves Leads
+    expect(await prisma.workItem.count({ where: { enquiryId: lead.id, status: 'PENDING' } })).toBe(0)
+    expect(await prisma.invoice.count({ where: { projectId } })).toBe(0) // no payment invented
+    await expect(acceptLeadAsJob(lead.id, null)).rejects.toThrow(/already a job/)
+
+    const archived = await createEnquiry({ name: 'Went Elsewhere', email: email() })
+    await markEnquiryLost(archived.id, 'Archived', null)
+    await expect(acceptLeadAsJob(archived.id, null)).rejects.toThrow(/Restore/)
   })
 
   it('the deposit must reach 20% of the accepted quote; a quote, an invoice or a small payment never books', async () => {

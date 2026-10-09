@@ -18,7 +18,7 @@ export const ENQUIRY_STAGE_LABEL: Record<string, string> = {
   QUOTE_SENT: 'Quote sent',
   AWAITING_BOOKING_CONFIRMATION: 'Awaiting booking confirmation',
   BOOKING_CONFIRMED: 'Booking confirmed',
-  DECLINED: 'Declined',
+  DECLINED: 'Archived', // DB value DECLINED; staff archive a lead that is not going ahead (Studio Ninja)
 }
 
 /** Restrained status-pill tone per stage (no rainbow): progress reads through the neutral kinds. */
@@ -70,6 +70,6 @@ export const ENQUIRY_STAGE_TABS: { key: string; label: string }[] = [
   { key: 'CONSULTATION', label: 'Consultation' },
   { key: 'QUOTE_SENT', label: 'Quote sent' },
   { key: 'AWAITING_BOOKING_CONFIRMATION', label: 'Awaiting booking confirmation' },
-  { key: 'BOOKING_CONFIRMED', label: 'Booking confirmed' },
-  { key: 'DECLINED', label: 'Declined' },
+  // A booked lead is a Job now: it leaves the Leads page (kept in the database, opened from its job).
+  { key: 'DECLINED', label: 'Archived' },
 ]

@@ -2,13 +2,14 @@
 
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getActionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { LEAD_DUE_ANCHORS, parseTaskForm } from '@/features/tasks/due'
 import { cancelBooking, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
-import { createDirectJob } from '@/lib/domain/project-workflow'
+import { acceptLeadAsJob, createDirectJob } from '@/lib/domain/project-workflow'
 import { parseNewLead, type NewLeadErrors } from '@/features/enquiries/new-lead'
 import {
   addEnquiryNote,
@@ -171,6 +172,25 @@ async function addEnquiry(formData: FormData, kind: 'lead' | 'job'): Promise<Add
   return { status: 'created', enquiryId: enquiry.id }
 }
 
+/** "Job accepted" ticked on a lead (after the confirm dialog): the lead becomes a job, which then opens. */
+export async function acceptLeadAsJobAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  if (!enquiryId) return
+  let projectId: string
+  try {
+    projectId = (await acceptLeadAsJob(enquiryId, user.id)).projectId
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'The job could not be created.'
+    redirect(`/leads/${enquiryId}?acceptError=${encodeURIComponent(message)}`)
+  }
+  revalidatePath('/leads')
+  revalidatePath('/jobs')
+  revalidatePath(`/leads/${enquiryId}`)
+  redirect(`/jobs/${projectId}?toast=job-added`)
+}
+
 /** Outcomes that close or reopen a lead (contract docs/23). Convert/Lost leave the active queue;
  * reopen brings a closed lead back. The case detail also uses these. */
 export async function updateEnquiryAction(formData: FormData): Promise<void> {
@@ -182,7 +202,7 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
 
   switch (op) {
     case 'lost':
-      await markEnquiryLost(enquiryId, 'Declined', user.id)
+      await markEnquiryLost(enquiryId, 'Archived', user.id)
       break
     case 'cancel_job':
       await cancelBooking(enquiryId, user.id)

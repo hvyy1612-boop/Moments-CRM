@@ -36,6 +36,7 @@ import { HistoryLog, type HistoryRow } from '../../finance/[invoiceId]/HistoryLo
 import { EnquiryWorkflow } from './EnquiryWorkflow'
 import { LeadNotes } from './LeadNotes'
 import { SidebarCard } from './SidebarCard'
+import { LeadJobAcceptedRow } from './LeadJobAcceptedRow'
 import { MarkEnquiryViewed } from './MarkEnquiryViewed'
 
 export const runtime = 'nodejs'
@@ -151,7 +152,7 @@ export default async function EnquiryDetailPage({
   //   The checklist stays workable the whole time.
   // - awaiting: its booking file holds the deposit invoice and the contract; signing alone does not book.
   // - confirmed: the deposit is paid, so it is a Job; the lead section turns read-only (Studio-Ninja style).
-  // There is no manual "Create Job": ticking tasks never books a lead.
+  // Ticking checklist tasks never books a lead; only the 20% deposit or ticking "Job accepted" (confirmed) does.
   const confirmed = enquiry.status === 'BOOKING_CONFIRMED'
   const awaiting = enquiry.status === 'AWAITING_BOOKING_CONFIRMATION'
   const declined = enquiry.status === 'DECLINED'
@@ -211,6 +212,21 @@ export default async function EnquiryDetailPage({
           <StatusTag kind={ENQUIRY_STAGE_KIND[enquiry.status] ?? 'hold'}>
             {ENQUIRY_STAGE_LABEL[enquiry.status] ?? titleCase(enquiry.status)}
           </StatusTag>
+          {/* Archive a lead that is not going ahead (it leaves Active, nothing is deleted); Restore brings it back. */}
+          {open || declined ? (
+            <form action={updateEnquiryAction} className="ml-auto">
+              <input type="hidden" name="csrf" value={csrf} />
+              <input type="hidden" name="enquiryId" value={enquiry.id} />
+              <input type="hidden" name="op" value={declined ? 'reopen' : 'lost'} />
+              <button
+                type="submit"
+                data-write="hide"
+                className="inline-flex h-9 items-center rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
+              >
+                {declined ? 'Restore lead' : 'Archive'}
+              </button>
+            </form>
+          ) : null}
         </div>
         <p className="mt-1 text-base text-ink-muted">
           {enquiry.eventType ? titleCase(enquiry.eventType) : 'Lead'}
@@ -229,8 +245,8 @@ export default async function EnquiryDetailPage({
               <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">
                 {/* No accepted quote = a job whose "Job accepted" was unticked (e.g. added directly by mistake). */}
                 {quoteAccepted ? 'Quote accepted.' : 'Waiting for the deposit.'} The date is not held yet: this lead becomes a
-                job once {depositNeeded ? `the ${BOOKING_DEPOSIT_PERCENT}% deposit (${formatAud(depositNeeded)}) is received` : 'the deposit is paid'}.
-                Raise the deposit invoice under Invoices{quoteAccepted ? ', and send the contract if needed' : ''}.
+                job once {depositNeeded ? `the ${BOOKING_DEPOSIT_PERCENT}% deposit (${formatAud(depositNeeded)}) is received` : 'the deposit is paid'},
+                or when you tick Job accepted. Raise the deposit invoice under Invoices{quoteAccepted ? ', and send the contract if needed' : ''}.
               </div>
             ) : confirmed ? (
               <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">
@@ -250,56 +266,31 @@ export default async function EnquiryDetailPage({
             csrf={csrf}
             taskTimes={taskTimes}
             taskDue={taskDue}
-            // Booked (it is a job now) or declined (closed until Reopen): nothing to work here.
+            // Booked (it is a job now) or archived (closed until Restore): nothing to work here.
             readOnly={confirmed || declined}
             footer={
               <>
-                {/* Outcome actions */}
-                <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
-                  {open ? (
-                    <>
-                      <p className="mr-auto text-sm text-ink-muted">
-                        {awaiting
-                          ? 'It becomes a job when the deposit is paid. Decline if the client does not go ahead.'
-                          : 'To book this lead, create a quote and mark it accepted when the client agrees, then take the deposit.'}
-                      </p>
-                      <form action={updateEnquiryAction}>
-                        <input type="hidden" name="csrf" value={csrf} />
-                        <input type="hidden" name="enquiryId" value={enquiry.id} />
-                        <input type="hidden" name="op" value="lost" />
-                        <button type="submit" className="rounded-md border border-line-strong px-3 py-1.5 text-sm font-bold text-lost-ink transition-colors hover:bg-sunk">
-                          Decline
-                        </button>
-                      </form>
-                    </>
-                  ) : confirmed ? (
-                    <>
-                      {enquiry.convertedProjectId ? (
-                        <Link href={`/jobs/${enquiry.convertedProjectId}`} className="font-bold text-accent-ink hover:underline">
-                          Open the job
-                        </Link>
-                      ) : null}
-                      {/* A confirmed booking that falls through is a JOB cancellation (enquiry keeps its history). */}
-                      <form action={updateEnquiryAction}>
-                        <input type="hidden" name="csrf" value={csrf} />
-                        <input type="hidden" name="enquiryId" value={enquiry.id} />
-                        <input type="hidden" name="op" value="cancel_job" />
-                        <button type="submit" className="rounded px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline">
-                          Cancel job
-                        </button>
-                      </form>
-                    </>
-                  ) : (
-                    <form action={updateEnquiryAction}>
-                      <input type="hidden" name="csrf" value={csrf} />
-                      <input type="hidden" name="enquiryId" value={enquiry.id} />
-                      <input type="hidden" name="op" value="reopen" />
-                      <button type="submit" className="rounded border border-line-strong px-3 py-1.5 text-sm font-bold text-ink-muted hover:text-ink">
-                        Reopen lead
-                      </button>
-                    </form>
-                  )}
-                </div>
+                {/* "Job accepted" (Studio Ninja): ticks itself on the 20% deposit; staff may tick it (with a
+                    confirm) once the client has confirmed - the lead then becomes a job and leaves Leads. */}
+                {declined ? null : (
+                  <LeadJobAcceptedRow
+                    csrf={csrf}
+                    enquiryId={enquiry.id}
+                    jobId={confirmed ? enquiry.convertedProjectId : null}
+                    readOnly={declined}
+                  />
+                )}
+                {confirmed ? (
+                  // A confirmed booking that falls through is a JOB cancellation (the lead keeps its history).
+                  <form action={updateEnquiryAction} className="flex justify-end">
+                    <input type="hidden" name="csrf" value={csrf} />
+                    <input type="hidden" name="enquiryId" value={enquiry.id} />
+                    <input type="hidden" name="op" value="cancel_job" />
+                    <button type="submit" className="rounded px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline">
+                      Cancel job
+                    </button>
+                  </form>
+                ) : null}
               </>
             }
             rail={

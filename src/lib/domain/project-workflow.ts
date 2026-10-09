@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db'
 import { cancelOpenWorkItems } from './enquiry-workflow'
-import { bookingDetailsFromLead, createEnquiryTx } from './enquiry'
+import { bookingDetailsFromLead, convertEnquiryCore, createEnquiryTx } from './enquiry'
 import { nextProjectCode } from './project'
 import { asTaskDue, projectDueData, type TaskDue } from '@/features/tasks/due'
 import { formatSydneyDate, daysUntilSydney } from '@/lib/time'
@@ -87,6 +87,29 @@ export async function bookingDepositReached(tx: Tx, projectId: string): Promise<
   const invoices = await tx.invoice.findMany({ where: { projectId }, select: INVOICE_MONEY_SELECT })
   const received = getJobBalance(invoices.map(toInvoiceMoneyInput), accepted.total).paidNet
   return received.greaterThanOrEqualTo(computeDeposit(accepted.total, BOOKING_DEPOSIT_PERCENT).deposit)
+}
+
+/**
+ * Tick "Job accepted" on a lead (Studio Ninja: staff may tick it themselves once the client has confirmed).
+ * The lead becomes a Job straight away: its booking file is opened if it has none, then confirmed - the
+ * same step the 20% deposit triggers, with no payment or contract invented. Refused for an archived or
+ * already booked lead. Returns the job's id.
+ */
+export async function acceptLeadAsJob(enquiryId: string, actorUserId: string | null) {
+  const now = new Date()
+  return prisma.$transaction(async (tx) => {
+    const lead = await tx.enquiry.findUnique({ where: { id: enquiryId }, select: { status: true, companyId: true } })
+    if (!lead) throw new Error('Lead not found.')
+    if (lead.status === 'DECLINED') throw new Error('Restore this lead before marking it as a job.')
+    if (lead.status === 'BOOKING_CONFIRMED') throw new Error('This lead is already a job.')
+    const { projectId } = await convertEnquiryCore(tx, enquiryId, actorUserId, now)
+    if (!projectId) throw new Error('The job could not be created.')
+    await confirmBookingByDepositTx(tx, projectId, actorUserId)
+    await tx.auditLog.create({
+      data: { companyId: lead.companyId, actorUserId, action: 'enquiry.job_accepted', entityType: 'Enquiry', entityId: enquiryId, afterData: { projectId } },
+    })
+    return { projectId }
+  })
 }
 
 /** Confirm a booking file into a Job without a payment (tests and back-office fixes). Add job uses

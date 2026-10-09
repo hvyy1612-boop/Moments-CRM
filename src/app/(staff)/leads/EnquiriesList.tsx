@@ -21,8 +21,8 @@ import type { EnquiryRowData } from './EnquiryRow'
 const DATE_FMT = new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
 const createdLabel = (ms: number) => DATE_FMT.format(new Date(ms))
 
-// Active = leads still being worked on. A booked lead (now a Job) and a declined one keep their own tabs.
-const inProgress = (r: { status: string }) => r.status !== 'DECLINED' && r.status !== 'BOOKING_CONFIRMED'
+// Active = leads still being worked on; archived ones have their own tab (booked leads are not listed).
+const inProgress = (r: { status: string }) => r.status !== 'DECLINED'
 
 /**
  * Broad service category (Type column) derived from the enquiry's Event. The schema has one event field,
@@ -37,7 +37,7 @@ function broadType(event: string): string {
   return titleCase(event)
 }
 
-// Tabs: All (the working pipeline, excludes Declined) + one per stage. Counts come from real data.
+// Tabs: Active (the working pipeline, excludes Archived) + one per stage. Counts come from real data.
 type TabKey = 'all' | string
 type SortKey = 'newest' | 'oldest' | 'name'
 const SORTS: { key: SortKey; label: string }[] = [

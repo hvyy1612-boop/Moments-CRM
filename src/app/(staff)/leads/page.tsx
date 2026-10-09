@@ -21,6 +21,9 @@ export default async function EnquiriesPage() {
   // can be corrected by hand - both persist through the enquiry backend commands (docs/24). The detailed
   // per-case checklist lives on the enquiry page, not here.
   const enquiries = await prisma.enquiry.findMany({
+    // A booked lead is a Job now (Studio Ninja): it leaves Leads. The row stays in the database as the job's
+    // history, opened from the job's "From lead" link.
+    where: { status: { not: 'BOOKING_CONFIRMED' } },
     orderBy: { updatedAt: 'asc' }, // oldest-waiting first (the default sort)
     select: {
       id: true,
