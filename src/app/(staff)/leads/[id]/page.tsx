@@ -174,6 +174,25 @@ export default async function EnquiryDetailPage({
     taskDue[w.id] = dueSpecOf(w)
   }
 
+  // Enquiry details (the Add lead form, or the wedding-enquiry fields from the website form), shown in the
+  // rail right under the client.
+  const enquiryDetails: { label: string; value: string }[] = []
+  const addDetail = (label: string, v: string | null | undefined) => {
+    if (v && v.trim()) enquiryDetails.push({ label, value: v })
+  }
+  addDetail("Partner's name", enquiry.partnerName)
+  addDetail('Job type', jobTypeLabel(enquiry.coverage, enquiry.coverageNote))
+  addDetail('Workflow', enquiry.eventType ? titleCase(enquiry.eventType) : null)
+  addDetail('Main shoot', formatShootWindow(enquiry) ?? 'Date not confirmed yet')
+  addDetail('Location', enquiry.eventLocation)
+  addDetail('Getting-ready location/s', enquiry.gettingReadyLocation)
+  addDetail('Ceremony and reception location', enquiry.ceremonyLocation)
+  addDetail('About the wedding day (incl. guest numbers)', enquiry.weddingDetails)
+  addDetail('How they heard about us', enquiry.heardAbout)
+  addDetail('What draws them to our style', enquiry.styleReason)
+  // The client's own words from the enquiry form (or what staff noted when adding the lead).
+  addDetail('Message', enquiry.message)
+
   return (
     <AppShell user={user} csrf={csrf} active="enquiries" bareHeader>
       <MarkEnquiryViewed id={enquiry.id} />
@@ -197,10 +216,9 @@ export default async function EnquiryDetailPage({
           ) : null}
         </p>
 
-        {/* Workflow (left, flexible) + a fixed-width rail of Client / Quotes / Invoices / Notes (right). */}
-        <div className="mt-6 grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20em]">
-          {/* MAIN: workflow + the lead outcome actions - the flexible column */}
-          <div className="flex min-w-0 flex-col gap-4">
+        {/* Booking state, above the workflow and its rail */}
+        {awaiting || confirmed ? (
+          <div className="mt-6">
             {awaiting ? (
               <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">
                 Quote accepted. The date is not held yet: this lead becomes a job once the deposit is paid. Raise
@@ -211,222 +229,211 @@ export default async function EnquiryDetailPage({
                 Booking confirmed - the deposit is paid and the job is active. Open the job to continue the work.
               </div>
             ) : null}
-
-            <EnquiryWorkflow
-              stages={board.stages}
-              allDone={board.allDone}
-              enquiryId={enquiry.id}
-              csrf={csrf}
-              taskTimes={taskTimes}
-              taskDue={taskDue}
-              // Booked (it is a job now) or declined (closed until Reopen): nothing to work here.
-              readOnly={confirmed || declined}
-            />
-
-            {/* Outcome actions */}
-            <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
-              {open ? (
-                <>
-                  <p className="mr-auto text-sm text-ink-muted">
-                    {awaiting
-                      ? 'It becomes a job when the deposit is paid. Decline if the client does not go ahead.'
-                      : 'To book this lead, create a quote and mark it accepted when the client agrees, then take the deposit.'}
-                  </p>
-                  <form action={updateEnquiryAction}>
-                    <input type="hidden" name="csrf" value={csrf} />
-                    <input type="hidden" name="enquiryId" value={enquiry.id} />
-                    <input type="hidden" name="op" value="lost" />
-                    <button type="submit" className="rounded-md border border-line-strong px-3 py-1.5 text-sm font-bold text-lost-ink transition-colors hover:bg-sunk">
-                      Decline
-                    </button>
-                  </form>
-                </>
-              ) : confirmed ? (
-                <>
-                  {enquiry.convertedProjectId ? (
-                    <Link href={`/jobs/${enquiry.convertedProjectId}`} className="font-bold text-accent-ink hover:underline">
-                      Open the job
-                    </Link>
-                  ) : null}
-                  {/* A confirmed booking that falls through is a JOB cancellation (enquiry keeps its history). */}
-                  <form action={updateEnquiryAction}>
-                    <input type="hidden" name="csrf" value={csrf} />
-                    <input type="hidden" name="enquiryId" value={enquiry.id} />
-                    <input type="hidden" name="op" value="cancel_job" />
-                    <button type="submit" className="rounded px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline">
-                      Cancel job
-                    </button>
-                  </form>
-                </>
-              ) : (
-                <form action={updateEnquiryAction}>
-                  <input type="hidden" name="csrf" value={csrf} />
-                  <input type="hidden" name="enquiryId" value={enquiry.id} />
-                  <input type="hidden" name="op" value="reopen" />
-                  <button type="submit" className="rounded border border-line-strong px-3 py-1.5 text-sm font-bold text-ink-muted hover:text-ink">
-                    Reopen lead
-                  </button>
-                </form>
-              )}
-            </div>
           </div>
+        ) : null}
 
-          {/* RAIL: Client / Quotes / Invoices / Notes - one shared card shell, fixed-width column */}
-          <aside className="flex flex-col gap-4">
-            {/* Client - basic contact, first; a clean 2-column key/value list (labels align, values flow) */}
-            <SidebarCard title="Client">
-              <dl className="grid grid-cols-[5.5em_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2 text-sm">
-                <dt className="text-muted">Name</dt>
-                <dd className="min-w-0 break-words text-ink">{enquiry.client?.displayName ?? enquiry.name}</dd>
-                <dt className="text-muted">Email</dt>
-                <dd className="min-w-0 break-all text-ink">{enquiry.email}</dd>
-                <dt className="text-muted">Phone</dt>
-                <dd className="min-w-0 text-ink">{enquiry.phone ?? '-'}</dd>
-              </dl>
-            </SidebarCard>
-
-            {/* Quotes */}
-            <SidebarCard
-              title="Quotes"
-              // One accepted quote per lead: once it is accepted, scope changes go through the job's change requests.
-              action={open && !awaiting ? (
-                <form action={createQuoteForEnquiryAction}>
-                  <input type="hidden" name="csrf" value={csrf} />
-                  <input type="hidden" name="enquiryId" value={enquiry.id} />
-                  <IconButton type="submit" label="Create quote" tone="accent" icon={PLUS} />
-                </form>
-              ) : undefined}
-            >
-              {quotes.length === 0 ? (
-                <p className="text-sm text-ink-muted">No quotes yet.</p>
-              ) : (
-                <ul>
-                  {quotes.map((q) => {
-                    const view = quoteView(q.status)
-                    const sent = q.currentVersion?.sentToClientAt
-                    return (
-                      <li key={q.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line py-2.5 first:border-t-0">
-                        <Link href={`/quotes/${q.id}`} className="tabular font-semibold text-ink hover:text-accent-ink hover:underline">
-                          {q.reference ?? 'Quote'}
+        {/* Workflow (left, flexible) + a fixed-width rail of Client / Enquiry details / Quotes / Invoices /
+            Contract / Notes (right). The rail starts level with the first box on the left, not the title. */}
+        <div className="mt-6">
+          <EnquiryWorkflow
+            stages={board.stages}
+            allDone={board.allDone}
+            enquiryId={enquiry.id}
+            csrf={csrf}
+            taskTimes={taskTimes}
+            taskDue={taskDue}
+            // Booked (it is a job now) or declined (closed until Reopen): nothing to work here.
+            readOnly={confirmed || declined}
+            footer={
+              <>
+                {/* Outcome actions */}
+                <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
+                  {open ? (
+                    <>
+                      <p className="mr-auto text-sm text-ink-muted">
+                        {awaiting
+                          ? 'It becomes a job when the deposit is paid. Decline if the client does not go ahead.'
+                          : 'To book this lead, create a quote and mark it accepted when the client agrees, then take the deposit.'}
+                      </p>
+                      <form action={updateEnquiryAction}>
+                        <input type="hidden" name="csrf" value={csrf} />
+                        <input type="hidden" name="enquiryId" value={enquiry.id} />
+                        <input type="hidden" name="op" value="lost" />
+                        <button type="submit" className="rounded-md border border-line-strong px-3 py-1.5 text-sm font-bold text-lost-ink transition-colors hover:bg-sunk">
+                          Decline
+                        </button>
+                      </form>
+                    </>
+                  ) : confirmed ? (
+                    <>
+                      {enquiry.convertedProjectId ? (
+                        <Link href={`/jobs/${enquiry.convertedProjectId}`} className="font-bold text-accent-ink hover:underline">
+                          Open the job
                         </Link>
-                        <StatusPill tone={view.tone}>{view.label}</StatusPill>
-                        <span className="tabular ml-auto text-sm font-medium text-ink">{q.currentVersion ? formatAud(q.currentVersion.total) : '-'}</span>
-                        <span className="w-full text-xs text-ink-muted">{sent ? `Sent ${formatSydneyDate(sent)}` : `Created ${formatSydneyDate(q.createdAt)}`}</span>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </SidebarCard>
-
-            {/* Invoices live on the booking file, so the + appears once the quote is accepted (the deposit
-                invoice is the first one); paying the deposit is what turns the lead into a job. */}
-            <SidebarCard
-              title="Invoices"
-              action={
-                fileEditable ? (
-                  <IconLink label="Create invoice" tone="accent" href={`/finance/new?job=${bookingFileId}`} icon={PLUS} />
-                ) : undefined
-              }
-            >
-              {invoices.length === 0 ? (
-                <p className="text-sm text-ink-muted">
-                  {fileEditable
-                    ? 'No invoices yet. Raise the deposit invoice here.'
-                    : open
-                      ? 'The deposit invoice can be raised once the quote is accepted.'
-                      : 'No invoices.'}
-                </p>
-              ) : (
-                <ul>
-                  {invoices.map((inv) => (
-                    <li key={inv.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line py-2.5 first:border-t-0">
-                      <Link href={`/finance/${inv.id}`} className="tabular font-semibold text-ink hover:text-accent-ink hover:underline">
-                        {inv.invoiceNumber}
-                      </Link>
-                      <StatusPill tone={invoiceStatusView(inv.status).tone}>{invoiceStatusView(inv.status).label}</StatusPill>
-                      <span className="tabular ml-auto text-sm font-medium text-ink">{formatAud(inv.total)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </SidebarCard>
-
-            {/* Contract: made from the accepted quote, sent for the client to sign. Signing records the
-                agreement only - the booking is confirmed by the deposit. */}
-            {bookingFileId && quoteAccepted ? (
-              <SidebarCard
-                title="Contract"
-                action={contractVersion ? <StatusPill tone={CONTRACT_TONE[contractVersion.status] ?? 'neutral'}>{titleCase(contractVersion.status)}</StatusPill> : undefined}
-              >
-                {!contract || !contractVersion ? (
-                  !fileEditable ? (
-                    <p className="text-sm text-ink-muted">No contract was sent for this booking.</p>
+                      ) : null}
+                      {/* A confirmed booking that falls through is a JOB cancellation (enquiry keeps its history). */}
+                      <form action={updateEnquiryAction}>
+                        <input type="hidden" name="csrf" value={csrf} />
+                        <input type="hidden" name="enquiryId" value={enquiry.id} />
+                        <input type="hidden" name="op" value="cancel_job" />
+                        <button type="submit" className="rounded px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline">
+                          Cancel job
+                        </button>
+                      </form>
+                    </>
                   ) : (
-                    <form action={createContractAction}>
+                    <form action={updateEnquiryAction}>
                       <input type="hidden" name="csrf" value={csrf} />
-                      <input type="hidden" name="projectId" value={bookingFileId} />
                       <input type="hidden" name="enquiryId" value={enquiry.id} />
-                      <p className="text-sm text-ink-muted">Generate the booking contract from the accepted quote.</p>
-                      <Button type="submit" size="sm" className="mt-3">Create contract</Button>
+                      <input type="hidden" name="op" value="reopen" />
+                      <button type="submit" className="rounded border border-line-strong px-3 py-1.5 text-sm font-bold text-ink-muted hover:text-ink">
+                        Reopen lead
+                      </button>
                     </form>
-                  )
-                ) : contractVersion.status === 'DRAFT' ? (
-                  fileEditable ? (
-                    <ContractSend csrf={csrf} contractId={contract.id} projectId={bookingFileId} enquiryId={enquiry.id} />
-                  ) : (
-                    <p className="text-sm text-ink-muted">Not sent yet. Send it from the job.</p>
-                  )
-                ) : contractVersion.status === 'SIGNED' ? (
-                  <p className="text-sm text-ink">
-                    Signed by {contractVersion.signedByClientName}
-                    {contractVersion.signedByClientAt ? ` on ${formatSydneyDate(contractVersion.signedByClientAt)}` : ''}.
-                    {awaiting ? ' The date is held once the deposit is paid.' : ''}
-                  </p>
-                ) : (
-                  <p className="text-sm text-ink-muted">Sent. Waiting for the client to sign.</p>
-                )}
-              </SidebarCard>
-            ) : null}
+                  )}
+                </div>
+              </>
+            }
+            rail={
+              <>
+                {/* Client - basic contact, first; a clean 2-column key/value list (labels align, values flow) */}
+                <SidebarCard title="Client">
+                  <dl className="grid grid-cols-[5.5em_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2 text-sm">
+                    <dt className="text-muted">Name</dt>
+                    <dd className="min-w-0 break-words text-ink">{enquiry.client?.displayName ?? enquiry.name}</dd>
+                    <dt className="text-muted">Email</dt>
+                    <dd className="min-w-0 break-all text-ink">{enquiry.email}</dd>
+                    <dt className="text-muted">Phone</dt>
+                    <dd className="min-w-0 text-ink">{enquiry.phone ?? '-'}</dd>
+                  </dl>
+                </SidebarCard>
 
-            {/* Notes (replaces the old Conversation panel) */}
-            <LeadNotes enquiryId={enquiry.id} csrf={csrf} notes={leadNotes} />
-          </aside>
+                {/* Enquiry details (the Add lead form, or the website enquiry form) - right under the client */}
+                {enquiryDetails.length > 0 ? (
+                  <SidebarCard title="Enquiry details">
+                    <dl className="flex flex-col gap-3 text-sm">
+                      {enquiryDetails.map((d) => (
+                        <div key={d.label}>
+                          <dt className="text-muted">{d.label}</dt>
+                          <dd className="mt-0.5 whitespace-pre-line break-words text-ink">{d.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </SidebarCard>
+                ) : null}
+
+                {/* Quotes */}
+                <SidebarCard
+                  title="Quotes"
+                  // One accepted quote per lead: once it is accepted, scope changes go through the job's change requests.
+                  action={open && !awaiting ? (
+                    <form action={createQuoteForEnquiryAction}>
+                      <input type="hidden" name="csrf" value={csrf} />
+                      <input type="hidden" name="enquiryId" value={enquiry.id} />
+                      <IconButton type="submit" label="Create quote" tone="accent" icon={PLUS} />
+                    </form>
+                  ) : undefined}
+                >
+                  {quotes.length === 0 ? (
+                    <p className="text-sm text-ink-muted">No quotes yet.</p>
+                  ) : (
+                    <ul>
+                      {quotes.map((q) => {
+                        const view = quoteView(q.status)
+                        const sent = q.currentVersion?.sentToClientAt
+                        return (
+                          <li key={q.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line py-2.5 first:border-t-0">
+                            <Link href={`/quotes/${q.id}`} className="tabular font-semibold text-ink hover:text-accent-ink hover:underline">
+                              {q.reference ?? 'Quote'}
+                            </Link>
+                            <StatusPill tone={view.tone}>{view.label}</StatusPill>
+                            <span className="tabular ml-auto text-sm font-medium text-ink">{q.currentVersion ? formatAud(q.currentVersion.total) : '-'}</span>
+                            <span className="w-full text-xs text-ink-muted">{sent ? `Sent ${formatSydneyDate(sent)}` : `Created ${formatSydneyDate(q.createdAt)}`}</span>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                </SidebarCard>
+
+                {/* Invoices live on the booking file, so the + appears once the quote is accepted (the deposit
+                    invoice is the first one); paying the deposit is what turns the lead into a job. */}
+                <SidebarCard
+                  title="Invoices"
+                  action={
+                    fileEditable ? (
+                      <IconLink label="Create invoice" tone="accent" href={`/finance/new?job=${bookingFileId}`} icon={PLUS} />
+                    ) : undefined
+                  }
+                >
+                  {invoices.length === 0 ? (
+                    <p className="text-sm text-ink-muted">
+                      {fileEditable
+                        ? 'No invoices yet. Raise the deposit invoice here.'
+                        : open
+                          ? 'The deposit invoice can be raised once the quote is accepted.'
+                          : 'No invoices.'}
+                    </p>
+                  ) : (
+                    <ul>
+                      {invoices.map((inv) => (
+                        <li key={inv.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line py-2.5 first:border-t-0">
+                          <Link href={`/finance/${inv.id}`} className="tabular font-semibold text-ink hover:text-accent-ink hover:underline">
+                            {inv.invoiceNumber}
+                          </Link>
+                          <StatusPill tone={invoiceStatusView(inv.status).tone}>{invoiceStatusView(inv.status).label}</StatusPill>
+                          <span className="tabular ml-auto text-sm font-medium text-ink">{formatAud(inv.total)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </SidebarCard>
+
+                {/* Contract: made from the accepted quote, sent for the client to sign. Signing records the
+                    agreement only - the booking is confirmed by the deposit. */}
+                {bookingFileId && quoteAccepted ? (
+                  <SidebarCard
+                    title="Contract"
+                    action={contractVersion ? <StatusPill tone={CONTRACT_TONE[contractVersion.status] ?? 'neutral'}>{titleCase(contractVersion.status)}</StatusPill> : undefined}
+                  >
+                    {!contract || !contractVersion ? (
+                      !fileEditable ? (
+                        <p className="text-sm text-ink-muted">No contract was sent for this booking.</p>
+                      ) : (
+                        <form action={createContractAction}>
+                          <input type="hidden" name="csrf" value={csrf} />
+                          <input type="hidden" name="projectId" value={bookingFileId} />
+                          <input type="hidden" name="enquiryId" value={enquiry.id} />
+                          <p className="text-sm text-ink-muted">Generate the booking contract from the accepted quote.</p>
+                          <Button type="submit" size="sm" className="mt-3">Create contract</Button>
+                        </form>
+                      )
+                    ) : contractVersion.status === 'DRAFT' ? (
+                      fileEditable ? (
+                        <ContractSend csrf={csrf} contractId={contract.id} projectId={bookingFileId} enquiryId={enquiry.id} />
+                      ) : (
+                        <p className="text-sm text-ink-muted">Not sent yet. Send it from the job.</p>
+                      )
+                    ) : contractVersion.status === 'SIGNED' ? (
+                      <p className="text-sm text-ink">
+                        Signed by {contractVersion.signedByClientName}
+                        {contractVersion.signedByClientAt ? ` on ${formatSydneyDate(contractVersion.signedByClientAt)}` : ''}.
+                        {awaiting ? ' The date is held once the deposit is paid.' : ''}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-ink-muted">Sent. Waiting for the client to sign.</p>
+                    )}
+                  </SidebarCard>
+                ) : null}
+
+                {/* Notes (replaces the old Conversation panel) */}
+                <LeadNotes enquiryId={enquiry.id} csrf={csrf} notes={leadNotes} />
+              </>
+            }
+          />
         </div>
 
-        {/* Enquiry details (the Add lead form, or the wedding-enquiry fields from the website form) */}
-        {(() => {
-          const details: { label: string; value: string; wide?: boolean }[] = []
-          const add = (label: string, v: string | null | undefined, wide = false) => {
-            if (v && v.trim()) details.push({ label, value: v, wide })
-          }
-          add("Partner's name", enquiry.partnerName)
-          add('Job type', jobTypeLabel(enquiry.coverage, enquiry.coverageNote))
-          add('Workflow', enquiry.eventType ? titleCase(enquiry.eventType) : null)
-          add('Main shoot', formatShootWindow(enquiry) ?? 'Date not confirmed yet')
-          add('Location', enquiry.eventLocation)
-          add('Getting-ready location/s', enquiry.gettingReadyLocation)
-          add('Ceremony and reception location', enquiry.ceremonyLocation)
-          add('About the wedding day (incl. guest numbers)', enquiry.weddingDetails)
-          add('How they heard about us', enquiry.heardAbout)
-          add('What draws them to our style', enquiry.styleReason)
-          // The client's own words from the enquiry form (or what staff noted when adding the lead).
-          add('Message', enquiry.message, true)
-          if (details.length === 0) return null
-          return (
-            <div className="mt-4 rounded-md border border-line bg-surface p-5">
-              <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Enquiry details</h2>
-              <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {details.map((d) => (
-                  <div key={d.label} className={d.wide ? 'sm:col-span-2' : undefined}>
-                    <dt className="text-xs font-medium uppercase tracking-wide text-muted">{d.label}</dt>
-                    <dd className="mt-0.5 whitespace-pre-line break-words text-sm text-ink">{d.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          )
-        })()}
+
 
         {/* History log (the lead's real audit trail, same component as the invoice/quote pages) */}
         <div className="mt-4">
