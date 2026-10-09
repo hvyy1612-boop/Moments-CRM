@@ -52,7 +52,8 @@ export type DashboardData = {
 
 const INVOICE_COUNTED = ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'PAID', 'OVERDUE'] as const
 const INVOICE_UNPAID = ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'OVERDUE'] as const
-const ACTIVE_STAGES_EXCLUDE = ['CANCELLED', 'COMPLETED', 'CLOSED']
+// BOOKING_REQUESTED = a lead's booking file (deposit not paid): not a Job yet, so not an active job.
+const ACTIVE_STAGES_EXCLUDE = ['BOOKING_REQUESTED', 'CANCELLED', 'COMPLETED', 'CLOSED']
 const STAGE_ORDER = new Map(PROJECT_STAGES.map((s, i) => [s.key, i]))
 
 const DAY_MS = 86_400_000

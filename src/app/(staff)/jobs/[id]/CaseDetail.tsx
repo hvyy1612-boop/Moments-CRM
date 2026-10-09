@@ -194,7 +194,8 @@ export async function CaseDetail({
   // the lead gave.
   const shootAt = shootDateOfJob(project)
   const shootDateLabel = shootAt ? (shootHasTime(project) ? formatSydneyDateTime(shootAt) : formatSydneyDate(shootAt)) : null
-  const shootLocation = project.convertedFromEnquiries[0]?.ceremonyLocation?.split('\n')[0]?.trim() || null
+  const lead = project.convertedFromEnquiries[0]
+  const shootLocation = lead?.eventLocation?.trim() || lead?.ceremonyLocation?.split('\n')[0]?.trim() || null
 
   // "Phase N of M": position of the active core stage in the production sequence, +1 for Complete.
   const hasBoard = Boolean(board && board.stages.length > 0)

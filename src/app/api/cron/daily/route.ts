@@ -61,8 +61,9 @@ export async function GET(req: Request): Promise<Response> {
     }
   }
 
+  // Jobs only: a lead's booking file (deposit not paid) has no production checklist yet.
   const projects = await prisma.project.findMany({
-    where: { lifecycleStatus: { notIn: Array.from(CLOSED_STATUSES) } },
+    where: { lifecycleStatus: { notIn: [...Array.from(CLOSED_STATUSES), 'BOOKING_REQUESTED'] } },
     select: { id: true, client: { select: { displayName: true } } },
   })
   for (const p of projects) {

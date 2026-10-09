@@ -15,8 +15,9 @@ import { cancelProjectTx } from './refund'
 /**
  * Leads (the `Enquiry` model; staff-facing name "Lead", like Job = `Project`). A website enquiry or a
  * staff-added lead lives here until it is booked. Converting (quote accepted, or Add job) upserts the
- * Client by email and creates a provisional BOOKING_REQUESTED Job; the lead moves to
- * AWAITING_BOOKING_CONFIRMATION, then BOOKING_CONFIRMED when the deposit is paid. A lead is never
+ * Client by email and opens the lead's BOOKING FILE (a BOOKING_REQUESTED Project that holds the deposit
+ * invoice and the contract - not a Job yet); the lead moves to AWAITING_BOOKING_CONFIRMATION and stays a
+ * workable lead. Paying the deposit confirms it: the file becomes a Job and the lead BOOKING_CONFIRMED. A lead is never
  * deleted: DECLINED leads are kept and can be reopened. Stage rules: docs/23 §4, docs/33.
  */
 
@@ -290,8 +291,8 @@ export async function convertEnquiryCore(
         clientId: client.id,
         code: await nextProjectCode(tx, company.id, now),
         name: enquiry.eventType ?? 'Project',
-        // A WON enquiry converts to a Job. The Project starts at BOOKING_REQUESTED (a booked job pending
-        // final confirmation); production commands advance it from there (docs/24 FIX 5).
+        // The booking file starts at BOOKING_REQUESTED (not a Job yet - see isBookingFile); the deposit
+        // payment (or Add job) confirms it into a Job.
         lifecycleStatus: 'BOOKING_REQUESTED',
         commercialStatus: 'UNQUOTED',
         source: enquiry.source,
@@ -300,9 +301,10 @@ export async function convertEnquiryCore(
       },
     })
 
-    // Neutral model: accepting/converting moves the lead to AWAITING booking confirmation, NOT booked.
-    // The Job exists (so a deposit invoice has a home) but stays provisional - production is not started
-    // and the enquiry only becomes BOOKING_CONFIRMED when the booking deposit is paid (see finance).
+    // Accepting the quote is NOT booking: the lead moves to AWAITING booking confirmation and stays a lead
+    // (its checklist stays open, it is still in Leads). The Project created here is only its booking file,
+    // the home for the deposit invoice and the contract; it becomes a Job when the deposit is paid
+    // (confirmBookingByDepositTx), which is also when the lead's checklist is closed out.
     await tx.enquiry.update({
       where: { id: enquiry.id },
       data: {
@@ -312,7 +314,6 @@ export async function convertEnquiryCore(
         convertedProjectId: project.id,
       },
     })
-    await cancelOpenWorkItems(tx, enquiry.id)
 
     await tx.auditLog.create({
       data: {

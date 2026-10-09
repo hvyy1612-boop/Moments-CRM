@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db'
+import { cancelOpenWorkItems } from './enquiry-workflow'
 import { formatSydneyDate, daysUntilSydney } from '@/lib/time'
 import { getJobBalance } from './money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
@@ -55,12 +56,21 @@ export async function seedProjectWorkflow(projectId: string) {
   await prisma.$transaction((tx) => seedIfNeeded(tx, projectId, project.companyId))
 }
 
+/** Add job: a booking the client already confirmed outside the app (Studio Ninja "create a job directly").
+ *  Confirms the new job at once; no payment or contract is recorded for it. */
+export async function confirmDirectBooking(projectId: string, actorUserId: string | null) {
+  await prisma.$transaction((tx) => confirmBookingByDepositTx(tx, projectId, actorUserId))
+}
+
 /**
- * Confirm a booking once its deposit is paid (neutral Enquiry model). Called from the finance deposit
- * handler inside the SAME transaction. Activates the provisional Job (BOOKING_REQUESTED -> CONFIRMED +
- * seeds the production workflow) and flips the linked enquiry AWAITING_BOOKING_CONFIRMATION ->
- * BOOKING_CONFIRMED. Fully idempotent: the lifecycle only advances from BOOKING_REQUESTED, the seed is
- * guarded, and the enquiry only flips from AWAITING - so replaying the payment event is a no-op.
+ * Confirm a booking: the moment a lead becomes a JOB. Called when the deposit is paid (from the finance
+ * payment handler, inside the SAME transaction) and by Add job for a booking the client already confirmed
+ * outside the app. A signed contract alone never calls this - the studio's policy is that the deposit holds
+ * the date. Turns the booking file into a Job (BOOKING_REQUESTED -> CONFIRMED + seeds the production
+ * workflow) and flips the linked lead AWAITING_BOOKING_CONFIRMATION -> BOOKING_CONFIRMED, closing out its
+ * unticked lead tasks (the lead section is then read-only, Studio-Ninja style). Fully idempotent: the
+ * lifecycle only advances from BOOKING_REQUESTED, the seed is guarded, and the lead only flips from
+ * AWAITING - so replaying the payment event is a no-op.
  */
 export async function confirmBookingByDepositTx(tx: Tx, projectId: string, actorUserId: string | null) {
   const project = await tx.project.findUnique({ where: { id: projectId }, select: { companyId: true, lifecycleStatus: true } })
@@ -76,6 +86,7 @@ export async function confirmBookingByDepositTx(tx: Tx, projectId: string, actor
   })
   if (enquiry && enquiry.status === 'AWAITING_BOOKING_CONFIRMATION') {
     await tx.enquiry.update({ where: { id: enquiry.id }, data: { status: 'BOOKING_CONFIRMED' } })
+    await cancelOpenWorkItems(tx, enquiry.id)
     await tx.auditLog.create({
       data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.booking_confirmed', entityType: 'Enquiry', entityId: enquiry.id, afterData: { projectId } },
     })
@@ -88,6 +99,7 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     where: { id: projectId },
     select: {
       companyId: true,
+      lifecycleStatus: true,
       confirmedByClientAt: true,
       owner: { select: { name: true } },
       invoices: { select: INVOICE_MONEY_SELECT },
@@ -95,7 +107,10 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     },
   })
 
-  await prisma.$transaction((tx) => seedIfNeeded(tx, projectId, project.companyId))
+  // A booking file (deposit not paid yet) has no production checklist: it is seeded when it is confirmed.
+  if (project.lifecycleStatus !== 'BOOKING_REQUESTED') {
+    await prisma.$transaction((tx) => seedIfNeeded(tx, projectId, project.companyId))
+  }
 
   const items = await prisma.workItem.findMany({
     // A CANCELLED row (e.g. an overdue-payment follow-up the cron resolved once the invoice was paid) is
@@ -439,7 +454,8 @@ export async function toggleProjectTask(taskId: string, actorUserId: string) {
   })
 }
 
-const AUTO_COMPLETE_FROM = new Set(['BOOKING_REQUESTED', 'CONFIRMED'])
+// Only a confirmed Job can finish; a booking file (deposit not paid) never auto-completes.
+const AUTO_COMPLETE_FROM = new Set(['CONFIRMED'])
 
 /**
  * Auto-complete a job when it is truly finished: EVERY staff task done AND the balance fully settled.

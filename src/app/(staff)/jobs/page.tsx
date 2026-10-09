@@ -8,6 +8,7 @@ import { prisma } from '@/lib/db'
 import { CLOSED_STATUSES } from '@/features/projects/lifecycle'
 import { buildProjectBoard, PROJECT_STAGES, type ProjectFacts, type TaskInput } from '@/features/projects/workflow'
 import { jobShootDate, resolveTaskDueDate } from '@/lib/domain/deadline'
+import { JOB_WHERE } from '@/lib/domain/project'
 import { formatSydneyDate, sydneyYmd } from '@/lib/time'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
@@ -52,8 +53,9 @@ export default async function JobsPage({
   const tab: 'active' | 'completed' = sp.tab === 'completed' ? 'completed' : 'active'
 
   const projects = await prisma.project.findMany({
-      // Jobs = Projects. A case becomes a Project only on conversion / direct booking, so membership is
-      // by ENTITY - never by commercial status (docs/24). The active/closed split is applied below.
+      // Jobs = CONFIRMED bookings (deposit paid, or Add job). A lead's booking file (quote accepted, deposit
+      // not paid) is still a lead and is not listed here (JOB_WHERE). The active/closed split is below.
+      where: JOB_WHERE,
       orderBy: { enquiryReceivedAt: 'desc' },
       include: {
         client: { select: { id: true, displayName: true } },

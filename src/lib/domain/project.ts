@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
 import { nextRecordNumber } from './numbering'
@@ -6,6 +7,18 @@ import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
 
 /** The interactive-transaction client type, carrying the db.ts extensions. */
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+
+/**
+ * Projects that are JOBS (confirmed bookings), for every list, count, calendar and search that shows jobs.
+ * Leaves out lead booking files: BOOKING_REQUESTED (quote accepted, deposit not paid yet) and a booking
+ * file cancelled before it was ever confirmed. See isBookingFile in features/projects/lifecycle.
+ */
+export const JOB_WHERE: Prisma.ProjectWhereInput = {
+  OR: [
+    { lifecycleStatus: { in: ['CONFIRMED', 'COMPLETED', 'CLOSED'] } },
+    { lifecycleStatus: 'CANCELLED', confirmedByClientAt: { not: null } },
+  ],
+}
 
 export async function requireCompany(tx: Tx) {
   const company = await tx.company.findFirst()

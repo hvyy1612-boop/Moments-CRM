@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { getCalendarView } from '@/lib/domain/calendar'
 import { convertEnquiry, createEnquiry } from '@/lib/domain/enquiry'
 import { createInvoiceWithLines, markOverdueInvoices, recordPayment } from '@/lib/domain/finance'
-import { getProjectBoard, seedProjectWorkflow } from '@/lib/domain/project-workflow'
+import { confirmDirectBooking, getProjectBoard } from '@/lib/domain/project-workflow'
 import { sydneyLocalToUtc } from '@/lib/time'
 
 /** Bug-scan 2026-10-05 (C): dates and figures that read wrong on screen, against the (test) database. */
@@ -15,10 +15,11 @@ beforeAll(async () => {
   companyId = (await prisma.company.findFirstOrThrow({ select: { id: true } })).id
 })
 
+/** A real (confirmed) job: a lead whose deposit is unpaid is still a lead and shows nowhere as a job. */
 async function newJob() {
   const e = await createEnquiry({ name: 'Display Client', email: email() })
   const projectId = (await convertEnquiry(e.id)).projectId as string
-  await seedProjectWorkflow(projectId)
+  await confirmDirectBooking(projectId, null)
   return projectId
 }
 

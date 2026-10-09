@@ -10,7 +10,8 @@ import { CLOSED_PROJECT, OPEN_ENQUIRY } from './today'
 // finished (same rule as the Today view), so a stopped job's leftover to-dos never sit there red forever.
 const LIVE_WORK: Prisma.WorkItemWhereInput[] = [
   { enquiry: { status: { in: [...OPEN_ENQUIRY] } } },
-  { project: { lifecycleStatus: { notIn: [...CLOSED_PROJECT] } } },
+  // Jobs only: a lead's booking file (deposit not paid) is not a job, so none of its tasks show.
+  { project: { lifecycleStatus: { notIn: [...CLOSED_PROJECT, 'BOOKING_REQUESTED'] } } },
 ]
 
 /**
@@ -160,10 +161,11 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
   const want = (c: CalCategory) => filter === 'all' || filter === c
   const items: CalItem[] = []
 
-  // Shoots - category job: each live job's shoot date (set on its Shoot task, else the lead's date).
+  // Shoots - category job: each live job's shoot date (set on its Shoot task, else the lead's date). A
+  // lead's booking file is left out: its date is not held until the deposit is paid.
   if (want('job')) {
     const jobs = await prisma.project.findMany({
-      where: { lifecycleStatus: { notIn: ['CANCELLED', 'CLOSED'] } },
+      where: { lifecycleStatus: { notIn: ['BOOKING_REQUESTED', 'CANCELLED', 'CLOSED'] } },
       select: { id: true, client: { select: { displayName: true } }, ...JOB_SHOOT_SELECT },
     })
     for (const j of jobs) {
@@ -472,7 +474,7 @@ export async function getIcsForToken(token: string): Promise<string | null> {
 
   const [jobs, events, appts] = await Promise.all([
     prisma.project.findMany({
-      where: { companyId: company.id, lifecycleStatus: { notIn: ['CANCELLED', 'CLOSED'] } },
+      where: { companyId: company.id, lifecycleStatus: { notIn: ['BOOKING_REQUESTED', 'CANCELLED', 'CLOSED'] } },
       select: { id: true, client: { select: { displayName: true } }, ...JOB_SHOOT_SELECT },
     }),
     prisma.calendarEvent.findMany({

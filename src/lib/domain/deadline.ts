@@ -49,7 +49,7 @@ export function jobShootDate(
 /** What a project query selects to know its shoot date (pass the row to {@link shootDateOfJob}). */
 export const JOB_SHOOT_SELECT = {
   workItems: { where: { type: SHOOT_TASK_TYPE }, select: { type: true, status: true, dueOverrideAt: true } },
-  convertedFromEnquiries: { select: { eventDate: true, ceremonyLocation: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+  convertedFromEnquiries: { select: { eventDate: true, eventLocation: true, ceremonyLocation: true }, orderBy: { createdAt: 'desc' }, take: 1 },
 } as const
 
 /** The shoot date of a project row fetched with {@link JOB_SHOOT_SELECT}. */

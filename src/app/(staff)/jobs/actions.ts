@@ -16,11 +16,11 @@ import {
   addProjectStage,
   addProjectStageBlock,
   addProjectTask,
+  confirmDirectBooking,
   deleteProjectStage,
   deleteProjectTask,
   moveProjectTask,
   renameProjectStage,
-  seedProjectWorkflow,
   toggleProjectTask,
   updateProjectTask,
 } from '@/lib/domain/project-workflow'
@@ -181,6 +181,9 @@ export async function createContractAction(formData: FormData): Promise<void> {
     // The button only shows in a valid state; a double submit ("already exists") is a no-op here.
   }
   revalidatePath(`/jobs/${projectId}`)
+  // Also offered on the lead page while the lead waits for its deposit.
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  if (enquiryId) revalidatePath(`/leads/${enquiryId}`)
 }
 
 /** Send the draft contract to the client and record the email. */
@@ -216,6 +219,8 @@ export async function sendContractAction(
     })
   }
   revalidatePath(`/jobs/${projectId}`)
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  if (enquiryId) revalidatePath(`/leads/${enquiryId}`)
   return { status: 'success' }
 }
 
@@ -597,9 +602,10 @@ export type StaffEnquiryState =
     }
 
 /**
- * "Add job" (Studio Ninja style, docs/33 decision 3): every job starts from a lead. The client is found or
- * created, a lead is logged for them, and that lead is converted straight into its job (provisional until
- * the deposit is paid), so the job keeps a lead, a client and the same lifecycle as any other.
+ * "Add job" (Studio Ninja "create a job directly", docs/33 decision 3): a booking the client has ALREADY
+ * confirmed outside the app (e.g. a returning client who rang to book). The client is found or created, a
+ * lead is logged for them and converted, and the job is confirmed at once - it skips the lead stage and the
+ * deposit wait. No payment or contract is invented; the deposit invoice is raised on the job as usual.
  */
 export async function createStaffEnquiryAction(
   _prev: StaffEnquiryState,
@@ -657,7 +663,7 @@ export async function createStaffEnquiryAction(
     const converted = await convertEnquiry(lead.id, user.id)
     if (!converted.projectId) throw new Error('No job was created.')
     projectId = converted.projectId
-    await seedProjectWorkflow(projectId)
+    await confirmDirectBooking(projectId, user.id)
   } catch {
     return { status: 'error', message: 'Could not create the job. Please try again.' }
   }

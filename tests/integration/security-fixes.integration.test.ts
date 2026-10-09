@@ -96,11 +96,14 @@ describe('signing a contract never revives or rewinds a job', () => {
     expect((await prisma.project.findUnique({ where: { id: projectId } }))?.lifecycleStatus).toBe('COMPLETED')
   })
 
-  it('a provisional booking is confirmed by the signature', async () => {
+  it('a signature alone does not book: the lead keeps waiting for the deposit', async () => {
     const { projectId, signToken } = await sentContract()
     await prisma.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'BOOKING_REQUESTED' } })
     await signContractByToken(signToken, 'Client', '1.1.1.1')
-    expect((await prisma.project.findUnique({ where: { id: projectId } }))?.lifecycleStatus).toBe('CONFIRMED')
+    expect((await prisma.project.findUnique({ where: { id: projectId } }))?.lifecycleStatus).toBe('BOOKING_REQUESTED')
+    const lead = await prisma.enquiry.findFirstOrThrow({ where: { convertedProjectId: projectId } })
+    expect(lead.status).toBe('AWAITING_BOOKING_CONFIRMATION')
+    expect((await prisma.contract.findFirstOrThrow({ where: { projectId } })).status).toBe('SIGNED')
   })
 })
 

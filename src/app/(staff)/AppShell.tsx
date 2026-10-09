@@ -94,7 +94,7 @@ export async function AppShell({
 
   // Gmail-style nav dot: how many enquiries are still unread (never opened, not yet converted/declined).
   const unreadEnquiries = await prisma.enquiry.count({
-    where: { viewedAt: null, convertedProjectId: null, status: { not: 'DECLINED' } },
+    where: { viewedAt: null, status: { notIn: ['DECLINED', 'BOOKING_CONFIRMED'] } },
   })
   const notifKeys = unreadEnquiries > 0 ? ['enquiries'] : []
 

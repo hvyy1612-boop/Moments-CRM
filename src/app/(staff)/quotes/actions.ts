@@ -157,7 +157,9 @@ export async function declineQuoteAction(formData: FormData): Promise<void> {
   redirect(`/quotes/${quoteId}`)
 }
 
-/** Accept the quote → convert the enquiry into a Job (one transaction), then open the new Job. */
+/** Accept the quote. A lead's quote opens its booking file and the lead moves to "Awaiting booking
+ *  confirmation" (still a lead until the deposit is paid), so staff land back on the lead to raise the
+ *  deposit invoice; a job's own quote is accepted in place and stays on the job. */
 export async function acceptQuoteAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
   if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
@@ -165,14 +167,16 @@ export async function acceptQuoteAction(formData: FormData): Promise<void> {
   const quoteId = str(formData, 'quoteId')
   if (!quoteId) return
   let projectId: string | null = null
+  let enquiryId: string | null = null
   try {
     const res = await acceptQuote(quoteId, user.id)
     projectId = res.projectId
+    enquiryId = res.enquiryId
   } catch (error) {
     redirect(`/quotes/${quoteId}?acceptError=${encodeURIComponent(error instanceof Error ? error.message : 'Could not accept the quote.')}`)
   }
   revalidatePath(`/quotes/${quoteId}`)
-  redirect(projectId ? `/jobs/${projectId}` : `/quotes/${quoteId}`)
+  redirect(enquiryId ? `/leads/${enquiryId}` : projectId ? `/jobs/${projectId}` : `/quotes/${quoteId}`)
 }
 
 /** Batch-delete the selected quotes from the list (accepted quotes are protected in the domain). Void

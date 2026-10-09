@@ -103,7 +103,7 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
   const jobs = await prisma.project.findMany({
     where: { lifecycleStatus: { notIn: CLOSED }, ...(sp.client ? { clientId: sp.client } : {}) },
     orderBy: { updatedAt: 'desc' },
-    select: { id: true, name: true, code: true, client: { select: { displayName: true } } },
+    select: { id: true, name: true, code: true, lifecycleStatus: true, client: { select: { displayName: true } } },
   })
 
   // One active job for this client: skip the picker and open its editor directly.
@@ -127,7 +127,16 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
         </p>
       ) : (
         <div className="mt-7">
-          <NewInvoiceJobPicker rows={jobs.map((j) => ({ id: j.id, code: j.code, client: j.client.displayName, job: j.name }))} />
+          <NewInvoiceJobPicker
+            rows={jobs.map((j) => ({
+              id: j.id,
+              code: j.code,
+              client: j.client.displayName,
+              // A lead's booking file (quote accepted, deposit not paid) is invoiceable - that is where the
+              // deposit invoice goes - but it is not a confirmed job yet, so say so.
+              job: j.lifecycleStatus === 'BOOKING_REQUESTED' ? `${j.name} (lead, awaiting deposit)` : j.name,
+            }))}
+          />
         </div>
       )}
     </PageContainer>

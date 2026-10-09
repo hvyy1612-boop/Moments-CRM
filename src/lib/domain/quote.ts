@@ -349,9 +349,10 @@ export async function createQuoteForEnquiry(enquiryId: string, createdByUserId: 
 }
 
 /**
- * Accept a quote (docs/31): the single controlled transition that turns the Enquiry into a Job. Staff
- * command (app is staff-only). ONE transaction: mark ACCEPTED + freeze the version, supersede sibling
- * quotes, convert the enquiry (idempotent) into a Job, and link both ways. Retries on the per-year
+ * Accept a quote (docs/31). Staff command (app is staff-only). ONE transaction: mark ACCEPTED + freeze the
+ * version, supersede sibling quotes, open the lead's booking file (idempotent convert) and link both ways.
+ * The lead moves to "Awaiting booking confirmation" and stays a lead; it becomes a Job only when the
+ * deposit is paid (confirmBookingByDepositTx). Retries on the per-year
  * project-code unique collision, same as convertEnquiry. Any failure rolls the whole thing back.
  */
 export async function acceptQuote(quoteId: string, actorUserId: string | null = null) {
@@ -385,7 +386,7 @@ export async function acceptQuote(quoteId: string, actorUserId: string | null = 
           // Commercial status only moves forward: a job already paid keeps "paid".
           await tx.project.updateMany({ where: { id: job.id, commercialStatus: { in: ['UNQUOTED', 'QUOTED'] } }, data: { commercialStatus: 'ACCEPTED' } })
           await tx.auditLog.create({ data: { action: 'quote.accepted', entityType: 'Quote', entityId: quote.id, actorUserId, afterData: { projectId: job.id } } })
-          return { quoteId: quote.id, projectId: job.id }
+          return { quoteId: quote.id, projectId: job.id, enquiryId: null }
         }
         if (quote.enquiry.status === 'DECLINED') throw new Error('Reopen the lead before accepting a quote.')
 
@@ -409,7 +410,7 @@ export async function acceptQuote(quoteId: string, actorUserId: string | null = 
         await tx.quote.update({ where: { id: quote.id }, data: { projectId: conv.projectId } })
 
         await tx.auditLog.create({ data: { action: 'quote.accepted', entityType: 'Quote', entityId: quote.id, actorUserId, afterData: { enquiryId: quote.enquiryId, projectId: conv.projectId } } })
-        return { quoteId: quote.id, projectId: conv.projectId }
+        return { quoteId: quote.id, projectId: conv.projectId, enquiryId: quote.enquiryId }
       })
     } catch (error) {
       const isUnique = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'

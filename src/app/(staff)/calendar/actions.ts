@@ -10,6 +10,7 @@ import { createCalendarEvent, moveCalendarEvent, rotateFeedToken } from '@/lib/d
 import { toggleEnquiryTask } from '@/lib/domain/enquiry-workflow'
 import { toggleProjectTask } from '@/lib/domain/project-workflow'
 import { prisma } from '@/lib/db'
+import { JOB_WHERE } from '@/lib/domain/project'
 
 export type CalendarActionState = { status: 'idle' | 'success' | 'error'; message?: string }
 
@@ -120,7 +121,7 @@ export async function searchEntitiesAction(query: string): Promise<SearchHit[]> 
       ? prisma.enquiry.findMany({ where: { OR: [{ name: contains }, { email: contains }] }, take: 5, select: { id: true, name: true, eventType: true } })
       : Promise.resolve([]),
     can(user, 'PROJECT_VIEW')
-      ? prisma.project.findMany({ where: { OR: [{ name: contains }, { code: contains }, { client: { displayName: contains } }] }, take: 5, select: { id: true, name: true, code: true, client: { select: { displayName: true } } } })
+      ? prisma.project.findMany({ where: { AND: [JOB_WHERE, { OR: [{ name: contains }, { code: contains }, { client: { displayName: contains } }] }] }, take: 5, select: { id: true, name: true, code: true, client: { select: { displayName: true } } } })
       : Promise.resolve([]),
     can(user, 'FINANCE_VIEW')
       ? prisma.invoice.findMany({ where: { OR: [{ invoiceNumber: contains }, { project: { client: { displayName: contains } } }] }, take: 5, orderBy: { createdAt: 'desc' }, select: { id: true, invoiceNumber: true, project: { select: { client: { select: { displayName: true } } } } } })

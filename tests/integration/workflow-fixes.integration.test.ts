@@ -77,6 +77,14 @@ describe('shoots on the calendar', () => {
   it("shows each job's shoot date, read-only, and flags two shoots on the same day", async () => {
     const a = await newJob()
     const b = await newJob()
+    // Only confirmed bookings are jobs on the calendar: pay each deposit.
+    for (const j of [a, b]) {
+      const inv = await createInvoice(j.projectId, { type: 'DEPOSIT', description: 'Deposit', amount: '500' }, null)
+      await recordPayment(inv.id, { paymentMethod: 'BANK_TRANSFER', amount: '500' }, null)
+    }
+    // A lead whose quote is accepted but deposit unpaid: its date is not held, so it is not shown.
+    const unpaid = await createEnquiry({ name: 'Unpaid', email: email(), eventDate: new Date('2033-03-17T00:00:00Z') })
+    const unpaidFile = await convertEnquiry(unpaid.id)
     const shoot = new Date('2033-03-17T00:00:00Z') // 11am Sydney
     await prisma.workItem.updateMany({ where: { projectId: { in: [a.projectId, b.projectId] }, type: 'SHOOT' }, data: { dueOverrideAt: shoot } })
 
@@ -84,5 +92,6 @@ describe('shoots on the calendar', () => {
     const shoots = cal.items.filter((i) => i.kind === 'shoot' && (i.refId === a.projectId || i.refId === b.projectId))
     expect(shoots).toHaveLength(2)
     expect(shoots.every((i) => i.dayKey === '2033-03-17' && !i.editable && i.conflict)).toBe(true)
+    expect(cal.items.some((i) => i.refId === unpaidFile.projectId)).toBe(false)
   })
 })

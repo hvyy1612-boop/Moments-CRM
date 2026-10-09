@@ -164,7 +164,8 @@ export default async function QuoteDetailPage({
               </>
             ) : isSentOrViewed ? (
               <>
-                {/* "Mark as accepted": a lead's quote converts the lead into its job; a job's own quote is
+                {/* "Mark as accepted": a lead's quote moves the lead to Awaiting booking confirmation (a Job only
+                    once the deposit is paid); a job's own quote is
                     accepted in place (one accepted quote per job). */}
                 <PrimaryAction action={acceptQuoteAction} csrf={csrf} quoteId={id} label="Mark as accepted" icon={CheckIcon} />
                 {/* "Edit" a sent quote opens a NEW version (reviseQuoteAction); the client is still looking at the

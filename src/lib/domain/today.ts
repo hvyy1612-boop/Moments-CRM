@@ -56,7 +56,8 @@ export async function getTodayCockpit(): Promise<TodayCockpit> {
         type: { not: 'AUTO' },
         OR: [
           { enquiry: { status: { in: [...OPEN_ENQUIRY] } } },
-          { project: { lifecycleStatus: { notIn: [...CLOSED_PROJECT] } } },
+          // Jobs only: a lead's booking file (deposit not paid) is not a job, so none of its tasks show.
+          { project: { lifecycleStatus: { notIn: [...CLOSED_PROJECT, 'BOOKING_REQUESTED'] } } },
         ],
       },
       select: {
@@ -70,7 +71,8 @@ export async function getTodayCockpit(): Promise<TodayCockpit> {
     }),
     // Live jobs, to find the ones shooting today (their shoot date: Shoot task, else the lead's date).
     prisma.project.findMany({
-      where: { lifecycleStatus: { notIn: [...CLOSED_PROJECT] } },
+      // Booking files (deposit not paid) are leads, not jobs: their shoot date is not held yet.
+      where: { lifecycleStatus: { notIn: [...CLOSED_PROJECT, 'BOOKING_REQUESTED'] } },
       select: { id: true, client: { select: { displayName: true } }, ...JOB_SHOOT_SELECT },
     }),
     prisma.enquiry.findMany({

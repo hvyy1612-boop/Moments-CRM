@@ -25,6 +25,9 @@ import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { updateEnquiryAction } from '../actions'
 import { createQuoteForEnquiryAction } from '../../quotes/actions'
+import { createContractAction } from '../../jobs/actions'
+import { ContractSend } from '../../jobs/[id]/ContractSend'
+import { Button } from '@/components/ui/Button'
 import { HistoryLog, type HistoryRow } from '../../finance/[invoiceId]/HistoryLog'
 import { EnquiryWorkflow } from './EnquiryWorkflow'
 import { LeadNotes } from './LeadNotes'
@@ -39,6 +42,8 @@ const PLUS = <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="cu
 const INVOICE_TONE: Record<string, Tone> = {
   DRAFT: 'neutral', ISSUED: 'info', SENT: 'info', PARTIALLY_PAID: 'warn', PAID: 'good', OVERDUE: 'bad', VOID: 'neutral',
 }
+// Same tones as the job page's Contract section.
+const CONTRACT_TONE: Record<string, Tone> = { DRAFT: 'neutral', SENT: 'info', SIGNED: 'good' }
 
 function titleCase(value: string): string {
   return value
@@ -93,7 +98,7 @@ export default async function EnquiryDetailPage({
   // /leads/[id] loads the Enquiry (lead) entity ONLY - it never guesses a Project id (docs/24 FIX 11).
   if (!enquiry) notFound()
 
-  const [activity, quotes, invoices, noteComms] = await Promise.all([
+  const [activity, quotes, invoices, noteComms, contract] = await Promise.all([
     prisma.auditLog.findMany({
       where: { entityType: 'Enquiry', entityId: id },
       orderBy: { createdAt: 'asc' }, // oldest first, like the invoice history log
@@ -106,7 +111,8 @@ export default async function EnquiryDetailPage({
       orderBy: { createdAt: 'desc' },
       select: { id: true, reference: true, status: true, createdAt: true, currentVersion: { select: { total: true, sentToClientAt: true } } },
     }),
-    // Invoices live on the Job the lead converted into (there is none before that).
+    // Invoices live on the lead's booking file (opened when its quote is accepted), which becomes the Job
+    // when the deposit is paid. There is nowhere to put an invoice before the quote is accepted.
     enquiry.convertedProjectId
       ? prisma.invoice.findMany({
           where: { projectId: enquiry.convertedProjectId },
@@ -120,6 +126,14 @@ export default async function EnquiryDetailPage({
       orderBy: { createdAt: 'desc' },
       select: { id: true, body: true, createdAt: true, by: { select: { name: true } } },
     }),
+    // The booking contract, made from the accepted quote on the booking file.
+    enquiry.convertedProjectId
+      ? prisma.contract.findFirst({
+          where: { projectId: enquiry.convertedProjectId },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, currentVersion: { select: { status: true, signedByClientName: true, signedByClientAt: true } } },
+        })
+      : Promise.resolve(null),
   ])
   const leadNotes = noteComms.map((n) => ({ id: n.id, body: n.body, at: formatSydneyDateTime(n.createdAt), by: n.by?.name ?? null }))
   const historyRows: HistoryRow[] = activity.map((a) => ({
@@ -131,11 +145,18 @@ export default async function EnquiryDetailPage({
     details: '',
   }))
 
-  // A Job exists once the lead's quote is accepted (Awaiting, then Confirmed on the deposit) - there is no
-  // manual "Create Job": ticking tasks never books a lead. "open" = a live lead with no Job yet.
-  const hasJob = enquiry.convertedProjectId != null
+  // The case stays a LEAD until the deposit is paid (studio policy: the 20% deposit holds the date):
+  // - open: New enquiry .. Quote sent, and Awaiting booking confirmation (quote accepted, deposit not paid).
+  //   The checklist stays workable the whole time.
+  // - awaiting: its booking file holds the deposit invoice and the contract; signing alone does not book.
+  // - confirmed: the deposit is paid, so it is a Job; the lead section turns read-only (Studio-Ninja style).
+  // There is no manual "Create Job": ticking tasks never books a lead.
   const confirmed = enquiry.status === 'BOOKING_CONFIRMED'
-  const open = isOpenEnquiry(enquiry.status) && !hasJob
+  const awaiting = enquiry.status === 'AWAITING_BOOKING_CONFIRMATION'
+  const open = isOpenEnquiry(enquiry.status)
+  const bookingFileId = awaiting || confirmed ? enquiry.convertedProjectId : null
+  const contractVersion = contract?.currentVersion ?? null
+  const quoteAccepted = quotes.some((q) => q.status === 'ACCEPTED')
   const board = await getEnquiryBoard(id)
   // Time-of-day for tasks that carry a manual due date+time (stored in dueAt for enquiry tasks). The
   // board row only carries the date, so the edit form reads the time from here to pre-fill its input.
@@ -173,11 +194,14 @@ export default async function EnquiryDetailPage({
         <div className="mt-6 grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20em]">
           {/* MAIN: workflow + the lead outcome actions - the flexible column */}
           <div className="flex min-w-0 flex-col gap-4">
-            {hasJob ? (
+            {awaiting ? (
               <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">
-                {confirmed
-                  ? 'Booking confirmed - the deposit is paid and the job is active. Open the job to continue the work.'
-                  : 'Awaiting booking confirmation - a job is held for this lead, but production starts once the booking deposit is paid.'}
+                Quote accepted. The date is not held yet: this lead becomes a job once the deposit is paid. Raise
+                the deposit invoice under Invoices{quoteAccepted ? ', and send the contract if needed' : ''}.
+              </div>
+            ) : confirmed ? (
+              <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">
+                Booking confirmed - the deposit is paid and the job is active. Open the job to continue the work.
               </div>
             ) : null}
 
@@ -187,7 +211,7 @@ export default async function EnquiryDetailPage({
               enquiryId={enquiry.id}
               csrf={csrf}
               taskTimes={taskTimes}
-              readOnly={hasJob}
+              readOnly={confirmed}
             />
 
             {/* Outcome actions */}
@@ -195,7 +219,9 @@ export default async function EnquiryDetailPage({
               {open ? (
                 <>
                   <p className="mr-auto text-sm text-ink-muted">
-                    To book this lead, create a quote and mark it accepted when the client agrees.
+                    {awaiting
+                      ? 'It becomes a job when the deposit is paid. Decline if the client does not go ahead.'
+                      : 'To book this lead, create a quote and mark it accepted when the client agrees, then take the deposit.'}
                   </p>
                   <form action={updateEnquiryAction}>
                     <input type="hidden" name="csrf" value={csrf} />
@@ -206,33 +232,22 @@ export default async function EnquiryDetailPage({
                     </button>
                   </form>
                 </>
-              ) : hasJob ? (
+              ) : confirmed ? (
                 <>
                   {enquiry.convertedProjectId ? (
                     <Link href={`/jobs/${enquiry.convertedProjectId}`} className="font-bold text-accent-ink hover:underline">
                       Open the job
                     </Link>
                   ) : null}
-                  {confirmed ? (
-                    // A confirmed booking that falls through is a JOB cancellation (enquiry keeps its history).
-                    <form action={updateEnquiryAction}>
-                      <input type="hidden" name="csrf" value={csrf} />
-                      <input type="hidden" name="enquiryId" value={enquiry.id} />
-                      <input type="hidden" name="op" value="cancel_job" />
-                      <button type="submit" className="rounded px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline">
-                        Cancel job
-                      </button>
-                    </form>
-                  ) : (
-                    <form action={updateEnquiryAction}>
-                      <input type="hidden" name="csrf" value={csrf} />
-                      <input type="hidden" name="enquiryId" value={enquiry.id} />
-                      <input type="hidden" name="op" value="lost" />
-                      <button type="submit" className="rounded px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline">
-                        Decline
-                      </button>
-                    </form>
-                  )}
+                  {/* A confirmed booking that falls through is a JOB cancellation (enquiry keeps its history). */}
+                  <form action={updateEnquiryAction}>
+                    <input type="hidden" name="csrf" value={csrf} />
+                    <input type="hidden" name="enquiryId" value={enquiry.id} />
+                    <input type="hidden" name="op" value="cancel_job" />
+                    <button type="submit" className="rounded px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline">
+                      Cancel job
+                    </button>
+                  </form>
                 </>
               ) : (
                 <form action={updateEnquiryAction}>
@@ -264,7 +279,8 @@ export default async function EnquiryDetailPage({
             {/* Quotes */}
             <SidebarCard
               title="Quotes"
-              action={open ? (
+              // One accepted quote per lead: once it is accepted, scope changes go through the job's change requests.
+              action={open && !awaiting ? (
                 <form action={createQuoteForEnquiryAction}>
                   <input type="hidden" name="csrf" value={csrf} />
                   <input type="hidden" name="enquiryId" value={enquiry.id} />
@@ -294,20 +310,20 @@ export default async function EnquiryDetailPage({
               )}
             </SidebarCard>
 
-            {/* Invoices (live on the booked job; the + opens the New-invoice flow) */}
+            {/* Invoices live on the booking file, so the + appears once the quote is accepted (the deposit
+                invoice is the first one); paying the deposit is what turns the lead into a job. */}
             <SidebarCard
               title="Invoices"
               action={
-                <IconLink
-                  label="Create invoice"
-                  tone="accent"
-                  href={`/finance/new${enquiry.convertedProjectId ? `?job=${enquiry.convertedProjectId}` : ''}`}
-                  icon={PLUS}
-                />
+                bookingFileId ? (
+                  <IconLink label="Create invoice" tone="accent" href={`/finance/new?job=${bookingFileId}`} icon={PLUS} />
+                ) : undefined
               }
             >
               {invoices.length === 0 ? (
-                <p className="text-sm text-ink-muted">No invoices yet.</p>
+                <p className="text-sm text-ink-muted">
+                  {bookingFileId ? 'No invoices yet. Raise the deposit invoice here.' : 'The deposit invoice can be raised once the quote is accepted.'}
+                </p>
               ) : (
                 <ul>
                   {invoices.map((inv) => (
@@ -322,6 +338,39 @@ export default async function EnquiryDetailPage({
                 </ul>
               )}
             </SidebarCard>
+
+            {/* Contract: made from the accepted quote, sent for the client to sign. Signing records the
+                agreement only - the booking is confirmed by the deposit. */}
+            {bookingFileId && quoteAccepted ? (
+              <SidebarCard
+                title="Contract"
+                action={contractVersion ? <StatusPill tone={CONTRACT_TONE[contractVersion.status] ?? 'neutral'}>{titleCase(contractVersion.status)}</StatusPill> : undefined}
+              >
+                {!contract || !contractVersion ? (
+                  confirmed ? (
+                    <p className="text-sm text-ink-muted">No contract was sent for this booking.</p>
+                  ) : (
+                    <form action={createContractAction}>
+                      <input type="hidden" name="csrf" value={csrf} />
+                      <input type="hidden" name="projectId" value={bookingFileId} />
+                      <input type="hidden" name="enquiryId" value={enquiry.id} />
+                      <p className="text-sm text-ink-muted">Generate the booking contract from the accepted quote.</p>
+                      <Button type="submit" size="sm" className="mt-3">Create contract</Button>
+                    </form>
+                  )
+                ) : contractVersion.status === 'DRAFT' ? (
+                  <ContractSend csrf={csrf} contractId={contract.id} projectId={bookingFileId} enquiryId={enquiry.id} />
+                ) : contractVersion.status === 'SIGNED' ? (
+                  <p className="text-sm text-ink">
+                    Signed by {contractVersion.signedByClientName}
+                    {contractVersion.signedByClientAt ? ` on ${formatSydneyDate(contractVersion.signedByClientAt)}` : ''}.
+                    {awaiting ? ' The date is held once the deposit is paid.' : ''}
+                  </p>
+                ) : (
+                  <p className="text-sm text-ink-muted">Sent. Waiting for the client to sign.</p>
+                )}
+              </SidebarCard>
+            ) : null}
 
             {/* Notes (replaces the old Conversation panel) */}
             <LeadNotes enquiryId={enquiry.id} csrf={csrf} notes={leadNotes} />

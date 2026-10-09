@@ -54,7 +54,7 @@ const SPECIAL: Record<string, string> = {
   'enquiry.converted': 'Lead converted to job',
   'enquiry.lost': 'Lead declined',
   'enquiry.reopened': 'Lead reopened',
-  'enquiry.booking_confirmed': 'Booking confirmed (deposit paid)',
+  'enquiry.booking_confirmed': 'Booking confirmed (now a job)',
   'enquiry.booking_cancelled': 'Booking cancelled',
   // `booking.*` from booking.ts is a SHOOT session; direct-booking's request/confirm is the client's booking.
   'booking.created': 'Shoot scheduled',

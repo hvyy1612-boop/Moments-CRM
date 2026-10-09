@@ -190,10 +190,9 @@ export async function signContractByToken(signToken: string, signedName: string,
       },
     })
     await tx.contract.update({ where: { id: contract.id }, data: { status: 'SIGNED' } })
-    if (project.lifecycleStatus === 'BOOKING_REQUESTED') {
-      // Same booking moment as a paid deposit: it starts the "days after booking" task dates.
-      await tx.project.update({ where: { id: contract.projectId }, data: { lifecycleStatus: 'CONFIRMED', confirmedByClientAt: now } })
-    }
+    // Signing only records the agreement. It never confirms the booking: the studio's policy is that the
+    // 20% deposit holds the date, so a signed-but-unpaid lead stays "Awaiting booking confirmation" and its
+    // booking file stays BOOKING_REQUESTED until the deposit is paid (confirmBookingByDepositTx).
     await tx.auditLog.create({
       data: {
         action: 'contract.signed',
