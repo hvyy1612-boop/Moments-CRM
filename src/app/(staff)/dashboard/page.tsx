@@ -22,7 +22,10 @@ const AGING_COLORS = ['var(--color-data-positive)', 'var(--color-data-warning)',
 const STAGE_COLORS = ['var(--color-dash-blue)', 'var(--color-dash-sand)', 'var(--color-dash-teal)', 'var(--color-dash-grey)', 'var(--color-dash-steel)', 'var(--color-dash-mauve)']
 
 function kShort(n: number): string {
-  if (Math.abs(n) >= 1000) return `$${(n / 1000).toFixed(1)}k`
+  if (Math.abs(n) >= 1000) {
+    const k = n / 1000
+    return `$${Number.isInteger(k) ? String(k) : k.toFixed(1)}K`
+  }
   return `$${Math.round(n)}`
 }
 const pct = (v: number | null): string => (v == null ? '-' : `${v >= 0 ? '+' : ''}${v}%`)
@@ -117,56 +120,56 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
         {/* KPI row: income / cash / balance / growth / bookings */}
         <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
-          <Kpi label="Total income" value={kShort(d.kpi.income)} icon={ICONS.income} sub="billed this period" />
-          <Kpi label="Cash collected" value={kShort(d.kpi.collected)} icon={ICONS.collected} delta={d.kpi.collectedDeltaPct} sub="received this period" />
-          <Kpi label="Outstanding balance" value={kShort(d.kpi.outstanding)} icon={ICONS.outstanding} sub={`${d.kpi.unpaidCount} unpaid invoice${d.kpi.unpaidCount === 1 ? '' : 's'}`} />
-          <Kpi label="Income growth" value={pct(d.kpi.incomeDeltaPct)} icon={ICONS.growth} sub="versus previous period" />
-          <Kpi label="Total bookings" value={String(d.kpi.totalBookings)} icon={ICONS.bookings} delta={d.kpi.bookingsDeltaPct} sub="confirmed jobs" />
+          <Kpi label="Total Income" value={kShort(d.kpi.income)} icon={ICONS.income} sub="billed this period" />
+          <Kpi label="Cash Collected" value={kShort(d.kpi.collected)} icon={ICONS.collected} delta={d.kpi.collectedDeltaPct} sub="received this period" />
+          <Kpi label="Outstanding Balance" value={kShort(d.kpi.outstanding)} icon={ICONS.outstanding} sub={`${d.kpi.unpaidCount} unpaid invoice${d.kpi.unpaidCount === 1 ? '' : 's'}`} />
+          <Kpi label="Income Growth" value={pct(d.kpi.incomeDeltaPct)} icon={ICONS.growth} sub="versus previous period" />
+          <Kpi label="Total Bookings" value={String(d.kpi.totalBookings)} icon={ICONS.bookings} delta={d.kpi.bookingsDeltaPct} sub="confirmed jobs" />
         </div>
 
         <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-12">
           {/* Row 1 */}
           <div className="lg:col-span-8">
-            <Card title="Income and bookings by month" right="Income, volume and growth">
+            <Card title="Income and Bookings by Month" right="Income, volume and growth">
               {revenueEmpty ? <Empty>No revenue data for this period</Empty> : <ComboChart series={d.revenueSeries} />}
             </Card>
           </div>
           <div className="lg:col-span-4">
-            <Card title="Billed versus collected" right="Balance">
+            <Card title="Billed versus Collected" right="Balance">
               {revenueEmpty ? <Empty>No revenue data for this period</Empty> : <ClusteredColumns series={d.revenueSeries} />}
             </Card>
           </div>
 
           {/* Row 2 */}
           <div className="lg:col-span-4">
-            <Card title="Revenue by occasion" right="Income mix">
+            <Card title="Revenue by Occasion" right="Income mix">
               {d.revenueByOccasion.length === 0 ? <Empty>No revenue in this period</Empty> : <Column bars={d.revenueByOccasion} colors={OCCASION_COLORS} format={kShort} />}
             </Card>
           </div>
           <div className="lg:col-span-4">
-            <Card title="Revenue by service" right={<span className="rounded-sm bg-accent-tint px-1.5 py-0.5 text-xs font-semibold uppercase text-accent-ink">New</span>}>
+            <Card title="Revenue by Service" right={<span className="rounded-sm bg-accent-tint px-1.5 py-0.5 text-xs font-semibold uppercase text-accent-ink">New</span>}>
               {d.revenueByService.length === 0 ? <Empty>No revenue in this period</Empty> : <PieChart segments={d.revenueByService} colors={SERVICE_COLORS} format={kShort} />}
             </Card>
           </div>
           <div className="lg:col-span-4">
-            <Card title="Lead pipeline">
+            <Card title="Lead Pipeline">
               {d.pipeline.every((p) => p.value === 0) ? <Empty>No leads in this period</Empty> : <Funnel bars={d.pipeline} format={(v) => String(v)} />}
             </Card>
           </div>
 
           {/* Row 3 */}
           <div className="lg:col-span-4">
-            <Card title="Bookings by source" right={`${d.kpi.totalBookings} booked`}>
+            <Card title="Bookings by Source" right={`${d.kpi.totalBookings} booked`}>
               {d.bookingsBySource.length === 0 ? <Empty>No bookings in this period</Empty> : <HBars bars={d.bookingsBySource} colors={SOURCE_COLORS} format={(v) => String(v)} />}
             </Card>
           </div>
           <div className="lg:col-span-4">
-            <Card title="Outstanding balance by age" right={`${kShort(d.invoiceAging.total)} owed`}>
+            <Card title="Outstanding Balance by Age" right={`${kShort(d.invoiceAging.total)} owed`}>
               {d.invoiceAging.total === 0 ? <Empty>No outstanding invoices</Empty> : <HBars bars={aging} colors={AGING_COLORS} format={kShort} />}
             </Card>
           </div>
           <div className="lg:col-span-4">
-            <Card title="Active jobs by stage">
+            <Card title="Active Jobs by Stage">
               {d.activeJobs === 0 ? <Empty>No active jobs right now</Empty> : <Donut segments={d.jobStages} colors={STAGE_COLORS} centre={String(d.activeJobs)} centreLabel="active jobs" format={(v) => String(v)} />}
             </Card>
           </div>
