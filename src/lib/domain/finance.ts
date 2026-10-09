@@ -6,7 +6,7 @@ import { JOB_SHOOT_SELECT } from './deadline'
 import { sendComposedInvoiceEmail, type SendResult } from '@/lib/email'
 import type { CreateInvoiceInput, CreateInvoiceLinesInput, RecordPaymentInput } from '@/lib/validation/finance'
 import { invoiceObligation, invoicePaidNet, lockInvoiceRow, refreshInvoiceAmountPaid } from './invoice-ledger'
-import { confirmBookingByDepositTx, maybeAutoCompleteJob } from './project-workflow'
+import { bookingDepositReached, confirmBookingByDepositTx, maybeAutoCompleteJob } from './project-workflow'
 import { nextRecordNumber } from './numbering'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
 import { getInvoiceBalance, nextPaymentDue } from './money'
@@ -611,9 +611,10 @@ export async function recordPayment(
     // the booking without waiting for the final payment.
     // A cancelled job keeps its money history (e.g. a cancellation fee is still recorded), but a payment
     // never moves a cancelled job's status or its lead.
-    const jobLive = invoice.projectId
-      ? (await tx.project.findUnique({ where: { id: invoice.projectId }, select: { lifecycleStatus: true } }))?.lifecycleStatus !== 'CANCELLED'
-      : false
+    const projectStatus = invoice.projectId
+      ? ((await tx.project.findUnique({ where: { id: invoice.projectId }, select: { lifecycleStatus: true } }))?.lifecycleStatus ?? null)
+      : null
+    const jobLive = projectStatus !== null && projectStatus !== 'CANCELLED'
     let depositCovered = false
     if (jobLive && !paidInFull && invoice.type === 'DEPOSIT') {
       const first = await tx.invoiceInstalment.findMany({ where: { invoiceId }, orderBy: { sortOrder: 'asc' }, take: 2, select: { amount: true } })
@@ -624,8 +625,18 @@ export async function recordPayment(
       if (project && !['PAID', 'DEPOSIT_PAID', 'CANCELLED'].includes(project.commercialStatus)) {
         await tx.project.update({ where: { id: invoice.projectId }, data: { commercialStatus: 'DEPOSIT_PAID' } })
       }
-      await confirmBookingByDepositTx(tx, invoice.projectId, actorUserId)
     }
+
+    // Booking confirmation (the lead becomes a Job). The deposit holds the date: with an accepted quote the
+    // money received on the booking must reach 20% of it, whichever invoice it was paid on - a small invoice
+    // paid in full is not the deposit. Without an accepted quote the paid deposit (or an invoice paid in
+    // full) decides, as before. Idempotent, so replaying the payment does nothing extra.
+    let confirmsBooking = depositCovered || paidInFull
+    if (jobLive && projectStatus === 'BOOKING_REQUESTED' && invoice.projectId) {
+      const reached = await bookingDepositReached(tx, invoice.projectId)
+      if (reached !== null) confirmsBooking = reached
+    }
+    if (confirmsBooking && jobLive && invoice.projectId) await confirmBookingByDepositTx(tx, invoice.projectId, actorUserId)
 
     if (paidInFull && jobLive) {
       // Advance the project's commercial status, never downgrade it.
@@ -640,10 +651,6 @@ export async function recordPayment(
           data: { commercialStatus: next },
         })
       }
-      // Neutral Enquiry model: the booking deposit is the confirmation gate. Paying a DEPOSIT (or paying
-      // in full) confirms the booking - it activates the provisional Job and flips the linked enquiry to
-      // BOOKING_CONFIRMED. Idempotent, so replaying the payment does nothing extra.
-      if (invoice.projectId) await confirmBookingByDepositTx(tx, invoice.projectId, actorUserId)
       // Payment is one half of "done"; auto-complete the job if the checklist is finished too.
       if (invoice.projectId) await maybeAutoCompleteJob(tx, invoice.projectId, actorUserId)
     }

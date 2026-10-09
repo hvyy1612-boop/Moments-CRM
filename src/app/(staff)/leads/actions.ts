@@ -7,8 +7,8 @@ import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getActionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { LEAD_DUE_ANCHORS, parseTaskForm } from '@/features/tasks/due'
-import { cancelBooking, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
-import { confirmDirectBooking } from '@/lib/domain/project-workflow'
+import { cancelBooking, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
+import { createDirectJob } from '@/lib/domain/project-workflow'
 import { parseNewLead, type NewLeadErrors } from '@/features/enquiries/new-lead'
 import {
   addEnquiryNote,
@@ -39,8 +39,8 @@ export type AddEnquiryState =
   | { status: 'idle' }
   // `values` = what was typed, handed back so the modal keeps it (React resets a form after every action).
   | { status: 'error'; message?: string; errors?: AddLeadErrors; values?: Record<string, string> }
-  // `projectId` is set when the form added a job (Add job on a client's page).
-  | { status: 'created'; enquiryId: string; projectId?: string }
+  // Add lead returns the new lead; Add job returns the new job (it has no lead).
+  | { status: 'created'; enquiryId?: string; projectId?: string }
 
 export type AddLeadErrors = NewLeadErrors & { clientId?: string }
 
@@ -74,9 +74,9 @@ export async function addEnquiryAction(_prev: AddEnquiryState, formData: FormDat
 }
 
 /**
- * "Add job" on a client's page (Studio Ninja: Add New Job on the client profile): a booking the client has
- * ALREADY confirmed outside the app. Same form and checks as Add lead; the lead is logged and confirmed into
- * a Job at once (same as Add job on the Jobs page) - no payment or contract is invented.
+ * "Add job" (Studio Ninja: Add New Job, on a client's page or the Jobs page): a booking the client has
+ * ALREADY confirmed outside the app. Same form and checks as Add lead, but only the Job is created - no lead,
+ * no sales workflow, no payment or contract invented. The job holds the details from the form.
  */
 export async function addJobAction(_prev: AddEnquiryState, formData: FormData): Promise<AddEnquiryState> {
   return withTypedValues(await addEnquiry(formData, 'job'), formData)
@@ -107,6 +107,36 @@ async function addEnquiry(formData: FormData, kind: 'lead' | 'job'): Promise<Add
   if (!client || client.archivedAt) return { status: 'error', message: 'That client is no longer available. Please choose another client.' }
 
   const lead = parsed.lead
+  if (kind === 'job') {
+    let projectId: string
+    try {
+      const job = await createDirectJob(
+        {
+          clientId: client.id,
+          name: lead.name,
+          eventType: lead.eventType,
+          coverage: lead.coverage,
+          coverageNote: lead.coverageNote,
+          heardAbout: lead.heardAbout,
+          shootDate: lead.eventDate,
+          shootEndDate: lead.eventEndDate,
+          shootStartTime: lead.eventStartTime,
+          shootEndTime: lead.eventEndTime,
+          shootLocation: lead.eventLocation,
+          note: lead.message,
+        },
+        user.id,
+      )
+      projectId = job.id
+    } catch {
+      return { status: 'error', message: 'The job could not be created. Please try again.' }
+    }
+    revalidatePath('/jobs')
+    revalidatePath('/clients')
+    revalidatePath(`/clients/${client.id}`)
+    return { status: 'created', projectId }
+  }
+
   const enquiry = await createEnquiry(
     {
       clientId: client.id,
@@ -132,28 +162,13 @@ async function addEnquiry(formData: FormData, kind: 'lead' | 'job'): Promise<Add
       heardAbout: lead.heardAbout,
       message: lead.message,
       source: 'MANUAL',
-      // Add job: a confirmed booking, never shown or counted as a lead (LEAD_WHERE).
-      createdAsJob: kind === 'job',
     },
     user.id,
   )
-  let projectId: string | undefined
-  if (kind === 'job') {
-    try {
-      const converted = await convertEnquiry(enquiry.id, user.id)
-      if (!converted.projectId) throw new Error('No job was created.')
-      await confirmDirectBooking(converted.projectId, user.id)
-      projectId = converted.projectId
-    } catch {
-      // The lead itself was saved; say so rather than leave staff guessing.
-      return { status: 'error', message: 'The lead was saved, but the job could not be created. Open the lead and try again.' }
-    }
-    revalidatePath('/jobs')
-  }
   revalidatePath('/leads')
   revalidatePath('/clients')
   revalidatePath(`/clients/${client.id}`)
-  return { status: 'created', enquiryId: enquiry.id, projectId }
+  return { status: 'created', enquiryId: enquiry.id }
 }
 
 /** Outcomes that close or reopen a lead (contract docs/23). Convert/Lost leave the active queue;

@@ -58,7 +58,7 @@ export default async function FinancePage() {
       project: {
         select: {
           client: { select: { displayName: true } },
-          convertedFromEnquiries: { select: { eventType: true }, take: 1 },
+          eventType: true,
         },
       },
       payments: {
@@ -74,7 +74,7 @@ export default async function FinancePage() {
     const charges = inv.payments.flatMap((p) => p.transactions).filter((t) => t.type === 'CHARGE')
     const paidAt = charges.length ? new Date(Math.max(...charges.map((c) => c.createdAt.getTime()))) : inv.issuedAt
     const service = titleCase(
-      inv.project.convertedFromEnquiries[0]?.eventType ?? 'Photography',
+      inv.project.eventType ?? 'Photography',
     )
     // An unpaid invoice is dated by its NEXT payment due (the earliest instalment not yet paid), so a late
     // deposit shows as overdue here even when the final payment is months away.

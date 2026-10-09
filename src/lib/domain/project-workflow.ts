@@ -1,8 +1,11 @@
 import { prisma } from '@/lib/db'
 import { cancelOpenWorkItems } from './enquiry-workflow'
+import { bookingDetailsFromLead, createEnquiryTx } from './enquiry'
+import { nextProjectCode } from './project'
 import { asTaskDue, projectDueData, type TaskDue } from '@/features/tasks/due'
 import { formatSydneyDate, daysUntilSydney } from '@/lib/time'
 import { getJobBalance } from './money'
+import { computeDeposit } from './pricing'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
 import { jobShootDate, resolveTaskDueDate, type DeadlineContext } from './deadline'
 import {
@@ -29,17 +32,13 @@ async function seedIfNeeded(tx: Tx, projectId: string, companyId: string) {
     where: { entityType: 'Project', entityId: projectId, action: SEED_ACTION },
   })
   if (seeded > 0) return
-  // The main shoot keeps the date AND time staff entered on the lead (Add job / Add lead "Main shoot"): it
-  // becomes the Shoot task's set time, so the job, the Jobs list and the calendar show the shoot in its slot.
-  // A lead with a date but no time (or "All day") leaves the task on the lead's day, as before.
-  const lead = await tx.enquiry.findFirst({
-    where: { convertedProjectId: projectId },
-    orderBy: { createdAt: 'desc' },
-    select: { eventDate: true, eventStartTime: true },
-  })
+  // The main shoot keeps the date AND time staff entered (Add job / Add lead "Main shoot", held on the job):
+  // it becomes the Shoot task's set time, so the job, the Jobs list and the calendar show the shoot in its
+  // slot. A date with no time (or "All day") leaves the task on that day.
+  const job = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { shootDate: true, shootStartTime: true } })
   const shootAt =
-    lead?.eventDate && lead.eventStartTime
-      ? projectDueData({ kind: 'absolute', date: lead.eventDate.toISOString().slice(0, 10), time: lead.eventStartTime }).dueOverrideAt
+    job.shootDate && job.shootStartTime
+      ? projectDueData({ kind: 'absolute', date: job.shootDate.toISOString().slice(0, 10), time: job.shootStartTime }).dueOverrideAt
       : null
   await tx.workItem.createMany({
     data: DEFAULT_PROJECT_TASKS.map((t, i) => ({
@@ -70,15 +69,97 @@ export async function seedProjectWorkflow(projectId: string) {
   await prisma.$transaction((tx) => seedIfNeeded(tx, projectId, project.companyId))
 }
 
-/** Add job: a booking the client already confirmed outside the app (Studio Ninja "create a job directly").
- *  Confirms the new job at once; no payment or contract is recorded for it. */
+/** Studio policy (momentsphotography.com.au FAQ): a 20% deposit holds the date. */
+export const BOOKING_DEPOSIT_PERCENT = 20
+
+/**
+ * Whether the money received on a booking file reaches its booking deposit: 20% of the accepted quote,
+ * whichever invoice it was paid on. null when the file has no accepted quote - then the paid deposit
+ * invoice decides, as before. Creating an invoice or accepting a quote never counts: only money received.
+ */
+export async function bookingDepositReached(tx: Tx, projectId: string): Promise<boolean | null> {
+  const accepted = await tx.quoteVersion.findFirst({
+    where: { quote: { projectId }, status: 'ACCEPTED' },
+    orderBy: { acceptedByClientAt: 'desc' },
+    select: { total: true },
+  })
+  if (!accepted) return null
+  const invoices = await tx.invoice.findMany({ where: { projectId }, select: INVOICE_MONEY_SELECT })
+  const received = getJobBalance(invoices.map(toInvoiceMoneyInput), accepted.total).paidNet
+  return received.greaterThanOrEqualTo(computeDeposit(accepted.total, BOOKING_DEPOSIT_PERCENT).deposit)
+}
+
+/** Confirm a booking file into a Job without a payment (tests and back-office fixes). Add job uses
+ *  createDirectJob. No payment or contract is recorded. */
 export async function confirmDirectBooking(projectId: string, actorUserId: string | null) {
   await prisma.$transaction((tx) => confirmBookingByDepositTx(tx, projectId, actorUserId))
 }
 
+export type DirectJobInput = {
+  clientId: string
+  name: string
+  eventType: string | null
+  coverage: string | null
+  coverageNote: string | null
+  heardAbout: string | null
+  shootDate: Date | null
+  shootEndDate: Date | null
+  shootStartTime: string | null
+  shootEndTime: string | null
+  shootLocation: string | null
+  note: string | null
+}
+
+/**
+ * Add job (Studio Ninja "create a job directly"): a booking the client ALREADY confirmed outside the app.
+ * Creates only the Job, holding its own booking details - no lead, no sales workflow, and no payment or
+ * contract invented (the deposit invoice is raised on the job as usual). The job is confirmed at once and
+ * its production workflow seeded; the note becomes the job's first internal note.
+ */
+export async function createDirectJob(input: DirectJobInput, actorUserId: string | null) {
+  return prisma.$transaction(async (tx) => {
+    const client = await tx.client.findUnique({ where: { id: input.clientId }, select: { id: true, companyId: true, archivedAt: true } })
+    if (!client || client.archivedAt) throw new Error('That client is no longer available.')
+    const now = new Date()
+    const project = await tx.project.create({
+      data: {
+        companyId: client.companyId,
+        clientId: client.id,
+        code: await nextProjectCode(tx, client.companyId, now),
+        name: input.name,
+        lifecycleStatus: 'CONFIRMED',
+        commercialStatus: 'UNQUOTED',
+        source: 'MANUAL',
+        ownerUserId: actorUserId,
+        // The confirmation date anchors every JOB_CONFIRMED task (e.g. "within 3 days of booking").
+        confirmedByClientAt: now,
+        enquiryReceivedAt: now,
+        eventType: input.eventType,
+        coverage: input.coverage,
+        coverageNote: input.coverageNote,
+        heardAbout: input.heardAbout,
+        shootDate: input.shootDate,
+        shootEndDate: input.shootEndDate,
+        shootStartTime: input.shootStartTime,
+        shootEndTime: input.shootEndTime,
+        shootLocation: input.shootLocation,
+      },
+    })
+    if (input.note) {
+      await tx.communication.create({
+        data: { projectId: project.id, type: 'NOTE', direction: 'internal', internal: true, body: input.note, byUserId: actorUserId },
+      })
+    }
+    await tx.auditLog.create({
+      data: { companyId: client.companyId, actorUserId, action: 'project.created_direct', entityType: 'Project', entityId: project.id, afterData: { code: project.code } },
+    })
+    await seedIfNeeded(tx, project.id, client.companyId)
+    return project
+  })
+}
+
 /** Why a job cannot go back to being a lead right now, or null when it can (see moveJobBackToLead). */
-export function moveBackToLeadBlocker(job: { lifecycleStatus: string; hasLead: boolean; paidNet: { greaterThan(n: number): boolean } }): string | null {
-  if (!job.hasLead) return 'This job has no lead to go back to.'
+export function moveBackToLeadBlocker(job: { lifecycleStatus: string; paidNet: { greaterThan(n: number): boolean } }): string | null {
   if (job.lifecycleStatus !== 'CONFIRMED') return 'Only an active job can go back to being a lead.'
   // The deposit holds the date: money received means it IS a booking, so it cannot be "unaccepted".
   if (job.paidNet.greaterThan(0)) return 'A payment is recorded on this job, so it stays a job. Refund the payment first to move it back to Leads.'
@@ -96,23 +177,66 @@ export async function moveJobBackToLead(projectId: string, actorUserId: string |
     await tx.$queryRaw`SELECT id FROM projects WHERE id = ${projectId} FOR UPDATE`
     const project = await tx.project.findUnique({
       where: { id: projectId },
-      select: { companyId: true, lifecycleStatus: true, invoices: { select: INVOICE_MONEY_SELECT } },
+      select: {
+        companyId: true, lifecycleStatus: true, name: true, ownerUserId: true, invoices: { select: INVOICE_MONEY_SELECT },
+        eventType: true, coverage: true, coverageNote: true, heardAbout: true,
+        shootDate: true, shootEndDate: true, shootStartTime: true, shootEndTime: true, shootLocation: true,
+        client: { select: { id: true, firstName: true, lastName: true, email: true, phone: true, street: true, suburb: true, state: true, postcode: true, country: true, type: true } },
+      },
     })
     if (!project) throw new Error('Job not found.')
-    const lead = await tx.enquiry.findFirst({ where: { convertedProjectId: projectId }, select: { id: true, status: true } })
     const blocker = moveBackToLeadBlocker({
       lifecycleStatus: project.lifecycleStatus,
-      hasLead: lead !== null,
       paidNet: getJobBalance(project.invoices.map(toInvoiceMoneyInput), null).paidNet,
     })
-    if (blocker || !lead) throw new Error(blocker ?? 'This job has no lead to go back to.')
+    if (blocker) throw new Error(blocker)
 
     // Back to a booking file: not a Job anywhere (JOB_WHERE / isBookingFile) until it is confirmed again.
     await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'BOOKING_REQUESTED', confirmedByClientAt: null } })
-    // A job added directly (Add job) becomes a real lead now, listed in Leads like any other.
-    await tx.enquiry.update({ where: { id: lead.id }, data: { status: 'AWAITING_BOOKING_CONFIRMATION', createdAsJob: false } })
-    // The lead tasks closed out on confirmation become workable again (same as Reopen).
-    await tx.workItem.updateMany({ where: { enquiryId: lead.id, status: 'CANCELLED' }, data: { status: 'PENDING' } })
+    let lead = await tx.enquiry.findFirst({ where: { convertedProjectId: projectId }, select: { id: true } })
+    if (lead) {
+      await tx.enquiry.update({ where: { id: lead.id }, data: { status: 'AWAITING_BOOKING_CONFIRMATION' } })
+      // The lead tasks closed out on confirmation become workable again (same as Reopen).
+      await tx.workItem.updateMany({ where: { enquiryId: lead.id, status: 'CANCELLED' }, data: { status: 'PENDING' } })
+    } else {
+      // A job added directly (Add job) never had a lead. Studio Ninja turns it into one when "Job accepted"
+      // is unticked, so a lead is made now from the job's own details, waiting for its deposit.
+      const c = project.client
+      const created = await createEnquiryTx(
+        tx,
+        {
+          clientId: c.id,
+          name: project.name,
+          firstName: c.firstName,
+          lastName: c.lastName,
+          email: c.email,
+          phone: c.phone,
+          street: c.street,
+          suburb: c.suburb,
+          state: c.state,
+          postcode: c.postcode,
+          country: c.country,
+          isCompany: c.type === 'BUSINESS',
+          eventType: project.eventType,
+          eventDate: project.shootDate,
+          eventEndDate: project.shootEndDate,
+          eventStartTime: project.shootStartTime,
+          eventEndTime: project.shootEndTime,
+          eventLocation: project.shootLocation,
+          coverage: project.coverage,
+          coverageNote: project.coverageNote,
+          heardAbout: project.heardAbout,
+          ownerUserId: project.ownerUserId,
+          source: 'MANUAL',
+        },
+        actorUserId,
+      )
+      await tx.enquiry.update({
+        where: { id: created.id },
+        data: { status: 'AWAITING_BOOKING_CONFIRMATION', convertedClientId: c.id, convertedProjectId: projectId },
+      })
+      lead = { id: created.id }
+    }
     await tx.auditLog.create({
       data: { companyId: project.companyId, actorUserId, action: 'project.moved_back_to_lead', entityType: 'Project', entityId: projectId, afterData: { enquiryId: lead.id } },
     })
@@ -137,8 +261,14 @@ export async function confirmBookingByDepositTx(tx: Tx, projectId: string, actor
   const project = await tx.project.findUnique({ where: { id: projectId }, select: { companyId: true, lifecycleStatus: true } })
   if (!project) return
   if (project.lifecycleStatus === 'BOOKING_REQUESTED') {
+    // The lead stays editable while it waits for its deposit, so the job takes the lead's details as they
+    // are NOW (shoot date and time, location, job type); the job keeps its own copy from here on.
+    const lead = await tx.enquiry.findFirst({ where: { convertedProjectId: projectId } })
     // The confirmation date anchors every JOB_CONFIRMED task (e.g. "within 3 days of booking").
-    await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'CONFIRMED', confirmedByClientAt: new Date() } })
+    await tx.project.update({
+      where: { id: projectId },
+      data: { lifecycleStatus: 'CONFIRMED', confirmedByClientAt: new Date(), ...(lead ? bookingDetailsFromLead(lead) : {}) },
+    })
   }
   await seedIfNeeded(tx, projectId, project.companyId)
   const enquiry = await tx.enquiry.findFirst({
@@ -164,7 +294,7 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
       confirmedByClientAt: true,
       owner: { select: { name: true } },
       invoices: { select: INVOICE_MONEY_SELECT },
-      convertedFromEnquiries: { select: { eventDate: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+      shootDate: true,
     },
   })
 
@@ -196,9 +326,9 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
   })
 
   // One deadline resolver for the whole board (Rule D0): SHOOT tasks follow the job's shoot date (set on
-  // the Shoot task, else the lead's event date), JOB_CONFIRMED tasks the booking confirmation date.
+  // the Shoot task, else the job's main shoot day), JOB_CONFIRMED tasks the booking confirmation date.
   const ctx: DeadlineContext = {
-    shootDate: jobShootDate(items, project.convertedFromEnquiries[0]?.eventDate),
+    shootDate: jobShootDate(items, project.shootDate),
     jobConfirmedAt: project.confirmedByClientAt,
   }
 

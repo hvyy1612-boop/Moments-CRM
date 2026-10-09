@@ -28,9 +28,10 @@ export type InvoiceDoc = {
     code: string
     client: { phone: string | null; street: string | null; suburb: string | null; state: string | null; postcode: string | null; country: string | null }
     company: { name: string; abn: string | null; settings: Prisma.JsonValue }
-    // The job's shoot date + place (fetched with JOB_SHOOT_SELECT): its Shoot task, else the lead's date.
+    // The job's shoot date + place (fetched with JOB_SHOOT_SELECT): its Shoot task, else its main shoot day.
     workItems: { type: string; status: string; dueOverrideAt: Date | null }[]
-    convertedFromEnquiries: { eventDate: Date | null; ceremonyLocation: string | null }[]
+    shootDate: Date | null
+    shootLocation: string | null
   }
 }
 
@@ -93,7 +94,7 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
   const addr = [c.street, [c.suburb, c.state, c.postcode].filter(Boolean).join(' '), c.country].filter(Boolean) as string[]
   const shootAt = shootDateOfJob(invoice.project)
   const shootTimed = shootHasTime(invoice.project)
-  const venue = invoice.project.convertedFromEnquiries[0]?.ceremonyLocation?.trim() || null
+  const venue = invoice.project.shootLocation?.trim() || null
 
   const rows = invoice.lines.map((l) => {
     const incl = l.lineTotal

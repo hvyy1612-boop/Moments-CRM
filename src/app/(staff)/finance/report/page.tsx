@@ -40,7 +40,7 @@ export default async function PaymentsReportPage({ searchParams }: { searchParam
             project: {
               select: {
                 client: { select: { displayName: true } },
-                convertedFromEnquiries: { select: { eventType: true }, take: 1 },
+                eventType: true,
               },
             },
             payments: { select: { transactions: { select: { type: true, amount: true, createdAt: true } } } },
@@ -64,7 +64,7 @@ export default async function PaymentsReportPage({ searchParams }: { searchParam
     return {
       number: inv.invoiceNumber,
       client: inv.project.client.displayName,
-      service: titleCase(inv.project.convertedFromEnquiries[0]?.eventType ?? 'Photography'),
+      service: titleCase(inv.project.eventType ?? 'Photography'),
       status,
       date: dateSource ? formatSydneyDate(dateSource) : '-',
       amount: formatAud(inv.total),

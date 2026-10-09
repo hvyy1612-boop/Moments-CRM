@@ -403,6 +403,18 @@ model Project {
   source              String?          @db.VarChar(50) // nguồn enquiry (I-6 taxonomy, TBD)
   confirmedByClientAt DateTime?        @map("confirmed_by_client_at") @db.Timestamptz // when the booking was confirmed (deposit paid / contract signed): anchors JOB_CONFIRMED tasks
   enquiryReceivedAt   DateTime         @default(now()) @map("enquiry_received_at") @db.Timestamptz
+  // The booking's own details. Add job fills them from its form; a lead that is booked copies its own in
+  // when it becomes a Job (the lead keeps its copy as history). Every job page, list, calendar and report
+  // reads them here, so a job never needs a lead behind it.
+  eventType           String?          @map("event_type") @db.VarChar(50) // occasion / workflow, e.g. Wedding
+  coverage            String?          @db.VarChar(30) // job type: Photography / Videography / Both / Other
+  coverageNote        String?          @map("coverage_note") @db.VarChar(300) // job type "Other": what the client asked for
+  heardAbout          String?          @map("heard_about") @db.Text // how the client heard about the studio
+  shootDate           DateTime?        @map("shoot_date") @db.Date // main shoot (first) day; null = not confirmed yet
+  shootEndDate        DateTime?        @map("shoot_end_date") @db.Date // last day of a multi-day shoot
+  shootStartTime      String?          @map("shoot_start_time") @db.VarChar(5) // HH:MM, Sydney local
+  shootEndTime        String?          @map("shoot_end_time") @db.VarChar(5) // HH:MM, Sydney local
+  shootLocation       String?          @map("shoot_location") @db.VarChar(300) // where the main shoot is
   createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt           DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -492,10 +504,6 @@ model Enquiry {
   clientId             String?       @map("client_id") @db.VarChar(30) // the client this lead is about (SN "Primary Client Contact")
   convertedClientId    String?       @map("converted_client_id") @db.VarChar(30)
   convertedProjectId   String?       @unique @map("converted_project_id") @db.VarChar(30) // one lead per job
-  // Add job (a booking already confirmed outside the app): this row only holds the job's lead details (job
-  // type, source, main shoot). It was never a lead, so it is never listed or counted as one (LEAD_WHERE).
-  // Unticking "Job accepted" on that job turns it into a real lead (false).
-  createdAsJob         Boolean       @default(false) @map("created_as_job")
   viewedAt             DateTime?     @map("viewed_at") @db.Timestamptz // Gmail-style read state: null = new/unread until a staff opens the detail
   createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz

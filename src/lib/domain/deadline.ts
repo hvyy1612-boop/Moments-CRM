@@ -35,32 +35,37 @@ export const SHOOT_TASK_TYPE = 'SHOOT'
 
 /**
  * The job's shoot date (Studio Ninja: the job date) - ONE rule for the board, Today, the calendar,
- * reminders and every list: the date staff set on the job's Shoot task; until they set one, the wedding /
- * event date the lead gave. Shoot-anchored tasks follow it, so changing it moves them all.
+ * reminders and every list: the date staff set on the job's Shoot task; until they set one, the job's main
+ * shoot day (Project.shootDate). Shoot-anchored tasks follow it, so changing it moves them all.
  */
 export function jobShootDate(
   tasks: { type: string; status?: string; dueOverrideAt: Date | null }[],
-  eventDate: Date | null | undefined,
+  shootDay: Date | null | undefined,
 ): Date | null {
   const set = tasks.find((t) => t.type === SHOOT_TASK_TYPE && t.status !== 'CANCELLED' && t.dueOverrideAt)
-  return set?.dueOverrideAt ?? eventDate ?? null
+  return set?.dueOverrideAt ?? shootDay ?? null
 }
 
-/** What a project query selects to know its shoot date (pass the row to {@link shootDateOfJob}). */
-export const JOB_SHOOT_SELECT = {
+/** The relations behind a job's shoot date, for a project query that uses `include` (its scalar fields,
+ *  shootDate and shootLocation, come with include already). Everywhere else use {@link JOB_SHOOT_SELECT}. */
+export const JOB_SHOOT_INCLUDE = {
   workItems: { where: { type: SHOOT_TASK_TYPE }, select: { type: true, status: true, dueOverrideAt: true } },
-  convertedFromEnquiries: { select: { id: true, enquiryNumber: true, eventDate: true, eventLocation: true, ceremonyLocation: true, createdAsJob: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+  // The lead the job was booked from, if any (a job made with Add job has none): for the "From lead" link.
+  convertedFromEnquiries: { select: { id: true, enquiryNumber: true }, orderBy: { createdAt: 'desc' }, take: 1 },
 } as const
+
+/** What a project query selects to know its shoot date and place (pass the row to {@link shootDateOfJob}). */
+export const JOB_SHOOT_SELECT = { shootDate: true, shootLocation: true, ...JOB_SHOOT_INCLUDE } as const
 
 /** The shoot date of a project row fetched with {@link JOB_SHOOT_SELECT}. */
 export function shootDateOfJob(p: {
   workItems: { type: string; status: string; dueOverrideAt: Date | null }[]
-  convertedFromEnquiries: { eventDate: Date | null }[]
+  shootDate: Date | null
 }): Date | null {
-  return jobShootDate(p.workItems, p.convertedFromEnquiries[0]?.eventDate)
+  return jobShootDate(p.workItems, p.shootDate)
 }
 
-/** True when the shoot date carries a time staff set (an event date from the lead is a day only). */
+/** True when the shoot date carries a time (the Shoot task's set time; the main shoot day alone is a day). */
 export function shootHasTime(p: { workItems: { type: string; status: string; dueOverrideAt: Date | null }[] }): boolean {
   return p.workItems.some((t) => t.type === SHOOT_TASK_TYPE && t.status !== 'CANCELLED' && t.dueOverrideAt != null)
 }

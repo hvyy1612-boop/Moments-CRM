@@ -4,19 +4,16 @@ import { sydneyLocalToUtc, sydneyYmd } from '@/lib/time'
 import { getInvoiceBalance } from './money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
 import { titleCase } from '@/lib/text'
-import { LEAD_WHERE } from './enquiry'
 
-// A job carries its lead's details. `eventType` is the occasion (Wedding, Portrait, ...) and drives the
-// service filter; `coverage` is the job type (Photography / Videography / Both); `source` is the channel.
-// Selected on any project query that needs them.
-const SERVICE_SELECT = { convertedFromEnquiries: { select: { eventType: true, eventDate: true, coverage: true, source: true }, orderBy: { createdAt: 'desc' }, take: 1 } } as const
-type LeadLite = { convertedFromEnquiries: { eventType?: string | null; coverage?: string | null; source?: string | null }[] } | null | undefined
+// A job holds its own booking details (copied from its lead when booked, or entered on Add job). `eventType`
+// is the occasion (Wedding, Portrait, ...) and drives the service filter; `coverage` is the job type
+// (Photography / Videography / Both); `source` is the channel. Selected on any project query that needs them.
+const SERVICE_SELECT = { eventType: true, coverage: true, source: true } as const
+type LeadLite = { eventType?: string | null; coverage?: string | null; source?: string | null } | null | undefined
 // Occasion = the event type (the dashboard's filter dimension).
-const serviceOf = (p: LeadLite): string =>
-  p?.convertedFromEnquiries[0]?.eventType?.trim() ? titleCase(p.convertedFromEnquiries[0]!.eventType!.trim()) : 'Other'
-// Service type = Photography / Videography / Both; leads that never recorded it bucket as "Unspecified".
-const coverageOf = (p: LeadLite): string =>
-  p?.convertedFromEnquiries[0]?.coverage?.trim() ? titleCase(p.convertedFromEnquiries[0]!.coverage!.trim()) : 'Unspecified'
+const serviceOf = (p: LeadLite): string => (p?.eventType?.trim() ? titleCase(p.eventType.trim()) : 'Other')
+// Service type = Photography / Videography / Both; jobs that never recorded it bucket as "Unspecified".
+const coverageOf = (p: LeadLite): string => (p?.coverage?.trim() ? titleCase(p.coverage.trim()) : 'Unspecified')
 
 /**
  * Dashboard analytics (read-only aggregation over the existing records). Every figure is derived from
@@ -168,7 +165,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; occasion
   const matchLead = (lead: LeadLite): boolean => (!occ || serviceOf(lead) === occ) && (!cov || coverageOf(lead) === cov)
 
   const [enquiries, invoices, payments, projects, serviceRows, recentRaw, confirmedProjects] = await Promise.all([
-    prisma.enquiry.findMany({ where: { ...LEAD_WHERE, createdAt: { gte: prevStart } }, select: { status: true, source: true, createdAt: true } }),
+    prisma.enquiry.findMany({ where: { createdAt: { gte: prevStart } }, select: { status: true, source: true, createdAt: true } }),
     prisma.invoice.findMany({
       where: { status: { in: INVOICE_COUNTED as unknown as string[] } as never },
       select: { issuedAt: true, createdAt: true, project: { select: SERVICE_SELECT }, ...INVOICE_MONEY_SELECT },
@@ -185,24 +182,23 @@ export async function getDashboardData(opts: { period: DashboardPeriod; occasion
         workItems: { where: { status: 'PENDING', type: { not: 'AUTO' } }, select: { stage: true } },
       },
     }),
-    // The service filter's options: every event type a booked lead has had.
-    prisma.enquiry.findMany({ where: { convertedProjectId: { not: null } }, select: { eventType: true }, distinct: ['eventType'] }),
+    // The service filter's options: every event type a job has had.
+    prisma.project.findMany({ where: { eventType: { not: null } }, select: { eventType: true }, distinct: ['eventType'] }),
     // Recent enquiries across all channels (latest first) - real records for the dashboard table.
     prisma.enquiry.findMany({
-      where: LEAD_WHERE,
       orderBy: { createdAt: 'desc' },
       take: 6,
       select: { id: true, name: true, eventType: true, source: true, status: true, createdAt: true },
     }),
     // Bookings = projects confirmed (deposit paid) in the window, by confirmation date; queried from
-    // prevStart so the previous-period delta can be computed. Carries the lead's details (service + source).
+    // prevStart so the previous-period delta can be computed. Carries the job's details (service + source).
     prisma.project.findMany({
       where: { confirmedByClientAt: { gte: prevStart, lt: end } },
-      select: { confirmedByClientAt: true, source: true, ...SERVICE_SELECT },
+      select: { confirmedByClientAt: true, ...SERVICE_SELECT },
     }),
   ])
 
-  const dataOccasions = [...new Set(serviceRows.map((r) => serviceOf({ convertedFromEnquiries: [r] })))].filter((o) => o !== 'Other' && !OCCASION_CHOICES.includes(o))
+  const dataOccasions = [...new Set(serviceRows.map((r) => serviceOf(r)))].filter((o) => o !== 'Other' && !OCCASION_CHOICES.includes(o))
   const occasions = [...OCCASION_CHOICES, ...dataOccasions]
   const coverages = ['Photography', 'Videography', 'Both']
 
@@ -266,7 +262,7 @@ export async function getDashboardData(opts: { period: DashboardPeriod; occasion
 
   const srcMap = new Map<string, number>() // money-ok: booking counts
   for (const p of inPeriodConfirmed) {
-    const key = titleCaseSource(p.source ?? p.convertedFromEnquiries[0]?.source ?? 'MANUAL')
+    const key = titleCaseSource(p.source ?? 'MANUAL')
     srcMap.set(key, (srcMap.get(key) ?? 0) + 1)
   }
   const bookingsBySource: Bar[] = [...srcMap.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value)

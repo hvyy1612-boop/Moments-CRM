@@ -5,7 +5,6 @@ import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { LEAD_WHERE } from '@/lib/domain/enquiry'
 import { formatSydneyDate } from '@/lib/time'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
@@ -54,7 +53,7 @@ export default async function ClientDetailPage({
 
   // The website Contact-Us submission for this client. A client may enquire more than once (a repeat
   // booking), so we show the most recent lead's answers here; the rest open from "Open lead".
-  const enquiryWhere = { ...LEAD_WHERE, OR: [{ clientId: id }, { convertedClientId: id }, { email: client.email }] }
+  const enquiryWhere = { OR: [{ clientId: id }, { convertedClientId: id }, { email: client.email }] }
   const [enquiry, enquiryCount] = await Promise.all([
     prisma.enquiry.findFirst({
       where: enquiryWhere,

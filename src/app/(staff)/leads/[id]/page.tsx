@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { StatusTag } from '@/components/ui/StatusTag'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
@@ -18,6 +18,8 @@ import {
 } from '@/features/enquiries/status'
 import { getEnquiryBoard } from '@/lib/domain/enquiry-workflow'
 import { formatAud } from '@/lib/money'
+import { computeDeposit } from '@/lib/domain/pricing'
+import { BOOKING_DEPOSIT_PERCENT } from '@/lib/domain/project-workflow'
 import { quoteView } from '@/features/quotes/status'
 import { invoiceStatusView } from '@/features/finance/invoice-detail'
 import { dueSpecOf, type DueSpec } from '@/features/tasks/due'
@@ -91,14 +93,11 @@ export default async function EnquiryDetailPage({
       message: true,
       status: true,
       convertedProjectId: true,
-      createdAsJob: true,
       client: { select: { displayName: true } },
     },
   })
   // /leads/[id] loads the Enquiry (lead) entity ONLY - it never guesses a Project id (docs/24 FIX 11).
   if (!enquiry) notFound()
-  // A job added directly (Add job) was never a lead: its details live on the job.
-  if (enquiry.createdAsJob && enquiry.convertedProjectId) redirect(`/jobs/${enquiry.convertedProjectId}`)
 
   const [activity, quotes, invoices, noteComms, contract] = await Promise.all([
     prisma.auditLog.findMany({
@@ -163,6 +162,10 @@ export default async function EnquiryDetailPage({
   const fileEditable = awaiting && bookingFileId != null
   const contractVersion = contract?.currentVersion ?? null
   const quoteAccepted = quotes.some((q) => q.status === 'ACCEPTED')
+  // The deposit that holds the date (studio policy): 20% of the accepted quote. The lead becomes a job once
+  // the money received on its booking reaches it (bookingDepositReached).
+  const acceptedTotal = quotes.find((q) => q.status === 'ACCEPTED')?.currentVersion?.total ?? null
+  const depositNeeded = acceptedTotal ? computeDeposit(acceptedTotal, BOOKING_DEPOSIT_PERCENT).deposit : null
   const board = await getEnquiryBoard(id)
   // Time-of-day for tasks that carry a manual due date+time (stored in dueAt for enquiry tasks). The
   // board row only carries the date, so the edit form reads the time from here to pre-fill its input.
@@ -226,7 +229,8 @@ export default async function EnquiryDetailPage({
               <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">
                 {/* No accepted quote = a job whose "Job accepted" was unticked (e.g. added directly by mistake). */}
                 {quoteAccepted ? 'Quote accepted.' : 'Waiting for the deposit.'} The date is not held yet: this lead becomes a
-                job once the deposit is paid. Raise the deposit invoice under Invoices{quoteAccepted ? ', and send the contract if needed' : ''}.
+                job once {depositNeeded ? `the ${BOOKING_DEPOSIT_PERCENT}% deposit (${formatAud(depositNeeded)}) is received` : 'the deposit is paid'}.
+                Raise the deposit invoice under Invoices{quoteAccepted ? ', and send the contract if needed' : ''}.
               </div>
             ) : confirmed ? (
               <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">

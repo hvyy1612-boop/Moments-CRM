@@ -7,7 +7,7 @@ import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { SentToast } from '@/components/ui/SentToast'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { JOB_SHOOT_SELECT, shootDateOfJob, shootHasTime } from '@/lib/domain/deadline'
+import { JOB_SHOOT_INCLUDE, shootDateOfJob, shootHasTime } from '@/lib/domain/deadline'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyDateTime, sydneyDateTimeParts } from '@/lib/time'
 import { getProjectBoard, moveBackToLeadBlocker } from '@/lib/domain/project-workflow'
@@ -65,11 +65,12 @@ function historyActionType(action: string): string {
   const base = action.replace(/^project\./, '').replace(/_/g, ' ')
   return base.charAt(0).toUpperCase() + base.slice(1)
 }
-function historyDetails(action: string, after: unknown, addedDirectly: boolean): string {
+function historyDetails(action: string, after: unknown): string {
   const title = (after && typeof after === 'object' && 'title' in after ? String((after as { title?: unknown }).title ?? '') : '') || 'a task'
   if (action === 'project.task_completed') return `${title} was completed.`
   if (action === 'project.task_reopened') return `${title} was reopened.`
-  if (action === 'enquiry.converted') return addedDirectly ? 'Job was added as an already confirmed booking.' : 'Job was created from a lead.'
+  if (action === 'enquiry.converted') return 'Job was created from a lead.'
+  if (action === 'project.created_direct') return 'Job was added as an already confirmed booking.'
   if (action === 'project.moved_back_to_lead') return 'Job accepted was unticked; it went back to Leads.'
   return historyActionType(action)
 }
@@ -126,7 +127,7 @@ export async function CaseDetail({
         include: { currentVersion: true },
       },
       // The job's shoot date (its Shoot task, else the lead's event date) and the lead's venue.
-      ...JOB_SHOOT_SELECT,
+      ...JOB_SHOOT_INCLUDE,
       invoices: { select: { ...INVOICE_MONEY_SELECT, id: true } },
       requirements: { orderBy: { sortOrder: 'asc' } },
       teamMembers: { orderBy: { sortOrder: 'asc' } },
@@ -181,7 +182,7 @@ export async function CaseDetail({
     actionType: historyActionType(r.action),
     dateLabel: formatSydneyDateTime(r.createdAt),
     user: r.actor?.name ?? 'System',
-    details: historyDetails(r.action, r.afterData, project.convertedFromEnquiries[0]?.createdAsJob === true),
+    details: historyDetails(r.action, r.afterData),
   }))
 
   const invoiceCount = project.invoices.length
@@ -191,7 +192,6 @@ export async function CaseDetail({
   const showAccepted = project.lifecycleStatus !== 'CANCELLED'
   const acceptedBlocker = moveBackToLeadBlocker({
     lifecycleStatus: project.lifecycleStatus,
-    hasLead: project.convertedFromEnquiries.length > 0,
     paidNet: getJobBalance(project.invoices.map(toInvoiceMoneyInput), null).paidNet,
   })
   // What the accepted quote agreed but no invoice covers yet (e.g. the balance after a paid deposit).
@@ -216,12 +216,12 @@ export async function CaseDetail({
     isAddOn: p.isAddOn,
   }))
 
-  // Header facts: the job's shoot date (set on its Shoot task, else the lead's event date) and the venue
-  // the lead gave.
+  // Header facts: the job's shoot date (set on its Shoot task, else its main shoot day) and its venue. The
+  // lead it was booked from, if any - a job made with Add job has none.
   const shootAt = shootDateOfJob(project)
   const shootDateLabel = shootAt ? (shootHasTime(project) ? formatSydneyDateTime(shootAt) : formatSydneyDate(shootAt)) : null
   const lead = project.convertedFromEnquiries[0]
-  const shootLocation = lead?.eventLocation?.trim() || lead?.ceremonyLocation?.split('\n')[0]?.trim() || null
+  const shootLocation = project.shootLocation
 
   // "Phase N of M": position of the active core stage in the production sequence, +1 for Complete.
   const hasBoard = Boolean(board && board.stages.length > 0)
@@ -279,9 +279,8 @@ export async function CaseDetail({
               <span className="flex items-center gap-1.5"><IconUsers className="h-4 w-4" /> {project.client.displayName}</span>
               {shootDateLabel ? <span className="flex items-center gap-1.5"><IconCalendar className="h-4 w-4" /> {shootDateLabel}</span> : null}
               {shootLocation ? <span className="flex items-center gap-1.5"><IconPin className="h-4 w-4" /> {shootLocation}</span> : null}
-              {/* The lead this job was booked from (its enquiry details, quote history and notes). A job added
-                  directly (Add job) never was a lead, so it has no link. */}
-              {lead && !lead.createdAsJob ? (
+              {/* The lead this job was booked from (its enquiry details, quote history and notes). */}
+              {lead ? (
                 <Link href={`/leads/${lead.id}`} className="hover:text-ink hover:underline">
                   From lead {lead.enquiryNumber ?? ''}
                 </Link>

@@ -21,13 +21,6 @@ import { cancelProjectTx } from './refund'
  * deleted: DECLINED leads are kept and can be reopened. Stage rules: docs/23 §4, docs/33.
  */
 
-/**
- * Enquiry rows that are LEADS, for every list, count, search and report that shows leads. Leaves out the
- * row behind an Add job (a booking already confirmed outside the app, `createdAsJob`): it only holds that
- * job's details and was never a lead (Studio Ninja greys the lead stage out on a job created directly).
- */
-export const LEAD_WHERE = { createdAsJob: false } satisfies Prisma.EnquiryWhereInput
-
 export type CreateEnquiryInput = {
   name: string
   firstName?: string | null
@@ -60,8 +53,6 @@ export type CreateEnquiryInput = {
   weddingDetails?: string | null
   styleReason?: string | null
   heardAbout?: string | null
-  // Add job: the booking is already confirmed, so this row is never a lead (see LEAD_WHERE).
-  createdAsJob?: boolean
 }
 
 /** Capture an enquiry (public form or staff). actorUserId is set when a staff member logs it.
@@ -77,61 +68,93 @@ export async function createEnquiry(input: CreateEnquiryInput, actorUserId: stri
   }
 }
 
-async function runCreateEnquiry(input: CreateEnquiryInput, actorUserId: string | null) {
-  return prisma.$transaction(async (tx) => {
-    const company = await requireCompany(tx)
-    const enquiryNumber = await nextRecordNumber(tx, company.id, 'ENQUIRY')
-    const enquiry = await tx.enquiry.create({
-      data: {
-        companyId: company.id,
-        enquiryNumber,
-        ownerUserId: input.ownerUserId ?? null,
-        clientId: input.clientId ?? null,
-        name: input.name,
-        firstName: input.firstName ?? null,
-        lastName: input.lastName ?? null,
-        email: input.email,
-        phone: input.phone ?? null,
-        street: input.street ?? null,
-        suburb: input.suburb ?? null,
-        state: input.state ?? null,
-        postcode: input.postcode ?? null,
-        country: input.country ?? null,
-        isCompany: input.isCompany ?? false,
-        eventType: input.eventType ?? null,
-        eventDate: input.eventDate ?? null,
-        eventEndDate: input.eventEndDate ?? null,
-        eventStartTime: input.eventStartTime ?? null,
-        eventEndTime: input.eventEndTime ?? null,
-        eventLocation: input.eventLocation ?? null,
-        message: input.message ?? null,
-        createdAsJob: input.createdAsJob ?? false,
-        partnerName: input.partnerName ?? null,
-        coverage: input.coverage ?? null,
-        coverageNote: input.coverageNote ?? null,
-        gettingReadyLocation: input.gettingReadyLocation ?? null,
-        ceremonyLocation: input.ceremonyLocation ?? null,
-        weddingDetails: input.weddingDetails ?? null,
-        styleReason: input.styleReason ?? null,
-        heardAbout: input.heardAbout ?? null,
-        source: input.source ?? 'WEBSITE',
-      },
-    })
-    await tx.auditLog.create({
-      data: {
-        companyId: company.id,
-        action: 'enquiry.created',
-        entityType: 'Enquiry',
-        entityId: enquiry.id,
-        actorUserId,
-        source: actorUserId ? 'staff.enquiry' : 'public.enquiry',
-        afterData: { email: enquiry.email },
-      },
-    })
-    // Store the client's first message as a Communication and open the first work item.
-    await seedEnquiryWorkflow(tx, enquiry)
-    return enquiry
+function runCreateEnquiry(input: CreateEnquiryInput, actorUserId: string | null) {
+  return prisma.$transaction((tx) => createEnquiryTx(tx, input, actorUserId))
+}
+
+/** createEnquiry inside a caller's transaction (no retry: the caller's transaction is the unit). */
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+
+export async function createEnquiryTx(tx: Tx, input: CreateEnquiryInput, actorUserId: string | null) {
+  const company = await requireCompany(tx)
+  const enquiryNumber = await nextRecordNumber(tx, company.id, 'ENQUIRY')
+  const enquiry = await tx.enquiry.create({
+    data: {
+      companyId: company.id,
+      enquiryNumber,
+      ownerUserId: input.ownerUserId ?? null,
+      clientId: input.clientId ?? null,
+      name: input.name,
+      firstName: input.firstName ?? null,
+      lastName: input.lastName ?? null,
+      email: input.email,
+      phone: input.phone ?? null,
+      street: input.street ?? null,
+      suburb: input.suburb ?? null,
+      state: input.state ?? null,
+      postcode: input.postcode ?? null,
+      country: input.country ?? null,
+      isCompany: input.isCompany ?? false,
+      eventType: input.eventType ?? null,
+      eventDate: input.eventDate ?? null,
+      eventEndDate: input.eventEndDate ?? null,
+      eventStartTime: input.eventStartTime ?? null,
+      eventEndTime: input.eventEndTime ?? null,
+      eventLocation: input.eventLocation ?? null,
+      message: input.message ?? null,
+      partnerName: input.partnerName ?? null,
+      coverage: input.coverage ?? null,
+      coverageNote: input.coverageNote ?? null,
+      gettingReadyLocation: input.gettingReadyLocation ?? null,
+      ceremonyLocation: input.ceremonyLocation ?? null,
+      weddingDetails: input.weddingDetails ?? null,
+      styleReason: input.styleReason ?? null,
+      heardAbout: input.heardAbout ?? null,
+      source: input.source ?? 'WEBSITE',
+    },
   })
+  await tx.auditLog.create({
+    data: {
+      companyId: company.id,
+      action: 'enquiry.created',
+      entityType: 'Enquiry',
+      entityId: enquiry.id,
+      actorUserId,
+      source: actorUserId ? 'staff.enquiry' : 'public.enquiry',
+      afterData: { email: enquiry.email },
+    },
+  })
+  // Store the client's first message as a Communication and open the first work item.
+  await seedEnquiryWorkflow(tx, enquiry)
+  return enquiry
+}
+
+/** The booking details a lead hands to its job (Project fields). The job keeps its own copy from then on. */
+export function bookingDetailsFromLead(e: {
+  eventType: string | null
+  coverage: string | null
+  coverageNote: string | null
+  heardAbout: string | null
+  eventDate: Date | null
+  eventEndDate: Date | null
+  eventStartTime: string | null
+  eventEndTime: string | null
+  eventLocation: string | null
+  ceremonyLocation: string | null
+}) {
+  // Staff-added leads have one location; website leads give the ceremony venue (first line).
+  const location = e.eventLocation?.trim() || e.ceremonyLocation?.split('\n')[0]?.trim() || null
+  return {
+    eventType: e.eventType,
+    coverage: e.coverage,
+    coverageNote: e.coverageNote,
+    heardAbout: e.heardAbout,
+    shootDate: e.eventDate,
+    shootEndDate: e.eventEndDate,
+    shootStartTime: e.eventStartTime,
+    shootEndTime: e.eventEndTime,
+    shootLocation: location ? location.slice(0, 300) : null,
+  }
 }
 
 /** Not a fit / ghosted: keep the record (never create a client). A reason is required. */
@@ -310,6 +333,7 @@ export async function convertEnquiryCore(
         source: enquiry.source,
         ownerUserId: enquiry.ownerUserId ?? actorUserId,
         enquiryReceivedAt: enquiry.createdAt,
+        ...bookingDetailsFromLead(enquiry),
       },
     })
 

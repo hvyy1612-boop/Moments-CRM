@@ -69,12 +69,7 @@ export default async function JobsPage({
             dueAt: true, dueOverrideAt: true, dueAnchor: true, dueOffsetDays: true, dueDateFixed: true,
           },
         },
-        // The lead's event date: the job's shoot date until staff set one on the Shoot task.
-        convertedFromEnquiries: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-          select: { eventDate: true },
-        },
+
       },
     })
   const canEdit = can(user, 'PROJECT_EDIT')
@@ -84,7 +79,7 @@ export default async function JobsPage({
     // Stage, progress and the next task come from the SAME board the job page shows (buildProjectBoard
     // over resolved due dates), so the list can never disagree with the job: add-on and custom stages
     // never claim the stage, custom stages never count toward progress, anchored tasks get their dates.
-    const shootAt = jobShootDate(p.workItems, p.convertedFromEnquiries[0]?.eventDate)
+    const shootAt = jobShootDate(p.workItems, p.shootDate)
     const ctx = { shootDate: shootAt, jobConfirmedAt: p.confirmedByClientAt }
     const tasks: TaskInput[] = p.workItems.map((w) => ({
       id: w.id, title: w.title, status: w.status, stage: w.stage, type: w.type, kind: w.kind,
