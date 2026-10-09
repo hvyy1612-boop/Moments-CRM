@@ -19,6 +19,7 @@ import {
 import { getEnquiryBoard } from '@/lib/domain/enquiry-workflow'
 import { formatAud } from '@/lib/money'
 import { quoteView } from '@/features/quotes/status'
+import { invoiceStatusView } from '@/features/finance/invoice-detail'
 import { formatShootWindow, jobTypeLabel } from '@/features/enquiries/new-lead'
 import { auditLabel } from '../../activity/audit'
 import { AppShell } from '../../AppShell'
@@ -39,9 +40,6 @@ export const metadata: Metadata = { title: 'Lead - Moments' }
 
 const PLUS = <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
 
-const INVOICE_TONE: Record<string, Tone> = {
-  DRAFT: 'neutral', ISSUED: 'info', SENT: 'info', PARTIALLY_PAID: 'warn', PAID: 'good', OVERDUE: 'bad', VOID: 'neutral',
-}
 // Same tones as the job page's Contract section.
 const CONTRACT_TONE: Record<string, Tone> = { DRAFT: 'neutral', SENT: 'info', SIGNED: 'good' }
 
@@ -153,8 +151,12 @@ export default async function EnquiryDetailPage({
   // There is no manual "Create Job": ticking tasks never books a lead.
   const confirmed = enquiry.status === 'BOOKING_CONFIRMED'
   const awaiting = enquiry.status === 'AWAITING_BOOKING_CONFIRMATION'
+  const declined = enquiry.status === 'DECLINED'
   const open = isOpenEnquiry(enquiry.status)
   const bookingFileId = awaiting || confirmed ? enquiry.convertedProjectId : null
+  // Invoices and the contract are worked on HERE only while the lead waits for its deposit; once it is a
+  // job they are managed on the job page and the lead section is read-only (Studio-Ninja style).
+  const fileEditable = awaiting && bookingFileId != null
   const contractVersion = contract?.currentVersion ?? null
   const quoteAccepted = quotes.some((q) => q.status === 'ACCEPTED')
   const board = await getEnquiryBoard(id)
@@ -211,7 +213,8 @@ export default async function EnquiryDetailPage({
               enquiryId={enquiry.id}
               csrf={csrf}
               taskTimes={taskTimes}
-              readOnly={confirmed}
+              // Booked (it is a job now) or declined (closed until Reopen): nothing to work here.
+              readOnly={confirmed || declined}
             />
 
             {/* Outcome actions */}
@@ -315,14 +318,18 @@ export default async function EnquiryDetailPage({
             <SidebarCard
               title="Invoices"
               action={
-                bookingFileId ? (
+                fileEditable ? (
                   <IconLink label="Create invoice" tone="accent" href={`/finance/new?job=${bookingFileId}`} icon={PLUS} />
                 ) : undefined
               }
             >
               {invoices.length === 0 ? (
                 <p className="text-sm text-ink-muted">
-                  {bookingFileId ? 'No invoices yet. Raise the deposit invoice here.' : 'The deposit invoice can be raised once the quote is accepted.'}
+                  {fileEditable
+                    ? 'No invoices yet. Raise the deposit invoice here.'
+                    : open
+                      ? 'The deposit invoice can be raised once the quote is accepted.'
+                      : 'No invoices.'}
                 </p>
               ) : (
                 <ul>
@@ -331,7 +338,7 @@ export default async function EnquiryDetailPage({
                       <Link href={`/finance/${inv.id}`} className="tabular font-semibold text-ink hover:text-accent-ink hover:underline">
                         {inv.invoiceNumber}
                       </Link>
-                      <StatusPill tone={INVOICE_TONE[inv.status] ?? 'neutral'}>{inv.status.toLowerCase().replace(/_/g, ' ')}</StatusPill>
+                      <StatusPill tone={invoiceStatusView(inv.status).tone}>{invoiceStatusView(inv.status).label}</StatusPill>
                       <span className="tabular ml-auto text-sm font-medium text-ink">{formatAud(inv.total)}</span>
                     </li>
                   ))}
@@ -347,7 +354,7 @@ export default async function EnquiryDetailPage({
                 action={contractVersion ? <StatusPill tone={CONTRACT_TONE[contractVersion.status] ?? 'neutral'}>{titleCase(contractVersion.status)}</StatusPill> : undefined}
               >
                 {!contract || !contractVersion ? (
-                  confirmed ? (
+                  !fileEditable ? (
                     <p className="text-sm text-ink-muted">No contract was sent for this booking.</p>
                   ) : (
                     <form action={createContractAction}>
@@ -359,7 +366,11 @@ export default async function EnquiryDetailPage({
                     </form>
                   )
                 ) : contractVersion.status === 'DRAFT' ? (
-                  <ContractSend csrf={csrf} contractId={contract.id} projectId={bookingFileId} enquiryId={enquiry.id} />
+                  fileEditable ? (
+                    <ContractSend csrf={csrf} contractId={contract.id} projectId={bookingFileId} enquiryId={enquiry.id} />
+                  ) : (
+                    <p className="text-sm text-ink-muted">Not sent yet. Send it from the job.</p>
+                  )
                 ) : contractVersion.status === 'SIGNED' ? (
                   <p className="text-sm text-ink">
                     Signed by {contractVersion.signedByClientName}

@@ -141,12 +141,21 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     jobConfirmedAt: project.confirmedByClientAt,
   }
 
-  // "Paid in full" via the Money foundation (docs/25): there is a real obligation (excludes DRAFT/VOID
-  // and credit notes) and nothing is owed on it. Agreed value is irrelevant here, so pass null.
-  const jobMoney = getJobBalance(project.invoices.map(toInvoiceMoneyInput), null)
+  // "Final payment received" via the Money foundation (docs/25), the same settlement rule as auto-complete:
+  // with an accepted quote (the agreed value) the WHOLE agreed amount must be invoiced and paid - a paid
+  // deposit alone is not the final payment. With no accepted quote: a real obligation exists and nothing
+  // is owed on it.
+  const acceptedQuote = await prisma.quoteVersion.findFirst({
+    where: { quote: { projectId }, status: 'ACCEPTED' },
+    orderBy: { acceptedByClientAt: 'desc' },
+    select: { total: true },
+  })
+  const jobMoney = getJobBalance(project.invoices.map(toInvoiceMoneyInput), acceptedQuote?.total ?? null)
   const facts: ProjectFacts = {
     // The read-only system milestone (derived from real records, never staff-ticked):
-    finalPaid: jobMoney.invoicedObligation.greaterThan(0) && jobMoney.outstanding.lessThanOrEqualTo(0),
+    finalPaid: jobMoney.agreedValueKnown
+      ? jobMoney.isFullySettled
+      : jobMoney.invoicedObligation.greaterThan(0) && jobMoney.outstanding.lessThanOrEqualTo(0),
   }
 
   const tasks: TaskInput[] = items.map((w) => ({

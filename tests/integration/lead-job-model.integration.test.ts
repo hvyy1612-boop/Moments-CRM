@@ -7,6 +7,7 @@ import { recordPayment } from '@/lib/domain/finance'
 import { JOB_WHERE } from '@/lib/domain/project'
 import { confirmDirectBooking, getProjectBoard } from '@/lib/domain/project-workflow'
 import { createInvoice } from './helpers'
+import { acceptQuote, createQuoteForEnquiry, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 
 const email = () => `it-${randomUUID()}@moments.test`
 
@@ -50,6 +51,22 @@ describe('lead-job model (integration, real DB) - docs/24', () => {
     expect(await prisma.workItem.count({ where: { enquiryId: e.id, status: 'PENDING' } })).toBe(0)
     expect(await prisma.workItem.count({ where: { projectId: projectId! } })).toBeGreaterThan(0) // production seeded
     expect(await prisma.project.count({ where: { AND: [JOB_WHERE, { id: projectId! }] } })).toBe(1)
+  })
+
+  it('a paid deposit is not the final payment: the milestone waits for the whole agreed quote', async () => {
+    const lead = await createEnquiry({ name: 'Final Payment', email: email() })
+    const q = await createQuoteForEnquiry(lead.id, null)
+    await saveQuoteDraft(q.versionId, [{ description: 'Wedding package', quantity: 1, unitPrice: '5000' }], null)
+    await sendQuote(q.quoteId, null)
+    const { projectId } = await acceptQuote(q.quoteId, null)
+    const milestone = async () =>
+      (await getProjectBoard(projectId!)).stages.flatMap((st) => st.tasks).find((t) => t.title === 'Final payment received')?.done
+    const deposit = await createInvoice(projectId!, { type: 'DEPOSIT', description: 'Deposit', amount: '1000' }, null)
+    await recordPayment(deposit.id, { paymentMethod: 'BANK_TRANSFER', amount: '1000' }, null)
+    expect(await milestone()).toBe(false) // $4,000 of the quote is not even invoiced yet
+    const balance = await createInvoice(projectId!, { type: 'BALANCE', description: 'Balance', amount: '4000' }, null)
+    await recordPayment(balance.id, { paymentMethod: 'BANK_TRANSFER', amount: '4000' }, null)
+    expect(await milestone()).toBe(true)
   })
 
   it('Add job (direct booking) is confirmed at once, with no payment or contract invented', async () => {

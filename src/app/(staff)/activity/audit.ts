@@ -51,7 +51,7 @@ const SPECIAL: Record<string, string> = {
   'enquiry.stage_auto': 'Lead stage moved on',
   'enquiry.status': 'Lead stage changed',
   'enquiry.moved_to_quote': 'Lead moved to consultation',
-  'enquiry.converted': 'Lead converted to job',
+  'enquiry.converted': 'Quote accepted, awaiting deposit',
   'enquiry.lost': 'Lead declined',
   'enquiry.reopened': 'Lead reopened',
   'enquiry.booking_confirmed': 'Booking confirmed (now a job)',

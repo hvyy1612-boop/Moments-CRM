@@ -52,6 +52,12 @@ function label(value: string): string {
   return value.toLowerCase().replace(/_/g, ' ')
 }
 
+/** "SIGNED" -> "Signed" (status pills read as words, like the quote's "Accepted"). */
+function titleWord(value: string): string {
+  const v = label(value)
+  return v.charAt(0).toUpperCase() + v.slice(1)
+}
+
 /** Turn an audit action + payload into the History Log's plain-language columns. */
 function historyActionType(action: string): string {
   const base = action.replace(/^project\./, '').replace(/_/g, ' ')
@@ -172,6 +178,10 @@ export async function CaseDetail({
 
   const invoiceCount = project.invoices.length
   const invoiceOutstanding = getJobBalance(project.invoices.map(toInvoiceMoneyInput), null).outstanding
+  // What the accepted quote agreed but no invoice covers yet (e.g. the balance after a paid deposit).
+  const notYetInvoiced = quoteAccepted && version
+    ? getJobBalance(project.invoices.map(toInvoiceMoneyInput), version.total).uninvoicedRemainder
+    : null
 
   const isDelivered = project.lifecycleStatus === 'COMPLETED'
   const isClosed = project.lifecycleStatus === 'CLOSED'
@@ -253,6 +263,12 @@ export async function CaseDetail({
               <span className="flex items-center gap-1.5"><IconUsers className="h-4 w-4" /> {project.client.displayName}</span>
               {shootDateLabel ? <span className="flex items-center gap-1.5"><IconCalendar className="h-4 w-4" /> {shootDateLabel}</span> : null}
               {shootLocation ? <span className="flex items-center gap-1.5"><IconPin className="h-4 w-4" /> {shootLocation}</span> : null}
+              {/* The lead this job was booked from (its enquiry details, quote history and notes). */}
+              {lead ? (
+                <Link href={`/leads/${lead.id}`} className="hover:text-ink hover:underline">
+                  From lead {lead.enquiryNumber ?? ''}
+                </Link>
+              ) : null}
             </div>
           </div>
 
@@ -441,7 +457,7 @@ export async function CaseDetail({
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h2 className="text-lg font-semibold text-ink">Contract</h2>
                     <div className="flex items-center gap-2">
-                      {contractVersion ? <StatusPill tone={CONTRACT_TONE[contractVersion.status] ?? 'neutral'}>{label(contractVersion.status)}</StatusPill> : null}
+                      {contractVersion ? <StatusPill tone={CONTRACT_TONE[contractVersion.status] ?? 'neutral'}>{titleWord(contractVersion.status)}</StatusPill> : null}
                       {quote ? <IconLink label="Edit quote" tone="accent" href={`/quotes/${quote.id}`} icon={EDIT_ICON} /> : null}
                     </div>
                   </div>
@@ -470,7 +486,9 @@ export async function CaseDetail({
                     <div>
                       <h2 className="text-lg font-semibold text-ink">Invoices &amp; payments</h2>
                       <p className="mt-1 text-sm text-ink-muted">
-                        {invoiceCount} invoice{invoiceCount === 1 ? '' : 's'} · {formatAud(invoiceOutstanding)} outstanding · managed in Payments.
+                        {invoiceCount} invoice{invoiceCount === 1 ? '' : 's'} · {formatAud(invoiceOutstanding)} outstanding
+                        {notYetInvoiced && notYetInvoiced.greaterThan(0) ? ` · ${formatAud(notYetInvoiced)} of the quote not invoiced yet` : ''} · managed in
+                        Payments.
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
