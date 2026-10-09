@@ -1,12 +1,13 @@
 'use client'
 
-import { type FormEvent, type ReactNode, useActionState, useEffect, useState } from 'react'
+import { type ReactNode, useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Alert } from '@/components/ui/Alert'
 import { IconButton } from '@/components/ui/IconButton'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Checkbox, Field, Select, TextInput, Textarea } from '@/components/ui/form'
+import { submitKeepingValues } from '@/components/ui/submitKeepingValues'
 import { JOB_TYPES, LEAD_SOURCES, LEAD_WORKFLOWS, parseNewLead } from '@/features/enquiries/new-lead'
 import { addEnquiryAction, addJobAction, type AddEnquiryState, type AddLeadErrors } from './actions'
 import { ClientContactPicker } from './ClientContactPicker'
@@ -112,16 +113,16 @@ export function AddEnquiryButton({
     setEdited((prev) => (prev.has(field) ? prev : new Set(prev).add(field)))
   }
 
-  // Same checks the server runs, in the browser first, so a blank required field turns red at once.
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
-    const fd = new FormData(event.currentTarget)
+  // Same checks the server runs, in the browser first, so a blank required field turns red at once. Submitted
+  // without React's form reset, so Job type and the ticks keep their values after a refused save.
+  const onSubmit = submitKeepingValues(action, (fd) => {
     const parsed = parseNewLead(fd, kind)
     const found: AddLeadErrors = parsed.ok ? {} : { ...parsed.errors }
     if (!String(fd.get('clientId') ?? '').trim()) found.clientId = `Please choose a client for this ${kind}.`
     setEdited(new Set())
     setClientErrors(found)
-    if (Object.keys(found).length > 0) event.preventDefault()
-  }
+    return Object.keys(found).length === 0
+  })
 
   const shootDisabled = unconfirmed
   const timeDisabled = unconfirmed || allDay
@@ -155,7 +156,6 @@ export function AddEnquiryButton({
         headerBorder={false}
       >
         <form
-          action={action}
           onSubmit={onSubmit}
           onInput={(e) => {
             const name = (e.target as HTMLInputElement).name

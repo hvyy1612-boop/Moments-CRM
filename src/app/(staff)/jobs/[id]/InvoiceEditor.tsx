@@ -6,6 +6,7 @@ import { Alert } from '@/components/ui/Alert'
 import { Button, secondaryLinkLg } from '@/components/ui/Button'
 import { MainAside } from '@/components/EditLayout'
 import { Field, Select, Textarea, TextInput } from '@/components/ui/form'
+import { submitKeepingValues } from '@/components/ui/submitKeepingValues'
 import { createInvoiceLinesAction, updateInvoiceLinesAction, type QuoteActionState } from '../actions'
 import { formatScheduleDate, presetRows, type ScheduleKey, type ScheduleRow } from '@/features/finance/payment-schedule'
 import { PaymentScheduleSelect } from './PaymentScheduleSelect'
@@ -239,7 +240,8 @@ export function InvoiceEditor({
 
   return (
     <>
-      <form action={action} className="mt-4 border-t border-line pt-6">
+      {/* No React form reset after a refused save: the Due select and every field keep their values. */}
+      <form onSubmit={submitKeepingValues(action)} className="mt-4 border-t border-line pt-6">
         {state.status === 'error' ? <div className="mb-6"><Alert tone="danger" title={state.message} /></div> : null}
         <input type="hidden" name="csrf" value={csrf} />
         <input type="hidden" name="projectId" value={projectId} />

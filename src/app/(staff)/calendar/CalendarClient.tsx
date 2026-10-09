@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Checkbox, Field, Select, TextInput, Textarea } from '@/components/ui/form'
+import { submitKeepingValues } from '@/components/ui/submitKeepingValues'
 import type { CalItem, CalendarViewData } from '@/lib/domain/calendar'
 import { createCalendarEventAction, moveCalendarItemAction, resetCalendarFeedAction, type CalendarActionState } from './actions'
 
@@ -532,7 +533,8 @@ function AddEventModal({ csrf, clients, prefill, onClose }: { csrf: string; clie
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         </div>
-        <form action={action} className="flex flex-col gap-4 px-5 py-4">
+        {/* No React form reset after a refused save: the All day tick keeps its value (submitKeepingValues). */}
+        <form onSubmit={submitKeepingValues(action)} className="flex flex-col gap-4 px-5 py-4">
           <input type="hidden" name="csrf" value={csrf} />
           {state.status === 'error' ? <Alert tone="danger" title={state.message ?? 'Please check the form.'} /> : null}
           <Field label="Type" htmlFor="ev-kind">
