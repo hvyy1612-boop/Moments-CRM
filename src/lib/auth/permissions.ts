@@ -34,6 +34,7 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   // SUPERVISOR (read-only) may open every viewing page; pages that exist only to create or edit
   // (new quote, quote/invoice/client edit, new invoice, client import) stay ADMIN / STUDIO.
   '/dashboard': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/notifications': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   '/leads': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   '/leads/report': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   '/leads/[id]': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },

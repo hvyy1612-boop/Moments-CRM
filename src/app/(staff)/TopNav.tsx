@@ -23,6 +23,7 @@ export function TopNav({
   userRole,
   csrf,
   alerts,
+  notificationsSeenAt,
 }: {
   collapsed: boolean
   onToggle: () => void
@@ -31,6 +32,7 @@ export function TopNav({
   userRole: string
   csrf: string
   alerts: Alert[]
+  notificationsSeenAt?: Date | null
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -73,7 +75,7 @@ export function TopNav({
         </span>
       ) : null}
       <CommandPalette />
-      <NotificationBell alerts={alerts} canViewActivity={userRole === 'ADMIN'} />
+      <NotificationBell alerts={alerts} seenAt={notificationsSeenAt ?? null} canViewActivity={userRole === 'ADMIN'} />
 
       <div ref={menuRef} className="relative shrink-0">
         <button

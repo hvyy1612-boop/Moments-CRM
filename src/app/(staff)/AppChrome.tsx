@@ -26,6 +26,7 @@ export function AppChrome({
   userRole,
   csrf,
   alerts,
+  notificationsSeenAt = null,
   notifKeys = [],
   children,
 }: {
@@ -37,6 +38,7 @@ export function AppChrome({
   userRole: string
   csrf: string
   alerts: Alert[]
+  notificationsSeenAt?: Date | null
   /** Nav keys that should show a notification dot (real state, computed server-side). */
   notifKeys?: string[]
   children: ReactNode
@@ -75,6 +77,7 @@ export function AppChrome({
         userRole={userRole}
         csrf={csrf}
         alerts={alerts}
+        notificationsSeenAt={notificationsSeenAt}
       />
 
       {/* Mobile navigation (below md, where the sidebar is hidden). */}

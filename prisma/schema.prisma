@@ -243,6 +243,9 @@ model User {
   status                    String    @default("ACTIVE") @db.VarChar(20) // ACTIVE | DELETED (Remove on the Users page = soft delete)
   mustChangePassword        Boolean   @default(false) @map("must_change_password")
   lastLoginAt               DateTime? @map("last_login_at") @db.Timestamptz
+  // Per-user "notifications seen" marker: the bell's unread count = alerts newer than this; "Mark all
+  // read" sets it to now. Nullable (never marked = everything unread). No per-notification table needed.
+  notificationsSeenAt       DateTime? @map("notifications_seen_at") @db.Timestamptz
   failedAttempts            Int       @default(0) @map("failed_attempts")
   lockedUntil               DateTime? @map("locked_until") @db.Timestamptz
   // Step-up PIN for the Activity page: a 4-digit PIN (hashed, Argon2id) an admin sets to re-open the
