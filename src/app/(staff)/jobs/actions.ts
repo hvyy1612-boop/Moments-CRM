@@ -669,7 +669,7 @@ export async function createStaffEnquiryAction(
   }
   revalidatePath('/jobs')
   revalidatePath('/leads')
-  redirect(`/jobs/${projectId}?toast=job-created`)
+  redirect(`/jobs/${projectId}?toast=job-added`)
 }
 
 // ---------------------------------------------------------------------------

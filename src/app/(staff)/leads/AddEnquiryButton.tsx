@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Checkbox, Field, Select, TextInput, Textarea } from '@/components/ui/form'
 import { JOB_TYPES, LEAD_SOURCES, LEAD_WORKFLOWS, parseNewLead } from '@/features/enquiries/new-lead'
-import { addEnquiryAction, type AddEnquiryState, type AddLeadErrors } from './actions'
+import { addEnquiryAction, addJobAction, type AddEnquiryState, type AddLeadErrors } from './actions'
 import { ClientContactPicker } from './ClientContactPicker'
 
 const INITIAL: AddEnquiryState = { status: 'idle' }
@@ -17,6 +17,14 @@ const IconEnquiryPlus = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
     <path d="M14 3v5h5" />
+    <path d="M12 11v6M9 14h6" />
+  </svg>
+)
+
+const IconJobPlus = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3" y="7" width="18" height="13" rx="2" />
+    <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
     <path d="M12 11v6M9 14h6" />
   </svg>
 )
@@ -40,6 +48,9 @@ function Part({ title, control, children }: { title: string; control?: ReactNode
  * to THAT client; on the Leads page staff search for an existing client (new clients are added in Clients
  * first). Fields: lead name, job type (Other asks what the client wants), workflow (Wedding for now),
  * source (the website's "How did you hear about us?" list), the main shoot window + location, and a note.
+ *
+ * `kind="job"` is Studio Ninja's "Add New Job" on a client's page: the same form for a booking the client
+ * has ALREADY confirmed outside the app, saved straight in as a confirmed Job (no deposit wait).
  */
 export function AddEnquiryButton({
   csrf,
@@ -47,16 +58,20 @@ export function AddEnquiryButton({
   clientName,
   clientEmail,
   trigger = 'button',
+  kind = 'lead',
 }: {
   csrf: string
   clientId?: string
   clientName?: string
   clientEmail?: string
   trigger?: 'button' | 'icon'
+  kind?: 'lead' | 'job'
 }) {
   const router = useRouter()
+  const isJob = kind === 'job'
+  const noun = isJob ? 'Job' : 'Lead'
   const [open, setOpen] = useState(false)
-  const [state, action, pending] = useActionState(addEnquiryAction, INITIAL)
+  const [state, action, pending] = useActionState(isJob ? addJobAction : addEnquiryAction, INITIAL)
   const typed = state.status === 'error' ? state.values : undefined
   const [jobType, setJobType] = useState('')
   const [unconfirmed, setUnconfirmed] = useState(false)
@@ -73,7 +88,8 @@ export function AddEnquiryButton({
   const boundToClient = Boolean(clientId)
 
   useEffect(() => {
-    if (state.status === 'created') router.push(`/leads/${state.enquiryId}?toast=enquiry-added`)
+    if (state.status !== 'created') return
+    router.push(state.projectId ? `/jobs/${state.projectId}?toast=job-added` : `/leads/${state.enquiryId}?toast=enquiry-added`)
   }, [state, router])
 
   const openModal = () => {
@@ -99,9 +115,9 @@ export function AddEnquiryButton({
   // Same checks the server runs, in the browser first, so a blank required field turns red at once.
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     const fd = new FormData(event.currentTarget)
-    const parsed = parseNewLead(fd)
+    const parsed = parseNewLead(fd, kind)
     const found: AddLeadErrors = parsed.ok ? {} : { ...parsed.errors }
-    if (!String(fd.get('clientId') ?? '').trim()) found.clientId = 'Please choose a client for this lead.'
+    if (!String(fd.get('clientId') ?? '').trim()) found.clientId = `Please choose a client for this ${kind}.`
     setEdited(new Set())
     setClientErrors(found)
     if (Object.keys(found).length > 0) event.preventDefault()
@@ -113,7 +129,7 @@ export function AddEnquiryButton({
   return (
     <>
       {trigger === 'icon' ? (
-        <IconButton label="Add Lead" data-write="hide" tone="accent" icon={<IconEnquiryPlus />} onClick={openModal} />
+        <IconButton label={`Add ${noun}`} data-write="hide" tone="accent" icon={isJob ? <IconJobPlus /> : <IconEnquiryPlus />} onClick={openModal} />
       ) : (
         <button
           type="button"
@@ -122,15 +138,19 @@ export function AddEnquiryButton({
           className="inline-flex h-9 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-          Add Lead
+          Add {noun}
         </button>
       )}
 
       <Modal
         open={open}
         onClose={close}
-        title="Add Lead"
-        description="The lead shows in Leads once you save it."
+        title={`Add ${noun}`}
+        description={
+          isJob
+            ? 'For a booking the client has already confirmed. It is added straight to Jobs when you save it.'
+            : 'The lead shows in Leads once you save it.'
+        }
         size="md"
         headerBorder={false}
       >
@@ -148,7 +168,7 @@ export function AddEnquiryButton({
           <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-6 py-5">
             {topMessage ? <Alert tone="danger" title={topMessage} /> : null}
 
-            {/* Who the lead is for */}
+            {/* Who the lead / job is for */}
             {boundToClient ? (
               <div className="flex items-center gap-3 rounded-md border border-line bg-paper px-4 py-3">
                 <input type="hidden" name="clientId" value={clientId} />
@@ -165,8 +185,8 @@ export function AddEnquiryButton({
               <ClientContactPicker error={errors.clientId} onPick={() => clearError('clientId')} />
             )}
 
-            <Part title="Lead details">
-              <Field label="Lead name" htmlFor="lead-name" error={errors.leadName} required>
+            <Part title={`${noun} details`}>
+              <Field label={`${noun} name`} htmlFor="lead-name" error={errors.leadName} required>
                 <TextInput
                   id="lead-name"
                   name="leadName"
@@ -291,7 +311,7 @@ export function AddEnquiryButton({
 
           {/* Two moderate, equal-size buttons (not oversized, not a full-width split bar). */}
           <div className="flex items-center gap-3 border-t border-line px-6 py-4">
-            <Button type="submit" size="md" loading={pending}>Save Lead</Button>
+            <Button type="submit" size="md" loading={pending}>Save {noun}</Button>
             <Button type="button" variant="secondary" size="md" onClick={close}>Cancel</Button>
           </div>
         </form>

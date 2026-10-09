@@ -7,7 +7,8 @@ import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getActionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { sydneyLocalToUtc } from '@/lib/time'
-import { cancelBooking, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
+import { cancelBooking, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
+import { confirmDirectBooking } from '@/lib/domain/project-workflow'
 import { parseNewLead, type NewLeadErrors } from '@/features/enquiries/new-lead'
 import {
   addEnquiryNote,
@@ -38,7 +39,8 @@ export type AddEnquiryState =
   | { status: 'idle' }
   // `values` = what was typed, handed back so the modal keeps it (React resets a form after every action).
   | { status: 'error'; message?: string; errors?: AddLeadErrors; values?: Record<string, string> }
-  | { status: 'created'; enquiryId: string }
+  // `projectId` is set when the form added a job (Add job on a client's page).
+  | { status: 'created'; enquiryId: string; projectId?: string }
 
 export type AddLeadErrors = NewLeadErrors & { clientId?: string }
 
@@ -68,7 +70,19 @@ export async function searchClientsAction(query: string): Promise<ClientMatch[]>
 }
 
 export async function addEnquiryAction(_prev: AddEnquiryState, formData: FormData): Promise<AddEnquiryState> {
-  const result = await addEnquiry(formData)
+  return withTypedValues(await addEnquiry(formData, 'lead'), formData)
+}
+
+/**
+ * "Add job" on a client's page (Studio Ninja: Add New Job on the client profile): a booking the client has
+ * ALREADY confirmed outside the app. Same form and checks as Add lead; the lead is logged and confirmed into
+ * a Job at once (same as Add job on the Jobs page) - no payment or contract is invented.
+ */
+export async function addJobAction(_prev: AddEnquiryState, formData: FormData): Promise<AddEnquiryState> {
+  return withTypedValues(await addEnquiry(formData, 'job'), formData)
+}
+
+function withTypedValues(result: AddEnquiryState, formData: FormData): AddEnquiryState {
   if (result.status !== 'error') return result
   const values = Object.fromEntries(LEAD_FORM_FIELDS.map((k) => [k, String(formData.get(k) ?? '')]))
   return { ...result, values }
@@ -79,14 +93,14 @@ export async function addEnquiryAction(_prev: AddEnquiryState, formData: FormDat
  * "Add lead" on their page). Nothing is stored until the form passes; the lead then appears in /leads
  * with its seeded workflow. The contact snapshot (email, phone, address) is copied from the client.
  */
-async function addEnquiry(formData: FormData): Promise<AddEnquiryState> {
+async function addEnquiry(formData: FormData, kind: 'lead' | 'job'): Promise<AddEnquiryState> {
   const user = await requireStaff()
   if (!(await csrfOk(formData))) return { status: 'error', message: 'Your session expired. Refresh and try again.' }
 
   const clientId = String(formData.get('clientId') ?? '').trim()
-  const parsed = parseNewLead(formData)
+  const parsed = parseNewLead(formData, kind)
   const errors: AddLeadErrors = parsed.ok ? {} : { ...parsed.errors }
-  if (!clientId) errors.clientId = 'Please choose a client for this lead.'
+  if (!clientId) errors.clientId = `Please choose a client for this ${kind}.`
   if (!parsed.ok || Object.keys(errors).length > 0) return { status: 'error', errors }
 
   const client = await prisma.client.findUnique({ where: { id: clientId } })
@@ -121,10 +135,23 @@ async function addEnquiry(formData: FormData): Promise<AddEnquiryState> {
     },
     user.id,
   )
+  let projectId: string | undefined
+  if (kind === 'job') {
+    try {
+      const converted = await convertEnquiry(enquiry.id, user.id)
+      if (!converted.projectId) throw new Error('No job was created.')
+      await confirmDirectBooking(converted.projectId, user.id)
+      projectId = converted.projectId
+    } catch {
+      // The lead itself was saved; say so rather than leave staff guessing.
+      return { status: 'error', message: 'The lead was saved, but the job could not be created. Open the lead and try again.' }
+    }
+    revalidatePath('/jobs')
+  }
   revalidatePath('/leads')
   revalidatePath('/clients')
   revalidatePath(`/clients/${client.id}`)
-  return { status: 'created', enquiryId: enquiry.id }
+  return { status: 'created', enquiryId: enquiry.id, projectId }
 }
 
 /** Outcomes that close or reopen a lead (contract docs/23). Convert/Lost leave the active queue;

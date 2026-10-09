@@ -170,7 +170,11 @@ export function ClientDetail({
               <IconButton type="submit" label="Restore client" tone="accent" icon={<IconRestore />} />
             </form>
           ) : (
-            <AddEnquiryButton csrf={csrf} clientId={client.id} clientName={client.displayName} clientEmail={client.email} trigger="icon" />
+            <>
+              <AddEnquiryButton csrf={csrf} clientId={client.id} clientName={client.displayName} clientEmail={client.email} trigger="icon" />
+              {/* Studio Ninja's client profile offers both: a new enquiry (lead) or a booking already confirmed (job). */}
+              <AddEnquiryButton kind="job" csrf={csrf} clientId={client.id} clientName={client.displayName} clientEmail={client.email} trigger="icon" />
+            </>
           )}
           {editing ? (
             <>

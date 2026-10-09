@@ -290,7 +290,9 @@ export async function convertEnquiryCore(
         companyId: company.id,
         clientId: client.id,
         code: await nextProjectCode(tx, company.id, now),
-        name: enquiry.eventType ?? 'Project',
+        // The job carries the name staff gave the lead / job ("Jenny & Matt", Studio Ninja style); a lead
+        // that is just named after the client (website enquiries) keeps the event type as its job name.
+        name: enquiry.name.trim() && enquiry.name.trim() !== client.displayName ? enquiry.name.trim() : (enquiry.eventType ?? 'Project'),
         // The booking file starts at BOOKING_REQUESTED (not a Job yet - see isBookingFile); the deposit
         // payment (or Add job) confirms it into a Job.
         lifecycleStatus: 'BOOKING_REQUESTED',

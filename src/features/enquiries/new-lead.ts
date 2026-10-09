@@ -84,13 +84,14 @@ function parseTime(value: string): string | null {
 
 const has = (list: readonly string[], value: string) => list.includes(value)
 
-export function parseNewLead(fd: FormData): { ok: true; lead: NewLead } | { ok: false; errors: NewLeadErrors } {
+/** `noun` only words the name messages: the same form adds a lead, or a job already confirmed (Add job). */
+export function parseNewLead(fd: FormData, noun: 'lead' | 'job' = 'lead'): { ok: true; lead: NewLead } | { ok: false; errors: NewLeadErrors } {
   const s = (k: string) => String(fd.get(k) ?? '').trim()
   const errors: NewLeadErrors = {}
 
   const name = s('leadName')
-  if (!name) errors.leadName = 'Please enter a lead name.'
-  else if (name.length > 150) errors.leadName = 'Please keep the lead name under 150 characters.'
+  if (!name) errors.leadName = `Please enter a ${noun} name.`
+  else if (name.length > 150) errors.leadName = `Please keep the ${noun} name under 150 characters.`
 
   const jobType = s('jobType')
   if (!has(JOB_TYPES.map((j) => j.value), jobType)) errors.jobType = 'Please choose a job type.'

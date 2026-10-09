@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
 import { convertEnquiry, createEnquiry } from '@/lib/domain/enquiry'
+import { findOrCreateClient } from '@/lib/domain/client'
 import { recordPayment } from '@/lib/domain/finance'
 import { JOB_WHERE } from '@/lib/domain/project'
 import { confirmDirectBooking, getProjectBoard } from '@/lib/domain/project-workflow'
@@ -59,6 +60,20 @@ describe('lead-job model (integration, real DB) - docs/24', () => {
     expect((await prisma.enquiry.findUniqueOrThrow({ where: { id: e.id } })).status).toBe('BOOKING_CONFIRMED')
     expect(await prisma.invoice.count({ where: { projectId: projectId! } })).toBe(0)
     expect(await prisma.contract.count({ where: { projectId: projectId! } })).toBe(0)
+  })
+
+  it('the job takes the name staff gave the lead; a lead named after its client keeps the event type', async () => {
+    const staff = await prisma.user.findFirstOrThrow({ select: { id: true } })
+    const jenny = await findOrCreateClient({ email: email(), firstName: 'Jenny', lastName: 'Smith' }, staff.id)
+    const named = await createEnquiry({ clientId: jenny.id, name: 'Jenny & Matt', email: jenny.email, eventType: 'Wedding' })
+    const a = await convertEnquiry(named.id)
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: a.projectId! } })).name).toBe('Jenny & Matt')
+
+    const plain = await createEnquiry({ name: 'Sam Lee', firstName: 'Sam', lastName: 'Lee', email: email(), eventType: 'Wedding' })
+    const b = await convertEnquiry(plain.id)
+    const job = await prisma.project.findUniqueOrThrow({ where: { id: b.projectId! }, include: { client: true } })
+    expect(job.client.displayName).toBe('Sam Lee')
+    expect(job.name).toBe('Wedding')
   })
 
   it('a booking file cancelled before its deposit was never a Job; a cancelled confirmed job still is', async () => {
