@@ -18,6 +18,7 @@ import {
   addProjectTask,
   confirmDirectBooking,
   deleteProjectStage,
+  moveJobBackToLead,
   deleteProjectTask,
   moveProjectTask,
   renameProjectStage,
@@ -77,6 +78,26 @@ export async function closeJobAction(formData: FormData): Promise<void> {
     // Balance outstanding or tasks pending - leave the job as-is; the page reflects the real state.
   }
   revalidatePath(`/jobs/${projectId}`)
+}
+
+/** Untick "Job accepted": the job goes back to being a lead (Awaiting booking confirmation). Refused once
+ *  money is recorded on it; the reason comes back to the job page as `?moveError=`. */
+export async function moveJobBackToLeadAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  if (!projectId) return
+  let enquiryId: string
+  try {
+    ;({ enquiryId } = await moveJobBackToLead(projectId, user.id))
+  } catch (error) {
+    redirect(`/jobs/${projectId}?moveError=${encodeURIComponent(error instanceof Error ? error.message : 'Could not move this job back to Leads.')}`)
+  }
+  revalidatePath('/jobs')
+  revalidatePath('/leads')
+  revalidatePath(`/leads/${enquiryId}`)
+  redirect(`/leads/${enquiryId}?toast=moved-to-lead`)
 }
 
 /** Save the draft version's lines + totals. */

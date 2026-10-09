@@ -62,6 +62,52 @@ export async function confirmDirectBooking(projectId: string, actorUserId: strin
   await prisma.$transaction((tx) => confirmBookingByDepositTx(tx, projectId, actorUserId))
 }
 
+/** Why a job cannot go back to being a lead right now, or null when it can (see moveJobBackToLead). */
+export function moveBackToLeadBlocker(job: { lifecycleStatus: string; hasLead: boolean; paidNet: { greaterThan(n: number): boolean } }): string | null {
+  if (!job.hasLead) return 'This job has no lead to go back to.'
+  if (job.lifecycleStatus !== 'CONFIRMED') return 'Only an active job can go back to being a lead.'
+  // The deposit holds the date: money received means it IS a booking, so it cannot be "unaccepted".
+  if (job.paidNet.greaterThan(0)) return 'A payment is recorded on this job, so it stays a job. Refund the payment first to move it back to Leads.'
+  return null
+}
+
+/**
+ * Untick "Job accepted" (Studio Ninja): the job becomes a lead again - it leaves Jobs and its lead goes back
+ * to "Awaiting booking confirmation" with its checklist reopened. For a booking confirmed by mistake (e.g.
+ * Add job too early). Refused once any money is recorded (the deposit holds the date) and for delivered or
+ * closed jobs. The production tasks are kept and come back if it is confirmed again.
+ */
+export async function moveJobBackToLead(projectId: string, actorUserId: string | null) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM projects WHERE id = ${projectId} FOR UPDATE`
+    const project = await tx.project.findUnique({
+      where: { id: projectId },
+      select: { companyId: true, lifecycleStatus: true, invoices: { select: INVOICE_MONEY_SELECT } },
+    })
+    if (!project) throw new Error('Job not found.')
+    const lead = await tx.enquiry.findFirst({ where: { convertedProjectId: projectId }, select: { id: true, status: true } })
+    const blocker = moveBackToLeadBlocker({
+      lifecycleStatus: project.lifecycleStatus,
+      hasLead: lead !== null,
+      paidNet: getJobBalance(project.invoices.map(toInvoiceMoneyInput), null).paidNet,
+    })
+    if (blocker || !lead) throw new Error(blocker ?? 'This job has no lead to go back to.')
+
+    // Back to a booking file: not a Job anywhere (JOB_WHERE / isBookingFile) until it is confirmed again.
+    await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'BOOKING_REQUESTED', confirmedByClientAt: null } })
+    await tx.enquiry.update({ where: { id: lead.id }, data: { status: 'AWAITING_BOOKING_CONFIRMATION' } })
+    // The lead tasks closed out on confirmation become workable again (same as Reopen).
+    await tx.workItem.updateMany({ where: { enquiryId: lead.id, status: 'CANCELLED' }, data: { status: 'PENDING' } })
+    await tx.auditLog.create({
+      data: { companyId: project.companyId, actorUserId, action: 'project.moved_back_to_lead', entityType: 'Project', entityId: projectId, afterData: { enquiryId: lead.id } },
+    })
+    await tx.auditLog.create({
+      data: { companyId: project.companyId, actorUserId, action: 'enquiry.moved_back_to_lead', entityType: 'Enquiry', entityId: lead.id, afterData: { projectId } },
+    })
+    return { enquiryId: lead.id }
+  })
+}
+
 /**
  * Confirm a booking: the moment a lead becomes a JOB. Called when the deposit is paid (from the finance
  * payment handler, inside the SAME transaction) and by Add job for a booking the client already confirmed

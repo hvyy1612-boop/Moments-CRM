@@ -51,10 +51,12 @@ const SPECIAL: Record<string, string> = {
   'enquiry.stage_auto': 'Lead stage moved on',
   'enquiry.status': 'Lead stage changed',
   'enquiry.moved_to_quote': 'Lead moved to consultation',
-  'enquiry.converted': 'Quote accepted, awaiting deposit',
+  'enquiry.converted': 'Moved to Awaiting booking confirmation',
   'enquiry.lost': 'Lead declined',
   'enquiry.reopened': 'Lead reopened',
   'enquiry.booking_confirmed': 'Booking confirmed (now a job)',
+  'enquiry.moved_back_to_lead': 'Job accepted unticked, back to awaiting deposit',
+  'project.moved_back_to_lead': 'Job accepted unticked, moved back to Leads',
   'enquiry.booking_cancelled': 'Booking cancelled',
   // `booking.*` from booking.ts is a SHOOT session; direct-booking's request/confirm is the client's booking.
   'booking.created': 'Shoot scheduled',

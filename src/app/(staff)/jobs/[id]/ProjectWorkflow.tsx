@@ -32,6 +32,7 @@ export function ProjectWorkflow({
   taskTimes = {},
   history = [],
   rail,
+  bookingRow,
 }: {
   board: ProjectBoard
   projectId: string
@@ -40,6 +41,8 @@ export function ProjectWorkflow({
   history?: HistoryEntry[]
   /** Extra cards rendered in the right rail, under "Next action" (the job's Client / Notes / Team). */
   rail?: ReactNode
+  /** The "Job accepted" milestone shown above the phases (see JobAcceptedRow). */
+  bookingRow?: ReactNode
 }) {
   const { stages, allDone, attentionCount, nextAction } = board
 
@@ -113,6 +116,8 @@ export function ProjectWorkflow({
             </p>
           </div>
         ) : null}
+
+        {bookingRow}
 
         {/* Phases */}
         {visibleStages.map((stage, i) => {

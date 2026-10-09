@@ -5,7 +5,7 @@ import { convertEnquiry, createEnquiry } from '@/lib/domain/enquiry'
 import { findOrCreateClient } from '@/lib/domain/client'
 import { recordPayment } from '@/lib/domain/finance'
 import { JOB_WHERE } from '@/lib/domain/project'
-import { confirmDirectBooking, getProjectBoard } from '@/lib/domain/project-workflow'
+import { confirmDirectBooking, getProjectBoard, moveJobBackToLead } from '@/lib/domain/project-workflow'
 import { createInvoice } from './helpers'
 import { acceptQuote, createQuoteForEnquiry, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 
@@ -91,6 +91,37 @@ describe('lead-job model (integration, real DB) - docs/24', () => {
     const job = await prisma.project.findUniqueOrThrow({ where: { id: b.projectId! }, include: { client: true } })
     expect(job.client.displayName).toBe('Sam Lee')
     expect(job.name).toBe('Wedding')
+  })
+
+  it('unticking "Job accepted" turns an unpaid job back into a lead waiting for its deposit', async () => {
+    const e = await createEnquiry({ name: 'Booked Too Early', email: email() })
+    const { projectId } = await convertEnquiry(e.id)
+    await confirmDirectBooking(projectId!, null) // e.g. Add job by mistake
+    expect(await prisma.workItem.count({ where: { enquiryId: e.id, status: 'PENDING' } })).toBe(0)
+
+    const { enquiryId } = await moveJobBackToLead(projectId!, null)
+    expect(enquiryId).toBe(e.id)
+    const file = await prisma.project.findUniqueOrThrow({ where: { id: projectId! } })
+    expect(file.lifecycleStatus).toBe('BOOKING_REQUESTED')
+    expect(file.confirmedByClientAt).toBeNull()
+    expect((await prisma.enquiry.findUniqueOrThrow({ where: { id: e.id } })).status).toBe('AWAITING_BOOKING_CONFIRMATION')
+    expect(await prisma.workItem.count({ where: { enquiryId: e.id, status: 'PENDING' } })).toBeGreaterThan(0) // checklist reopened
+    expect(await prisma.project.count({ where: { AND: [JOB_WHERE, { id: projectId! }] } })).toBe(0) // gone from Jobs
+
+    // Paying the deposit books it again.
+    const inv = await createInvoice(projectId!, { type: 'DEPOSIT', description: 'Deposit', amount: '800' }, null)
+    await recordPayment(inv.id, { paymentMethod: 'BANK_TRANSFER', amount: '800' }, null)
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: projectId! } })).lifecycleStatus).toBe('CONFIRMED')
+  })
+
+  it('"Job accepted" cannot be unticked once money is recorded (the deposit holds the date)', async () => {
+    const e = await createEnquiry({ name: 'Deposit Paid', email: email() })
+    const { projectId } = await convertEnquiry(e.id)
+    const inv = await createInvoice(projectId!, { type: 'DEPOSIT', description: 'Deposit', amount: '500' }, null)
+    await recordPayment(inv.id, { paymentMethod: 'BANK_TRANSFER', amount: '500' }, null)
+    await expect(moveJobBackToLead(projectId!, null)).rejects.toThrow(/payment is recorded/i)
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: projectId! } })).lifecycleStatus).toBe('CONFIRMED')
+    expect((await prisma.enquiry.findUniqueOrThrow({ where: { id: e.id } })).status).toBe('BOOKING_CONFIRMED')
   })
 
   it('a booking file cancelled before its deposit was never a Job; a cancelled confirmed job still is', async () => {

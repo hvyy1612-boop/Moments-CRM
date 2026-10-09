@@ -10,7 +10,7 @@ import { prisma } from '@/lib/db'
 import { JOB_SHOOT_SELECT, shootDateOfJob, shootHasTime } from '@/lib/domain/deadline'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyDateTime, sydneyDateTimeParts } from '@/lib/time'
-import { getProjectBoard } from '@/lib/domain/project-workflow'
+import { getProjectBoard, moveBackToLeadBlocker } from '@/lib/domain/project-workflow'
 import { getJobBalance } from '@/lib/domain/money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
 import { listActivePackages } from '@/lib/domain/package'
@@ -29,6 +29,7 @@ import { ContractSend } from './ContractSend'
 import type { HistoryEntry } from './HistoryLogModal'
 import { JobSidebar } from './JobSidebar'
 import { ProjectWorkflow } from './ProjectWorkflow'
+import { JobAcceptedRow } from './JobAcceptedRow'
 import { QuoteBuilder } from './QuoteBuilder'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import {
@@ -68,6 +69,7 @@ function historyDetails(action: string, after: unknown): string {
   if (action === 'project.task_completed') return `${title} was completed.`
   if (action === 'project.task_reopened') return `${title} was reopened.`
   if (action === 'enquiry.converted') return 'Job was created from a lead.'
+  if (action === 'project.moved_back_to_lead') return 'Job accepted was unticked; it went back to Leads.'
   return historyActionType(action)
 }
 
@@ -178,6 +180,14 @@ export async function CaseDetail({
 
   const invoiceCount = project.invoices.length
   const invoiceOutstanding = getJobBalance(project.invoices.map(toInvoiceMoneyInput), null).outstanding
+  // "Job accepted" milestone: shown for every job that was confirmed; it can be unticked (back to a lead)
+  // only while no money is recorded and the job is still active.
+  const showAccepted = project.lifecycleStatus !== 'CANCELLED'
+  const acceptedBlocker = moveBackToLeadBlocker({
+    lifecycleStatus: project.lifecycleStatus,
+    hasLead: project.convertedFromEnquiries.length > 0,
+    paidNet: getJobBalance(project.invoices.map(toInvoiceMoneyInput), null).paidNet,
+  })
   // What the accepted quote agreed but no invoice covers yet (e.g. the balance after a paid deposit).
   const notYetInvoiced = quoteAccepted && version
     ? getJobBalance(project.invoices.map(toInvoiceMoneyInput), version.total).uninvoicedRemainder
@@ -361,6 +371,17 @@ export async function CaseDetail({
                 csrf={csrf}
                 taskTimes={taskTimes}
                 history={history}
+                bookingRow={
+                  showAccepted ? (
+                    <JobAcceptedRow
+                      key="job-accepted"
+                      csrf={csrf}
+                      projectId={project.id}
+                      acceptedLabel={project.confirmedByClientAt ? formatSydneyDate(project.confirmedByClientAt) : null}
+                      blocker={acceptedBlocker}
+                    />
+                  ) : null
+                }
                 rail={
                   // Keyed for the same reason as the nav icons: rendered by the client board beside its own cards.
                   <JobSidebar
