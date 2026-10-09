@@ -5,7 +5,8 @@ import { convertEnquiry, createEnquiry, markEnquiryLost, setLeadJobComplete } fr
 import { findOrCreateClient } from '@/lib/domain/client'
 import { recordPayment } from '@/lib/domain/finance'
 import { JOB_WHERE } from '@/lib/domain/project'
-import { acceptLeadAsJob, confirmDirectBooking, createDirectJob, getProjectBoard, moveJobBackToLead } from '@/lib/domain/project-workflow'
+import { acceptLeadAsJob, confirmDirectBooking, createDirectJob, getProjectBoard, moveJobBackToLead, setJobComplete } from '@/lib/domain/project-workflow'
+import { toggleEnquiryTask } from '@/lib/domain/enquiry-workflow'
 import { createInvoice } from './helpers'
 import { acceptQuote, createQuoteForEnquiry, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 
@@ -131,6 +132,30 @@ describe('lead-job model (integration, real DB) - docs/24', () => {
     expect((await setLeadJobComplete(lead.id, false, null)).jobCompleteAt).toBeNull()
     await markEnquiryLost(lead.id, 'Archived', null)
     await expect(setLeadJobComplete(lead.id, true, null)).rejects.toThrow(/Restore/)
+  })
+
+  it('the Leads status follows the furthest section ticked inside, both ways', async () => {
+    const staff = await prisma.user.findFirstOrThrow({ select: { id: true } })
+    const lead = await createEnquiry({ name: 'Status Follows Ticks', email: email() })
+    const status = async () => (await prisma.enquiry.findUniqueOrThrow({ where: { id: lead.id } })).status
+    const quoteTask = await prisma.workItem.findFirstOrThrow({ where: { enquiryId: lead.id, stage: 'quote' } })
+    await toggleEnquiryTask(quoteTask.id, staff.id)
+    expect(await status()).toBe('CONSULTATION') // ticked in Consultation, earlier sections still open
+    await toggleEnquiryTask(quoteTask.id, staff.id)
+    expect(await status()).toBe('NEW_ENQUIRY') // unticked: back
+    const contactTask = await prisma.workItem.findFirstOrThrow({ where: { enquiryId: lead.id, stage: 'discussion' } })
+    await toggleEnquiryTask(contactTask.id, staff.id)
+    expect(await status()).toBe('CONTACTED')
+  })
+
+  it('"Job complete" on a job moves it to Completed and back; a closed job cannot change', async () => {
+    const job = await directJob()
+    await setJobComplete(job.id, true, null)
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: job.id } })).lifecycleStatus).toBe('COMPLETED') // Completed Jobs
+    await setJobComplete(job.id, false, null)
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: job.id } })).lifecycleStatus).toBe('CONFIRMED') // Active again
+    await prisma.project.update({ where: { id: job.id }, data: { lifecycleStatus: 'CLOSED' } })
+    await expect(setJobComplete(job.id, false, null)).rejects.toThrow(/completed job/)
   })
 
   it('the deposit must reach 20% of the accepted quote; a quote, an invoice or a small payment never books', async () => {

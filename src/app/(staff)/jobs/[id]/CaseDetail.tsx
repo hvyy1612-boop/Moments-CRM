@@ -72,6 +72,9 @@ function historyDetails(action: string, after: unknown): string {
   if (action === 'project.task_reopened') return `${title} was reopened.`
   if (action === 'enquiry.converted') return 'Job was created from a lead.'
   if (action === 'project.created_direct') return 'Job was added as an already confirmed booking.'
+  if (action === 'project.completed_manual') return 'Job complete was ticked; the job moved to Completed Jobs.'
+  if (action === 'project.reopened') return 'Job complete was unticked; the job is back in Active Jobs.'
+  if (action === 'project.auto_completed') return 'Every task done and fully paid: Job complete ticked itself.'
   if (action === 'project.moved_back_to_lead') return 'Job accepted was unticked; it went back to Leads.'
   return historyActionType(action)
 }
@@ -201,21 +204,21 @@ export async function CaseDetail({
     : null
 
   const isDelivered = project.lifecycleStatus === 'COMPLETED'
-  // "Job complete" (the end of the job, SN-style): the job was completed - automatically once every task is
-  // done and it is fully paid - or has been closed since. The date is when it was completed.
+  // "Job complete" (the end of the job, SN-style): ticked by staff, or by the system once every task is done
+  // and it is fully paid; a closed job stays complete. The date is when it was completed.
   const jobComplete = isDelivered || project.lifecycleStatus === 'CLOSED'
   const completedAt = jobComplete
     ? (await prisma.auditLog.findFirst({
-        where: { entityType: 'Project', entityId: project.id, action: 'project.auto_completed' },
+        where: { entityType: 'Project', entityId: project.id, action: { in: ['project.auto_completed', 'project.completed_manual'] } },
         orderBy: { createdAt: 'desc' },
         select: { createdAt: true },
       }))?.createdAt ?? null
     : null
   const completedLabel = completedAt ? formatSydneyDate(completedAt) : null
   const isClosed = project.lifecycleStatus === 'CLOSED'
-  const blockingCount = isDelivered
-    ? await prisma.workItem.count({ where: { projectId: project.id, status: 'PENDING', type: { not: 'AUTO' } } })
-    : 0
+  // Staff tasks still open: shown before ticking "Job complete", and they block closing a delivered job.
+  const openTaskCount = await prisma.workItem.count({ where: { projectId: project.id, status: 'PENDING', type: { not: 'AUTO' } } })
+  const blockingCount = isDelivered ? openTaskCount : 0
   const canClose = isDelivered && invoiceOutstanding.lessThanOrEqualTo(0) && blockingCount === 0
 
   const packageOptions = (await listActivePackages()).map((p) => ({
@@ -401,7 +404,18 @@ export async function CaseDetail({
                     />
                   ) : null
                 }
-                completeRow={<JobCompleteRow key="job-complete" done={jobComplete} dateLabel={completedLabel} />}
+                completeRow={
+                  <JobCompleteRow
+                    key="job-complete"
+                    csrf={csrf}
+                    projectId={project.id}
+                    done={jobComplete}
+                    dateLabel={completedLabel}
+                    readOnly={project.lifecycleStatus === 'CLOSED' || project.lifecycleStatus === 'CANCELLED'}
+                    openTasks={openTaskCount}
+                    outstandingLabel={invoiceOutstanding.greaterThan(0) ? formatAud(invoiceOutstanding) : null}
+                  />
+                }
                 rail={
                   // Keyed for the same reason as the nav icons: rendered by the client board beside its own cards.
                   <JobSidebar

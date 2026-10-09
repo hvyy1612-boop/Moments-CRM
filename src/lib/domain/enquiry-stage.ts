@@ -25,36 +25,36 @@ const GROUP_TO_STAGE: [string, OpenStage][] = [
 ]
 
 /**
- * Derive the open stage from the checklist: it is the group of the earliest incomplete task, walking
- * New enquiry -> Contacted -> Consultation. Empty groups are skipped, so it works for any per-case task
- * set. When everything is done the lead sits at Consultation until a real event moves it on.
+ * Derive the open status from the checklist: the furthest section (New enquiry -> Contacted ->
+ * Consultation) staff have ticked a task in, so whatever is ticked inside shows on the Leads list. Nothing
+ * ticked = New enquiry. Custom stages do not map to a status.
  */
 export function deriveOpenStage(tasks: DeriveTask[]): OpenStage {
-  const real = tasks.filter((t) => t.type !== 'AUTO')
-  for (const [group, stage] of GROUP_TO_STAGE) {
-    const groupTasks = real.filter((t) => t.stage === group)
-    if (groupTasks.some((t) => t.status !== 'COMPLETED')) return stage
+  const ticked = tasks.filter((t) => t.type !== 'AUTO' && t.status === 'COMPLETED')
+  let stage: OpenStage = 'NEW_ENQUIRY'
+  for (const [group, s] of GROUP_TO_STAGE) {
+    if (ticked.some((t) => t.stage === group)) stage = s
   }
-  return 'CONSULTATION'
+  return stage
 }
 
 /**
- * After a checklist change, nudge the enquiry's stage FORWARD to match the workflow. Forward-only so a
- * manual correction (or a reopened task) is never silently undone; demoting is done by hand. No-op for
- * closed leads (converted / lost) and when the derived stage is not ahead of the current one.
+ * After a checklist change, set the lead's status to match it, in BOTH directions (owner, 2026-10-10: the
+ * list must show what is ticked inside; unticking moves it back). Only for the three checklist statuses -
+ * Quote sent, Awaiting booking confirmation, a booked or an archived lead are never changed by ticking.
  */
 export async function syncEnquiryStageFromTasks(tx: Tx, enquiryId: string, actorUserId: string) {
   const enquiry = await tx.enquiry.findUnique({
     where: { id: enquiryId },
     select: { status: true, companyId: true },
   })
-  if (!enquiry || !OPEN.has(enquiry.status)) return
+  if (!enquiry || !OPEN.has(enquiry.status)) return // Quote sent and later come from real events
   const items = await tx.workItem.findMany({
     where: { enquiryId, status: { not: 'CANCELLED' } },
     select: { stage: true, status: true, type: true },
   })
   const derived = deriveOpenStage(items)
-  if (OPEN_STAGE_ORDER.indexOf(derived) <= OPEN_STAGE_ORDER.indexOf(enquiry.status as OpenStage)) return
+  if (derived === enquiry.status) return
 
   await tx.enquiry.update({ where: { id: enquiryId }, data: { status: derived } })
   await tx.auditLog.create({

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
 import { createEnquiry } from '@/lib/domain/enquiry'
-import { addEnquiryStage, deleteEnquiryTask, getEnquiryBoard, renameEnquiryStage } from '@/lib/domain/enquiry-workflow'
+import { addEnquiryStage, deleteEnquiryTask, toggleEnquiryTask, getEnquiryBoard, renameEnquiryStage } from '@/lib/domain/enquiry-workflow'
 
 /** Bug-scan 2026-10-05 (C): lead custom stages and stage sync, against the (test) database. */
 
@@ -25,12 +25,13 @@ describe('lead custom stages', () => {
   })
 })
 
-describe('deleting a task moves the lead on like ticking it would', () => {
-  it('removing every open "New enquiry" task advances the lead to Contacted', async () => {
+describe('deleting a task moves the status like unticking it would', () => {
+  it('deleting the only ticked Contacted task takes the lead back to New enquiry', async () => {
     const id = await newLead()
-    const open = await prisma.workItem.findMany({ where: { enquiryId: id, stage: 'new', status: 'PENDING' }, select: { id: true } })
-    expect(open.length).toBeGreaterThan(0)
-    for (const t of open) await deleteEnquiryTask(t.id, userId)
+    const contact = await prisma.workItem.findFirstOrThrow({ where: { enquiryId: id, stage: 'discussion' }, select: { id: true } })
+    await toggleEnquiryTask(contact.id, userId)
     expect((await prisma.enquiry.findUniqueOrThrow({ where: { id } })).status).toBe('CONTACTED')
+    await deleteEnquiryTask(contact.id, userId)
+    expect((await prisma.enquiry.findUniqueOrThrow({ where: { id } })).status).toBe('NEW_ENQUIRY')
   })
 })

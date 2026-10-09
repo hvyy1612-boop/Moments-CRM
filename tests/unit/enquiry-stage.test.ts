@@ -5,31 +5,25 @@ const nw = (status: string) => ({ stage: 'new', type: 'TODO', status })
 const disc = (status: string) => ({ stage: 'discussion', type: 'TODO', status })
 const quo = (status: string) => ({ stage: 'quote', type: 'TODO', status })
 
-// The lead's three checklist groups (New enquiry / Contacted / Consultation) drive the three early stages.
-describe('deriveOpenStage - stage follows the workflow, 3 groups (docs/24)', () => {
-  it('a fresh lead (New enquiry group not done) is NEW_ENQUIRY', () => {
+// The lead's three checklist sections (New enquiry / Contacted / Consultation) drive the three early
+// statuses: the status is the furthest section with a ticked task (owner, 2026-10-10).
+describe('deriveOpenStage - the status shows the furthest section ticked inside', () => {
+  it('a fresh lead (nothing ticked) is NEW_ENQUIRY', () => {
     expect(deriveOpenStage([nw('PENDING'), disc('PENDING'), quo('PENDING')])).toBe('NEW_ENQUIRY')
   })
 
-  it('New enquiry group done, Contacted pending -> CONTACTED', () => {
-    expect(deriveOpenStage([nw('COMPLETED'), disc('PENDING'), quo('PENDING')])).toBe('CONTACTED')
+  it('a tick in New enquiry keeps NEW_ENQUIRY; a tick in Contacted shows CONTACTED', () => {
+    expect(deriveOpenStage([nw('COMPLETED'), disc('PENDING'), quo('PENDING')])).toBe('NEW_ENQUIRY')
+    expect(deriveOpenStage([nw('COMPLETED'), disc('COMPLETED'), quo('PENDING')])).toBe('CONTACTED')
   })
 
-  it('New enquiry + Contacted done, Consultation pending -> CONSULTATION', () => {
-    expect(deriveOpenStage([nw('COMPLETED'), disc('COMPLETED'), quo('PENDING')])).toBe('CONSULTATION')
-  })
-
-  it('everything done stays CONSULTATION (later stages come from real events, not ticks)', () => {
+  it('a tick in Consultation shows CONSULTATION even with earlier sections still open', () => {
+    expect(deriveOpenStage([nw('PENDING'), disc('PENDING'), quo('COMPLETED')])).toBe('CONSULTATION')
     expect(deriveOpenStage([nw('COMPLETED'), disc('COMPLETED'), quo('COMPLETED')])).toBe('CONSULTATION')
   })
 
-  it('empty groups are skipped', () => {
-    // No New enquiry task at all; Contacted pending -> CONTACTED (not stuck at NEW_ENQUIRY).
-    expect(deriveOpenStage([disc('PENDING'), quo('PENDING')])).toBe('CONTACTED')
-  })
-
-  it('count of tasks in a group does not matter', () => {
-    expect(deriveOpenStage([nw('COMPLETED'), disc('COMPLETED'), disc('PENDING'), quo('PENDING')])).toBe('CONTACTED')
+  it('one ticked task is enough; the rest of the section may still be open', () => {
+    expect(deriveOpenStage([nw('PENDING'), disc('COMPLETED'), disc('PENDING'), quo('PENDING')])).toBe('CONTACTED')
   })
 })
 

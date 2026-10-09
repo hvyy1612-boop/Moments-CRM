@@ -45,16 +45,16 @@ describe('enquiry sales lifecycle', () => {
     expect(OPEN_STAGE_ORDER).toEqual(['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION'])
   })
 
-  it('derives the early stage from the earliest incomplete task group', () => {
-    // An incomplete "new" task keeps the lead at New enquiry.
+  it('shows the furthest section with a ticked task, whatever is ticked before it', () => {
+    // Nothing ticked -> New enquiry.
     expect(deriveOpenStage([task('new'), task('discussion'), task('quote')])).toBe('NEW_ENQUIRY')
-    // New done, discussion pending -> Contacted.
-    expect(deriveOpenStage([task('new', 'COMPLETED'), task('discussion'), task('quote')])).toBe('CONTACTED')
-    // New + discussion done, quote-prep pending -> Consultation.
-    expect(deriveOpenStage([task('new', 'COMPLETED'), task('discussion', 'COMPLETED'), task('quote')])).toBe('CONSULTATION')
-    // Everything done still sits at Consultation - moving to Quote sent is an explicit send event.
-    expect(deriveOpenStage([task('new', 'COMPLETED'), task('discussion', 'COMPLETED'), task('quote', 'COMPLETED')])).toBe('CONSULTATION')
-    // Empty checklist -> Consultation fallback.
-    expect(deriveOpenStage([])).toBe('CONSULTATION')
+    expect(deriveOpenStage([])).toBe('NEW_ENQUIRY')
+    // A tick in New enquiry stays New enquiry; a tick in Contacted shows Contacted.
+    expect(deriveOpenStage([task('new', 'COMPLETED'), task('discussion'), task('quote')])).toBe('NEW_ENQUIRY')
+    expect(deriveOpenStage([task('new'), task('discussion', 'COMPLETED'), task('quote')])).toBe('CONTACTED')
+    // A tick in Consultation shows Consultation even with earlier sections still open (owner, 2026-10-10).
+    expect(deriveOpenStage([task('new'), task('discussion'), task('quote', 'COMPLETED')])).toBe('CONSULTATION')
+    // An Auto row never counts.
+    expect(deriveOpenStage([{ stage: 'quote', status: 'COMPLETED', type: 'AUTO' }])).toBe('NEW_ENQUIRY')
   })
 })

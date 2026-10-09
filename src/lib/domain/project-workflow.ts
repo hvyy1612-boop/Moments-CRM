@@ -69,6 +69,37 @@ export async function seedProjectWorkflow(projectId: string) {
   await prisma.$transaction((tx) => seedIfNeeded(tx, projectId, project.companyId))
 }
 
+/**
+ * Tick or untick "Job complete" on a job (Studio Ninja): ticking moves an active job to Completed Jobs
+ * (COMPLETED, shown as Delivered) - staff decide, even with tasks or money still open (the job page says so
+ * before they confirm). Unticking brings a completed job back to Active. A closed or cancelled job cannot
+ * change. The system still ticks it by itself once every task is done and the job is fully paid.
+ */
+export async function setJobComplete(projectId: string, done: boolean, actorUserId: string | null) {
+  return prisma.$transaction(async (tx) => {
+    const project = await tx.project.findUnique({ where: { id: projectId }, select: { companyId: true, lifecycleStatus: true } })
+    if (!project) throw new Error('Job not found.')
+    if (done) {
+      if (project.lifecycleStatus === 'COMPLETED') return
+      if (project.lifecycleStatus !== 'CONFIRMED') throw new Error('Only an active job can be marked complete.')
+    } else {
+      if (project.lifecycleStatus === 'CONFIRMED') return
+      if (project.lifecycleStatus !== 'COMPLETED') throw new Error('Only a completed job can go back to Active.')
+    }
+    await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: done ? 'COMPLETED' : 'CONFIRMED' } })
+    await tx.auditLog.create({
+      data: {
+        companyId: project.companyId,
+        actorUserId,
+        action: done ? 'project.completed_manual' : 'project.reopened',
+        entityType: 'Project',
+        entityId: projectId,
+        afterData: { lifecycleStatus: done ? 'COMPLETED' : 'CONFIRMED' },
+      },
+    })
+  })
+}
+
 /** Studio policy (momentsphotography.com.au FAQ): a 20% deposit holds the date. */
 export const BOOKING_DEPOSIT_PERCENT = 20
 

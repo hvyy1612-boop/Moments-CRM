@@ -69,7 +69,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
   const sortLabel = SORTS.find((s) => s.key === sort)!.label
   const TABS: { key: TabKey; label: string }[] = [{ key: 'all', label: 'Active' }, ...ENQUIRY_STAGE_TABS]
 
-  // Exactly six information columns (spec §9): Lead ID | Created | Client | Event | Type | Stage.
+  // Exactly six information columns (spec §9): Lead ID | Created | Client | Event | Type | Status.
   // Column sizing: an EVEN Carbon-style rhythm across the full width (no single column absorbing the
   // slack). Every column is a `fr` share (Client/Event 1.5, the rest 1-1.4) so the spacing reads
   // balanced; each carries a small `em` min via minmax so text/pills never clip - at narrow widths the
@@ -118,7 +118,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
     },
     {
       key: 'stage',
-      header: 'Stage',
+      header: 'Status',
       width: 'minmax(16em, 1.4fr)',
       cell: (r) => (
         <StatusTag kind={ENQUIRY_STAGE_KIND[r.status] ?? 'enquiry'}>
@@ -128,7 +128,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
     },
   ]
 
-  // Stage filter as a compact structured-list dropdown (not a wide tab strip); rendered as the toolbar's
+  // Status filter as a compact structured-list dropdown (not a wide tab strip); rendered as the toolbar's
   // leading control so filter + search sit together on one row.
   const filterControl = (
     <Popover

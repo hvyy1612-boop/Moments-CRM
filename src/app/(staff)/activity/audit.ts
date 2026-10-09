@@ -55,6 +55,8 @@ const SPECIAL: Record<string, string> = {
   'enquiry.lost': 'Lead archived',
   'enquiry.job_accepted': 'Job accepted ticked (lead is now a job)',
   'enquiry.job_complete': 'Job complete ticked on the lead',
+  'project.completed_manual': 'Job complete ticked (job moved to Completed)',
+  'project.reopened': 'Job complete unticked (job back in Active)',
   'enquiry.job_complete_cleared': 'Job complete unticked on the lead',
   'enquiry.reopened': 'Lead restored',
   'enquiry.booking_confirmed': 'Booking confirmed (now a job)',

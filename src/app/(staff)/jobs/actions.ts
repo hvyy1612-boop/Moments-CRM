@@ -16,6 +16,7 @@ import {
   addProjectTask,
   deleteProjectStage,
   moveJobBackToLead,
+  setJobComplete,
   deleteProjectTask,
   moveProjectTask,
   renameProjectStage,
@@ -78,6 +79,22 @@ export async function closeJobAction(formData: FormData): Promise<void> {
 
 /** Untick "Job accepted": the job goes back to being a lead (Awaiting booking confirmation). Refused once
  *  money is recorded on it; the reason comes back to the job page as `?moveError=`. */
+/** Tick / untick "Job complete" on the job page: Completed Jobs <-> Active Jobs. */
+export async function setJobCompleteAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  if (!projectId) return
+  try {
+    await setJobComplete(projectId, formData.get('done') === 'true', user.id)
+  } catch (error) {
+    redirect(`/jobs/${projectId}?completeError=${encodeURIComponent(error instanceof Error ? error.message : 'Could not update the job.')}`)
+  }
+  revalidatePath('/jobs')
+  revalidatePath(`/jobs/${projectId}`)
+}
+
 export async function moveJobBackToLeadAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
   if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
