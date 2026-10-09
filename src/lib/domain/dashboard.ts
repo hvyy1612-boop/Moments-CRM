@@ -26,6 +26,11 @@ const coverageOf = (p: LeadLite): string =>
 export type DashboardPeriod = 'today' | '7d' | 'month' | 'year' | 'custom'
 const SYDNEY = 'Australia/Sydney'
 
+// Event types offered in the Occasion slicer. A studio can book more than weddings, so the list is a
+// fixed catalogue (always selectable) rather than only the values already in the data; any real event
+// type not in this list is appended so nothing is lost.
+const OCCASION_CHOICES = ['Wedding', 'Engagement', 'Anniversary', 'Portrait', 'Family', 'Event', 'Corporate', 'Maternity', 'Newborn']
+
 export type Bar = { label: string; value: number; sub?: string }
 export type SeriesPoint = { label: string; booked: number; collected: number; bookings: number }
 export type RecentEnquiry = { id: string; name: string; service: string | null; source: string; status: string; createdAt: Date }
@@ -195,7 +200,8 @@ export async function getDashboardData(opts: { period: DashboardPeriod; occasion
     }),
   ])
 
-  const occasions = [...new Set(serviceRows.map((r) => serviceOf({ convertedFromEnquiries: [r] })))].sort()
+  const dataOccasions = [...new Set(serviceRows.map((r) => serviceOf({ convertedFromEnquiries: [r] })))].filter((o) => o !== 'Other' && !OCCASION_CHOICES.includes(o))
+  const occasions = [...OCCASION_CHOICES, ...dataOccasions]
   const coverages = ['Photography', 'Videography', 'Both']
 
   // --- Lead pipeline (enquiries created in the window, grouped by stage) ---
@@ -350,7 +356,7 @@ export function sampleDashboardData(): DashboardData {
     period: 'year',
     occasion: 'all',
     coverage: 'all',
-    occasions: ['Wedding', 'Engagement', 'Anniversary', 'Portrait', 'Event'],
+    occasions: OCCASION_CHOICES,
     coverages: ['Photography', 'Videography', 'Both'],
     kpi: { income: 486200, incomeDeltaPct: 12, collected: 447800, collectedDeltaPct: 9, outstanding: 38400, unpaidCount: 7, totalBookings: 92, bookingsDeltaPct: 9 },
     revenueSeries: months.map((label, i) => ({ label, booked: booked[i]! * 1000, collected: Math.round(booked[i]! * 1000 * 0.9), bookings: bookingsCt[i]! })),
