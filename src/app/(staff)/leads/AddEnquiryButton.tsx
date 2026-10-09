@@ -178,40 +178,22 @@ export function AddEnquiryButton({
                 />
               </Field>
 
-              <fieldset className="flex flex-col gap-1.5">
-                <legend className="mb-1.5 text-sm font-medium text-ink">
-                  Job type<span className="text-danger"> *</span>
-                </legend>
-                {/* Segmented control: one bar divided into equal segments, the selected one filled. */}
-                <div
-                  role="radiogroup"
-                  className={`flex w-full gap-0.5 rounded-md border p-0.5 ${errors.jobType ? 'border-danger' : 'border-line-strong'} bg-surface`}
+              <Field label="Job type" htmlFor="lead-jobtype" required error={errors.jobType}>
+                <Select
+                  id="lead-jobtype"
+                  name="jobType"
+                  value={jobType}
+                  onChange={(e) => setJobType(e.target.value)}
+                  hasError={Boolean(errors.jobType)}
                 >
-                  {JOB_TYPES.map((t) => {
-                    const checked = jobType === t.value
-                    return (
-                      <label
-                        key={t.value}
-                        title={'detail' in t ? t.detail : undefined}
-                        className={`flex min-h-9 flex-1 cursor-pointer items-center justify-center rounded px-2 py-1.5 text-center text-sm font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${
-                          checked ? 'bg-ink text-surface' : 'text-ink hover:bg-sunk'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="jobType"
-                          value={t.value}
-                          checked={checked}
-                          onChange={() => setJobType(t.value)}
-                          className="sr-only"
-                        />
-                        {t.label}
-                      </label>
-                    )
-                  })}
-                </div>
-                {errors.jobType ? <p className="text-sm text-danger">{errors.jobType}</p> : null}
-              </fieldset>
+                  <option value="">Choose a job type...</option>
+                  {JOB_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}{'detail' in t ? ` (${t.detail})` : ''}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
 
               {jobType === 'Other' ? (
                 <Field label="What is the client asking for?" htmlFor="lead-jobtype-note" error={errors.jobTypeNote} required>
