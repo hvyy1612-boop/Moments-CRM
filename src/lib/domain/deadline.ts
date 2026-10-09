@@ -14,7 +14,7 @@ import { sydneyYmd } from '@/lib/time'
 
 /** How a task's base due date is derived. There is no MANUAL anchor — a manual date is `dueOverrideAt`
  *  (Rule D1). `null` = the task is not date-anchored (no due date unless overridden). */
-export type DueAnchor = 'SHOOT' | 'JOB_CONFIRMED' | 'FIXED'
+export type DueAnchor = 'SHOOT' | 'JOB_CONFIRMED' | 'FIXED' | 'LEAD_CREATED' // LEAD_CREATED: lead tasks only (features/tasks/due)
 
 export type DeadlineTask = {
   dueAnchor: DueAnchor | null

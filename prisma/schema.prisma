@@ -94,6 +94,7 @@ enum DueAnchor {
   SHOOT
   JOB_CONFIRMED
   FIXED
+  LEAD_CREATED // lead tasks: N days after the lead was created
 }
 
 enum InvoiceType {

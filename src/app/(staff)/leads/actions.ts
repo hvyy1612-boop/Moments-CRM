@@ -6,7 +6,7 @@ import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getActionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { sydneyLocalToUtc } from '@/lib/time'
+import { LEAD_DUE_ANCHORS, parseTaskForm } from '@/features/tasks/due'
 import { cancelBooking, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
 import { confirmDirectBooking } from '@/lib/domain/project-workflow'
 import { parseNewLead, type NewLeadErrors } from '@/features/enquiries/new-lead'
@@ -181,15 +181,12 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
   revalidatePath('/jobs')
 }
 
-/** Combine the form's date (yyyy-mm-dd) and time (HH:mm[:ss]) into a UTC instant, read as Sydney
- *  wall-clock so the calendar can place the task in the right slot. Null when no date was given; a
- *  missing time falls back to 9am. */
-function parseDue(formData: FormData): Date | null {
-  const date = String(formData.get('dueAt') ?? '').trim()
-  if (!date) return null
-  const time = String(formData.get('dueTime') ?? '').trim() || '09:00'
-  const d = sydneyLocalToUtc(`${date}T${time}`)
-  return Number.isNaN(d.getTime()) ? null : d
+/** Read a lead task form: name + when it is due (none / N days after the lead was created / a set date,
+ *  time optional). An appointment always needs a date and a time. Null = invalid (the browser shows the
+ *  same checks first, so this only guards the server). */
+function readLeadTask(formData: FormData, type: string) {
+  const parsed = parseTaskForm(formData, { anchors: LEAD_DUE_ANCHORS, calendarItem: type === 'APPOINTMENT' })
+  return parsed.ok ? parsed : null
 }
 
 function revalidateEnquiry(enquiryId: string) {
@@ -218,11 +215,11 @@ export async function addEnquiryTaskAction(formData: FormData): Promise<void> {
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
   const enquiryId = String(formData.get('enquiryId') ?? '')
   const stage = String(formData.get('stage') ?? '')
-  const title = String(formData.get('title') ?? '')
   const type = String(formData.get('type') ?? 'TODO')
-  if (!enquiryId || !stage || !title.trim()) return
+  const task = readLeadTask(formData, type)
+  if (!enquiryId || !stage || !task) return
   try {
-    await addEnquiryTask(enquiryId, stage, title, type, parseDue(formData), user.id)
+    await addEnquiryTask(enquiryId, stage, task.title, type, task.due, user.id)
   } catch {
     // no-op on invalid stage / empty title
   }
@@ -235,10 +232,12 @@ export async function updateEnquiryTaskAction(formData: FormData): Promise<void>
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
   const enquiryId = String(formData.get('enquiryId') ?? '')
   const workItemId = String(formData.get('workItemId') ?? '')
-  const title = String(formData.get('title') ?? '')
-  if (!enquiryId || !workItemId || !title.trim()) return
+  if (!enquiryId || !workItemId) return
+  const existing = await prisma.workItem.findUnique({ where: { id: workItemId }, select: { type: true } })
+  const task = existing ? readLeadTask(formData, existing.type) : null
+  if (!task) return
   try {
-    await updateEnquiryTask(workItemId, title, parseDue(formData), user.id)
+    await updateEnquiryTask(workItemId, task.title, task.due, user.id)
   } catch {
     // no-op on stale id
   }

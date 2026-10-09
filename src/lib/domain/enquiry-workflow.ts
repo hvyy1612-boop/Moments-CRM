@@ -4,10 +4,12 @@ import {
   buildEnquiryBoard,
   DEFAULT_ENQUIRY_TASKS,
   ENQUIRY_STAGE_KEYS,
+  ENQUIRY_TASK_SCHEDULE,
   enquiryStageLabel,
   type EnquiryBoard,
   type TaskInput,
 } from '@/features/enquiries/workflow'
+import { asTaskDue, leadDueData, type TaskDue } from '@/features/tasks/due'
 import { syncEnquiryStageFromTasks } from './enquiry-stage'
 
 /** Interactive-transaction client type. */
@@ -39,6 +41,8 @@ export async function seedEnquiryWorkflow(
       status: t.done ? ('COMPLETED' as const) : ('PENDING' as const),
       completedAt: t.done ? new Date() : null,
       order: i,
+      // The default schedule is stored on the task: N days after the lead was created.
+      ...(ENQUIRY_TASK_SCHEDULE[t.title] !== undefined ? { dueAnchor: 'LEAD_CREATED' as const, dueOffsetDays: ENQUIRY_TASK_SCHEDULE[t.title] } : {}),
     })),
   })
 }
@@ -71,6 +75,9 @@ export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> 
       stage: true,
       type: true,
       dueAt: true,
+      dueAnchor: true,
+      dueOffsetDays: true,
+      dueDateFixed: true,
       order: true,
       completedAt: true,
       completedBy: { select: { name: true } },
@@ -83,6 +90,9 @@ export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> 
     stage: w.stage,
     type: w.type,
     dueAt: w.dueAt,
+    dueAnchor: w.dueAnchor,
+    dueOffsetDays: w.dueOffsetDays,
+    dueDateFixed: w.dueDateFixed,
     order: w.order,
     completedByName: w.completedBy?.name ?? null,
     completedAt: w.completedAt ?? null,
@@ -122,7 +132,7 @@ export async function addEnquiryTask(
   stage: string,
   title: string,
   type: string,
-  dueAt: Date | null,
+  due: TaskDue | Date | null,
   actorUserId: string,
 ) {
   const clean = title.trim()
@@ -148,7 +158,7 @@ export async function addEnquiryTask(
         title: clean,
         status: 'PENDING',
         order: (last?.order ?? 0) + 1,
-        dueAt,
+        ...leadDueData(asTaskDue(due)),
       },
     })
     await tx.auditLog.create({
@@ -228,12 +238,14 @@ export async function deleteEnquiryStage(enquiryId: string, stage: string, actor
 }
 
 /** Rename a task and/or change its due date. */
-export async function updateEnquiryTask(taskId: string, title: string, dueAt: Date | null, actorUserId: string) {
+export async function updateEnquiryTask(taskId: string, title: string, due: TaskDue | Date | null, actorUserId: string) {
   const clean = title.trim()
   if (!clean) throw new Error('A task needs a title.')
   const task = await loadTask(taskId)
   await prisma.$transaction(async (tx) => {
-    await tx.workItem.update({ where: { id: taskId }, data: { title: clean, dueAt } })
+    // `null` (older callers) clears only the set date, falling back to the task's schedule.
+    const dueData = due === null ? { dueAt: null } : leadDueData(asTaskDue(due))
+    await tx.workItem.update({ where: { id: taskId }, data: { title: clean, ...dueData } })
     await tx.auditLog.create({
       data: { companyId: task.companyId, actorUserId, action: 'enquiry.task_edited', entityType: 'Enquiry', entityId: task.enquiryId!, afterData: { title: clean } },
     })

@@ -2,10 +2,12 @@
 
 import { useState } from 'react'
 import { LEAD_TASK_TYPES, type EnqStage, type TaskType } from '@/features/enquiries/workflow'
+import { CALENDAR_TASK_TYPES, LEAD_DUE_ANCHORS, type DueSpec } from '@/features/tasks/due'
 import { TASK_TITLE_PLACEHOLDER, TaskTypePicker } from '../../jobs/[id]/TaskTypePicker'
 import {
   checkTaskForm,
   TaskDueDateTimeFields,
+  TaskDueFields,
   taskBorderFor,
   taskInputBase,
   type TaskFormErrors,
@@ -35,6 +37,7 @@ export function EnquiryWorkflow({
   enquiryId,
   csrf,
   taskTimes = {},
+  taskDue = {},
   readOnly = false,
 }: {
   stages: EnqStage[]
@@ -42,6 +45,8 @@ export function EnquiryWorkflow({
   enquiryId: string
   csrf: string
   taskTimes?: Record<string, string>
+  /** Each task's stored due date, to pre-fill the edit form (features/tasks/due dueSpecOf). */
+  taskDue?: Record<string, DueSpec>
   /** A booked lead: render the ticked checklist as a read-only record (no toggling, editing, adding). */
   readOnly?: boolean
 }) {
@@ -228,8 +233,8 @@ export function EnquiryWorkflow({
                             action={updateEnquiryTaskAction}
                             noValidate
                             onSubmit={(e) => {
-                              const errs = checkTaskForm(e.currentTarget)
-                              if (errs.title || errs.date || errs.time) {
+                              const errs = checkTaskForm(e.currentTarget, { anchors: LEAD_DUE_ANCHORS, calendarItem: CALENDAR_TASK_TYPES.has(t.type) })
+                              if (Object.keys(errs).length > 0) {
                                 e.preventDefault()
                                 setEditErrors(errs)
                                 return
@@ -252,12 +257,16 @@ export function EnquiryWorkflow({
                               />
                               {editErrors.title ? <p className="text-sm text-danger">{editErrors.title}</p> : null}
                             </div>
-                            <TaskDueDateTimeFields
-                              dateDefault={t.dueValue ?? ''}
-                              timeDefault={taskTimes[t.id] ?? ''}
-                              errors={editErrors}
-                              onClear={clearEdit}
-                            />
+                            {CALENDAR_TASK_TYPES.has(t.type) ? (
+                              <TaskDueDateTimeFields
+                                dateDefault={t.dueValue ?? ''}
+                                timeDefault={taskTimes[t.id] ?? ''}
+                                errors={editErrors}
+                                onClear={clearEdit}
+                              />
+                            ) : (
+                              <TaskDueFields anchors={LEAD_DUE_ANCHORS} initial={taskDue[t.id] ?? { mode: 'none' }} errors={editErrors} onClear={clearEdit} />
+                            )}
                             <div className="flex items-center gap-2">
                               <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface">Save</button>
                               <button type="button" onClick={() => { setEditErrors({}); setEditingId(null) }} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">Cancel</button>
@@ -285,8 +294,8 @@ export function EnquiryWorkflow({
                         action={addEnquiryTaskAction}
                         noValidate
                         onSubmit={(e) => {
-                          const errs = checkTaskForm(e.currentTarget)
-                          if (errs.title || errs.date || errs.time) {
+                          const errs = checkTaskForm(e.currentTarget, { anchors: LEAD_DUE_ANCHORS, calendarItem: addType !== 'TODO' })
+                          if (Object.keys(errs).length > 0) {
                             e.preventDefault()
                             setAddErrors(errs)
                             return
@@ -311,8 +320,12 @@ export function EnquiryWorkflow({
                           />
                           {addErrors.title ? <p className="text-sm text-danger">{addErrors.title}</p> : null}
                         </div>
-                        <div className="flex flex-wrap items-end gap-3">
-                          <TaskDueDateTimeFields errors={addErrors} onClear={clearAdd} />
+                        <div>
+                          {addType === 'TODO' ? (
+                            <TaskDueFields key={`due-${stage.key}`} anchors={LEAD_DUE_ANCHORS} initial={{ mode: 'none' }} errors={addErrors} onClear={clearAdd} />
+                          ) : (
+                            <TaskDueDateTimeFields errors={addErrors} onClear={clearAdd} />
+                          )}
                         </div>
                         <div className="flex items-center gap-2">
                           <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface">Add</button>

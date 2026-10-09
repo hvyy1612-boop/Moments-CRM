@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { daysUntilSydney, formatSydneyTime, sydneyLocalToUtc, sydneyYmd, systemClock } from '@/lib/time'
-import { addDays, ENQUIRY_TASK_SCHEDULE } from '@/features/enquiries/workflow'
+import { leadTaskDue } from '@/features/tasks/due'
 import { JOB_SHOOT_SELECT, resolveTaskDueDate, shootDateOfJob, shootHasTime, type DueAnchor } from './deadline'
 import { CLOSED_PROJECT, OPEN_ENQUIRY } from './today'
 
@@ -144,11 +144,7 @@ type CalWorkItem = {
 }
 
 function resolveCalendarDate(w: CalWorkItem): { date: Date | null; timed: boolean } {
-  if (w.enquiry) {
-    const offset = ENQUIRY_TASK_SCHEDULE[w.title]
-    const date = w.dueAt ?? (offset !== undefined ? addDays(w.enquiry.createdAt, offset) : null)
-    return { date, timed: Boolean(w.dueAt) }
-  }
+  if (w.enquiry) return leadTaskDue(w, w.enquiry.createdAt)
   const date = resolveTaskDueDate(w, {
     shootDate: w.project ? shootDateOfJob(w.project) : null,
     jobConfirmedAt: w.project?.confirmedByClientAt ?? null,

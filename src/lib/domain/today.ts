@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db'
 import { formatSydneyDate, formatSydneyTime, sydneyLocalToUtc, sydneyYmd, systemClock } from '@/lib/time'
-import { addDays, ENQUIRY_TASK_SCHEDULE } from '@/features/enquiries/workflow'
+import { leadTaskDue } from '@/features/tasks/due'
 import { STUDIO_TO_ACT } from '@/features/enquiries/status'
 import { JOB_SHOOT_SELECT, resolveTaskDueDate, shootDateOfJob, shootHasTime } from './deadline'
 
@@ -91,8 +91,7 @@ export async function getTodayCockpit(): Promise<TodayCockpit> {
     // Leads anchor to the enquiry date; jobs use the one deadline resolver (Rule D0).
     let date: Date | null
     if (isLead) {
-      const offset = ENQUIRY_TASK_SCHEDULE[w.title]
-      date = w.dueAt ?? (offset !== undefined ? addDays(w.enquiry!.createdAt, offset) : null)
+      date = leadTaskDue(w, w.enquiry!.createdAt).date
     } else {
       date = resolveTaskDueDate(w, {
         shootDate: w.project ? shootDateOfJob(w.project) : null,

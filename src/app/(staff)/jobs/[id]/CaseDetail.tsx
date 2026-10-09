@@ -30,6 +30,7 @@ import type { HistoryEntry } from './HistoryLogModal'
 import { JobSidebar } from './JobSidebar'
 import { ProjectWorkflow } from './ProjectWorkflow'
 import { JobAcceptedRow } from './JobAcceptedRow'
+import { dueSpecOf, type DueSpec } from '@/features/tasks/due'
 import { QuoteBuilder } from './QuoteBuilder'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import {
@@ -142,12 +143,17 @@ export async function CaseDetail({
   const canInvoice = project.lifecycleStatus !== 'CANCELLED'
 
   const board = await getProjectBoard(project.id)
-  const taskOverrides = await prisma.workItem.findMany({
-    where: { projectId: project.id, dueOverrideAt: { not: null } },
-    select: { id: true, dueOverrideAt: true },
+  // Each task's stored due date: its time (shown on the row) and what the edit form opens with.
+  const taskDueRows = await prisma.workItem.findMany({
+    where: { projectId: project.id },
+    select: { id: true, dueOverrideAt: true, dueAnchor: true, dueOffsetDays: true, dueDateFixed: true },
   })
   const taskTimes: Record<string, string> = {}
-  for (const w of taskOverrides) if (w.dueOverrideAt) taskTimes[w.id] = sydneyDateTimeParts(w.dueOverrideAt).time
+  const taskDue: Record<string, DueSpec> = {}
+  for (const w of taskDueRows) {
+    if (w.dueOverrideAt) taskTimes[w.id] = sydneyDateTimeParts(w.dueOverrideAt).time
+    taskDue[w.id] = dueSpecOf(w)
+  }
 
   // Internal team notes (client-facing messages are not shown here) for the Notes section.
   const internalNotes = await prisma.communication.findMany({
@@ -370,6 +376,7 @@ export async function CaseDetail({
                 projectId={project.id}
                 csrf={csrf}
                 taskTimes={taskTimes}
+                taskDue={taskDue}
                 history={history}
                 bookingRow={
                   showAccepted ? (

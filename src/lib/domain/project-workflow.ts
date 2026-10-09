@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { cancelOpenWorkItems } from './enquiry-workflow'
+import { asTaskDue, projectDueData, type TaskDue } from '@/features/tasks/due'
 import { formatSydneyDate, daysUntilSydney } from '@/lib/time'
 import { getJobBalance } from './money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
@@ -278,7 +279,7 @@ export async function addProjectTask(
   stage: string,
   title: string,
   type: string,
-  dueAt: Date | null,
+  due: TaskDue | Date | null,
   actorUserId: string,
 ) {
   const clean = title.trim()
@@ -304,8 +305,9 @@ export async function addProjectTask(
         title: clean,
         status: 'PENDING',
         order: (last?.order ?? 0) + 1,
-        // A staff-added task is manually dated (or undated): the date is an override, not an anchor.
-        dueOverrideAt: dueAt,
+        // No due date / relative to the shoot or job accepted / a set day / a set date + time (Rule D1:
+        // a timed date is an override). See features/tasks/due.
+        ...projectDueData(asTaskDue(due)),
       },
     })
     await tx.auditLog.create({
@@ -375,12 +377,14 @@ export async function deleteProjectStage(projectId: string, stage: string, actor
 
 /** Rename a task and/or set its manual due date. A manual date is an override (Rule D1); passing null
  *  clears the override so the task follows its anchor again. */
-export async function updateProjectTask(taskId: string, title: string, dueAt: Date | null, actorUserId: string | null) {
+export async function updateProjectTask(taskId: string, title: string, due: TaskDue | Date | null, actorUserId: string | null) {
   const clean = title.trim()
   if (!clean) throw new Error('A task needs a title.')
   const task = await loadTask(taskId)
   await prisma.$transaction(async (tx) => {
-    await tx.workItem.update({ where: { id: taskId }, data: { title: clean, dueOverrideAt: dueAt } })
+    // `null` (older callers) clears only the manual date, falling back to the task's anchor (Rule D1).
+    const dueData = due === null ? { dueOverrideAt: null } : projectDueData(asTaskDue(due))
+    await tx.workItem.update({ where: { id: taskId }, data: { title: clean, ...dueData } })
     await tx.auditLog.create({
       data: {
         companyId: task.companyId,

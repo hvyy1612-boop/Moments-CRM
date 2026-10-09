@@ -8,6 +8,7 @@
  */
 
 import { daysUntilSydney, sydneyDateTimeParts } from '@/lib/time'
+import { leadTaskDue } from '@/features/tasks/due'
 
 // SHOOT = the job's MAIN shoot task (its date is the job's shoot date). EXTRA_SHOOT = an additional shoot
 // staff add to a job; it shows in the calendar but never changes the main shoot date. AUTO_EMAIL is only
@@ -103,6 +104,7 @@ export function addDays(base: Date, days: number): Date {
   return d
 }
 
+
 export const MS_PER_DAY = 86_400_000
 
 /** Reminder tone for a task's due date, relative to today. */
@@ -133,6 +135,10 @@ export type TaskInput = {
   stage: string | null
   type: string
   dueAt: Date | null
+  /** Stored due fields (features/tasks/due): none, LEAD_CREATED + offset, FIXED day, or dueAt (timed). */
+  dueAnchor?: 'SHOOT' | 'JOB_CONFIRMED' | 'FIXED' | 'LEAD_CREATED' | null
+  dueOffsetDays?: number
+  dueDateFixed?: Date | null
   order: number
   completedByName: string | null
   completedAt: Date | null
@@ -195,13 +201,12 @@ export function buildEnquiryBoard(
         // A booked enquiry shows the whole checklist ticked (forceAllDone): the sales phase is done, so
         // due dates and blockers are moot and hidden - it is a read-only record, not a live queue.
         const done = forceAllDone || t.status === 'COMPLETED'
-        const offset = ENQUIRY_TASK_SCHEDULE[t.title]
-        let dueDate: Date | null = forceAllDone ? null : (t.dueAt ?? null)
-        let noDate = false
-        if (!forceAllDone && !dueDate && offset !== undefined) {
-          if (anchorDate) dueDate = addDays(anchorDate, offset)
-          else noDate = true
-        }
+        // The task's own stored due date (none / N days after the lead was created / a set day / a set
+        // date + time) - never guessed from its title any more.
+        const dueDate: Date | null = forceAllDone
+          ? null
+          : leadTaskDue({ dueAt: t.dueAt, dueAnchor: t.dueAnchor ?? null, dueOffsetDays: t.dueOffsetDays ?? 0, dueDateFixed: t.dueDateFixed ?? null }, anchorDate).date
+        const noDate = false
         const blockedBy = ENQUIRY_TASK_BLOCKED_BY[t.title] ?? null
         return {
           id: t.id,

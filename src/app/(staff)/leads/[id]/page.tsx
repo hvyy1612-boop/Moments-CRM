@@ -20,6 +20,7 @@ import { getEnquiryBoard } from '@/lib/domain/enquiry-workflow'
 import { formatAud } from '@/lib/money'
 import { quoteView } from '@/features/quotes/status'
 import { invoiceStatusView } from '@/features/finance/invoice-detail'
+import { dueSpecOf, type DueSpec } from '@/features/tasks/due'
 import { formatShootWindow, jobTypeLabel } from '@/features/enquiries/new-lead'
 import { auditLabel } from '../../activity/audit'
 import { AppShell } from '../../AppShell'
@@ -162,12 +163,16 @@ export default async function EnquiryDetailPage({
   const board = await getEnquiryBoard(id)
   // Time-of-day for tasks that carry a manual due date+time (stored in dueAt for enquiry tasks). The
   // board row only carries the date, so the edit form reads the time from here to pre-fill its input.
-  const datedTasks = await prisma.workItem.findMany({
-    where: { enquiryId: id, dueAt: { not: null } },
-    select: { id: true, dueAt: true },
+  const taskDueRows = await prisma.workItem.findMany({
+    where: { enquiryId: id },
+    select: { id: true, dueAt: true, dueAnchor: true, dueOffsetDays: true, dueDateFixed: true },
   })
   const taskTimes: Record<string, string> = {}
-  for (const w of datedTasks) if (w.dueAt) taskTimes[w.id] = sydneyDateTimeParts(w.dueAt).time
+  const taskDue: Record<string, DueSpec> = {}
+  for (const w of taskDueRows) {
+    if (w.dueAt) taskTimes[w.id] = sydneyDateTimeParts(w.dueAt).time
+    taskDue[w.id] = dueSpecOf(w)
+  }
 
   return (
     <AppShell user={user} csrf={csrf} active="enquiries" bareHeader>
@@ -213,6 +218,7 @@ export default async function EnquiryDetailPage({
               enquiryId={enquiry.id}
               csrf={csrf}
               taskTimes={taskTimes}
+              taskDue={taskDue}
               // Booked (it is a job now) or declined (closed until Reopen): nothing to work here.
               readOnly={confirmed || declined}
             />

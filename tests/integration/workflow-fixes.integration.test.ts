@@ -5,8 +5,8 @@ import { getCalendarView } from '@/lib/domain/calendar'
 import { cancelBooking, convertEnquiry, createEnquiry } from '@/lib/domain/enquiry'
 import { recordPayment } from '@/lib/domain/finance'
 import { createInvoice } from './helpers'
-import { addProjectStage, addProjectStageBlock, addProjectTask, seedProjectWorkflow, toggleProjectTask } from '@/lib/domain/project-workflow'
-import { addEnquiryTask } from '@/lib/domain/enquiry-workflow'
+import { addProjectStage, addProjectStageBlock, addProjectTask, getProjectBoard, seedProjectWorkflow, toggleProjectTask, updateProjectTask } from '@/lib/domain/project-workflow'
+import { addEnquiryTask, getEnquiryBoard, updateEnquiryTask } from '@/lib/domain/enquiry-workflow'
 
 /** Bug-scan 2026-10-05: workflow / calendar / cancellation fixes against the real (test) database. */
 
@@ -132,5 +132,55 @@ describe('adding workflow tasks: to-do, extra shoot, appointment', () => {
     await addEnquiryTask(lead.id, 'new', 'Consultation call', 'APPOINTMENT', at, staff.id)
     const leadRows = await prisma.workItem.findMany({ where: { enquiryId: lead.id, kind: 'CUSTOM' }, orderBy: { order: 'asc' } })
     expect(leadRows.map((r) => [r.title, r.type])).toEqual([['Shoot on a lead', 'TODO'], ['Consultation call', 'APPOINTMENT']])
+  })
+})
+
+describe('task due dates: no due date, relative, absolute (Studio Ninja)', () => {
+  const rowOf = async (projectId: string, title: string) =>
+    (await getProjectBoard(projectId)).stages.flatMap((st) => st.tasks).find((t) => t.title === title)
+
+  it('a relative job task follows the main shoot; "no due date" stays undated; a set day has no time', async () => {
+    const staff = await prisma.user.findFirstOrThrow({ select: { id: true } })
+    const job = await newJob()
+    const shoot = new Date('2035-06-20T00:00:00Z')
+    await prisma.workItem.updateMany({ where: { projectId: job.projectId, type: 'SHOOT' }, data: { dueOverrideAt: shoot } })
+
+    await addProjectTask(job.projectId, 'preshoot', 'Send timeline form', 'TODO', { kind: 'relative', anchor: 'BEFORE_SHOOT', days: 10 }, staff.id)
+    await addProjectTask(job.projectId, 'preshoot', 'Ideas board', 'TODO', { kind: 'none' }, staff.id)
+    await addProjectTask(job.projectId, 'editing', 'Order album', 'TODO', { kind: 'absolute', date: '2035-07-01', time: null }, staff.id)
+
+    expect((await rowOf(job.projectId, 'Send timeline form'))?.dueValue).toBe('2035-06-10')
+    expect((await rowOf(job.projectId, 'Ideas board'))?.dueLabel).toBeNull()
+    expect((await rowOf(job.projectId, 'Order album'))?.dueValue).toBe('2035-07-01')
+
+    // Moving the shoot re-dates the relative task, not the set day.
+    await prisma.workItem.updateMany({ where: { projectId: job.projectId, type: 'SHOOT' }, data: { dueOverrideAt: new Date('2035-06-27T00:00:00Z') } })
+    expect((await rowOf(job.projectId, 'Send timeline form'))?.dueValue).toBe('2035-06-17')
+    expect((await rowOf(job.projectId, 'Order album'))?.dueValue).toBe('2035-07-01')
+
+    // Editing switches the kind of due date cleanly (no leftover anchor or override).
+    const row = await prisma.workItem.findFirstOrThrow({ where: { projectId: job.projectId, title: 'Send timeline form' } })
+    await updateProjectTask(row.id, 'Send timeline form', { kind: 'none' }, staff.id)
+    expect(await prisma.workItem.findUniqueOrThrow({ where: { id: row.id } })).toMatchObject({ dueAnchor: null, dueOverrideAt: null, dueDateFixed: null })
+  })
+
+  it('lead tasks: the default schedule is stored, "after lead created" works, and "no due date" really clears it', async () => {
+    const staff = await prisma.user.findFirstOrThrow({ select: { id: true } })
+    const lead = await createEnquiry({ name: 'Due dates', email: email() })
+    const seeded = await prisma.workItem.findFirstOrThrow({ where: { enquiryId: lead.id, title: 'Send initial enquiry response' } })
+    expect(seeded).toMatchObject({ dueAnchor: 'LEAD_CREATED', dueOffsetDays: 1 })
+
+    await addEnquiryTask(lead.id, 'new', 'Check availability', 'TODO', { kind: 'relative', anchor: 'AFTER_LEAD_CREATED', days: 2 }, staff.id)
+    const board = await getEnquiryBoard(lead.id)
+    const rows = board.stages.flatMap((st) => st.tasks)
+    const created = (await prisma.enquiry.findUniqueOrThrow({ where: { id: lead.id } })).createdAt
+    const expected = new Date(created.getTime())
+    expected.setDate(expected.getDate() + 2)
+    expect(rows.find((t) => t.title === 'Check availability')?.dueLabel).toBeTruthy()
+
+    await updateEnquiryTask(seeded.id, 'Send initial enquiry response', { kind: 'none' }, staff.id)
+    const after = (await getEnquiryBoard(lead.id)).stages.flatMap((st) => st.tasks).find((t) => t.id === seeded.id)
+    expect(after?.dueLabel).toBeNull() // not re-dated from its title any more
+    expect(expected.getTime()).toBeGreaterThan(created.getTime())
   })
 })

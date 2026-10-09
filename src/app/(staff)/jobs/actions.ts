@@ -8,7 +8,7 @@ import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { can } from '@/lib/auth/authz'
 import { getActionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { sydneyLocalToUtc } from '@/lib/time'
+import { JOB_DUE_ANCHORS, parseTaskForm } from '@/features/tasks/due'
 import { closeJob } from '@/lib/domain/project'
 import { findOrCreateClient } from '@/lib/domain/client'
 import { convertEnquiry, createEnquiry } from '@/lib/domain/enquiry'
@@ -453,15 +453,13 @@ export async function recordPaymentAction(
   return { status: 'success' }
 }
 
-/** Combine the form's date (yyyy-mm-dd) and time (HH:mm) into a UTC instant, read as Sydney wall-clock
- *  so the calendar can place the task in the right slot. Null when no date was given; a missing time
- *  falls back to 9am. */
-function parseDue(formData: FormData): Date | null {
-  const date = String(formData.get('dueAt') ?? '').trim()
-  if (!date) return null
-  const time = String(formData.get('dueTime') ?? '').trim() || '09:00'
-  const d = sydneyLocalToUtc(`${date}T${time}`)
-  return Number.isNaN(d.getTime()) ? null : d
+/** Read a job task form: name + when it is due (none / relative to the shoot or job accepted / a set
+ *  date, time optional). Extra shoots and appointments always need a date and a time. Null = invalid
+ *  (the browser shows the same checks first, so this only guards the server). */
+const CALENDAR_TYPES = new Set(['EXTRA_SHOOT', 'APPOINTMENT']) // calendar items: always a date + time
+function readJobTask(formData: FormData, type: string) {
+  const parsed = parseTaskForm(formData, { anchors: JOB_DUE_ANCHORS, calendarItem: CALENDAR_TYPES.has(type) })
+  return parsed.ok ? parsed : null
 }
 
 /** Toggle a workflow task on a project (tick to complete, tick again to reopen). Backend + audit. */
@@ -488,11 +486,11 @@ export async function addProjectTaskAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
   const projectId = String(formData.get('projectId') ?? '')
   const stage = String(formData.get('stage') ?? '')
-  const title = String(formData.get('title') ?? '')
   const type = String(formData.get('type') ?? 'TODO')
-  if (!projectId || !stage || !title.trim()) return
+  const task = readJobTask(formData, type)
+  if (!projectId || !stage || !task) return
   try {
-    await addProjectTask(projectId, stage, title, type, parseDue(formData), user.id)
+    await addProjectTask(projectId, stage, task.title, type, task.due, user.id)
   } catch {
     // Invalid stage / empty title: the re-render shows the real state.
   }
@@ -506,10 +504,12 @@ export async function updateProjectTaskAction(formData: FormData): Promise<void>
   const user = await requireStaff()
   const projectId = String(formData.get('projectId') ?? '')
   const workItemId = String(formData.get('workItemId') ?? '')
-  const title = String(formData.get('title') ?? '')
-  if (!projectId || !workItemId || !title.trim()) return
+  if (!projectId || !workItemId) return
+  const existing = await prisma.workItem.findUnique({ where: { id: workItemId }, select: { type: true } })
+  const task = existing ? readJobTask(formData, existing.type) : null
+  if (!task) return
   try {
-    await updateProjectTask(workItemId, title, parseDue(formData), user.id)
+    await updateProjectTask(workItemId, task.title, task.due, user.id)
   } catch {
     // no-op on stale id
   }
