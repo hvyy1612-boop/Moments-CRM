@@ -101,10 +101,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <PageContainer variant="wide">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="flex items-center gap-3">
-              <h1 className="font-semibold text-3xl leading-none text-ink">Dashboard</h1>
-              {preview ? <span className="rounded-sm bg-accent-tint px-2 py-0.5 text-xs font-semibold text-accent-ink">Sample preview</span> : null}
-            </div>
+            <h1 className="font-semibold text-3xl leading-none text-ink">Dashboard</h1>
             <p className="mt-1.5 text-sm text-ink-muted">
               Moments Photography and Film, analytics report
               {' · '}
