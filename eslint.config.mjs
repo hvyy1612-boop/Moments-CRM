@@ -1,6 +1,7 @@
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FlatCompat } from '@eslint/eslintrc'
+import { BROWSER_GLOBALS } from './scripts/browser-globals.mjs'
 
 const compat = new FlatCompat({ baseDirectory: dirname(fileURLToPath(import.meta.url)) })
 
@@ -27,10 +28,8 @@ const config = [
     rules: {
       // The brief bans `any` outright (§12.1).
       '@typescript-eslint/no-explicit-any': 'error',
-      // Browser globals (window.status, window.name, ...) type-check everywhere because lib.dom declares
-      // them, but they do not exist on the server: a stray `status` crashed /jobs whenever the list was empty.
-      // Write window.x in client code when it is really meant.
-      'no-restricted-globals': ['error', 'addEventListener', 'blur', 'close', 'closed', 'confirm', 'event', 'external', 'find', 'focus', 'frames', 'history', 'innerHeight', 'innerWidth', 'length', 'location', 'name', 'onerror', 'onload', 'open', 'opener', 'outerHeight', 'outerWidth', 'parent', 'print', 'removeEventListener', 'screen', 'scroll', 'scrollBy', 'scrollTo', 'scrollX', 'scrollY', 'self', 'status', 'stop', 'top'],
+      // Browser-only globals crash a server page (scripts/browser-globals.mjs); write window.x in client code.
+      'no-restricted-globals': ['error', ...BROWSER_GLOBALS],
     },
   },
 ]

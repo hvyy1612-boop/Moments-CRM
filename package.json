@@ -25,7 +25,8 @@
     "check:passwordhash": "node scripts/check-passwordhash.mjs",
     "check:tokens": "node scripts/check-design-tokens.mjs",
     "check:money": "node scripts/check-money-number.mjs",
-    "verify": "npm run typecheck && npm run lint && npm run test && npm run check:routes && npm run check:passwordhash && npm run check:tokens && npm run check:money && npm run e2e && npm run audit:high"
+    "check:globals": "node scripts/check-browser-globals.mjs",
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run check:routes && npm run check:passwordhash && npm run check:tokens && npm run check:money && npm run check:globals && npm run e2e && npm run audit:high"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
