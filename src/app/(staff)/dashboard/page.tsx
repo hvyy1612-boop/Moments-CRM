@@ -105,7 +105,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               <h1 className="font-semibold text-3xl leading-none text-ink">Dashboard</h1>
               {preview ? <span className="rounded-sm bg-accent-tint px-2 py-0.5 text-xs font-semibold text-accent-ink">Sample preview</span> : null}
             </div>
-            <p className="mt-1.5 text-sm text-ink-muted">Moments Photography and Film, analytics report</p>
+            <p className="mt-1.5 text-sm text-ink-muted">
+              Moments Photography and Film, analytics report
+              {' · '}
+              {preview ? (
+                <a href="/dashboard" className="font-medium text-accent-ink hover:underline">Back to live data</a>
+              ) : (
+                <a href="/dashboard?preview=1" className="font-medium text-accent-ink hover:underline">View sample preview</a>
+              )}
+            </p>
           </div>
           <DashboardFilters period={d.period} occasion={d.occasion} coverage={d.coverage} occasions={d.occasions} coverages={d.coverages} from={sp.from} to={sp.to} />
         </div>
