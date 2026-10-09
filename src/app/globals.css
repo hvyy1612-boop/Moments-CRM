@@ -96,6 +96,16 @@
   --color-data-warning: #b69a68;
   --color-data-negative: #b47770;
 
+  /* Dashboard analytics palette (the approved Power BI style mockup: light blue, grey, soft peach on
+     white). Used only by the dashboard charts; every chart colour is a token so no literal hex leaks out. */
+  --color-dash-blue: #5fa8c7;
+  --color-dash-steel: #5a93b0;
+  --color-dash-peach: #f0bda2;
+  --color-dash-grey: #818890;
+  --color-dash-sand: #d9b06a;
+  --color-dash-mauve: #c0a0b4;
+  --color-dash-teal: #4a9f91;
+
   /* Radius - small for controls, medium/large for cards (D-10: card 8-10, button 7, tag 5). */
   --radius-sm: 2px;
   --radius: 5px;
@@ -192,6 +202,26 @@ body {
 .donut-sub {
   font-size: 10px;
   line-height: 1.25;
+}
+
+/* Dashboard load-in animation + depth + line glow. Power BI style: motion runs once on load (bars grow,
+   line draws, cards fade/stagger), never loops; hover lifts a card with a soft accent glow. All disabled
+   under prefers-reduced-motion. Lengths here are fine - globals.css is exempt from the token check. */
+@keyframes dashGrowY { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes dashGrowX { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes dashDraw { to { stroke-dashoffset: 0; } }
+@keyframes dashFade { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.dash-barY { transform-origin: bottom; animation: dashGrowY 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) 0.1s both; }
+.dash-svgbar { transform-box: fill-box; transform-origin: bottom; animation: dashGrowY 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) 0.1s both; }
+.dash-fillx { transform-origin: left center; animation: dashGrowX 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) 0.1s both; }
+.dash-line { stroke-dasharray: 600; stroke-dashoffset: 600; animation: dashDraw 1.3s ease 0.3s forwards; }
+.dash-depth { filter: drop-shadow(0 3px 6px rgba(20, 30, 40, 0.14)); }
+.dash-card { animation: dashFade 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; transition: box-shadow 0.18s ease, transform 0.18s ease; }
+.dash-card:hover { transform: translateY(-3px); box-shadow: 0 10px 28px -6px color-mix(in srgb, var(--color-dash-blue) 40%, transparent); }
+@media (prefers-reduced-motion: reduce) {
+  .dash-barY, .dash-svgbar, .dash-fillx, .dash-line, .dash-card { animation: none; }
+  .dash-line { stroke-dashoffset: 0; }
+  .dash-card:hover { transform: none; }
 }
 
 /*

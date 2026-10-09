@@ -3,14 +3,19 @@ import { PROJECT_STAGES, stageLabel } from '@/features/projects/workflow'
 import { sydneyLocalToUtc, sydneyYmd } from '@/lib/time'
 import { getInvoiceBalance } from './money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
-import { jobShootDate } from './deadline'
 import { titleCase } from '@/lib/text'
 
-// A job's "service" is what its lead asked for (the event type: Wedding, Portrait, ...), the same label
-// the Payments list shows. Selected on any project query that needs it.
-const SERVICE_SELECT = { convertedFromEnquiries: { select: { eventType: true, eventDate: true }, orderBy: { createdAt: 'desc' }, take: 1 } } as const
-const serviceOf = (p: { convertedFromEnquiries: { eventType: string | null }[] } | null | undefined): string =>
-  p?.convertedFromEnquiries[0]?.eventType?.trim() ? titleCase(p.convertedFromEnquiries[0].eventType.trim()) : 'Other'
+// A job carries its lead's details. `eventType` is the occasion (Wedding, Portrait, ...) and drives the
+// service filter; `coverage` is the job type (Photography / Videography / Both); `source` is the channel.
+// Selected on any project query that needs them.
+const SERVICE_SELECT = { convertedFromEnquiries: { select: { eventType: true, eventDate: true, coverage: true, source: true }, orderBy: { createdAt: 'desc' }, take: 1 } } as const
+type LeadLite = { convertedFromEnquiries: { eventType?: string | null; coverage?: string | null; source?: string | null }[] } | null | undefined
+// Occasion = the event type (the dashboard's filter dimension).
+const serviceOf = (p: LeadLite): string =>
+  p?.convertedFromEnquiries[0]?.eventType?.trim() ? titleCase(p.convertedFromEnquiries[0]!.eventType!.trim()) : 'Other'
+// Service type = Photography / Videography / Both; leads that never recorded it bucket as "Unspecified".
+const coverageOf = (p: LeadLite): string =>
+  p?.convertedFromEnquiries[0]?.coverage?.trim() ? titleCase(p.convertedFromEnquiries[0]!.coverage!.trim()) : 'Unspecified'
 
 /**
  * Dashboard analytics (read-only aggregation over the existing records). Every figure is derived from
@@ -22,7 +27,7 @@ export type DashboardPeriod = 'today' | '7d' | 'month' | 'custom'
 const SYDNEY = 'Australia/Sydney'
 
 export type Bar = { label: string; value: number; sub?: string }
-export type SeriesPoint = { label: string; booked: number; collected: number }
+export type SeriesPoint = { label: string; booked: number; collected: number; bookings: number }
 export type RecentEnquiry = { id: string; name: string; service: string | null; source: string; status: string; createdAt: Date }
 
 export type DashboardData = {
@@ -30,22 +35,22 @@ export type DashboardData = {
   service: string
   services: string[]
   kpi: {
-    bookedRevenue: number
-    bookedDeltaPct: number | null
-    bookingRatePct: number
-    bookingNum: number
-    bookingDenom: number
+    income: number
+    incomeDeltaPct: number | null
+    collected: number
+    collectedDeltaPct: number | null
     outstanding: number
     unpaidCount: number
-    avgTurnaroundDays: number | null
+    totalBookings: number
+    bookingsDeltaPct: number | null
   }
   revenueSeries: SeriesPoint[]
   jobStages: Bar[]
   activeJobs: number
-  leadSources: Bar[]
+  bookingsBySource: Bar[]
+  revenueByOccasion: Bar[]
   revenueByService: Bar[]
   invoiceAging: { current: number; d1: number; d8: number; d30: number; total: number } // money-ok: chart display values, summed from Decimal
-  turnaround: Bar[]
   pipeline: Bar[]
   recentEnquiries: RecentEnquiry[]
 }
@@ -104,13 +109,6 @@ function resolveRange(period: DashboardPeriod, from: string | undefined, to: str
   return default7
 }
 
-function median(values: number[]): number {
-  if (values.length === 0) return 0
-  const s = [...values].sort((a, b) => a - b)
-  const mid = Math.floor(s.length / 2)
-  return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2
-}
-
 /** Chart x-axis buckets over [start, end): daily for short ranges, weekly for medium, monthly for
  *  long custom ranges. Labels are formatted in the Sydney zone. */
 function buckets(start: Date, end: Date): { label: string; from: number; to: number }[] {
@@ -154,14 +152,14 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   const svc = opts.service && opts.service !== 'all' ? opts.service : null
   const matchesSvc = (service: string): boolean => !svc || service === svc
 
-  const [enquiries, invoices, payments, projects, serviceRows, recentRaw, delivered] = await Promise.all([
+  const [enquiries, invoices, payments, projects, serviceRows, recentRaw, confirmedProjects] = await Promise.all([
     prisma.enquiry.findMany({ where: { createdAt: { gte: prevStart } }, select: { status: true, source: true, createdAt: true } }),
     prisma.invoice.findMany({
       where: { status: { in: INVOICE_COUNTED as unknown as string[] } as never },
       select: { issuedAt: true, createdAt: true, project: { select: SERVICE_SELECT }, ...INVOICE_MONEY_SELECT },
     }),
     prisma.paymentTransaction.findMany({
-      where: { createdAt: { gte: start, lt: end } },
+      where: { createdAt: { gte: prevStart, lt: end } },
       select: { amount: true, type: true, createdAt: true, payment: { select: { invoice: { select: { project: { select: SERVICE_SELECT } } } } } },
     }),
     prisma.project.findMany({
@@ -180,41 +178,18 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
       take: 6,
       select: { id: true, name: true, eventType: true, source: true, status: true, createdAt: true },
     }),
-    // Turnaround = shoot date -> the day the Delivery stage was finished, measured on every job whose
-    // Delivery tasks are all done (finished jobs included - they are exactly the ones with a turnaround).
+    // Bookings = projects confirmed (deposit paid) in the window, by confirmation date; queried from
+    // prevStart so the previous-period delta can be computed. Carries the lead's details (service + source).
     prisma.project.findMany({
-      where: { lifecycleStatus: { not: 'CANCELLED' }, workItems: { some: { stage: 'delivery', status: 'COMPLETED' } } },
-      select: {
-        ...SERVICE_SELECT,
-        workItems: {
-          where: { OR: [{ type: 'SHOOT' }, { stage: 'delivery', type: { not: 'AUTO' } }], status: { not: 'CANCELLED' } },
-          select: { type: true, stage: true, status: true, dueOverrideAt: true, completedAt: true },
-        },
-      },
+      where: { confirmedByClientAt: { gte: prevStart, lt: end } },
+      select: { confirmedByClientAt: true, source: true, ...SERVICE_SELECT },
     }),
   ])
 
   const services = [...new Set(serviceRows.map((r) => serviceOf({ convertedFromEnquiries: [r] })))].sort()
 
-  // --- Booking rate + lead source + pipeline (enquiries) ---
+  // --- Lead pipeline (enquiries created in the window, grouped by stage) ---
   const inPeriodEnq = enquiries.filter((e) => e.createdAt >= start && e.createdAt < end)
-  const bookingDenom = inPeriodEnq.length
-  // A successful conversion is a CONFIRMED booking (deposit paid), never just an accepted quote (spec §17).
-  const bookingNum = inPeriodEnq.filter((e) => e.status === 'BOOKING_CONFIRMED').length
-  const bookingRatePct = bookingDenom ? Math.round((bookingNum / bookingDenom) * 100) : 0
-
-  const sourceMap = new Map<string, { converted: number; total: number }>() // money-ok: lead counts
-  for (const e of inPeriodEnq) {
-    const key = e.source
-    const rec = sourceMap.get(key) ?? { converted: 0, total: 0 }
-    rec.total += 1
-    if (e.status === 'BOOKING_CONFIRMED') rec.converted += 1
-    sourceMap.set(key, rec)
-  }
-  const leadSources: Bar[] = [...sourceMap.entries()]
-    .map(([k, v]) => ({ label: titleCaseSource(k), value: v.total ? Math.round((v.converted / v.total) * 100) : 0, sub: `${v.converted}/${v.total}` }))
-    .sort((a, b) => b.value - a.value)
-
   const PIPE = [
     { label: 'New enquiry', s: 'NEW_ENQUIRY' },
     { label: 'Contacted', s: 'CONTACTED' },
@@ -237,12 +212,15 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   const prevBooked = prevInvoices.reduce((s, i) => s + booked(i), 0)
   const bookedDeltaPct = prevBooked > 0 ? Math.round(((bookedRevenue - prevBooked) / prevBooked) * 1000) / 10 : null
 
-  const svcMap = new Map<string, number>()
+  // Income split two ways: by occasion (event type) and by service type (Photography / Videography / Both).
+  const occMap = new Map<string, number>()
+  const covMap = new Map<string, number>()
   for (const i of periodInvoices) {
-    const k = serviceOf(i.project)
-    svcMap.set(k, (svcMap.get(k) ?? 0) + booked(i))
+    occMap.set(serviceOf(i.project), (occMap.get(serviceOf(i.project)) ?? 0) + booked(i))
+    covMap.set(coverageOf(i.project), (covMap.get(coverageOf(i.project)) ?? 0) + booked(i))
   }
-  const revenueByService: Bar[] = [...svcMap.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 6)
+  const revenueByOccasion: Bar[] = [...occMap.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 6)
+  const revenueByService: Bar[] = [...covMap.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value)
 
   // --- Outstanding + aging (unpaid invoices, current) ---
   // Balance per invoice is the ledger-derived, credit-aware `owed` (docs/25 Part 1). Aging is still
@@ -261,15 +239,33 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
     else aging.d30 += bal
   }
 
-  // --- Collected cash + revenue series ---
+  // --- Bookings (projects confirmed in the window) ---
+  const svcConfirmed = confirmedProjects.filter((p) => matchesSvc(serviceOf(p)))
+  const inPeriodConfirmed = svcConfirmed.filter((p) => p.confirmedByClientAt && p.confirmedByClientAt >= start && p.confirmedByClientAt < end)
+  const totalBookings = inPeriodConfirmed.length
+  const prevBookings = svcConfirmed.filter((p) => p.confirmedByClientAt && p.confirmedByClientAt >= prevStart && p.confirmedByClientAt < start).length
+  const bookingsDeltaPct = prevBookings > 0 ? Math.round(((totalBookings - prevBookings) / prevBookings) * 1000) / 10 : null
+
+  const srcMap = new Map<string, number>() // money-ok: booking counts
+  for (const p of inPeriodConfirmed) {
+    const key = titleCaseSource(p.source ?? p.convertedFromEnquiries[0]?.source ?? 'MANUAL')
+    srcMap.set(key, (srcMap.get(key) ?? 0) + 1)
+  }
+  const bookingsBySource: Bar[] = [...srcMap.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value)
+
+  // --- Collected cash + revenue series (billed, collected net, bookings count per bucket) ---
   const svcPayments = payments.filter((p) => matchesSvc(serviceOf(p.payment?.invoice?.project)))
+  // Collected cash is NET: a CHARGE adds, a REFUND subtracts (refunds are stored positive) - docs/24 Inc 3b.
+  const collectedNet = (p: (typeof svcPayments)[number]) => (p.type === 'CHARGE' ? num(p.amount) : -num(p.amount))
+  const collected = svcPayments.filter((p) => p.createdAt >= start && p.createdAt < end).reduce((s, p) => s + collectedNet(p), 0)
+  const prevCollected = svcPayments.filter((p) => p.createdAt >= prevStart && p.createdAt < start).reduce((s, p) => s + collectedNet(p), 0)
+  const collectedDeltaPct = prevCollected > 0 ? Math.round(((collected - prevCollected) / prevCollected) * 1000) / 10 : null
   const bk = buckets(start, end)
   const revenueSeries: SeriesPoint[] = bk.map((b) => ({
     label: b.label,
     booked: periodInvoices.filter((i) => { const t = inv(i).getTime(); return t >= b.from && t < b.to }).reduce((s, i) => s + booked(i), 0),
-    // Collected cash is NET: a CHARGE adds, a REFUND subtracts. REFUND transactions are
-    // stored with a positive amount, so summing raw would count a refund as income (docs/24 Inc 3b).
-    collected: svcPayments.filter((p) => { const t = p.createdAt.getTime(); return t >= b.from && t < b.to }).reduce((s, p) => s + (p.type === 'CHARGE' ? num(p.amount) : -num(p.amount)), 0),
+    collected: svcPayments.filter((p) => { const t = p.createdAt.getTime(); return t >= b.from && t < b.to }).reduce((s, p) => s + collectedNet(p), 0),
+    bookings: inPeriodConfirmed.filter((p) => { const t = p.confirmedByClientAt!.getTime(); return t >= b.from && t < b.to }).length,
   }))
 
   // --- Job stages (active jobs by current workflow stage) ---
@@ -288,25 +284,6 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
   const jobStages: Bar[] = [...stageMap.entries()].map(([k, v]) => ({ label: stageLabel(k), value: v }))
   const activeJobs = jobStages.reduce((s, b) => s + b.value, 0)
 
-  // --- Turnaround (shoot -> Delivery stage finished), by service, median ---
-  const turnMap = new Map<string, number[]>()
-  const allTurn: number[] = []
-  for (const p of delivered.filter((d) => matchesSvc(serviceOf(d)))) {
-    const shoot = jobShootDate(p.workItems, p.convertedFromEnquiries[0]?.eventDate)
-    const deliveryTasks = p.workItems.filter((w) => w.stage === 'delivery')
-    if (!shoot || deliveryTasks.length === 0 || deliveryTasks.some((w) => w.status !== 'COMPLETED' || !w.completedAt)) continue
-    const finished = new Date(Math.max(...deliveryTasks.map((w) => w.completedAt!.getTime())))
-    const days = (finished.getTime() - shoot.getTime()) / 86_400_000
-    if (days < 0) continue
-    allTurn.push(days)
-    const k = serviceOf(p)
-    const arr = turnMap.get(k) ?? []
-    arr.push(days)
-    turnMap.set(k, arr)
-  }
-  const turnaround: Bar[] = [...turnMap.entries()].map(([label, arr]) => ({ label, value: Math.round(median(arr) * 10) / 10 })).sort((a, b) => b.value - a.value)
-  const avgTurnaroundDays = allTurn.length ? Math.round((allTurn.reduce((s, d) => s + d, 0) / allTurn.length) * 10) / 10 : null
-
   const recentEnquiries: RecentEnquiry[] = recentRaw.map((e) => ({
     id: e.id,
     name: e.name,
@@ -321,22 +298,22 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
     service: opts.service,
     services,
     kpi: {
-      bookedRevenue,
-      bookedDeltaPct,
-      bookingRatePct,
-      bookingNum,
-      bookingDenom,
+      income: bookedRevenue,
+      incomeDeltaPct: bookedDeltaPct,
+      collected,
+      collectedDeltaPct,
       outstanding: aging.total,
       unpaidCount: unpaid.length,
-      avgTurnaroundDays,
+      totalBookings,
+      bookingsDeltaPct,
     },
     revenueSeries,
     jobStages,
     activeJobs,
-    leadSources,
+    bookingsBySource,
+    revenueByOccasion,
     revenueByService,
     invoiceAging: aging,
-    turnaround,
     pipeline,
     recentEnquiries,
   }
@@ -344,5 +321,5 @@ export async function getDashboardData(opts: { period: DashboardPeriod; service:
 
 function titleCaseSource(s: string): string {
   const map: Record<string, string> = { WEBSITE: 'Website', MANUAL: 'Added by staff' }
-  return map[s] ?? s
+  return map[s] ?? titleCase(s.replace(/_/g, ' ').toLowerCase())
 }
