@@ -1,7 +1,7 @@
 import type { FormEventHandler, ReactNode } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
-import { Checkbox, Field, FormActions, FormBlock, FormCell, PageForm, Select, TextInput, Textarea } from '@/components/ui/form'
+import { Checkbox, Field, FormActions, FormBlock, FormCell, PageForm, TextInput, Textarea } from '@/components/ui/form'
 
 export type ClientFormValues = {
   firstName?: string | null
@@ -21,8 +21,8 @@ export type ClientFormValues = {
 /** The four contact fields the modal enforces; each holds an inline message when that field is invalid. */
 export type ContactErrors = { firstName?: string; lastName?: string; email?: string; phone?: string }
 
-/** Shared client form. With `showEnquiryFields`, it doubles as the single intake: adding the client
- *  also opens an enquiry (event type / date / how they heard / note feed the new lead).
+/** Shared client form: the client's contact details only. A lead is added separately, from the client's
+ *  page ("Add lead"), Studio-Ninja style - saving a client never opens a lead.
  *
  *  Two layouts from one field set: the default is the full-page Carbon grid form (/clients/new and the
  *  edit page - group headings left, content-sized fields right); `bare` is the compact box layout with
@@ -34,7 +34,6 @@ export function ClientForm({
   values = {},
   clientId,
   submitLabel,
-  showEnquiryFields = false,
   bare = false,
   footer,
   errors,
@@ -47,7 +46,6 @@ export function ClientForm({
   values?: ClientFormValues
   clientId?: string
   submitLabel: string
-  showEnquiryFields?: boolean
   bare?: boolean
   footer?: ReactNode
   errors?: ContactErrors
@@ -125,79 +123,13 @@ export function ClientForm({
       <TextInput id="country" name="country" defaultValue={v.country ?? ''} autoComplete="country-name" />
     </Field>
   )
-  const partnerName = (
-    <Field label="Partner's name" htmlFor="partnerName">
-      <TextInput id="partnerName" name="partnerName" placeholder="Their partner (optional)" />
-    </Field>
-  )
-  const coverage = (
-    <Field label="Photography, videography or both?" htmlFor="coverage">
-      <Select id="coverage" name="coverage" defaultValue="">
-        <option value="">Not sure yet</option>
-        <option value="Photography">Photography</option>
-        <option value="Videography">Videography</option>
-        <option value="Both">Both</option>
-      </Select>
-    </Field>
-  )
-  const eventType = (
-    <Field label="Event type" htmlFor="eventType">
-      <TextInput id="eventType" name="eventType" placeholder="Wedding" />
-    </Field>
-  )
-  const eventDate = (
-    <Field label="Wedding / event date" htmlFor="eventDate">
-      <TextInput id="eventDate" name="eventDate" type="date" />
-    </Field>
-  )
-  const heardAbout = (
-    <Field label="How did they hear about us?" htmlFor="heardAbout">
-      <Select id="heardAbout" name="heardAbout" defaultValue="">
-        <option value="">Choose an option</option>
-        <option value="Google">Google</option>
-        <option value="Gemini">Gemini</option>
-        <option value="ChatGPT">ChatGPT</option>
-        <option value="Word of mouth">Word of mouth</option>
-        <option value="Instagram">Instagram</option>
-        <option value="Facebook">Facebook</option>
-        <option value="TikTok">TikTok</option>
-        <option value="Pinterest">Pinterest</option>
-        <option value="Easy Weddings">Easy Weddings</option>
-        <option value="Wedshed">Wedshed</option>
-        <option value="One Fine Day">One Fine Day</option>
-        <option value="Blog post">Blog post</option>
-        <option value="Unknown">Unknown</option>
-      </Select>
-    </Field>
-  )
-  // Descriptive fields, full width and un-abbreviated, to match the public website enquiry form.
-  const gettingReady = (
-    <Field label="Where is the 'getting-ready' location/s? (if known, or if they'd like it photographed / filmed)" htmlFor="gettingReadyLocation">
-      <Textarea id="gettingReadyLocation" name="gettingReadyLocation" placeholder="Enter the getting-ready location/s" />
-    </Field>
-  )
-  const ceremony = (
-    <Field label="Where is the ceremony and reception location?" htmlFor="ceremonyLocation">
-      <Textarea id="ceremonyLocation" name="ceremonyLocation" placeholder="Enter the ceremony and reception location" />
-    </Field>
-  )
-  const weddingDetails = (
-    <Field label="Tell us more about the wedding day, including how many guests are attending" htmlFor="weddingDetails">
-      <Textarea id="weddingDetails" name="weddingDetails" placeholder="Number of guests, the style of the day, and anything else they've shared." />
-    </Field>
-  )
-  const styleReason = (
-    <Field label="What draws them to our photography / videography style?" htmlFor="styleReason">
-      <Textarea id="styleReason" name="styleReason" placeholder="What appealed to them about our photography / videography (optional)" />
-    </Field>
-  )
-  const notesLabel = showEnquiryFields ? 'Note' : 'Notes'
+  const notesLabel = 'Notes'
   const notesTextarea = (
     <Textarea
       id="notes"
       name="notes"
       defaultValue={v.notes ?? ''}
-      placeholder={showEnquiryFields ? 'What are they looking for?' : 'Anything worth remembering about this client.'}
+      placeholder="Anything worth remembering about this client."
     />
   )
   const notes = (
@@ -228,25 +160,6 @@ export function ClientForm({
             {postcode}
             {country}
           </div>
-          {showEnquiryFields ? (
-            // Set off by spacing + the caption alone - no rule, to keep the modal frame clean.
-            <div className="mt-8">
-              <p className="mb-4 text-xs font-bold uppercase tracking-wide text-muted">Enquiry</p>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {partnerName}
-                {coverage}
-                {eventType}
-                {eventDate}
-                {heardAbout}
-              </div>
-              <div className="mt-4 flex flex-col gap-4">
-                {gettingReady}
-                {ceremony}
-                {weddingDetails}
-                {styleReason}
-              </div>
-            </div>
-          ) : null}
           <div className="mt-4">{notes}</div>
         </div>
         <div className="border-t border-line px-6 py-4">
@@ -280,24 +193,10 @@ export function ClientForm({
           <FormCell span={6}>{country}</FormCell>
         </FormBlock>
 
-        {showEnquiryFields ? (
-          <FormBlock title="Enquiry" description="Adding the client also opens a lead with these details.">
-            <FormCell span={6}>{partnerName}</FormCell>
-            <FormCell span={6}>{coverage}</FormCell>
-            <FormCell span={4}>{eventType}</FormCell>
-            <FormCell span={4}>{eventDate}</FormCell>
-            <FormCell span={4}>{heardAbout}</FormCell>
-            <FormCell>{gettingReady}</FormCell>
-            <FormCell>{ceremony}</FormCell>
-            <FormCell>{weddingDetails}</FormCell>
-            <FormCell>{styleReason}</FormCell>
-          </FormBlock>
-        ) : null}
-
         {/* The group heading already names this field, so its label is for screen readers only. */}
         <FormBlock
           title={notesLabel}
-          description={showEnquiryFields ? 'What they are looking for, in your words.' : 'Anything worth remembering about this client.'}
+          description="Anything worth remembering about this client."
         >
           <FormCell>
             <label htmlFor="notes" className="sr-only">{notesLabel}</label>

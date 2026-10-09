@@ -9,7 +9,6 @@ import { getActionUser } from '@/lib/auth/guard'
 import { parseCsv } from '@/lib/csv'
 import { prisma } from '@/lib/db'
 import { archiveClient, clientHasHistory, createClient, deleteEmptyClients, restoreClient, updateClient } from '@/lib/domain/client'
-import { createEnquiry } from '@/lib/domain/enquiry'
 import { clientSchema } from '@/lib/validation/client'
 import type { ClientFormValues } from './ClientForm'
 
@@ -72,73 +71,25 @@ function friendlyClientError(error: unknown): string {
   return error instanceof Error && error.message ? error.message : 'Could not save the client. Please try again.'
 }
 
-/** The opening lead's own fields, checked BEFORE the client is created so a too-long value can never leave a
- *  client behind with no lead (the columns are event_type 50, coverage 30, partner_name 150). */
-function leadExtras(formData: FormData) {
-  const str = (k: string) => String(formData.get(k) ?? '').trim() || null
-  const limit = (value: string | null, max: number, label: string) => {
-    if (value && value.length > max) throw new Error(`Please keep the ${label} under ${max} characters.`)
-    return value
-  }
-  return {
-    eventType: limit(str('eventType'), 50, 'event type'),
-    partnerName: limit(str('partnerName'), 150, "partner's name"),
-    coverage: limit(str('coverage'), 30, 'coverage'),
-    gettingReadyLocation: str('gettingReadyLocation'),
-    ceremonyLocation: str('ceremonyLocation'),
-    weddingDetails: str('weddingDetails'),
-    styleReason: str('styleReason'),
-    heardAbout: str('heardAbout'),
-  }
-}
-
 /**
- * The single intake: add a client and open an enquiry (lead) for them in one step, then land on the
- * lead's workflow. A refused save returns a friendly message and the typed values instead of throwing
- * (which replaced the whole page with the error screen).
+ * Add client: records the client ONLY (Studio-Ninja order - the lead is added afterwards with "Add lead" on
+ * the client's page, so nothing shows in Leads until that lead is saved). Lands on the new client's page.
+ * A refused save returns a friendly message and the typed values instead of throwing (which replaced the
+ * whole page with the error screen).
  */
 export async function createClientFormAction(_prev: ClientFormState, formData: FormData): Promise<ClientFormState> {
   const user = await requireStaff()
   if (!(await csrfOk(formData))) return { status: 'error', message: 'Your session expired. Refresh and try again.', values: submittedValues(formData) }
-  let enquiryId: string
+  let clientId: string
   try {
-    const data = parseClient(formData)
-    const extras = leadExtras(formData)
-    const client = await createClient(data, user.id)
-
-    const name = [data.firstName, data.lastName].filter(Boolean).join(' ') || data.company || data.email
-    const eventDateRaw = String(formData.get('eventDate') ?? '').trim()
-    const eventDate = eventDateRaw ? new Date(eventDateRaw) : null
-
-    const enquiry = await createEnquiry(
-      {
-        clientId: client.id,
-        name,
-        firstName: data.firstName ?? null,
-        lastName: data.lastName ?? null,
-        email: data.email,
-        phone: data.phone ?? null,
-        street: data.street ?? null,
-        suburb: data.suburb ?? null,
-        state: data.state ?? null,
-        postcode: data.postcode ?? null,
-        country: data.country ?? null,
-        isCompany: data.isCompany ?? false,
-        eventDate,
-        message: data.notes ?? null,
-        source: 'MANUAL',
-        ...extras,
-      },
-      user.id,
-    )
-    enquiryId = enquiry.id
+    const client = await createClient(parseClient(formData), user.id)
+    clientId = client.id
   } catch (error) {
     return { status: 'error', message: friendlyClientError(error), values: submittedValues(formData) }
   }
 
   revalidatePath('/clients')
-  revalidatePath('/leads')
-  redirect(`/leads/${enquiryId}?toast=enquiry-added`)
+  redirect(`/clients/${clientId}?toast=client-added`)
 }
 
 export type ImportState =

@@ -7,9 +7,8 @@ import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
 import { getActionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { sydneyLocalToUtc } from '@/lib/time'
-import { findOrCreateClient } from '@/lib/domain/client'
 import { cancelBooking, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
-import { enquirySchema } from '@/lib/validation/enquiry'
+import { parseNewLead, type NewLeadErrors } from '@/features/enquiries/new-lead'
 import {
   addEnquiryNote,
   addEnquiryStage,
@@ -38,13 +37,20 @@ async function csrfOk(formData: FormData): Promise<boolean> {
 export type AddEnquiryState =
   | { status: 'idle' }
   // `values` = what was typed, handed back so the modal keeps it (React resets a form after every action).
-  | { status: 'error'; message?: string; errors?: { name?: string; email?: string }; values?: Record<'name' | 'email' | 'phone' | 'eventType' | 'message', string> }
+  | { status: 'error'; message?: string; errors?: AddLeadErrors; values?: Record<string, string> }
   | { status: 'created'; enquiryId: string }
 
-/** Staff adds a REAL Enquiry (a lead). It appears immediately in /leads with its seeded workflow. */
+export type AddLeadErrors = NewLeadErrors & { clientId?: string }
+
+/** The Add lead form's own fields, echoed back on a refused save. */
+const LEAD_FORM_FIELDS = [
+  'leadName', 'jobType', 'jobTypeNote', 'workflow', 'source', 'dateUnconfirmed', 'startDate', 'endDate',
+  'allDay', 'startTime', 'endTime', 'location', 'note',
+] as const
+
 export type ClientMatch = { id: string; displayName: string; email: string }
 
-/** Type-ahead search for the "Primary Client Contact" picker (name or email). */
+/** Type-ahead search for the client picker on the Leads page (name or email). */
 export async function searchClientsAction(query: string): Promise<ClientMatch[]> {
   await requireStaff()
   const q = query.trim()
@@ -64,51 +70,33 @@ export async function searchClientsAction(query: string): Promise<ClientMatch[]>
 export async function addEnquiryAction(_prev: AddEnquiryState, formData: FormData): Promise<AddEnquiryState> {
   const result = await addEnquiry(formData)
   if (result.status !== 'error') return result
-  const get = (k: string) => String(formData.get(k) ?? '')
-  return { ...result, values: { name: get('name'), email: get('email'), phone: get('phone'), eventType: get('eventType'), message: get('message') } }
+  const values = Object.fromEntries(LEAD_FORM_FIELDS.map((k) => [k, String(formData.get(k) ?? '')]))
+  return { ...result, values }
 }
 
+/**
+ * Staff adds a lead for an EXISTING client (Studio-Ninja style: the client is recorded first, then
+ * "Add lead" on their page). Nothing is stored until the form passes; the lead then appears in /leads
+ * with its seeded workflow. The contact snapshot (email, phone, address) is copied from the client.
+ */
 async function addEnquiry(formData: FormData): Promise<AddEnquiryState> {
   const user = await requireStaff()
   if (!(await csrfOk(formData))) return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  const eventType = String(formData.get('eventType') ?? '').trim() || null
-  const message = String(formData.get('message') ?? '').trim() || null
-  // Checked before any client is created: enquiries.event_type is VARCHAR(50) (a longer value used to
-  // crash the insert after the new client was already saved).
-  if (eventType && eventType.length > 50) return { status: 'error', message: 'Please keep the event type under 50 characters.' }
 
-  // Studio-Ninja "Primary Client Contact": the lead is tied to a client - an existing one that was
-  // picked, or a new one created from the typed fields. Either way the person is in Clients.
-  const existingClientId = String(formData.get('clientId') ?? '').trim()
-  let client
-  if (existingClientId) {
-    client = await prisma.client.findUnique({ where: { id: existingClientId } })
-    if (!client) return { status: 'error', message: 'That client no longer exists.' }
-  } else {
-    // Coerce to strings first so an absent field never leaks a raw "expected string, received null".
-    const name = String(formData.get('name') ?? '').trim()
-    const email = String(formData.get('email') ?? '').trim()
-    const phone = String(formData.get('phone') ?? '').trim()
-    if (!name && !email) {
-      return { status: 'error', message: 'Add a client for this lead. Search for an existing one, or fill in the new client details.' }
-    }
-    const parsed = enquirySchema.safeParse({ name, email, phone })
-    if (!parsed.success) {
-      const f = parsed.error.flatten().fieldErrors
-      if (f.phone?.[0] && !f.name?.[0] && !f.email?.[0]) return { status: 'error', message: `Phone: ${f.phone[0]}` }
-      return { status: 'error', errors: { name: f.name?.[0], email: f.email?.[0] } }
-    }
-    const parts = parsed.data.name.trim().split(/\s+/)
-    client = await findOrCreateClient(
-      { email: parsed.data.email, firstName: parts[0], lastName: parts.slice(1).join(' ') || undefined, phone: parsed.data.phone },
-      user.id,
-    )
-  }
+  const clientId = String(formData.get('clientId') ?? '').trim()
+  const parsed = parseNewLead(formData)
+  const errors: AddLeadErrors = parsed.ok ? {} : { ...parsed.errors }
+  if (!clientId) errors.clientId = 'Please choose a client for this lead.'
+  if (!parsed.ok || Object.keys(errors).length > 0) return { status: 'error', errors }
 
+  const client = await prisma.client.findUnique({ where: { id: clientId } })
+  if (!client || client.archivedAt) return { status: 'error', message: 'That client is no longer available. Please choose another client.' }
+
+  const lead = parsed.lead
   const enquiry = await createEnquiry(
     {
       clientId: client.id,
-      name: client.displayName,
+      name: lead.name,
       firstName: client.firstName,
       lastName: client.lastName,
       email: client.email,
@@ -119,14 +107,23 @@ async function addEnquiry(formData: FormData): Promise<AddEnquiryState> {
       postcode: client.postcode,
       country: client.country,
       isCompany: client.type === 'BUSINESS',
-      eventType,
-      message,
+      eventType: lead.eventType,
+      eventDate: lead.eventDate,
+      eventEndDate: lead.eventEndDate,
+      eventStartTime: lead.eventStartTime,
+      eventEndTime: lead.eventEndTime,
+      eventLocation: lead.eventLocation,
+      coverage: lead.coverage,
+      coverageNote: lead.coverageNote,
+      heardAbout: lead.heardAbout,
+      message: lead.message,
       source: 'MANUAL',
     },
     user.id,
   )
   revalidatePath('/leads')
   revalidatePath('/clients')
+  revalidatePath(`/clients/${client.id}`)
   return { status: 'created', enquiryId: enquiry.id }
 }
 

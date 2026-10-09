@@ -60,7 +60,8 @@ const SOURCE_OPTIONS = ['ENQUIRY', 'REFERRAL', 'MANUAL', 'OTHER']
 // Archived is not offered inline: archiving is the admin-only Remove action, and Restore brings it back.
 const STATUS_OPTIONS = ['PROSPECT', 'ACTIVE']
 const CONTACT_OPTIONS = ['Email', 'Phone', 'Text message']
-const COVERAGE_OPTIONS = ['Photography', 'Videography', 'Both']
+// The lead's job type (features/enquiries/new-lead JOB_TYPES); 'Other' keeps a lead added as Other intact.
+const COVERAGE_OPTIONS = ['Photography', 'Videography', 'Both', 'Other']
 
 function DocSection({ title, icon, action, children }: { title: string; icon: ReactNode; action?: ReactNode; children: ReactNode }) {
   return (
@@ -169,7 +170,7 @@ export function ClientDetail({
               <IconButton type="submit" label="Restore client" tone="accent" icon={<IconRestore />} />
             </form>
           ) : (
-            <AddEnquiryButton csrf={csrf} clientId={client.id} clientName={client.displayName} trigger="icon" />
+            <AddEnquiryButton csrf={csrf} clientId={client.id} clientName={client.displayName} clientEmail={client.email} trigger="icon" />
           )}
           {editing ? (
             <>

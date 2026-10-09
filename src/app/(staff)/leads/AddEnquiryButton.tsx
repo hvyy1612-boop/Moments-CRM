@@ -1,37 +1,17 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
+import { type FormEvent, type ReactNode, useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { IconButton } from '@/components/ui/IconButton'
-import { Field, TextInput, Textarea } from '@/components/ui/form'
-import { addEnquiryAction, type AddEnquiryState } from './actions'
+import { Modal } from '@/components/ui/Modal'
+import { Checkbox, Field, Select, TextInput, Textarea } from '@/components/ui/form'
+import { JOB_TYPES, LEAD_SOURCES, LEAD_WORKFLOWS, parseNewLead } from '@/features/enquiries/new-lead'
+import { addEnquiryAction, type AddEnquiryState, type AddLeadErrors } from './actions'
 import { ClientContactPicker } from './ClientContactPicker'
 
 const INITIAL: AddEnquiryState = { status: 'idle' }
-
-type ClientErrors = { name?: string; email?: string; contact?: string }
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-/** Same required-field checks the server runs, done in the browser so staff see the red line the
- * moment they submit a blank starred field (Google/Facebook style) instead of a native tooltip. */
-function validateContact(fd: FormData): ClientErrors {
-  // An existing client was picked (or pre-bound) - nothing else to fill in.
-  if (String(fd.get('clientId') ?? '').trim()) return {}
-  // Search mode with nothing chosen: the new-client fields are not even on screen.
-  if (!fd.has('name')) {
-    return { contact: 'Please add a client for this lead. Search for an existing one, or fill in the new client details.' }
-  }
-  const name = String(fd.get('name') ?? '').trim()
-  const email = String(fd.get('email') ?? '').trim()
-  const errs: ClientErrors = {}
-  if (!name) errs.name = "Please enter the client's name."
-  if (!email) errs.email = 'Please enter an email address.'
-  else if (!EMAIL_RE.test(email)) errs.email = 'Please enter a valid email address.'
-  return errs
-}
 
 const IconEnquiryPlus = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -41,47 +21,94 @@ const IconEnquiryPlus = () => (
   </svg>
 )
 
+/** A small uppercase caption that opens each part of the form, with an optional control on the right. */
+function Part({ title, control, children }: { title: string; control?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-xs font-bold uppercase tracking-wide text-muted">{title}</h3>
+        {control}
+      </div>
+      {children}
+    </section>
+  )
+}
+
 /**
- * "Add lead" opens a compact sheet that creates a REAL lead (an `Enquiry` row) and opens it.
- *
- * Two entry points: the plain list button (no client) opens the search-or-add client picker; passing
- * `clientId` pre-binds the enquiry to THAT existing client (a repeat booking - anniversary, family
- * shoot...), so it links the new lead to the client and never creates a duplicate. `trigger="icon"`
- * renders it as a round icon action for the client-header toolbar.
+ * "Add lead": a form in a modal that creates a lead (an `Enquiry` row) only when Save lead passes - Cancel
+ * or closing stores nothing, so nothing shows in Leads. Two entry points: on a client's page it is pre-bound
+ * to THAT client; on the Leads page staff search for an existing client (new clients are added in Clients
+ * first). Fields: lead name, job type (Other asks what the client wants), workflow (Wedding for now),
+ * source (the website's "How did you hear about us?" list), the main shoot window + location, and a note.
  */
 export function AddEnquiryButton({
   csrf,
   clientId,
   clientName,
+  clientEmail,
   trigger = 'button',
 }: {
   csrf: string
   clientId?: string
   clientName?: string
+  clientEmail?: string
   trigger?: 'button' | 'icon'
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [state, action, pending] = useActionState(addEnquiryAction, INITIAL)
-  const [clientErrors, setClientErrors] = useState<ClientErrors>({})
-  const boundToClient = Boolean(clientId)
-  const serverErrors = state.status === 'error' ? (state.errors ?? {}) : {}
-  // Client-side check wins while it stands; the server's answer fills in once the form actually posts.
-  const errors = {
-    name: clientErrors.name ?? serverErrors.name,
-    email: clientErrors.email ?? serverErrors.email,
-  }
-  const topMessage = clientErrors.contact ?? (state.status === 'error' ? state.message : undefined)
   const typed = state.status === 'error' ? state.values : undefined
+  const [jobType, setJobType] = useState('')
+  const [unconfirmed, setUnconfirmed] = useState(false)
+  const [allDay, setAllDay] = useState(false)
+  // Errors found in the browser on submit, and the fields edited since (their server error is stale).
+  const [clientErrors, setClientErrors] = useState<AddLeadErrors>({})
+  const [edited, setEdited] = useState<Set<string>>(new Set())
+  const serverErrors = state.status === 'error' ? (state.errors ?? {}) : {}
+  const errors: AddLeadErrors = {
+    ...Object.fromEntries(Object.entries(serverErrors).filter(([k]) => !edited.has(k))),
+    ...clientErrors,
+  }
+  const topMessage = state.status === 'error' ? state.message : undefined
+  const boundToClient = Boolean(clientId)
 
   useEffect(() => {
-    if (state.status === 'created') router.push(`/leads/${state.enquiryId}`)
+    if (state.status === 'created') router.push(`/leads/${state.enquiryId}?toast=enquiry-added`)
   }, [state, router])
 
   const openModal = () => {
+    setJobType(typed?.jobType ?? '')
+    setUnconfirmed(typed?.dateUnconfirmed === 'on')
+    setAllDay(typed?.allDay === 'on')
     setClientErrors({})
+    setEdited(new Set())
     setOpen(true)
   }
+  const close = () => setOpen(false)
+
+  const clearError = (field: string) => {
+    setClientErrors((prev) => {
+      if (!(field in prev)) return prev
+      const next = { ...prev }
+      delete next[field as keyof AddLeadErrors]
+      return next
+    })
+    setEdited((prev) => (prev.has(field) ? prev : new Set(prev).add(field)))
+  }
+
+  // Same checks the server runs, in the browser first, so a blank required field turns red at once.
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    const fd = new FormData(event.currentTarget)
+    const parsed = parseNewLead(fd)
+    const found: AddLeadErrors = parsed.ok ? {} : { ...parsed.errors }
+    if (!String(fd.get('clientId') ?? '').trim()) found.clientId = 'Please choose a client for this lead.'
+    setEdited(new Set())
+    setClientErrors(found)
+    if (Object.keys(found).length > 0) event.preventDefault()
+  }
+
+  const shootDisabled = unconfirmed
+  const timeDisabled = unconfirmed || allDay
 
   return (
     <>
@@ -99,68 +126,189 @@ export function AddEnquiryButton({
         </button>
       )}
 
-      {open ? (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/40 p-4 sm:items-center"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Add lead"
-          onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false) }}
+      <Modal
+        open={open}
+        onClose={close}
+        title="Add lead"
+        description="The lead shows in Leads once you save it."
+        size="md"
+        headerBorder={false}
+      >
+        <form
+          action={action}
+          onSubmit={onSubmit}
+          onInput={(e) => {
+            const name = (e.target as HTMLInputElement).name
+            if (name) clearError(name)
+          }}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col"
         >
-          <div className="w-full max-w-md rounded-xl border border-line bg-surface p-6 shadow-lg">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-ink">{boundToClient ? `New lead for ${clientName ?? 'this client'}` : 'Add lead'}</h2>
-              <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="rounded p-1 text-ink-muted hover:bg-sunk hover:text-ink">
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
-              </button>
-            </div>
+          <input type="hidden" name="csrf" value={csrf} />
+          <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-6 py-5">
+            {topMessage ? <Alert tone="danger" title={topMessage} /> : null}
 
-            {topMessage ? <div className="mb-3"><Alert tone="danger" title={topMessage} /></div> : null}
-
-            <form
-              action={action}
-              noValidate
-              onSubmit={(e) => {
-                const found = validateContact(new FormData(e.currentTarget))
-                // Block the post and show the red lines when a starred field is empty or wrong.
-                if (found.name || found.email || found.contact) {
-                  e.preventDefault()
-                  setClientErrors(found)
-                } else {
-                  setClientErrors({})
-                }
-              }}
-              className="flex flex-col gap-4"
-            >
-              <input type="hidden" name="csrf" value={csrf} />
-              {boundToClient ? (
-                <>
-                  <input type="hidden" name="clientId" value={clientId} />
-                  <p className="rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink-muted">
-                    This lead is added to <span className="font-medium text-ink">{clientName ?? 'this client'}</span>. It will not create a new client.
-                  </p>
-                </>
-              ) : (
-                <ClientContactPicker
-                  errors={errors}
-                  defaults={typed}
-                  onFieldInput={(field) => setClientErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev))}
-                />
-              )}
-              <Field label="Event type" htmlFor="enq-type">
-                <TextInput id="enq-type" name="eventType" defaultValue={typed?.eventType} placeholder="Wedding, Events, Portrait" maxLength={50} autoComplete="off" />
-              </Field>
-              <Field label="Note / first message" htmlFor="enq-note">
-                <Textarea id="enq-note" name="message" rows={3} defaultValue={typed?.message} />
-              </Field>
-              <div className="mt-1 flex justify-end gap-2">
-                <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
-                <Button type="submit" loading={pending}>Add lead</Button>
+            {/* Who the lead is for */}
+            {boundToClient ? (
+              <div className="flex items-center gap-3 rounded-md border border-line bg-paper px-4 py-3">
+                <input type="hidden" name="clientId" value={clientId} />
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-sm font-semibold text-surface" aria-hidden="true">
+                  {(clientName ?? '?').trim().charAt(0).toUpperCase()}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-xs font-bold uppercase tracking-wide text-muted">Client</span>
+                  <span className="block truncate text-base font-medium text-ink">{clientName ?? 'This client'}</span>
+                  {clientEmail ? <span className="block truncate text-sm text-ink-muted">{clientEmail}</span> : null}
+                </span>
               </div>
-            </form>
+            ) : (
+              <ClientContactPicker error={errors.clientId} onPick={() => clearError('clientId')} />
+            )}
+
+            <Part title="Lead details">
+              <Field label="Lead name" htmlFor="lead-name" error={errors.leadName} required>
+                <TextInput
+                  id="lead-name"
+                  name="leadName"
+                  defaultValue={typed?.leadName}
+                  placeholder="e.g. Jenny & Matt"
+                  maxLength={150}
+                  autoComplete="off"
+                  hasError={Boolean(errors.leadName)}
+                />
+              </Field>
+
+              <fieldset className="flex flex-col gap-1.5">
+                <legend className="mb-1.5 text-sm font-medium text-ink">
+                  Job type<span className="text-danger"> *</span>
+                </legend>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup">
+                  {JOB_TYPES.map((t) => {
+                    const checked = jobType === t.value
+                    return (
+                      <label
+                        key={t.value}
+                        className={`flex min-h-14 cursor-pointer flex-col items-center justify-center rounded border px-2 py-2 text-center transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${
+                          checked ? 'border-ink bg-ink text-surface' : `${errors.jobType ? 'border-danger' : 'border-line-strong'} bg-surface text-ink hover:bg-sunk`
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="jobType"
+                          value={t.value}
+                          checked={checked}
+                          onChange={() => setJobType(t.value)}
+                          className="sr-only"
+                        />
+                        <span className="text-sm font-medium">{t.label}</span>
+                        {'detail' in t ? <span className={`text-xs ${checked ? 'text-surface/80' : 'text-ink-muted'}`}>{t.detail}</span> : null}
+                      </label>
+                    )
+                  })}
+                </div>
+                {errors.jobType ? <p className="text-sm text-danger">{errors.jobType}</p> : null}
+              </fieldset>
+
+              {jobType === 'Other' ? (
+                <Field label="What is the client asking for?" htmlFor="lead-jobtype-note" error={errors.jobTypeNote} required>
+                  <TextInput
+                    id="lead-jobtype-note"
+                    name="jobTypeNote"
+                    defaultValue={typed?.jobTypeNote}
+                    placeholder="e.g. Drone footage of the venue only"
+                    maxLength={300}
+                    autoComplete="off"
+                    hasError={Boolean(errors.jobTypeNote)}
+                  />
+                </Field>
+              ) : null}
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Workflow" htmlFor="lead-workflow" error={errors.workflow}>
+                  <Select id="lead-workflow" name="workflow" defaultValue={typed?.workflow || LEAD_WORKFLOWS[0]}>
+                    {LEAD_WORKFLOWS.map((w) => (
+                      <option key={w} value={w}>{w}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="How did they hear about us?" htmlFor="lead-source" error={errors.source}>
+                  <Select id="lead-source" name="source" defaultValue={typed?.source ?? ''} hasError={Boolean(errors.source)}>
+                    <option value="">Not specified</option>
+                    {LEAD_SOURCES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+            </Part>
+
+            <Part
+              title="Main shoot"
+              control={
+                <Checkbox
+                  id="lead-date-unconfirmed"
+                  name="dateUnconfirmed"
+                  label="Date not confirmed yet"
+                  checked={unconfirmed}
+                  onChange={(e) => {
+                    setUnconfirmed(e.target.checked)
+                    for (const f of ['startDate', 'endDate', 'startTime', 'endTime']) clearError(f)
+                  }}
+                />
+              }
+            >
+              <div className={`grid grid-cols-2 gap-4 transition-opacity ${shootDisabled ? 'opacity-50' : ''}`}>
+                <Field label="Start date" htmlFor="lead-start-date" error={errors.startDate} required={!shootDisabled}>
+                  <TextInput id="lead-start-date" name="startDate" type="date" defaultValue={typed?.startDate} disabled={shootDisabled} hasError={Boolean(errors.startDate)} />
+                </Field>
+                <Field label="Start time" htmlFor="lead-start-time" error={errors.startTime}>
+                  <TextInput id="lead-start-time" name="startTime" type="time" defaultValue={typed?.startTime} disabled={timeDisabled} hasError={Boolean(errors.startTime)} />
+                </Field>
+                <Field label="End date" htmlFor="lead-end-date" error={errors.endDate} hint="Only for a shoot over more than one day.">
+                  <TextInput id="lead-end-date" name="endDate" type="date" defaultValue={typed?.endDate} disabled={shootDisabled} hasError={Boolean(errors.endDate)} />
+                </Field>
+                <Field label="End time" htmlFor="lead-end-time" error={errors.endTime}>
+                  <TextInput id="lead-end-time" name="endTime" type="time" defaultValue={typed?.endTime} disabled={timeDisabled} hasError={Boolean(errors.endTime)} />
+                </Field>
+              </div>
+              <div className={shootDisabled ? 'opacity-50' : undefined}>
+                <Checkbox
+                  id="lead-all-day"
+                  name="allDay"
+                  label="All day (no set times)"
+                  checked={allDay}
+                  disabled={shootDisabled}
+                  onChange={(e) => {
+                    setAllDay(e.target.checked)
+                    clearError('startTime')
+                    clearError('endTime')
+                  }}
+                />
+              </div>
+              <Field label="Location" htmlFor="lead-location" error={errors.location}>
+                <TextInput
+                  id="lead-location"
+                  name="location"
+                  defaultValue={typed?.location}
+                  placeholder="Venue or address"
+                  maxLength={300}
+                  autoComplete="off"
+                  hasError={Boolean(errors.location)}
+                />
+              </Field>
+            </Part>
+
+            <Field label="Note" htmlFor="lead-note" error={errors.note}>
+              <Textarea id="lead-note" name="note" rows={3} defaultValue={typed?.note} placeholder="What the client is looking for, in your words." maxLength={5000} />
+            </Field>
           </div>
-        </div>
-      ) : null}
+
+          <div className="flex items-center gap-3 border-t border-line px-6 py-4">
+            <Button type="submit" size="xl" loading={pending}>Save lead</Button>
+            <Button type="button" variant="secondary" size="lg" onClick={close}>Cancel</Button>
+          </div>
+        </form>
+      </Modal>
     </>
   )
 }

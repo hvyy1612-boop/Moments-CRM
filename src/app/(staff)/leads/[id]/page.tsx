@@ -19,6 +19,7 @@ import {
 import { getEnquiryBoard } from '@/lib/domain/enquiry-workflow'
 import { formatAud } from '@/lib/money'
 import { quoteView } from '@/features/quotes/status'
+import { formatShootWindow, jobTypeLabel } from '@/features/enquiries/new-lead'
 import { auditLabel } from '../../activity/audit'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
@@ -71,8 +72,13 @@ export default async function EnquiryDetailPage({
       phone: true,
       eventType: true,
       eventDate: true,
+      eventEndDate: true,
+      eventStartTime: true,
+      eventEndTime: true,
+      eventLocation: true,
       partnerName: true,
       coverage: true,
+      coverageNote: true,
       gettingReadyLocation: true,
       ceremonyLocation: true,
       weddingDetails: true,
@@ -81,6 +87,7 @@ export default async function EnquiryDetailPage({
       message: true,
       status: true,
       convertedProjectId: true,
+      client: { select: { displayName: true } },
     },
   })
   // /leads/[id] loads the Enquiry (lead) entity ONLY - it never guesses a Project id (docs/24 FIX 11).
@@ -246,7 +253,7 @@ export default async function EnquiryDetailPage({
             <SidebarCard title="Client">
               <dl className="grid grid-cols-[5.5em_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2 text-sm">
                 <dt className="text-muted">Name</dt>
-                <dd className="min-w-0 break-words text-ink">{enquiry.name}</dd>
+                <dd className="min-w-0 break-words text-ink">{enquiry.client?.displayName ?? enquiry.name}</dd>
                 <dt className="text-muted">Email</dt>
                 <dd className="min-w-0 break-all text-ink">{enquiry.email}</dd>
                 <dt className="text-muted">Phone</dt>
@@ -321,16 +328,17 @@ export default async function EnquiryDetailPage({
           </aside>
         </div>
 
-        {/* Enquiry details (wedding-enquiry fields captured on the add-client / website form) */}
+        {/* Enquiry details (the Add lead form, or the wedding-enquiry fields from the website form) */}
         {(() => {
           const details: { label: string; value: string; wide?: boolean }[] = []
           const add = (label: string, v: string | null | undefined, wide = false) => {
             if (v && v.trim()) details.push({ label, value: v, wide })
           }
           add("Partner's name", enquiry.partnerName)
-          add('Photography, videography or both', enquiry.coverage)
-          add('Event type', enquiry.eventType ? titleCase(enquiry.eventType) : null)
-          add('Wedding / event date', enquiry.eventDate ? formatSydneyDate(enquiry.eventDate) : null)
+          add('Job type', jobTypeLabel(enquiry.coverage, enquiry.coverageNote))
+          add('Workflow', enquiry.eventType ? titleCase(enquiry.eventType) : null)
+          add('Main shoot', formatShootWindow(enquiry) ?? 'Date not confirmed yet')
+          add('Location', enquiry.eventLocation)
           add('Getting-ready location/s', enquiry.gettingReadyLocation)
           add('Ceremony and reception location', enquiry.ceremonyLocation)
           add('About the wedding day (incl. guest numbers)', enquiry.weddingDetails)

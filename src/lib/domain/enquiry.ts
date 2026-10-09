@@ -14,7 +14,7 @@ import { cancelProjectTx } from './refund'
 
 /**
  * Leads (the `Enquiry` model; staff-facing name "Lead", like Job = `Project`). A website enquiry or a
- * staff-added lead lives here until it is booked. Converting (accept quote / Create Job) upserts the
+ * staff-added lead lives here until it is booked. Converting (quote accepted, or Add job) upserts the
  * Client by email and creates a provisional BOOKING_REQUESTED Job; the lead moves to
  * AWAITING_BOOKING_CONFIRMATION, then BOOKING_CONFIRMED when the deposit is paid. A lead is never
  * deleted: DECLINED leads are kept and can be reopened. Stage rules: docs/23 §4, docs/33.
@@ -34,6 +34,11 @@ export type CreateEnquiryInput = {
   isCompany?: boolean
   eventType?: string | null
   eventDate?: Date | null
+  // Main shoot window (staff Add lead form): last day, HH:MM times, location.
+  eventEndDate?: Date | null
+  eventStartTime?: string | null
+  eventEndTime?: string | null
+  eventLocation?: string | null
   message?: string | null
   source?: EnquirySource
   ownerUserId?: string | null
@@ -41,6 +46,7 @@ export type CreateEnquiryInput = {
   // Wedding-enquiry detail fields (parity with the public website enquiry form).
   partnerName?: string | null
   coverage?: string | null
+  coverageNote?: string | null
   gettingReadyLocation?: string | null
   ceremonyLocation?: string | null
   weddingDetails?: string | null
@@ -84,9 +90,14 @@ async function runCreateEnquiry(input: CreateEnquiryInput, actorUserId: string |
         isCompany: input.isCompany ?? false,
         eventType: input.eventType ?? null,
         eventDate: input.eventDate ?? null,
+        eventEndDate: input.eventEndDate ?? null,
+        eventStartTime: input.eventStartTime ?? null,
+        eventEndTime: input.eventEndTime ?? null,
+        eventLocation: input.eventLocation ?? null,
         message: input.message ?? null,
         partnerName: input.partnerName ?? null,
         coverage: input.coverage ?? null,
+        coverageNote: input.coverageNote ?? null,
         gettingReadyLocation: input.gettingReadyLocation ?? null,
         ceremonyLocation: input.ceremonyLocation ?? null,
         weddingDetails: input.weddingDetails ?? null,

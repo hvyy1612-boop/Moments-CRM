@@ -40,7 +40,7 @@ type SortKey = 'newest' | 'oldest' | 'name'
 const SORTS: { key: SortKey; label: string }[] = [
   { key: 'newest', label: 'Created date: newest' },
   { key: 'oldest', label: 'Created date: oldest' },
-  { key: 'name', label: 'Client A-Z' },
+  { key: 'name', label: 'Lead name A-Z' },
 ]
 
 export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: string }) {
@@ -97,7 +97,8 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
     { key: 'created', header: 'Created', width: 'minmax(8.5em, 1fr)', cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{createdLabel(r.createdMs)}</span> },
     {
       key: 'client',
-      header: 'Client',
+      // The lead's name ("Jenny & Matt"); a website lead is named after the person who enquired.
+      header: 'Lead',
       width: 'minmax(11em, 1.5fr)',
       cell: (r) => (
         <Link href={`/leads/${r.id}`} className={`block truncate text-ink transition-colors hover:text-accent-ink ${r.unread ? 'font-semibold' : ''}`}>

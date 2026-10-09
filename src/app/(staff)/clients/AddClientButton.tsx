@@ -28,10 +28,11 @@ function validateContact(fd: FormData): ContactErrors {
 }
 
 /**
- * "Add client" opens the intake in a Modal instead of navigating to /clients/new - the studio adds a
- * client (and its opening enquiry) without leaving the list. The form is the shared ClientForm in its
- * `bare` layout; on success createClientFormAction redirects to the new enquiry, which unmounts the modal
- * on its own, so there is no manual close-on-submit (the modal only closes here via Cancel / Escape / x).
+ * "Add client" opens the form in a Modal instead of navigating to /clients/new. It records the client
+ * ONLY (Studio-Ninja order): a lead is added afterwards with "Add lead" on the client's page. The form is
+ * the shared ClientForm in its `bare` layout; on success createClientFormAction redirects to the new
+ * client's page, which unmounts the modal on its own, so there is no manual close-on-submit (the modal
+ * only closes here via Cancel / Escape / x).
  */
 export function AddClientButton({ csrf }: { csrf: string }) {
   const [open, setOpen] = useState(false)
@@ -65,7 +66,7 @@ export function AddClientButton({ csrf }: { csrf: string }) {
         open={open}
         onClose={close}
         title="Add a client"
-        description="Record the client and their enquiry. This opens a lead you can work through in Leads, and becomes a job once it is booked."
+        description="Record the client's contact details. Then use Add lead on their page when they enquire."
         size="lg"
         headerBorder={false}
       >
@@ -75,7 +76,6 @@ export function AddClientButton({ csrf }: { csrf: string }) {
           formError={state.status === 'error' ? state.message : undefined}
           csrf={csrf}
           submitLabel="Save client"
-          showEnquiryFields
           bare
           requireContact
           errors={errors}

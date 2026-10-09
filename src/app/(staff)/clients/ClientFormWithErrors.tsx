@@ -16,14 +16,12 @@ export function ClientFormWithErrors({
   values,
   clientId,
   submitLabel,
-  showEnquiryFields = false,
 }: {
   mode: 'create' | 'update'
   csrf: string
   values?: ClientFormValues
   clientId?: string
   submitLabel: string
-  showEnquiryFields?: boolean
 }) {
   const [state, formAction] = useActionState(mode === 'create' ? createClientFormAction : updateClientFormAction, IDLE)
   return (
@@ -33,7 +31,6 @@ export function ClientFormWithErrors({
       values={state.status === 'error' ? state.values : values}
       clientId={clientId}
       submitLabel={submitLabel}
-      showEnquiryFields={showEnquiryFields}
       formError={state.status === 'error' ? state.message : undefined}
     />
   )
