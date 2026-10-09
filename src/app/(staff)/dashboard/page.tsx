@@ -47,7 +47,7 @@ function Delta({ value }: { value: number }) {
 
 function Kpi({ label, value, icon, delta, sub }: { label: string; value: string; icon: ReactNode; delta?: number | null; sub: string }) {
   return (
-    <div className="dash-card relative rounded-sm border border-line-strong bg-surface p-4">
+    <div className="dash-card relative rounded-sm border border-card-border bg-surface p-4">
       <div className="absolute inset-x-0 top-0 h-1 rounded-t-sm" style={{ backgroundImage: 'linear-gradient(90deg, var(--color-dash-blue), var(--color-dash-peach))' }} aria-hidden="true" />
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 text-sm text-ink-muted">{label}</div>
@@ -61,7 +61,7 @@ function Kpi({ label, value, icon, delta, sub }: { label: string; value: string;
 
 function Card({ title, right, children }: { title: string; right?: ReactNode; children: ReactNode }) {
   return (
-    <section className="dash-card flex h-full flex-col rounded-sm border border-line-strong bg-surface p-4">
+    <section className="dash-card flex h-full flex-col rounded-sm border border-card-border bg-surface p-4">
       <div className="mb-3 flex items-baseline justify-between gap-3">
         <h2 className="font-semibold text-base leading-tight text-ink">{title}</h2>
         {right ? <span className="tabular shrink-0 text-xs font-medium text-ink-muted">{right}</span> : null}

@@ -105,6 +105,9 @@
   --color-dash-sand: #d9b06a;
   --color-dash-mauve: #c0a0b4;
   --color-dash-teal: #4a9f91;
+  /* Dashboard card border: darker than --color-line-strong so the square frames read clearly, but still
+     a 1px hairline (the border stays thin; only the colour is stronger). */
+  --color-card-border: #b3ada0;
 
   /* Radius - small for controls, medium/large for cards (D-10: card 8-10, button 7, tag 5). */
   --radius-sm: 2px;
