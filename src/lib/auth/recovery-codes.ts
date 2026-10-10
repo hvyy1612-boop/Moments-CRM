@@ -17,11 +17,11 @@ import { revokeAllSessions } from './session'
  * instead each account holds six codes, shown once when the staff member sets their own password.
  *
  * - Only an Argon2id hash of each code is stored; a used code is deleted.
- * - A wrong code counts against the SAME lockout as sign-in (5 failures -> 15 minutes) and per IP.
+ * - A wrong code counts against the SAME lockout as sign-in (5 failures -> 5 minutes) and per IP.
  * - Every outcome is generic to the caller, so the page never reveals which login IDs exist.
  */
 const LOCKOUT_THRESHOLD = 5
-const LOCKOUT_WINDOW_MS = 15 * 60 * 1000
+const LOCKOUT_WINDOW_MS = 5 * 60 * 1000
 
 type Meta = { ipAddress: string; userAgent?: string | null }
 
@@ -109,7 +109,7 @@ export async function resetPasswordWithRecoveryCode(
   }
 
   if (!matchId) {
-    // Same budget as sign-in: an expired lock starts a fresh window; the 5th miss locks 15 minutes.
+    // Same budget as sign-in: an expired lock starts a fresh window; the 5th miss locks 5 minutes.
     const fresh = Boolean(user.lockedUntil)
     const updated = await prisma.user.update({
       where: { id: user.id },

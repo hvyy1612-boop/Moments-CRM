@@ -13,11 +13,11 @@ export async function verifyUserPassword(userId: string, password: string): Prom
 }
 
 const REAUTH_THRESHOLD = 5 // same budget as sign-in (SEC-S04)
-const REAUTH_LOCK_MS = 15 * 60 * 1000
+const REAUTH_LOCK_MS = 5 * 60 * 1000
 
 /**
  * Re-authentication with the SAME lockout budget as sign-in: a wrong password counts as a failed attempt
- * (atomic increment) and the 5th locks the account for 15 minutes. Used wherever a signed-in session must
+ * (atomic increment) and the 5th locks the account for 5 minutes. Used wherever a signed-in session must
  * prove the password (change password, the Activity page fallback), so an unattended session cannot be
  * used to guess it without limit. A correct password clears the counter.
  */

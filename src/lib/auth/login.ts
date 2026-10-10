@@ -8,12 +8,12 @@ import { createSession, type CreatedSession } from './session'
  *
  * Every outcome writes a SignInLog. The caller shows one generic failure message for every
  * failure kind, so nothing here reveals whether an account exists, is locked or is disabled
- * (SEC-S05). Lockout is 15 minutes after 5 consecutive failures, counted per account (User
+ * (SEC-S05). Lockout is 5 minutes after 5 consecutive failures, counted per account (User
  * counters) and per IP (SignInLog rows in the window - D-005: Postgres is the rate limiter,
  * no new table needed).
  */
 const LOCKOUT_THRESHOLD = 5 // SEC-S04
-const LOCKOUT_WINDOW_MS = 15 * 60 * 1000 // SEC-S04: 15 minutes
+const LOCKOUT_WINDOW_MS = 5 * 60 * 1000 // SEC-S04: 5 minutes
 const KNOWN_ADDRESS_MS = 30 * 24 * 60 * 60 * 1000 // an address this account signed in from in the last 30 days
 
 export type LoginResult = { ok: true; session: CreatedSession } | { ok: false }

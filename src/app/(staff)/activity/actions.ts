@@ -74,7 +74,7 @@ export async function confirmActivityAccessAction(_prev: StepUpState, formData: 
     if (!password) return ERR('Please enter your account password.')
     // Same lockout budget as sign-in, and every miss is on the audit trail (it bypasses the PIN lock).
     const verdict = await verifyUserPasswordWithLockout(user.id, password)
-    if (verdict === 'locked') return ERR('Too many wrong attempts. Please wait 15 minutes and try again.')
+    if (verdict === 'locked') return ERR('Too many wrong attempts. Please wait 5 minutes and try again.')
     if (verdict === 'wrong') {
       await safeLog(user.id, 'auth.activity_password_failed')
       return ERR('That password is not correct. Please try again.')

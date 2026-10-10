@@ -44,7 +44,7 @@ export async function changePassword(
   // the account over). The forced first-login change skips it: they just signed in with the temp password.
   if (!user.mustChangePassword) {
     const verdict = await verifyUserPasswordWithLockout(user.id, String(formData.get('currentPassword') ?? ''))
-    if (verdict === 'locked') return { status: 'error', message: 'Too many wrong attempts. Please wait 15 minutes and try again.' }
+    if (verdict === 'locked') return { status: 'error', message: 'Too many wrong attempts. Please wait 5 minutes and try again.' }
     if (verdict === 'wrong') return { status: 'error', errors: { current: 'Your current password is not correct.' } }
   }
 
@@ -85,7 +85,7 @@ export async function createRecoveryCodesAction(_prev: RecoveryCodesState, formD
   if (!user) redirect('/login')
   if (user.mustChangePassword) redirect('/change-password')
   const verdict = await verifyUserPasswordWithLockout(user.id, String(formData.get('currentPassword') ?? ''))
-  if (verdict === 'locked') return { status: 'error', message: 'Too many wrong attempts. Please wait 15 minutes and try again.' }
+  if (verdict === 'locked') return { status: 'error', message: 'Too many wrong attempts. Please wait 5 minutes and try again.' }
   if (verdict === 'wrong') return { status: 'error', message: 'Your current password is not correct.' }
   const result = await freshCodes(user)
   return result.status === 'codes' ? result : { status: 'error', message: 'Could not create recovery codes. Please try again.' }
