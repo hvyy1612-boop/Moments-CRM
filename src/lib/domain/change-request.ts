@@ -18,9 +18,6 @@ import { reviseQuoteTx } from './quote'
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
-/** A fee at/above this needs a manager (ADMIN); a $0 schedule-only change needs any staff (Rule C3). */
-const APPROVAL_THRESHOLD = new Prisma.Decimal(500)
-
 const TYPE_BY_KIND: Record<ChangeRequestPayload['kind'], ChangeRequestType> = {
   reschedule: 'OPERATIONAL',
   scopeChange: 'COMMERCIAL',
@@ -167,15 +164,10 @@ export async function approveChangeRequest(changeRequestId: string, actorUserId:
     const cr = await tx.changeRequest.findUnique({ where: { id: changeRequestId }, include: { project: { select: { companyId: true } } } })
     if (!cr) throw new Error('Change request not found.')
     if (cr.status !== 'IMPACT_ASSESSMENT') throw new Error('Assess the change request before approving it.')
-    const payload = changeRequestPayloadSchema.parse(cr.payload)
 
-    // Rule C3 authority: a fee ≥ threshold needs a manager (ADMIN); smaller/schedule-only, any staff.
-    if (commercialAmount(payload).greaterThanOrEqualTo(APPROVAL_THRESHOLD) && actorUserId) {
-      const actor = await tx.user.findUnique({ where: { id: actorUserId }, select: { role: true } })
-      if (actor && actor.role !== 'ADMIN') {
-        throw new Error('A change of this value needs a manager to approve it.')
-      }
-    }
+    // Owner decision (2026-10-10): no value gate on approval - any staff member who can reach change
+    // requests (ADMIN or STUDIO, enforced in the server action) may approve any change, regardless of
+    // amount. Staff = Admin except the Activity log.
 
     const updated = await tx.changeRequest.update({
       where: { id: changeRequestId },
