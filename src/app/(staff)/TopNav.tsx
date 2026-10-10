@@ -95,8 +95,8 @@ export function TopNav({
               <div className="truncate text-xs text-ink-muted">{ROLE_LABEL[userRole as Role] ?? userRole}</div>
             </div>
             <div className="py-1">
-              {/* Settings is admin only (the page 404s for other roles); everyone can change their own password. */}
-              {userRole === 'ADMIN' ? (
+              {/* Settings is open to the Admin owner and Staff (Supervisor 404s); everyone changes their own password. */}
+              {userRole === 'ADMIN' || userRole === 'STUDIO' ? (
                 <Link href="/settings" role="menuitem" onClick={() => setMenuOpen(false)} className="block px-4 py-2 text-sm text-ink hover:bg-paper">
                   Settings
                 </Link>
