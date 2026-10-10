@@ -6,7 +6,7 @@ import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { CLOSED_STATUSES } from '@/features/projects/lifecycle'
-import { buildProjectBoard, PROJECT_STAGES, type ProjectFacts, type TaskInput } from '@/features/projects/workflow'
+import { buildProjectBoard, PROJECT_STAGES, type TaskInput } from '@/features/projects/workflow'
 import { jobShootDate, resolveTaskDueDate } from '@/lib/domain/deadline'
 import { JOB_WHERE } from '@/lib/domain/project'
 import { formatSydneyDate, sydneyYmd } from '@/lib/time'
@@ -23,8 +23,6 @@ export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Jobs - Moments' }
 
 const SORTS: JobSortValue[] = ['newest', 'oldest', 'stage', 'client-asc']
-// System milestones never affect the list's stage or progress (both are manual-task only).
-const NO_FACTS: ProjectFacts = { finalPaid: false }
 
 // Reading order of the workflow stages, so "Sort by stage" clusters the pipeline Planning -> Delivery.
 const STAGE_RANK = new Map(PROJECT_STAGES.map((s, i) => [s.key, i]))
@@ -86,7 +84,7 @@ export default async function JobsPage({
       resolvedDueAt: resolveTaskDueDate(w, ctx), dueAnchor: w.dueAnchor, order: w.order,
       completedByName: null, completedAt: null,
     }))
-    const board = buildProjectBoard(NO_FACTS, tasks, formatSydneyDate, now, (d) => daysUntilSydney(d, now))
+    const board = buildProjectBoard(tasks, formatSydneyDate, now, (d) => daysUntilSydney(d, now))
     const total = board.stages.filter((s) => !s.custom).reduce((n, s) => n + s.total, 0) // money-ok: task count
     const checklistDone = total > 0 && board.allDone
     const nextId = board.nextAction?.kind === 'task' ? board.nextAction.taskId : null

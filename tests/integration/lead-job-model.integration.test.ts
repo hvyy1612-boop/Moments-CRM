@@ -5,7 +5,7 @@ import { convertEnquiry, createEnquiry, markEnquiryLost, setLeadJobComplete } fr
 import { findOrCreateClient } from '@/lib/domain/client'
 import { recordPayment } from '@/lib/domain/finance'
 import { JOB_WHERE } from '@/lib/domain/project'
-import { acceptLeadAsJob, confirmDirectBooking, createDirectJob, getProjectBoard, moveJobBackToLead, setJobComplete } from '@/lib/domain/project-workflow'
+import { acceptLeadAsJob, confirmDirectBooking, createDirectJob, getProjectBoard, moveJobBackToLead, setJobComplete, toggleProjectTask } from '@/lib/domain/project-workflow'
 import { toggleEnquiryTask } from '@/lib/domain/enquiry-workflow'
 import { createInvoice } from './helpers'
 import { acceptQuote, createQuoteForEnquiry, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
@@ -54,20 +54,24 @@ describe('lead-job model (integration, real DB) - docs/24', () => {
     expect(await prisma.project.count({ where: { AND: [JOB_WHERE, { id: projectId! }] } })).toBe(1)
   })
 
-  it('a paid deposit is not the final payment: the milestone waits for the whole agreed quote', async () => {
+  it('"Final payment received" is a staff task: money alone never ticks it, and the job completes once staff do', async () => {
     const lead = await createEnquiry({ name: 'Final Payment', email: email() })
     const q = await createQuoteForEnquiry(lead.id, null)
     await saveQuoteDraft(q.versionId, [{ description: 'Wedding package', quantity: 1, unitPrice: '5000' }], null)
     await sendQuote(q.quoteId, null)
     const { projectId } = await acceptQuote(q.quoteId, null)
-    const milestone = async () =>
-      (await getProjectBoard(projectId!)).stages.flatMap((st) => st.tasks).find((t) => t.title === 'Final payment received')?.done
     const deposit = await createInvoice(projectId!, { type: 'DEPOSIT', description: 'Deposit', amount: '1000' }, null)
     await recordPayment(deposit.id, { paymentMethod: 'BANK_TRANSFER', amount: '1000' }, null)
-    expect(await milestone()).toBe(false) // $4,000 of the quote is not even invoiced yet
     const balance = await createInvoice(projectId!, { type: 'BALANCE', description: 'Balance', amount: '4000' }, null)
     await recordPayment(balance.id, { paymentMethod: 'BANK_TRANSFER', amount: '4000' }, null)
-    expect(await milestone()).toBe(true)
+    const finalPayment = async () => prisma.workItem.findFirstOrThrow({ where: { projectId: projectId!, kind: 'final_payment_received' } })
+    expect((await finalPayment()).status).toBe('PENDING') // paid in full, but staff confirm it
+    const staff = await prisma.user.findFirstOrThrow({ select: { id: true } })
+    const others = await prisma.workItem.findMany({ where: { projectId: projectId!, status: 'PENDING', NOT: { kind: 'final_payment_received' } } })
+    for (const t of others) await toggleProjectTask(t.id, staff.id)
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: projectId! } })).lifecycleStatus).toBe('CONFIRMED') // waits for it
+    await toggleProjectTask((await finalPayment()).id, staff.id)
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: projectId! } })).lifecycleStatus).toBe('COMPLETED') // Job complete ticked itself
   })
 
   const directJob = async (over: Partial<Parameters<typeof createDirectJob>[0]> = {}) => {

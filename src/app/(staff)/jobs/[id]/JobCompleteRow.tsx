@@ -20,7 +20,7 @@ function ConfirmButton() {
  * The "Job complete" milestone that closes a job's workflow (Studio Ninja), the counterpart of "Job
  * accepted" at the top: "Job accepted" STARTS the job, "Job complete" ENDS it. Staff tick it (with a
  * confirm that says what is still open) and the job moves to Completed Jobs; unticking brings it back to
- * Active. The system also ticks it by itself once every task is done and the job is fully paid. A closed
+ * Active. The system also ticks it by itself once every task is done (Final payment received included). A closed
  * or cancelled job cannot change. (A lead has its own row, LeadJobCompleteRow, that keeps it in Leads.)
  */
 export function JobCompleteRow({
@@ -95,7 +95,7 @@ export function JobCompleteRow({
           <span className="text-base text-ink">Job complete</span>
           <span className="block text-sm text-muted">
             The end of the job: tick it when the work is finished and the job moves to Completed Jobs. It also ticks itself
-            once every task is done and the job is fully paid.
+            once every task is done, Final payment received included.
           </span>
         </div>
         {dateLabel ? <span className="whitespace-nowrap text-sm text-muted">{dateLabel}</span> : null}

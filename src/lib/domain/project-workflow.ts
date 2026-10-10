@@ -17,7 +17,6 @@ import {
   PROJECT_TASK_SCHEDULE,
   stageLabel,
   type ProjectBoard,
-  type ProjectFacts,
   type TaskInput,
 } from '@/features/projects/workflow'
 
@@ -338,7 +337,7 @@ export async function confirmBookingByDepositTx(tx: Tx, projectId: string, actor
   }
 }
 
-/** Read the project's business facts + editable task rows and build the board. Seeds once on first read. */
+/** Read the project's task rows and build the board. Seeds once on first read. */
 export async function getProjectBoard(projectId: string): Promise<ProjectBoard> {
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: projectId },
@@ -347,7 +346,6 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
       lifecycleStatus: true,
       confirmedByClientAt: true,
       owner: { select: { name: true } },
-      invoices: { select: INVOICE_MONEY_SELECT },
       shootDate: true,
     },
   })
@@ -386,23 +384,6 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     jobConfirmedAt: project.confirmedByClientAt,
   }
 
-  // "Final payment received" via the Money foundation (docs/25), the same settlement rule as auto-complete:
-  // with an accepted quote (the agreed value) the WHOLE agreed amount must be invoiced and paid - a paid
-  // deposit alone is not the final payment. With no accepted quote: a real obligation exists and nothing
-  // is owed on it.
-  const acceptedQuote = await prisma.quoteVersion.findFirst({
-    where: { quote: { projectId }, status: 'ACCEPTED' },
-    orderBy: { acceptedByClientAt: 'desc' },
-    select: { total: true },
-  })
-  const jobMoney = getJobBalance(project.invoices.map(toInvoiceMoneyInput), acceptedQuote?.total ?? null)
-  const facts: ProjectFacts = {
-    // The read-only system milestone (derived from real records, never staff-ticked):
-    finalPaid: jobMoney.agreedValueKnown
-      ? jobMoney.isFullySettled
-      : jobMoney.invoicedObligation.greaterThan(0) && jobMoney.outstanding.lessThanOrEqualTo(0),
-  }
-
   const tasks: TaskInput[] = items.map((w) => ({
     id: w.id,
     title: w.title,
@@ -419,7 +400,7 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
 
   const now = new Date()
   const daysUntil = (d: Date) => daysUntilSydney(d, now)
-  return buildProjectBoard(facts, tasks, formatSydneyDate, now, daysUntil, project.owner?.name ?? null)
+  return buildProjectBoard(tasks, formatSydneyDate, now, daysUntil, project.owner?.name ?? null)
 }
 
 async function loadTask(taskId: string) {
@@ -717,16 +698,15 @@ export async function toggleProjectTask(taskId: string, actorUserId: string) {
 const AUTO_COMPLETE_FROM = new Set(['CONFIRMED'])
 
 /**
- * Auto-complete a job when it is truly finished: EVERY staff task done AND the balance fully settled.
- * Called from whichever event completes last - the final task tick (see toggleProjectTask) or the final
- * payment (see recordPayment) - so staff never flip the status by hand and a delivered-but-unpaid job
- * stays visible until it is paid. Forward-only from an active job state; parked/terminal states are left
- * alone. Re-opening a task never auto-demotes (that stays a manual correction). No-op unless both hold.
+ * Tick "Job complete" by itself once EVERY staff task is done - "Final payment received" included, which
+ * staff tick when the money is in (no sum decides it). Called after a task tick (toggleProjectTask) and a
+ * payment (recordPayment). Forward-only from an active job; parked/terminal states are left alone.
+ * Re-opening a task never auto-demotes (staff untick "Job complete" for that).
  */
 export async function maybeAutoCompleteJob(tx: Tx, projectId: string, actorUserId: string | null) {
   const project = await tx.project.findUnique({
     where: { id: projectId },
-    select: { companyId: true, lifecycleStatus: true, invoices: { select: INVOICE_MONEY_SELECT } },
+    select: { companyId: true, lifecycleStatus: true },
   })
   if (!project || !AUTO_COMPLETE_FROM.has(project.lifecycleStatus)) return
 
@@ -736,23 +716,8 @@ export async function maybeAutoCompleteJob(tx: Tx, projectId: string, actorUserI
   ])
   if (total === 0 || pending > 0) return // checklist not finished
 
-  // "Settled" is the canonical isFullySettled (money.ts / docs/25 Rule M4b), NOT raw outstanding: a job
-  // with no invoice (outstanding 0) or only a deposit paid must NOT auto-complete (bug #3). Agreed value
-  // = the accepted quote total, else null (unknown).
-  const acceptedQuote = await tx.quoteVersion.findFirst({
-    where: { quote: { projectId }, status: 'ACCEPTED' },
-    orderBy: { acceptedByClientAt: 'desc' },
-    select: { total: true },
-  })
-  const agreed = acceptedQuote?.total ?? null
-  const bal = getJobBalance(project.invoices.map(toInvoiceMoneyInput), agreed)
-  // With a KNOWN agreed value use the canonical isFullySettled (catches deposit-only / under-invoiced,
-  // bug #3). Without one (a job with no accepted quote) fall back to "nothing outstanding" so the
-  // no-quote flow still completes - never demand an agreed value the studio never set (regression guard).
-  const settled = bal.agreedValueKnown
-    ? bal.isFullySettled
-    : bal.outstanding.lessThanOrEqualTo(0) && bal.overpaymentToResolve.lessThanOrEqualTo(0)
-  if (!settled) return // still owed / under-invoiced - stay active so nothing is forgotten
+  // Paid in full is a staff call, not a sum (owner, 2026-10-10): the "Final payment received" task is part of
+  // the checklist, so a job only completes itself once staff have ticked it along with everything else.
 
   await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'COMPLETED' } })
   await tx.auditLog.create({

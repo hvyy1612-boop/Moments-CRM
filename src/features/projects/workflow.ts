@@ -12,8 +12,6 @@ import { sydneyDateTimeParts } from '@/lib/time'
 export { JOB_TASK_TYPES } from '@/features/enquiries/workflow'
 export type { TaskType } from '@/features/enquiries/workflow'
 
-export type ProjectFacts = { finalPaid: boolean }
-
 type StageDef = { key: string; label: string; color: string; optional?: boolean }
 
 // Stage labels use full, medium-neutral industry terms (they cover photo AND video - this is a photo &
@@ -38,19 +36,9 @@ export function stageLabel(key: string): string {
   return PROJECT_STAGES.find((s) => s.key === key)?.label ?? key
 }
 
-/**
- * Read-only SYSTEM milestones shown inside the workflow (not staff tasks, not WorkItems in the DB): their
- * done-state is derived from real records via ProjectFacts, so staff can see them but can never tick them
- * and they never drift out of sync. buildProjectBoard injects these virtual rows into their stage.
- */
-export const AUTO_MILESTONES: { stage: string; key: string; title: string; fact: keyof ProjectFacts; note: string }[] = [
-  { stage: 'delivery', key: 'final_payment_received', title: 'Final payment received', fact: 'finalPaid', note: 'Confirmed automatically when the balance is paid in full.' },
-]
-
 /** The production workflow seeded for a new Job: staff (manual) tasks only, action-oriented names
- *  (Verb + Object). The system milestone (Final payment received) is NOT seeded here -
- *  they are read-only rows derived from real records (see AUTO_MILESTONES). "Shoot scheduled" is a staff
- *  task (staff confirm it), NOT a system milestone. Optional add-on stages (video/film/album) start empty
+ *  (Verb + Object). "Final payment received" is a staff task too (owner, 2026-10-10: staff confirm the money
+ *  rather than the system working it out); "Shoot scheduled" likewise. Optional add-on stages (video/film/album) start empty
  *  and are added per package. */
 export const DEFAULT_PROJECT_TASKS: { stage: string; key: string; title: string; type: TaskType }[] = [
   { stage: 'preshoot', key: 'confirm_shoot_details', title: 'Confirm shoot details', type: 'TODO' },
@@ -66,6 +54,7 @@ export const DEFAULT_PROJECT_TASKS: { stage: string; key: string; title: string;
   { stage: 'delivery', key: 'prepare_client_gallery', title: 'Prepare client gallery', type: 'TODO' },
   { stage: 'delivery', key: 'send_client_gallery', title: 'Send client gallery', type: 'TODO' },
   { stage: 'delivery', key: 'issue_final_invoice', title: 'Issue final invoice', type: 'TODO' },
+  { stage: 'delivery', key: 'final_payment_received', title: 'Final payment received', type: 'TODO' },
 ]
 
 /** Stable key <- canonical title, for core production tasks (backfill + read-time key resolution). A
@@ -112,6 +101,7 @@ export const PROJECT_TASK_NOTE: Record<string, string> = {
   'Prepare client gallery': 'Assemble the gallery and any files for delivery.',
   'Send client gallery': 'Deliver the gallery to the client.',
   'Issue final invoice': 'Raise the final invoice for the remaining balance.',
+  'Final payment received': 'Tick once the final balance is in the bank.',
   'Send client welcome email': 'Sent automatically once the booking is confirmed.',
   'Collect wedding and shoot details': 'Gather the timeline, venues, and key people.',
   'Confirm timeline and venue details': 'Confirm the run sheet and locations.',
@@ -173,6 +163,7 @@ export const PROJECT_TASK_SCHEDULE: Record<string, number> = {
   'Prepare client gallery': 35,
   'Send client gallery': 42,
   'Issue final invoice': 42,
+  'Final payment received': 49, // a week after the final invoice
   'Send client welcome email': -60,
   'Collect wedding and shoot details': -45,
   'Confirm timeline and venue details': -30,
@@ -224,6 +215,7 @@ export const PROJECT_TASK_SCHEDULE: Record<string, number> = {
 
 /** Which task must be done before another can start (a light dependency, matched by title). */
 export const PROJECT_TASK_BLOCKED_BY: Record<string, string> = {
+  'Final payment received': 'Issue final invoice',
   'Edit wedding images': 'Cull wedding images',
   'Finalise wedding gallery': 'Edit wedding images',
   'Send final gallery to client': 'Finalise wedding gallery',
@@ -307,7 +299,6 @@ function isoDate(d: Date): string {
 }
 
 export function buildProjectBoard(
-  facts: ProjectFacts,
   tasks: TaskInput[],
   formatDate: (d: Date) => string,
   now: Date | null = null,
@@ -361,33 +352,6 @@ export function buildProjectBoard(
         }
       })
 
-  // Read-only SYSTEM milestones for a stage (virtual - not WorkItems); done-state from real facts.
-  const autoRowsFor = (stageKey: string): BoardTaskRow[] =>
-    AUTO_MILESTONES.filter((m) => m.stage === stageKey).map((m) => ({
-      id: `auto:${stageKey}:${m.key}`,
-      key: m.key,
-      title: m.title,
-      type: 'AUTO' as TaskType,
-      typeLabel: TASK_TYPE_LABEL.AUTO ?? 'Auto',
-      note: m.note,
-      editable: false,
-      isSystem: true,
-      done: facts[m.fact],
-      needsAttention: false,
-      owner: 'System',
-      dueLabel: null,
-      dueValue: null,
-      noDate: false,
-      dueTone: dueToneFor(null, facts[m.fact], now),
-      blocked: false,
-      blockedBy: null,
-      completedByName: facts[m.fact] ? 'System' : null,
-      completedAt: null,
-      canComplete: false,
-      canEdit: false,
-      canDelete: false,
-    }))
-
   const coreStages: BoardStage[] = PROJECT_STAGES.map((stage) => {
     const manualRows = manualRowsFor(stage.key)
     return {
@@ -399,7 +363,7 @@ export function buildProjectBoard(
       active: false,
       done: manualRows.filter((t) => t.done).length,
       total: manualRows.length,
-      tasks: [...manualRows, ...autoRowsFor(stage.key)],
+      tasks: manualRows,
     }
   })
 

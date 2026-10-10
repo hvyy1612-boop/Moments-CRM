@@ -74,7 +74,7 @@ function historyDetails(action: string, after: unknown): string {
   if (action === 'project.created_direct') return 'Job was added as an already confirmed booking.'
   if (action === 'project.completed_manual') return 'Job complete was ticked; the job moved to Completed Jobs.'
   if (action === 'project.reopened') return 'Job complete was unticked; the job is back in Active Jobs.'
-  if (action === 'project.auto_completed') return 'Every task done and fully paid: Job complete ticked itself.'
+  if (action === 'project.auto_completed') return 'Every task done (Final payment received included): Job complete ticked itself.'
   if (action === 'project.moved_back_to_lead') return 'Job accepted was unticked; it went back to Leads.'
   return historyActionType(action)
 }
