@@ -194,9 +194,10 @@ export async function restoreClientAction(formData: FormData): Promise<void> {
 /**
  * Remove a single client safely. There is no hard cascade any more: an EMPTY client (no jobs, no
  * leads) is deleted outright; a client WITH history is ARCHIVED instead
- * (reversible via restore), so their jobs, invoices and payment ledger are never destroyed. Archiving a
- * client that has history is ADMIN-only (deleting an empty one is open to any staff); the UI confirms
- * first. Never deletes paid financial records - that closes the old cascade loophole.
+ * (reversible via restore), so their jobs, invoices and payment ledger are never destroyed. Any staff
+ * member may archive a client with history or delete an empty one (owner decision: Staff = Admin except
+ * the Activity log); the UI confirms first. Never deletes paid financial records - that closes the old
+ * cascade loophole.
  */
 export async function removeClientAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
@@ -204,9 +205,6 @@ export async function removeClientAction(formData: FormData): Promise<void> {
   const clientId = String(formData.get('clientId') ?? '')
   if (!clientId) return
   if (await clientHasHistory(clientId)) {
-    if (user.role !== 'ADMIN') {
-      throw new Error('Only an admin can archive a client that already has jobs or leads.')
-    }
     await archiveClient(clientId, user.id)
   } else {
     // Empty client: safe to delete for good (deleteEmptyClients re-checks emptiness atomically).

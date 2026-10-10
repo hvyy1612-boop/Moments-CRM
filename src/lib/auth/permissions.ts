@@ -60,14 +60,16 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/finance': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   // Interactive price calculator: build a quote estimate from the fixed-price catalogue.
   '/pricing': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
-  // Company configuration is owner-level, not a day-to-day staff workflow.
-  '/settings': { roles: ['ADMIN'] },
+  // Owner decision: a studio Staff member does everything the owner does EXCEPT read the Activity log,
+  // so company settings, notification go-live and account management are open to ADMIN and STUDIO.
+  '/settings': { roles: ['ADMIN', 'STUDIO'] },
   // Notification automation go-live control (docs/25 Part 4): switch client emails / follow-ups on.
-  '/settings/notifications': { roles: ['ADMIN'] },
-  '/users': { roles: ['ADMIN'] },
+  '/settings/notifications': { roles: ['ADMIN', 'STUDIO'] },
+  '/users': { roles: ['ADMIN', 'STUDIO'] },
   // Printable staff roster (per team) — the source for the "Download PDF" export.
-  '/users/roster/[team]': { roles: ['ADMIN'] },
-  // Security + activity log: ADMIN only (contains IP addresses and login history).
+  '/users/roster/[team]': { roles: ['ADMIN', 'STUDIO'] },
+  // Security + activity log: ADMIN only (contains IP addresses and login history) — the ONE area Staff
+  // cannot reach. This is the single difference between the Admin owner and Staff.
   '/activity': { roles: ['ADMIN'] },
   // Client-facing, reached by a token only. No session, no account.
   '/quote/[token]': { token: true },

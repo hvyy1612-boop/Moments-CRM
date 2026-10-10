@@ -137,10 +137,11 @@ export async function searchEntitiesAction(query: string): Promise<SearchHit[]> 
   ]
 }
 
-/** Admin: retire the calendar subscription link and issue a new one (old subscriptions stop updating). */
+/** Retire the calendar subscription link and issue a new one (old subscriptions stop updating). Any
+ * staff member may do this (owner decision: Staff = Admin except the Activity log); SUPERVISOR cannot. */
 export async function resetCalendarFeedAction(formData: FormData): Promise<void> {
   const user = await getActionUser()
-  if (!user || user.role !== 'ADMIN') return
+  if (!user || user.role === 'SUPERVISOR') return
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value
   if (!verifyCsrf(cookieValue, formData.get('csrf'))) return
   await rotateFeedToken(user.id)

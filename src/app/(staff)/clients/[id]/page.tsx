@@ -114,7 +114,7 @@ export default async function ClientDetailPage({
           enquiry={enquiryData}
           enquiryCount={enquiryCount}
           csrf={csrf}
-          canDelete={user.role === 'ADMIN'}
+          canDelete={user.role !== 'SUPERVISOR'}
         />
       </PageContainer>
     </AppShell>

@@ -19,11 +19,13 @@ export const metadata: Metadata = { title: 'Staff - Moments' }
 
 
 /**
- * Staff account management (ADMIN only). Accounts are added here (the system issues a login ID and a
- * one-time password) or by people signing up at /register while sign-up is open (switch below; the Admin
- * role is never offered there once an Admin exists). Accounts are grouped by team; admins can reset a
- * password, disable (revokes sessions), or remove (soft-delete: hidden here, kept in the database). Each
- * team exports a printable roster of its active accounts (Download PDF).
+ * Staff account management (anyone with USER_MANAGE: the Admin owner and Staff). Accounts are added here
+ * (the system issues a login ID and a one-time password) or by people signing up at /register while
+ * sign-up is open (switch below; the Admin role is never offered there once an Admin exists). Accounts
+ * are grouped by team; account managers can reset a password, disable (revokes sessions), or remove
+ * (soft-delete: hidden here, kept in the database) - but only an Admin may create or act on an Admin
+ * account, and the studio's last active admin can never be disabled or removed. Each team exports a
+ * printable roster of its active accounts (Download PDF).
  */
 export default async function UsersPage() {
   const user = await requireRole('/users')
@@ -44,6 +46,7 @@ export default async function UsersPage() {
     roleLabel: ROLE_LABEL[u.role] ?? u.role,
     isActive: u.isActive,
     lastLogin: u.lastLoginAt ? `Last in ${formatSydneyDate(u.lastLoginAt)}` : 'Never signed in',
+    isAdminAccount: u.role === 'ADMIN',
   })
 
   const teams: TeamGroup[] = TEAMS.map((t) => {
@@ -64,14 +67,14 @@ export default async function UsersPage() {
 
         <section className="rounded-md border border-line bg-surface p-5">
           <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Add staff</h2>
-          <AddStaffForm csrf={csrf} />
+          <AddStaffForm csrf={csrf} canCreateAdmin={user.role === 'ADMIN'} />
         </section>
 
         <section className="mt-4 flex flex-col gap-3 rounded-md border border-line bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-xs font-bold uppercase tracking-wide text-muted">Staff sign-up</h2>
             <p className="mt-1 text-base text-ink">
-              {signup.open ? 'Open: anyone with the link can create a Staff or Supervisor account at /register.' : 'Closed: only an admin can add accounts.'}
+              {signup.open ? 'Open: anyone with the link can create a Staff or Supervisor account at /register.' : 'Closed: new accounts can only be added above.'}
             </p>
           </div>
           <form action={setSignupOpenAction}>
@@ -92,7 +95,7 @@ export default async function UsersPage() {
           <span className="font-semibold text-ink">Disable</span> blocks sign-in but keeps the account ·{' '}
           <span className="font-semibold text-ink">Remove</span> deletes the account and revokes access
         </p>
-        <StaffTeams teams={teams} csrf={csrf} currentUserId={user.id} />
+        <StaffTeams teams={teams} csrf={csrf} currentUserId={user.id} viewerIsAdmin={user.role === 'ADMIN'} />
       </PageContainer>
     </AppShell>
   )

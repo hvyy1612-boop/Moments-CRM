@@ -190,7 +190,7 @@ export default async function ClientsPage({
               {q ? `No clients match "${q}".` : tab === 'archived' ? 'No archived clients.' : 'No clients yet. Add your first client above, or convert a lead.'}
             </p>
           ) : (
-            <ClientsTable rows={rows} csrf={csrf} canDelete={user.role === 'ADMIN'} backParam={backParam} />
+            <ClientsTable rows={rows} csrf={csrf} canDelete={user.role !== 'SUPERVISOR'} backParam={backParam} />
           )}
         </div>
       </PageContainer>

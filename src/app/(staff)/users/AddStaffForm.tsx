@@ -8,7 +8,7 @@ import { addStaffAction, type AddStaffState } from './actions'
 
 const INITIAL: AddStaffState = { status: 'idle' }
 
-export function AddStaffForm({ csrf }: { csrf: string }) {
+export function AddStaffForm({ csrf, canCreateAdmin }: { csrf: string; canCreateAdmin: boolean }) {
   const [state, action, pending] = useActionState(addStaffAction, INITIAL)
   const errors = state.status === 'error' ? (state.errors ?? {}) : {}
 
@@ -54,7 +54,7 @@ export function AddStaffForm({ csrf }: { csrf: string }) {
           >
             <option value="STUDIO">Staff</option>
             <option value="SUPERVISOR">Supervisor (read only)</option>
-            <option value="ADMIN">Admin</option>
+            {canCreateAdmin ? <option value="ADMIN">Admin</option> : null}
           </select>
         </div>
         <Button type="submit" loading={pending}>Add staff</Button>

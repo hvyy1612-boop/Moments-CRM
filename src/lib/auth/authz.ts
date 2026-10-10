@@ -44,9 +44,14 @@ const STAFF_CRM: Permission[] = [
 // A read-only reviewer: every VIEW permission, nothing that writes, no Activity / Settings / Users.
 const READ_ONLY: Permission[] = ['ENQUIRY_VIEW', 'PROJECT_VIEW', 'CLIENT_VIEW', 'QUOTE_VIEW', 'FINANCE_VIEW', 'CALENDAR_VIEW']
 
+// Owner decision: a studio Staff member does EVERYTHING the owner does - full CRM, all money
+// operations, settings and account management - the ONLY thing reserved for the Admin (owner) is the
+// Activity log (who signed in / the security + audit trail). So Staff = Admin minus the two log views.
+const STAFF_FULL: Permission[] = [...STAFF_CRM, 'USER_MANAGE', 'SETTINGS_EDIT', 'MONEY_ADMIN']
+
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
-  ADMIN: [...STAFF_CRM, 'USER_MANAGE', 'AUTH_LOG_VIEW', 'AUDIT_LOG_VIEW', 'SETTINGS_EDIT', 'MONEY_ADMIN'],
-  STUDIO: STAFF_CRM,
+  ADMIN: [...STAFF_FULL, 'AUTH_LOG_VIEW', 'AUDIT_LOG_VIEW'],
+  STUDIO: STAFF_FULL,
   SUPERVISOR: READ_ONLY,
 }
 
