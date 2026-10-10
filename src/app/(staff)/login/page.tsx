@@ -1,10 +1,12 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
+import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { Alert } from '@/components/ui/Alert'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { getSessionUser } from '@/lib/auth/guard'
+import { signupOptions } from '@/lib/auth/register'
 import { LoginForm } from './LoginForm'
 
 export const runtime = 'nodejs'
@@ -14,12 +16,14 @@ export const metadata: Metadata = { title: 'Sign in - Moments' }
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ reset?: string; error?: string }>
+  searchParams: Promise<{ reset?: string; codes?: string }>
 }) {
   const user = await getSessionUser()
   if (user) redirect('/dashboard')
 
-  const { reset, error } = await searchParams
+  const { reset, codes } = await searchParams
+  const { open: signupOpen } = await signupOptions()
+  const codesLeft = codes !== undefined && /^\d$/.test(codes) ? Number(codes) : null
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
@@ -74,18 +78,19 @@ export default async function LoginPage({
             <div className="mt-4">
               <Alert tone="success" title="Your password has been updated">
                 Sign in with your new password.
-              </Alert>
-            </div>
-          ) : null}
-          {error === 'google' ? (
-            <div className="mt-4">
-              <Alert tone="danger" title="Couldn’t sign in with Google">
-                Please sign in with your email and password.
+                {codesLeft !== null
+                  ? ` You have ${codesLeft} recovery code${codesLeft === 1 ? '' : 's'} left${codesLeft <= 2 ? ': create a new set from Change password after you sign in.' : '.'}`
+                  : null}
               </Alert>
             </div>
           ) : null}
 
           <LoginForm csrf={csrf} />
+          {signupOpen ? (
+            <p className="login-signup">
+              New to Moments? <Link href="/register" className="login-link">Create an account</Link>
+            </p>
+          ) : null}
         </div>
       </div>
     </main>

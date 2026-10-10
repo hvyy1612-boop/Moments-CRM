@@ -1,29 +1,19 @@
 'use server'
 
-import { EnquirySource } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { getSessionUser } from '@/lib/auth/guard'
+import { getActionUser } from '@/lib/auth/guard'
+import { parseCsv } from '@/lib/csv'
 import { prisma } from '@/lib/db'
-import {
-  addClientNote,
-  archiveClient,
-  clientHasHistory,
-  createClient,
-  deleteClientNote,
-  deleteEmptyClients,
-  restoreClient,
-  setClientConsent,
-  updateClient,
-  updateClientNotes,
-} from '@/lib/domain/client'
-import { createEnquiry } from '@/lib/domain/enquiry'
+import { archiveClient, clientHasHistory, createClient, deleteEmptyClients, restoreClient, updateClient } from '@/lib/domain/client'
 import { clientSchema } from '@/lib/validation/client'
+import type { ClientFormValues } from './ClientForm'
 
 async function requireStaff() {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDIO')) {
     throw new Error('Not authorised.')
   }
@@ -54,53 +44,42 @@ function parseClient(formData: FormData) {
   return parsed.data
 }
 
-export async function createClientAction(formData: FormData): Promise<void> {
+export type ClientFormState = { status: 'idle' } | { status: 'error'; message: string; values: ClientFormValues }
+
+function submittedValues(formData: FormData): ClientFormValues {
+  const s = (k: string) => String(formData.get(k) ?? '')
+  return {
+    firstName: s('firstName'), lastName: s('lastName'), company: s('company'), email: s('email'), phone: s('phone'),
+    street: s('street'), suburb: s('suburb'), state: s('state'), postcode: s('postcode'), country: s('country'),
+    notes: s('notes'), isCompany: formData.get('isCompany') === 'on',
+  }
+}
+
+function friendlyClientError(error: unknown): string {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === 'P2002') return 'A client with this email already exists.'
+    if (error.code === 'P2000') return 'One of the fields is too long. Please shorten it and try again.'
+    return 'Could not save the client. Please try again.'
+  }
+  if (error instanceof Prisma.PrismaClientValidationError || error instanceof Prisma.PrismaClientUnknownRequestError) {
+    return 'Could not save the client. Please try again.'
+  }
+  return error instanceof Error && error.message ? error.message : 'Could not save the client. Please try again.'
+}
+
+export async function createClientFormAction(_prev: ClientFormState, formData: FormData): Promise<ClientFormState> {
   const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const data = parseClient(formData)
-  const client = await createClient(data, user.id)
-
-  const name = [data.firstName, data.lastName].filter(Boolean).join(' ') || data.company || data.email
-  const eventDateRaw = String(formData.get('eventDate') ?? '').trim()
-  const eventDate = eventDateRaw ? new Date(eventDateRaw) : null
-  const sourceRaw = String(formData.get('source') ?? '').toUpperCase()
-  const source = (Object.values(EnquirySource) as string[]).includes(sourceRaw)
-    ? (sourceRaw as EnquirySource)
-    : EnquirySource.MANUAL
-  const str = (k: string) => String(formData.get(k) ?? '').trim() || null
-
-  const enquiry = await createEnquiry(
-    {
-      clientId: client.id,
-      name,
-      firstName: data.firstName ?? null,
-      lastName: data.lastName ?? null,
-      email: data.email,
-      phone: data.phone ?? null,
-      street: data.street ?? null,
-      suburb: data.suburb ?? null,
-      state: data.state ?? null,
-      postcode: data.postcode ?? null,
-      country: data.country ?? null,
-      isCompany: data.isCompany ?? false,
-      eventType: String(formData.get('eventType') ?? '').trim() || null,
-      eventDate,
-      message: data.notes ?? null,
-      source,
-      partnerName: str('partnerName'),
-      coverage: str('coverage'),
-      gettingReadyLocation: str('gettingReadyLocation'),
-      ceremonyLocation: str('ceremonyLocation'),
-      weddingDetails: str('weddingDetails'),
-      styleReason: str('styleReason'),
-      heardAbout: str('heardAbout'),
-    },
-    user.id,
-  )
+  if (!(await csrfOk(formData))) return { status: 'error', message: 'Your session expired. Refresh and try again.', values: submittedValues(formData) }
+  let clientId: string
+  try {
+    const client = await createClient(parseClient(formData), user.id)
+    clientId = client.id
+  } catch (error) {
+    return { status: 'error', message: friendlyClientError(error), values: submittedValues(formData) }
+  }
 
   revalidatePath('/clients')
-  revalidatePath('/leads')
-  redirect(`/leads/${enquiry.id}?toast=enquiry-added`)
+  redirect(`/clients/${clientId}?toast=client-added`)
 }
 
 export type ImportState =
@@ -115,18 +94,16 @@ export async function importClientsAction(_prev: ImportState, formData: FormData
   const raw = String(formData.get('csv') ?? '').trim()
   if (!raw) return { status: 'error', message: 'Paste at least one row of CSV first.' }
 
-  const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+  const rows = parseCsv(raw)
 
-  if (lines[0] && /email/i.test(lines[0]) && !/@/.test(lines[0]!)) lines.shift()
+  if (rows[0] && rows[0].some((c) => /email/i.test(c)) && !rows[0].some((c) => c.includes('@'))) rows.shift()
 
   let created = 0
   let skipped = 0
   let failed = 0
   const seen = new Set<string>()
 
-  for (const line of lines) {
-
-    const cols = line.split(/[\t;,]/).map((c) => c.trim())
+  for (const cols of rows) {
     const [name = '', email = '', phone = ''] = cols
     const key = email.toLowerCase()
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
@@ -170,25 +147,19 @@ export async function importClientsAction(_prev: ImportState, formData: FormData
   return { status: 'done', created, skipped, failed }
 }
 
-export async function updateClientAction(formData: FormData): Promise<void> {
+export async function updateClientFormAction(_prev: ClientFormState, formData: FormData): Promise<ClientFormState> {
   const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  if (!(await csrfOk(formData))) return { status: 'error', message: 'Your session expired. Refresh and try again.', values: submittedValues(formData) }
   const clientId = String(formData.get('clientId') ?? '')
-  if (!clientId) throw new Error('Missing client.')
-  await updateClient(clientId, parseClient(formData), user.id)
+  if (!clientId) return { status: 'error', message: 'Missing client.', values: submittedValues(formData) }
+  try {
+    await updateClient(clientId, parseClient(formData), user.id)
+  } catch (error) {
+    return { status: 'error', message: friendlyClientError(error), values: submittedValues(formData) }
+  }
   revalidatePath('/clients')
   revalidatePath(`/clients/${clientId}`)
   redirect(`/clients/${clientId}`)
-}
-
-export async function archiveClientAction(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const clientId = String(formData.get('clientId') ?? '')
-  if (!clientId) return
-  await archiveClient(clientId, user.id)
-  revalidatePath('/clients')
-  revalidatePath(`/clients/${clientId}`)
 }
 
 export async function restoreClientAction(formData: FormData): Promise<void> {
@@ -207,9 +178,6 @@ export async function removeClientAction(formData: FormData): Promise<void> {
   const clientId = String(formData.get('clientId') ?? '')
   if (!clientId) return
   if (await clientHasHistory(clientId)) {
-    if (user.role !== 'ADMIN') {
-      throw new Error('Only an admin can archive a client that already has jobs or leads.')
-    }
     await archiveClient(clientId, user.id)
   } else {
 
@@ -231,39 +199,3 @@ export async function deleteClientsAction(formData: FormData): Promise<void> {
   revalidatePath('/clients')
 }
 
-export async function addClientNoteAction(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const clientId = String(formData.get('clientId') ?? '')
-  if (!clientId) return
-  await addClientNote(clientId, String(formData.get('title') ?? ''), String(formData.get('body') ?? ''), user.id)
-  revalidatePath(`/clients/${clientId}`)
-}
-
-export async function deleteClientNoteAction(formData: FormData): Promise<void> {
-  await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const noteId = String(formData.get('noteId') ?? '')
-  const clientId = String(formData.get('clientId') ?? '')
-  if (!noteId) return
-  await deleteClientNote(noteId)
-  if (clientId) revalidatePath(`/clients/${clientId}`)
-}
-
-export async function setClientConsentAction(formData: FormData): Promise<void> {
-  await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const clientId = String(formData.get('clientId') ?? '')
-  if (!clientId) return
-  await setClientConsent(clientId, formData.get('consent') === 'true')
-  revalidatePath(`/clients/${clientId}`)
-}
-
-export async function updateClientNotesAction(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const clientId = String(formData.get('clientId') ?? '')
-  if (!clientId) return
-  await updateClientNotes(clientId, String(formData.get('notes') ?? ''), user.id)
-  revalidatePath(`/clients/${clientId}`)
-}

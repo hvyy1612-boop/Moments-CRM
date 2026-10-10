@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 
-const COLS: [string, string][] = [['phone', 'Phone'], ['source', 'Source'], ['jobs', 'Jobs'], ['since', 'Client since']]
+const COLS: [string, string][] = [['phone', 'Phone'], ['email', 'Email'], ['since', 'Date created']]
 const KEY = 'clients.hiddenCols'
 
 export function ColumnsMenu() {

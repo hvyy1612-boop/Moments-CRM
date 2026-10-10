@@ -9,9 +9,8 @@ import {
 } from '@/lib/domain/money'
 
 const d = (n: number | string) => new Prisma.Decimal(n)
-const charge = (amount: number) => ({ type: 'CHARGE' as const, status: 'SUCCEEDED' as const, amount: d(amount) })
-const refund = (amount: number) => ({ type: 'REFUND' as const, status: 'SUCCEEDED' as const, amount: d(amount) })
-const reversal = (amount: number) => ({ type: 'REVERSAL' as const, status: 'SUCCEEDED' as const, amount: d(amount) })
+const charge = (amount: number) => ({ type: 'CHARGE' as const, amount: d(amount) })
+const refund = (amount: number) => ({ type: 'REFUND' as const, amount: d(amount) })
 const inst = (amount: number, sortOrder = 0, dueAt: Date | null = null, label: string | null = null) => ({
   label,
   dueAt,
@@ -55,23 +54,8 @@ describe('getInvoiceBalance — the money invariant (docs/25 Part 1)', () => {
     expect(b.overpaymentToResolve.toString()).toBe('200')
   })
 
-  it('DRAFT and VOID carry no obligation (Rule M1)', () => {
-    expect(getInvoiceBalance(invoice({ status: 'DRAFT', total: d(5000) })).obligation.toString()).toBe('0')
+  it('VOID carries no obligation (Rule M1)', () => {
     expect(getInvoiceBalance(invoice({ status: 'VOID', total: d(5000), transactions: [charge(100)] })).owed.toString()).toBe('0')
-  })
-
-  it('REVERSAL subtracts like a refund (Rule M2b)', () => {
-    const b = getInvoiceBalance(invoice({ total: d(1000), transactions: [charge(1000), reversal(400)] }))
-    expect(b.paidNet.toString()).toBe('600')
-    expect(b.owed.toString()).toBe('400')
-  })
-
-  it('non-SUCCEEDED transactions are ignored', () => {
-    const b = getInvoiceBalance(
-      invoice({ total: d(1000), transactions: [{ type: 'CHARGE', status: 'PENDING', amount: d(1000) }] }),
-    )
-    expect(b.paidNet.toString()).toBe('0')
-    expect(b.owed.toString()).toBe('1000')
   })
 
   it('refunds are counted ONCE — the ledger is the only cash source (no double-count)', () => {
@@ -82,14 +66,9 @@ describe('getInvoiceBalance — the money invariant (docs/25 Part 1)', () => {
 })
 
 describe('computePaidNet', () => {
-  it('nets charges, refunds and reversals, ignoring failed rows', () => {
-    const net = computePaidNet([
-      charge(1000),
-      refund(200),
-      reversal(100),
-      { type: 'CHARGE', status: 'FAILED', amount: d(999) },
-    ])
-    expect(net.toString()).toBe('700')
+  it('nets charges minus refunds', () => {
+    const net = computePaidNet([charge(1000), refund(200), charge(50)])
+    expect(net.toString()).toBe('850')
   })
 })
 
@@ -167,14 +146,6 @@ describe('getJobBalance — outstanding and overpayment aggregated separately (R
     expect(job.paidNet.toString()).toBe('100')
   })
 
-  it('DRAFT invoices never inflate the job obligation (old-data safety)', () => {
-    const draft = invoice({ status: 'DRAFT', total: d(9999) })
-    const issued = invoice({ total: d(1000), transactions: [charge(1000)] })
-    const job = getJobBalance([draft, issued], null)
-    expect(job.invoicedObligation.toString()).toBe('1000')
-    expect(job.outstanding.toString()).toBe('0')
-  })
-
   it('supplementary + deposit invoices do not double-count obligation', () => {
     const deposit = invoice({ total: d(1500), transactions: [charge(1500)] })
     const supplementary = invoice({ total: d(500), transactions: [] })
@@ -182,5 +153,28 @@ describe('getJobBalance — outstanding and overpayment aggregated separately (R
     expect(job.invoicedObligation.toString()).toBe('2000')
     expect(job.outstanding.toString()).toBe('500')
     expect(job.uninvoicedRemainder?.toString()).toBe('0')
+  })
+})
+
+describe('credit notes are price reductions (bug-scan 2026-10-05)', () => {
+  it('a Price-decrease credit settles the job once the reduced amount is paid (agreed value drops with it)', () => {
+
+    const inv = invoice({ total: d(3000), transactions: [charge(2800)], creditNotes: [{ amount: d(200) }] })
+    const job = getJobBalance([inv], d(3000))
+    expect(job.outstanding.toString()).toBe('0')
+    expect(job.uninvoicedRemainder?.toString()).toBe('0')
+    expect(job.isFullySettled).toBe(true)
+  })
+
+  it('credits on a void invoice never become a phantom overpayment', () => {
+    const b = getInvoiceBalance(invoice({ status: 'VOID', total: d(1000), creditNotes: [{ amount: d(200) }] }))
+    expect(b.obligation.toString()).toBe('0')
+    expect(b.overpaymentToResolve.toString()).toBe('0')
+  })
+
+  it('credits above an edited-down total floor the obligation at zero (no phantom overpayment)', () => {
+    const b = getInvoiceBalance(invoice({ total: d(100), creditNotes: [{ amount: d(200) }] }))
+    expect(b.obligation.toString()).toBe('0')
+    expect(b.overpaymentToResolve.toString()).toBe('0')
   })
 })

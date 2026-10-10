@@ -5,29 +5,26 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { getSessionUser } from '@/lib/auth/guard'
+import { getActionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { sydneyLocalToUtc } from '@/lib/time'
-import { findOrCreateClient } from '@/lib/domain/client'
-import { cancelBooking, convertEnquiry, createEnquiry, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
-import { enquirySchema } from '@/lib/validation/enquiry'
+import { LEAD_DUE_ANCHORS, parseTaskForm } from '@/features/tasks/due'
+import { cancelBooking, createEnquiry, setLeadJobComplete, markEnquiryLost, reopenEnquiry } from '@/lib/domain/enquiry'
+import { acceptLeadAsJob, createDirectJob } from '@/lib/domain/project-workflow'
+import { parseNewLead, type NewLeadErrors } from '@/features/enquiries/new-lead'
 import {
   addEnquiryNote,
   addEnquiryStage,
   addEnquiryTask,
   deleteEnquiryStage,
   deleteEnquiryTask,
-  logClientReply,
   moveEnquiryTask,
   renameEnquiryStage,
-  sendStaffReply,
   toggleEnquiryTask,
   updateEnquiryTask,
 } from '@/lib/domain/enquiry-workflow'
-import { seedProjectWorkflow } from '@/lib/domain/project-workflow'
 
 async function requireStaff() {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || !can(user, 'ENQUIRY_CONVERT')) {
     throw new Error('Not authorised.')
   }
@@ -41,8 +38,17 @@ async function csrfOk(formData: FormData): Promise<boolean> {
 
 export type AddEnquiryState =
   | { status: 'idle' }
-  | { status: 'error'; message?: string; errors?: { name?: string; email?: string } }
-  | { status: 'created'; enquiryId: string }
+  // `values` = what was typed, handed back so the modal keeps it (React resets a form after every action).
+  | { status: 'error'; message?: string; errors?: AddLeadErrors; values?: Record<string, string> }
+  // Add lead returns the new lead; Add job returns the new job (it has no lead).
+  | { status: 'created'; enquiryId?: string; projectId?: string }
+
+export type AddLeadErrors = NewLeadErrors & { clientId?: string }
+
+const LEAD_FORM_FIELDS = [
+  'leadName', 'jobType', 'jobTypeNote', 'workflow', 'source', 'dateUnconfirmed', 'startDate', 'endDate',
+  'allDay', 'startTime', 'endTime', 'location', 'note',
+] as const
 
 export type ClientMatch = { id: string; displayName: string; email: string }
 
@@ -52,6 +58,8 @@ export async function searchClientsAction(query: string): Promise<ClientMatch[]>
   if (q.length < 2) return []
   return prisma.client.findMany({
     where: {
+
+      archivedAt: null,
       OR: [{ displayName: { contains: q, mode: 'insensitive' } }, { email: { contains: q } }],
     },
     select: { id: true, displayName: true, email: true },
@@ -61,40 +69,67 @@ export async function searchClientsAction(query: string): Promise<ClientMatch[]>
 }
 
 export async function addEnquiryAction(_prev: AddEnquiryState, formData: FormData): Promise<AddEnquiryState> {
+  return withTypedValues(await addEnquiry(formData, 'lead'), formData)
+}
+
+export async function addJobAction(_prev: AddEnquiryState, formData: FormData): Promise<AddEnquiryState> {
+  return withTypedValues(await addEnquiry(formData, 'job'), formData)
+}
+
+function withTypedValues(result: AddEnquiryState, formData: FormData): AddEnquiryState {
+  if (result.status !== 'error') return result
+  const values = Object.fromEntries(LEAD_FORM_FIELDS.map((k) => [k, String(formData.get(k) ?? '')]))
+  return { ...result, values }
+}
+
+async function addEnquiry(formData: FormData, kind: 'lead' | 'job'): Promise<AddEnquiryState> {
   const user = await requireStaff()
   if (!(await csrfOk(formData))) return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  const eventType = String(formData.get('eventType') ?? '').trim() || null
-  const message = String(formData.get('message') ?? '').trim() || null
 
-  const existingClientId = String(formData.get('clientId') ?? '').trim()
-  let client
-  if (existingClientId) {
-    client = await prisma.client.findUnique({ where: { id: existingClientId } })
-    if (!client) return { status: 'error', message: 'That client no longer exists.' }
-  } else {
+  const clientId = String(formData.get('clientId') ?? '').trim()
+  const parsed = parseNewLead(formData, kind)
+  const errors: AddLeadErrors = parsed.ok ? {} : { ...parsed.errors }
+  if (!clientId) errors.clientId = `Please choose a client for this ${kind}.`
+  if (!parsed.ok || Object.keys(errors).length > 0) return { status: 'error', errors }
 
-    const name = String(formData.get('name') ?? '').trim()
-    const email = String(formData.get('email') ?? '').trim()
-    const phone = String(formData.get('phone') ?? '').trim()
-    if (!name && !email) {
-      return { status: 'error', message: 'Add a client for this lead. Search for an existing one, or fill in the new client details.' }
+  const client = await prisma.client.findUnique({ where: { id: clientId } })
+  if (!client || client.archivedAt) return { status: 'error', message: 'That client is no longer available. Please choose another client.' }
+
+  const lead = parsed.lead
+  if (kind === 'job') {
+    let projectId: string
+    try {
+      const job = await createDirectJob(
+        {
+          clientId: client.id,
+          name: lead.name,
+          eventType: lead.eventType,
+          coverage: lead.coverage,
+          coverageNote: lead.coverageNote,
+          heardAbout: lead.heardAbout,
+          shootDate: lead.eventDate,
+          shootEndDate: lead.eventEndDate,
+          shootStartTime: lead.eventStartTime,
+          shootEndTime: lead.eventEndTime,
+          shootLocation: lead.eventLocation,
+          note: lead.message,
+        },
+        user.id,
+      )
+      projectId = job.id
+    } catch {
+      return { status: 'error', message: 'The job could not be created. Please try again.' }
     }
-    const parsed = enquirySchema.safeParse({ name, email, phone })
-    if (!parsed.success) {
-      const f = parsed.error.flatten().fieldErrors
-      return { status: 'error', errors: { name: f.name?.[0], email: f.email?.[0] } }
-    }
-    const parts = parsed.data.name.trim().split(/\s+/)
-    client = await findOrCreateClient(
-      { email: parsed.data.email, firstName: parts[0], lastName: parts.slice(1).join(' ') || undefined, phone: parsed.data.phone },
-      user.id,
-    )
+    revalidatePath('/jobs')
+    revalidatePath('/clients')
+    revalidatePath(`/clients/${client.id}`)
+    return { status: 'created', projectId }
   }
 
   const enquiry = await createEnquiry(
     {
       clientId: client.id,
-      name: client.displayName,
+      name: lead.name,
       firstName: client.firstName,
       lastName: client.lastName,
       email: client.email,
@@ -105,15 +140,51 @@ export async function addEnquiryAction(_prev: AddEnquiryState, formData: FormDat
       postcode: client.postcode,
       country: client.country,
       isCompany: client.type === 'BUSINESS',
-      eventType,
-      message,
+      eventType: lead.eventType,
+      eventDate: lead.eventDate,
+      eventEndDate: lead.eventEndDate,
+      eventStartTime: lead.eventStartTime,
+      eventEndTime: lead.eventEndTime,
+      eventLocation: lead.eventLocation,
+      coverage: lead.coverage,
+      coverageNote: lead.coverageNote,
+      heardAbout: lead.heardAbout,
+      message: lead.message,
       source: 'MANUAL',
     },
     user.id,
   )
   revalidatePath('/leads')
   revalidatePath('/clients')
+  revalidatePath(`/clients/${client.id}`)
   return { status: 'created', enquiryId: enquiry.id }
+}
+
+export async function acceptLeadAsJobAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  if (!enquiryId) return
+  let projectId: string
+  try {
+    projectId = (await acceptLeadAsJob(enquiryId, user.id)).projectId
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'The job could not be created.'
+    redirect(`/leads/${enquiryId}?acceptError=${encodeURIComponent(message)}`)
+  }
+  revalidatePath('/leads')
+  revalidatePath('/jobs')
+  revalidatePath(`/leads/${enquiryId}`)
+  redirect(`/jobs/${projectId}?toast=job-added`)
+}
+
+export async function toggleLeadJobCompleteAction(formData: FormData): Promise<void> {
+  const user = await requireStaff()
+  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  if (!enquiryId) return
+  await setLeadJobComplete(enquiryId, formData.get('done') === 'true', user.id)
+  revalidatePath(`/leads/${enquiryId}`)
 }
 
 export async function updateEnquiryAction(formData: FormData): Promise<void> {
@@ -125,7 +196,7 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
 
   switch (op) {
     case 'lost':
-      await markEnquiryLost(enquiryId, 'Declined', user.id)
+      await markEnquiryLost(enquiryId, 'Archived', user.id)
       break
     case 'cancel_job':
       await cancelBooking(enquiryId, user.id)
@@ -141,12 +212,9 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
   revalidatePath('/jobs')
 }
 
-function parseDue(formData: FormData): Date | null {
-  const date = String(formData.get('dueAt') ?? '').trim()
-  if (!date) return null
-  const time = String(formData.get('dueTime') ?? '').trim() || '09:00'
-  const d = sydneyLocalToUtc(`${date}T${time}`)
-  return Number.isNaN(d.getTime()) ? null : d
+function readLeadTask(formData: FormData, type: string) {
+  const parsed = parseTaskForm(formData, { anchors: LEAD_DUE_ANCHORS, calendarItem: type === 'APPOINTMENT' })
+  return parsed.ok ? parsed : null
 }
 
 function revalidateEnquiry(enquiryId: string) {
@@ -173,11 +241,11 @@ export async function addEnquiryTaskAction(formData: FormData): Promise<void> {
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
   const enquiryId = String(formData.get('enquiryId') ?? '')
   const stage = String(formData.get('stage') ?? '')
-  const title = String(formData.get('title') ?? '')
   const type = String(formData.get('type') ?? 'TODO')
-  if (!enquiryId || !stage || !title.trim()) return
+  const task = readLeadTask(formData, type)
+  if (!enquiryId || !stage || !task) return
   try {
-    await addEnquiryTask(enquiryId, stage, title, type, parseDue(formData), user.id)
+    await addEnquiryTask(enquiryId, stage, task.title, type, task.due, user.id)
   } catch {
     // no-op on invalid stage / empty title
   }
@@ -189,10 +257,12 @@ export async function updateEnquiryTaskAction(formData: FormData): Promise<void>
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
   const enquiryId = String(formData.get('enquiryId') ?? '')
   const workItemId = String(formData.get('workItemId') ?? '')
-  const title = String(formData.get('title') ?? '')
-  if (!enquiryId || !workItemId || !title.trim()) return
+  if (!enquiryId || !workItemId) return
+  const existing = await prisma.workItem.findUnique({ where: { id: workItemId }, select: { type: true } })
+  const task = existing ? readLeadTask(formData, existing.type) : null
+  if (!task) return
   try {
-    await updateEnquiryTask(workItemId, title, parseDue(formData), user.id)
+    await updateEnquiryTask(workItemId, task.title, task.due, user.id)
   } catch {
     // no-op on stale id
   }
@@ -271,28 +341,6 @@ export async function moveEnquiryTaskAction(formData: FormData): Promise<void> {
   revalidateEnquiry(enquiryId)
 }
 
-export async function sendReplyAction(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const enquiryId = String(formData.get('enquiryId') ?? '')
-  const body = String(formData.get('body') ?? '')
-  if (!enquiryId || !body.trim()) return
-  await sendStaffReply(enquiryId, body, user.id)
-  revalidatePath('/leads')
-  revalidatePath(`/leads/${enquiryId}`)
-}
-
-export async function logClientReplyAction(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const enquiryId = String(formData.get('enquiryId') ?? '')
-  const body = String(formData.get('body') ?? '')
-  if (!enquiryId || !body.trim()) return
-  await logClientReply(enquiryId, body, user.id)
-  revalidatePath('/leads')
-  revalidatePath(`/leads/${enquiryId}`)
-}
-
 export async function addEnquiryNoteAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
@@ -303,29 +351,8 @@ export async function addEnquiryNoteAction(formData: FormData): Promise<void> {
   revalidatePath(`/leads/${enquiryId}`)
 }
 
-export async function convertEnquiryAction(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const enquiryId = String(formData.get('enquiryId') ?? '')
-  if (!enquiryId) throw new Error('Missing enquiry.')
-  const result = await convertEnquiry(enquiryId, user.id)
-  if (result.projectId) await seedProjectWorkflow(result.projectId)
-  revalidatePath('/leads')
-  redirect(`/jobs/${result.projectId}?toast=job-created`)
-}
-
-export async function markEnquiryLostAction(formData: FormData): Promise<void> {
-  const user = await requireStaff()
-  if (!(await csrfOk(formData))) throw new Error('Invalid request.')
-  const enquiryId = String(formData.get('enquiryId') ?? '')
-  if (!enquiryId) throw new Error('Missing enquiry.')
-  const reason = String(formData.get('reason') ?? '').trim() || 'Cancelled'
-  await markEnquiryLost(enquiryId, reason, user.id)
-  revalidatePath('/leads')
-}
-
 export async function markEnquiryViewedAction(id: string): Promise<void> {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDIO')) return
   if (!id) return
   await prisma.enquiry.updateMany({ where: { id, viewedAt: null }, data: { viewedAt: new Date() } })

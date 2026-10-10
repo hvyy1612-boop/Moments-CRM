@@ -9,9 +9,12 @@ import { InvoiceFit } from '@/components/InvoiceFit'
 import { SentToast } from '@/components/ui/SentToast'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
+import { can } from '@/lib/auth/authz'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { JOB_SHOOT_SELECT } from '@/lib/domain/deadline'
 import { getInvoiceBalanceById } from '@/lib/domain/invoice-money'
+import { nextPaymentDue } from '@/lib/domain/money'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyTime, sydneyYmd } from '@/lib/time'
 import { titleCase } from '@/lib/text'
@@ -56,15 +59,15 @@ export default async function InvoiceDetailPage({
       id: true, invoiceNumber: true, type: true, status: true, subtotal: true, taxTotal: true, total: true,
       amountPaid: true, invoiceDate: true, dueAt: true, poNumber: true, notes: true, accessToken: true,
       billingNameSnapshot: true, billingEmailSnapshot: true, billingJobNameSnapshot: true,
-      creditNotes: { where: { NOT: { status: 'VOIDED' } }, select: { amount: true } },
+      creditNotes: { select: { amount: true } },
       lines: { orderBy: { sortOrder: 'asc' }, select: { itemName: true, description: true, quantity: true, unitPrice: true, discount: true, lineTotal: true } },
-      instalments: { orderBy: { sortOrder: 'asc' }, select: { label: true, dueAt: true, amount: true, status: true } },
+      instalments: { orderBy: { sortOrder: 'asc' }, select: { label: true, dueAt: true, amount: true } },
       payments: {
         orderBy: { receivedAt: 'desc' },
         select: {
           id: true, amount: true, paymentMethod: true, receivedAt: true, status: true,
           transactions: { where: { type: 'CHARGE' }, take: 1, select: { metadata: true } },
-          refunds: { where: { status: { not: 'FAILED' } }, select: { amount: true } },
+          refunds: { select: { amount: true } },
         },
       },
       project: {
@@ -72,7 +75,7 @@ export default async function InvoiceDetailPage({
           id: true, name: true, code: true,
           client: { select: { id: true, displayName: true, email: true, phone: true, street: true, suburb: true, state: true, postcode: true, country: true } },
           company: { select: { name: true, abn: true, settings: true } },
-          bookings: { orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true, endsAt: true, location: true, title: true } },
+          ...JOB_SHOOT_SELECT,
         },
       },
     },
@@ -99,7 +102,9 @@ export default async function InvoiceDetailPage({
   const status = inv.status
   const unpaid = inv.amountPaid.lte(0)
   const isEditable = unpaid && status !== 'VOID' && status !== 'PAID' && status !== 'PARTIALLY_PAID'
-  const canVoid = unpaid && status !== 'VOID' && status !== 'DRAFT'
+
+  const moneyAdmin = can(user, 'MONEY_ADMIN')
+  const canVoid = moneyAdmin && unpaid && status !== 'VOID'
   const c = inv.project.client
   const clientName = inv.billingNameSnapshot ?? c.displayName
   const jobName = inv.billingJobNameSnapshot ?? inv.project.name
@@ -108,8 +113,7 @@ export default async function InvoiceDetailPage({
   const refundedOf = (p: (typeof inv.payments)[number]) => p.refunds.reduce((s, r) => s.add(r.amount), new Prisma.Decimal(0))
   const instalments = balance?.instalments ?? []
   const single = instalments.length <= 1
-
-  const rowCents = instalments.map((it) => (inv.instalments.length === 0 && status === 'DRAFT' ? cents(inv.total) : cents(it.amount)))
+  const rowCents = instalments.map((it) => cents(it.amount))
   const scheduleRows = instalments.map((it, i) => {
     const due = it.dueAt ?? (single ? inv.dueAt ?? inv.invoiceDate : null)
     const dueYmd = due ? ymd(due) : null
@@ -125,9 +129,8 @@ export default async function InvoiceDetailPage({
   const scheduleName = single ? 'No split payments' : `Split into ${instalments.length} payments`
   const balanceDue =
     status === 'VOID' ? new Prisma.Decimal(0)
-    : status === 'DRAFT' ? Prisma.Decimal.max(inv.total.sub(docCredits), 0)
     : balance?.owed ?? new Prisma.Decimal(0)
-  const canPay = status !== 'DRAFT' && status !== 'PAID' && status !== 'VOID' && balanceDue.greaterThan(0)
+  const canPay = status !== 'PAID' && status !== 'VOID' && balanceDue.greaterThan(0)
 
   const paymentRows = inv.payments.map((p) => {
     const refunded = refundedOf(p)
@@ -141,7 +144,7 @@ export default async function InvoiceDetailPage({
       amount: formatAud(p.amount),
       refunded: refunded.greaterThan(0) ? formatAud(refunded) : null,
       refundable: refundable.toString(),
-      canRefund: refundable.greaterThan(0) && status !== 'VOID',
+      canRefund: moneyAdmin && refundable.greaterThan(0) && status !== 'VOID',
     }
   })
 
@@ -153,8 +156,9 @@ export default async function InvoiceDetailPage({
       : []
   })
 
+  const nextDue = balance ? (nextPaymentDue(balance) ?? inv.dueAt) : inv.dueAt
   const isOverdue =
-    status !== 'PAID' && status !== 'VOID' && balanceDue.greaterThan(0) && inv.dueAt != null && ymd(inv.dueAt) < todayYmd
+    status !== 'PAID' && status !== 'VOID' && balanceDue.greaterThan(0) && nextDue != null && ymd(nextDue) < todayYmd
   const statusView = invoiceStatusView(status, { overdue: isOverdue })
   const doc = <InvoiceDocument invoice={{ ...inv, creditsTotal: docCredits }} />
 
@@ -191,7 +195,7 @@ export default async function InvoiceDetailPage({
                 clientViewHref={inv.accessToken ? `/invoice/${inv.accessToken}` : null}
                 editHref={isEditable ? `/finance/${inv.id}/edit` : null}
                 canVoid={canVoid}
-                canDelete={unpaid}
+                canDelete={moneyAdmin && unpaid && inv.payments.length === 0 }
               />
             </div>
 

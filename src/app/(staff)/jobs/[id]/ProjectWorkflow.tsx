@@ -1,13 +1,16 @@
 'use client'
 
 import { useState, type ReactNode } from 'react'
-import { ADDABLE_TASK_TYPES, type ProjectBoard } from '@/features/projects/workflow'
+import { JOB_TASK_TYPES, type ProjectBoard } from '@/features/projects/workflow'
+import type { TaskType } from '@/features/enquiries/workflow'
+import { CALENDAR_TASK_TYPES, defaultJobDue, JOB_DUE_ANCHORS, type DueSpec } from '@/features/tasks/due'
+import { TASK_TITLE_PLACEHOLDER, TaskTypePicker } from './TaskTypePicker'
 import {
   checkTaskForm,
   TaskDueDateTimeFields,
+  TaskDueFields,
   taskBorderFor,
   taskInputBase,
-  taskInputClass,
   type TaskFormErrors,
 } from '@/components/ui/TaskDateTimeFields'
 import {
@@ -30,21 +33,35 @@ export function ProjectWorkflow({
   projectId,
   csrf,
   taskTimes = {},
+  taskDue = {},
   history = [],
   rail,
+  bookingRow,
+  completeRow,
+  muted = false,
 }: {
   board: ProjectBoard
   projectId: string
   csrf: string
   taskTimes?: Record<string, string>
+
+  taskDue?: Record<string, DueSpec>
   history?: HistoryEntry[]
 
   rail?: ReactNode
+
+  bookingRow?: ReactNode
+
+  completeRow?: ReactNode
+
+  muted?: boolean
 }) {
   const { stages, allDone, attentionCount, nextAction } = board
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [addingStage, setAddingStage] = useState<string | null>(null)
+
+  const [addType, setAddType] = useState<TaskType>('TODO')
   const [addStageOpen, setAddStageOpen] = useState(false)
   const [renamingStage, setRenamingStage] = useState<string | null>(null)
   const [editErrors, setEditErrors] = useState<TaskFormErrors>({})
@@ -114,6 +131,9 @@ export function ProjectWorkflow({
           </div>
         ) : null}
 
+        <div className={`flex flex-col gap-4 transition-opacity ${muted ? 'opacity-55 hover:opacity-100 focus-within:opacity-100' : ''}`}>
+        {bookingRow}
+
         {/* Phases */}
         {visibleStages.map((stage, i) => {
           const isCollapsed = collapsed[stage.key]
@@ -162,7 +182,7 @@ export function ProjectWorkflow({
                   </button>
                   {stage.custom ? (
                     <div className="flex shrink-0 items-center gap-1">
-                      <button type="button" onClick={() => setRenamingStage(stage.key)} aria-label="Rename stage" className="rounded p-1 text-ink-muted transition-colors hover:bg-sunk hover:text-ink">
+                      <button type="button" data-write="hide" onClick={() => setRenamingStage(stage.key)} aria-label="Rename stage" className="rounded p-1 text-ink-muted transition-colors hover:bg-sunk hover:text-ink">
                         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h4l10-10-4-4L4 16v4z" /><path d="m13.5 6.5 4 4" /></svg>
                       </button>
                       <form action={deleteProjectStageAction} onSubmit={(e) => { if (!window.confirm(`Delete the "${stage.label}" stage and its tasks?`)) e.preventDefault() }}>
@@ -221,8 +241,8 @@ export function ProjectWorkflow({
                               action={updateProjectTaskAction}
                               noValidate
                               onSubmit={(e) => {
-                                const errs = checkTaskForm(e.currentTarget)
-                                if (errs.title || errs.date || errs.time) {
+                                const errs = checkTaskForm(e.currentTarget, { anchors: JOB_DUE_ANCHORS, calendarItem: CALENDAR_TASK_TYPES.has(t.type) })
+                                if (Object.keys(errs).length > 0) {
                                   e.preventDefault()
                                   setEditErrors(errs)
                                   return
@@ -245,12 +265,16 @@ export function ProjectWorkflow({
                                 />
                                 {editErrors.title ? <p className="text-sm text-danger">{editErrors.title}</p> : null}
                               </div>
-                              <TaskDueDateTimeFields
-                                dateDefault={t.dueValue ?? ''}
-                                timeDefault={taskTimes[t.id] ?? ''}
-                                errors={editErrors}
-                                onClear={clearEdit}
-                              />
+                              {CALENDAR_TASK_TYPES.has(t.type) ? (
+                                <TaskDueDateTimeFields
+                                  dateDefault={t.dueValue ?? ''}
+                                  timeDefault={taskTimes[t.id] ?? ''}
+                                  errors={editErrors}
+                                  onClear={clearEdit}
+                                />
+                              ) : (
+                                <TaskDueFields anchors={JOB_DUE_ANCHORS} initial={taskDue[t.id] ?? { mode: 'none' }} errors={editErrors} onClear={clearEdit} />
+                              )}
                               <div className="flex items-center gap-2">
                                 <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface">Save</button>
                                 <button type="button" onClick={() => { setEditErrors({}); setEditingId(null) }} className="rounded px-3 py-1.5 text-sm font-bold text-muted hover:text-ink">Cancel</button>
@@ -286,8 +310,8 @@ export function ProjectWorkflow({
                         action={addProjectTaskAction}
                         noValidate
                         onSubmit={(e) => {
-                          const errs = checkTaskForm(e.currentTarget)
-                          if (errs.title || errs.date || errs.time) {
+                          const errs = checkTaskForm(e.currentTarget, { anchors: JOB_DUE_ANCHORS, calendarItem: addType !== 'TODO' })
+                          if (Object.keys(errs).length > 0) {
                             e.preventDefault()
                             setAddErrors(errs)
                             return
@@ -300,27 +324,24 @@ export function ProjectWorkflow({
                         <input type="hidden" name="csrf" value={csrf} />
                         <input type="hidden" name="projectId" value={projectId} />
                         <input type="hidden" name="stage" value={stage.key} />
+                        <TaskTypePicker options={JOB_TASK_TYPES} value={addType} onChange={setAddType} />
                         <div className="flex flex-col gap-1">
                           <input
                             className={`${taskInputBase} ${taskBorderFor(Boolean(addErrors.title))}`}
                             name="title"
-                            placeholder="New task"
+                            placeholder={TASK_TITLE_PLACEHOLDER[addType] ?? 'New task'}
                             autoFocus
                             aria-label="Task title"
                             onInput={() => clearAdd('title')}
                           />
                           {addErrors.title ? <p className="text-sm text-danger">{addErrors.title}</p> : null}
                         </div>
-                        <div className="flex flex-wrap items-end gap-3">
-                          <label className="flex flex-col gap-1 text-xs font-bold text-muted">
-                            <span>Type</span>
-                            <select className={`${taskInputClass} max-w-40`} name="type" defaultValue="TODO" aria-label="Task type">
-                              {ADDABLE_TASK_TYPES.map((o) => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                              ))}
-                            </select>
-                          </label>
-                          <TaskDueDateTimeFields errors={addErrors} onClear={clearAdd} />
+                        <div>
+                          {addType === 'TODO' ? (
+                            <TaskDueFields key={`due-${stage.key}`} anchors={JOB_DUE_ANCHORS} initial={defaultJobDue(stage.key)} errors={addErrors} onClear={clearAdd} />
+                          ) : (
+                            <TaskDueDateTimeFields errors={addErrors} onClear={clearAdd} />
+                          )}
                         </div>
                         <div className="flex items-center gap-2">
                           <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-bold text-surface">Add</button>
@@ -330,7 +351,8 @@ export function ProjectWorkflow({
                     ) : (
                       <button
                         type="button"
-                        onClick={() => { setAddErrors({}); setAddingStage(stage.key) }}
+                        data-write="hide"
+                        onClick={() => { setAddErrors({}); setAddType('TODO'); setAddingStage(stage.key) }}
                         className="rounded py-1 text-sm font-bold text-accent-ink hover:underline"
                       >
                         + Add task
@@ -383,10 +405,13 @@ export function ProjectWorkflow({
             </form>
           </div>
         ) : (
-          <button type="button" onClick={() => setAddStageOpen(true)} className="self-start rounded py-1 text-sm font-bold text-accent-ink hover:underline">
+          <button type="button" data-write="hide" onClick={() => setAddStageOpen(true)} className="self-start rounded py-1 text-sm font-bold text-accent-ink hover:underline">
             + Add stage
           </button>
         )}
+        </div>
+
+        {completeRow}
       </div>
 
       {/* RAIL: Next action + the job's Client / Notes / Team cards (5/16 of the row) */}

@@ -1,27 +1,34 @@
 
 
-export function currentActionText(waitingOn: string | null, pendingTitle: string | null): string {
-  if (waitingOn === 'CLIENT') return 'Waiting for client reply'
-  if (pendingTitle) return `Staff needs to: ${pendingTitle.toLowerCase()}`
-  if (waitingOn === 'STUDIO') return 'Staff needs to act'
-  return '-'
-}
+import { daysUntilSydney, sydneyDateTimeParts } from '@/lib/time'
+import { leadTaskDue } from '@/features/tasks/due'
 
-export type TaskType = 'TODO' | 'AUTO_EMAIL' | 'APPOINTMENT' | 'SHOOT' | 'AUTO'
+export type TaskType = 'TODO' | 'AUTO_EMAIL' | 'APPOINTMENT' | 'SHOOT' | 'EXTRA_SHOOT' | 'AUTO'
 
 export const TASK_TYPE_LABEL: Record<TaskType, string> = {
   TODO: '',
   AUTO_EMAIL: 'Auto email',
   APPOINTMENT: 'Appointment',
-  SHOOT: 'Shoot',
+  SHOOT: 'Main shoot',
+  EXTRA_SHOOT: 'Extra shoot',
   AUTO: 'Auto',
 }
 
-export const ADDABLE_TASK_TYPES: { value: TaskType; label: string }[] = [
-  { value: 'TODO', label: 'To-do' },
-  { value: 'AUTO_EMAIL', label: 'Auto email' },
-  { value: 'APPOINTMENT', label: 'Appointment' },
-  { value: 'SHOOT', label: 'Shoot' },
+export type AddableTaskType = { value: TaskType; label: string; detail: string }
+
+const TODO_TYPE: AddableTaskType = { value: 'TODO', label: 'To-do', detail: 'A task you tick when it is done.' }
+const APPOINTMENT_TYPE: AddableTaskType = {
+  value: 'APPOINTMENT',
+  label: 'Appointment',
+  detail: 'A meeting or call with the client. Shows in the calendar.',
+}
+
+export const LEAD_TASK_TYPES: AddableTaskType[] = [TODO_TYPE, APPOINTMENT_TYPE]
+
+export const JOB_TASK_TYPES: AddableTaskType[] = [
+  TODO_TYPE,
+  { value: 'EXTRA_SHOOT', label: 'Extra shoot', detail: 'Another shoot for this job. Shows in the calendar.' },
+  APPOINTMENT_TYPE,
 ]
 
 type StageDef = { key: string; label: string; color: string }
@@ -86,7 +93,8 @@ export type DueTone = 'overdue' | 'today' | 'soon' | null
 
 export function dueToneFor(dueDate: Date | null, done: boolean, now: Date | null): DueTone {
   if (done || !dueDate || !now) return null
-  const diff = Math.floor((dueDate.getTime() - now.getTime()) / MS_PER_DAY)
+
+  const diff = daysUntilSydney(dueDate, now)
   if (diff < 0) return 'overdue'
   if (diff === 0) return 'today'
   if (diff <= 3) return 'soon'
@@ -106,6 +114,10 @@ export type TaskInput = {
   stage: string | null
   type: string
   dueAt: Date | null
+
+  dueAnchor?: 'SHOOT' | 'JOB_CONFIRMED' | 'FIXED' | 'LEAD_CREATED' | null
+  dueOffsetDays?: number
+  dueDateFixed?: Date | null
   order: number
   completedByName: string | null
   completedAt: Date | null
@@ -144,7 +156,7 @@ export type EnqStage = {
 export type EnquiryBoard = { stages: EnqStage[]; allDone: boolean }
 
 function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10)
+  return sydneyDateTimeParts(d).date
 }
 
 export function buildEnquiryBoard(
@@ -165,13 +177,11 @@ export function buildEnquiryBoard(
         const type = (t.type as TaskType) ?? 'TODO'
 
         const done = forceAllDone || t.status === 'COMPLETED'
-        const offset = ENQUIRY_TASK_SCHEDULE[t.title]
-        let dueDate: Date | null = forceAllDone ? null : (t.dueAt ?? null)
-        let noDate = false
-        if (!forceAllDone && !dueDate && offset !== undefined) {
-          if (anchorDate) dueDate = addDays(anchorDate, offset)
-          else noDate = true
-        }
+
+        const dueDate: Date | null = forceAllDone
+          ? null
+          : leadTaskDue({ dueAt: t.dueAt, dueAnchor: t.dueAnchor ?? null, dueOffsetDays: t.dueOffsetDays ?? 0, dueDateFixed: t.dueDateFixed ?? null }, anchorDate).date
+        const noDate = false
         const blockedBy = ENQUIRY_TASK_BLOCKED_BY[t.title] ?? null
         return {
           id: t.id,
@@ -222,7 +232,7 @@ export function buildEnquiryBoard(
     if (prev === undefined || t.order < prev) firstOrder.set(t.stage, t.order)
   }
   const customStages = [...firstOrder.keys()]
-    .sort((a, b) => firstOrder.get(a)! - firstOrder.get(b)!)
+    .sort((a, b) => firstOrder.get(a)! - firstOrder.get(b)! || a.localeCompare(b))
     .map((key) => toStage(key, key, 'enquiry', true))
 
   return { stages: [...coreStages, ...customStages], allDone: activeKey === null }

@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["syd1"],
-  "buildCommand": "prisma generate && next build",
+  "buildCommand": "prisma generate && node scripts/check-browser-globals.mjs && next build",
   "crons": [{ "path": "/api/cron/daily", "schedule": "0 22 * * *" }]
 }

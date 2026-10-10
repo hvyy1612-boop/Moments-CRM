@@ -11,10 +11,13 @@ export function ContractSend({
   csrf,
   contractId,
   projectId,
+  enquiryId,
 }: {
   csrf: string
   contractId: string
   projectId: string
+
+  enquiryId?: string
 }) {
   const [state, action, sending] = useActionState(sendContractAction, IDLE)
 
@@ -24,6 +27,7 @@ export function ContractSend({
       <input type="hidden" name="csrf" value={csrf} />
       <input type="hidden" name="contractId" value={contractId} />
       <input type="hidden" name="projectId" value={projectId} />
+      {enquiryId ? <input type="hidden" name="enquiryId" value={enquiryId} /> : null}
       <p className="text-sm text-ink-muted">
         The contract snapshots the accepted quote. Send the private link for the client to sign.
       </p>

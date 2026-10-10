@@ -5,11 +5,11 @@ import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { resolveLabel } from '@/features/projects/labels'
 import { CLOSED_STATUSES } from '@/features/projects/lifecycle'
-import { PROJECT_STAGES } from '@/features/projects/workflow'
-import { getCompanyStatusLabels } from '@/lib/domain/status-labels'
-import { sydneyYmd } from '@/lib/time'
+import { buildProjectBoard, PROJECT_STAGES, type TaskInput } from '@/features/projects/workflow'
+import { jobShootDate, resolveTaskDueDate } from '@/lib/domain/deadline'
+import { JOB_WHERE } from '@/lib/domain/project'
+import { formatSydneyDate, sydneyYmd } from '@/lib/time'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { PageHeader } from '@/components/PageHeader'
@@ -17,7 +17,7 @@ import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { JobsTable, type JobRow } from './JobsTable'
 import { JobSortSelect, JOB_DEFAULT_SORT, type JobSortValue } from './JobSortSelect'
 import { JobFilterMenu } from './JobFilterMenu'
-import { AddJobButton } from './AddJobButton'
+import { AddEnquiryButton } from '../leads/AddEnquiryButton'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Jobs - Moments' }
@@ -36,7 +36,7 @@ function daysUntilSydney(due: Date, now: Date): number {
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; sort?: string; status?: string; task?: string; tab?: string }>
+  searchParams: Promise<{ q?: string; sort?: string; task?: string; tab?: string }>
 }) {
   const user = await requireRole('/jobs')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
@@ -45,13 +45,12 @@ export default async function JobsPage({
   const sp = await searchParams
   const q = (sp.q ?? '').trim()
   const sort: JobSortValue = SORTS.includes(sp.sort as JobSortValue) ? (sp.sort as JobSortValue) : JOB_DEFAULT_SORT
-  const status = sp.status ?? ''
   const task = sp.task ?? ''
   const tab: 'active' | 'completed' = sp.tab === 'completed' ? 'completed' : 'active'
 
-  const [projects, labels] = await Promise.all([
-    prisma.project.findMany({
+  const projects = await prisma.project.findMany({
 
+      where: JOB_WHERE,
       orderBy: { enquiryReceivedAt: 'desc' },
       include: {
         client: { select: { id: true, displayName: true } },
@@ -59,48 +58,38 @@ export default async function JobsPage({
         workItems: {
           where: { type: { not: 'AUTO' }, status: { not: 'CANCELLED' } },
           orderBy: { order: 'asc' },
-          select: { type: true, stage: true, status: true, dueAt: true, dueOverrideAt: true },
-        },
-        bookings: {
-          where: { status: { not: 'CANCELLED' } },
-          orderBy: { startsAt: 'asc' },
-          take: 1,
-          select: { startsAt: true },
+          select: {
+            id: true, title: true, kind: true, order: true, type: true, stage: true, status: true,
+            dueAt: true, dueOverrideAt: true, dueAnchor: true, dueOffsetDays: true, dueDateFixed: true,
+          },
         },
 
-        convertedFromEnquiries: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-          select: { eventDate: true },
-        },
       },
-    }),
-    getCompanyStatusLabels(),
-  ])
+    })
   const canEdit = can(user, 'PROJECT_EDIT')
 
   const now = new Date()
   let rows: JobRow[] = projects.map((p) => {
-    const next = p.workItems.find((t) => t.status !== 'COMPLETED')
-    const total = p.workItems.length
-    const doneCount = p.workItems.filter((t) => t.status === 'COMPLETED').length
-    const checklistDone = total > 0 && !next
-    const cancelled = p.lifecycleStatus === 'CANCELLED' || p.lifecycleStatus === 'LOST'
 
-    const label =
-      !p.statusLabelId && checklistDone
-        ? (labels.find((l) => l.stage === 'COMPLETED') ?? resolveLabel(p, labels))
-        : resolveLabel(p, labels)
+    const shootAt = jobShootDate(p.workItems, p.shootDate)
+    const ctx = { shootDate: shootAt, jobConfirmedAt: p.confirmedByClientAt }
+    const tasks: TaskInput[] = p.workItems.map((w) => ({
+      id: w.id, title: w.title, status: w.status, stage: w.stage, type: w.type, kind: w.kind,
+      resolvedDueAt: resolveTaskDueDate(w, ctx), dueAnchor: w.dueAnchor, order: w.order,
+      completedByName: null, completedAt: null,
+    }))
+    const board = buildProjectBoard(tasks, formatSydneyDate, now, (d) => daysUntilSydney(d, now))
+    const total = board.stages.filter((s) => !s.custom).reduce((n, s) => n + s.total, 0)
+    const checklistDone = total > 0 && board.allDone
+    const nextId = board.nextAction?.kind === 'task' ? board.nextAction.taskId : null
+    const nextDue = nextId ? (tasks.find((t) => t.id === nextId)?.resolvedDueAt ?? null) : null
+    const cancelled = p.lifecycleStatus === 'CANCELLED'
 
-    const pct = total > 0 ? Math.round((doneCount / total) * 100) : null
-
-    const shootTask = p.workItems.find((t) => t.type === 'SHOOT' && (t.dueOverrideAt ?? t.dueAt))
-    const shootAt = (shootTask?.dueOverrideAt ?? shootTask?.dueAt) ?? p.bookings[0]?.startsAt ?? p.convertedFromEnquiries[0]?.eventDate ?? null
+    const pct = total > 0 ? board.progressPercent : null
 
     let alert: JobRow['alert'] = null
     let alertLabel: string | null = null
     if (!cancelled && !checklistDone) {
-      const nextDue = next?.dueOverrideAt ?? next?.dueAt ?? null
       let taskKind: 'red' | 'amber' | null = null
       let taskLabel: string | null = null
       let taskDays = Infinity
@@ -129,12 +118,11 @@ export default async function JobsPage({
       name: p.name,
       client: p.client.displayName,
       clientId: p.client.id,
-      label,
 
       closed: CLOSED_STATUSES.has(p.lifecycleStatus),
       cancelled,
       completed: checklistDone,
-      stageKey: next?.stage ?? null,
+      stageKey: board.currentPhaseKey,
       pct,
       shootAt,
       enquiredAt: p.enquiryReceivedAt,
@@ -153,7 +141,6 @@ export default async function JobsPage({
   const activeCount = rows.filter((r) => !r.closed).length
   const completedCount = rows.filter((r) => r.closed).length
   rows = rows.filter((r) => (tab === 'completed' ? r.closed : !r.closed))
-  if (status) rows = rows.filter((r) => r.label.id === status)
 
   if (sort === 'oldest') rows = [...rows].sort((a, b) => a.enquiredAt.getTime() - b.enquiredAt.getTime())
   else if (sort === 'client-asc') rows = [...rows].sort((a, b) => a.client.localeCompare(b.client))
@@ -165,7 +152,6 @@ export default async function JobsPage({
   const listQs = new URLSearchParams()
   if (q) listQs.set('q', q)
   if (sort !== JOB_DEFAULT_SORT) listQs.set('sort', sort)
-  if (status) listQs.set('status', status)
   if (task) listQs.set('task', task)
   if (tab === 'completed') listQs.set('tab', tab)
   const listQsStr = listQs.toString()
@@ -175,7 +161,6 @@ export default async function JobsPage({
     const p = new URLSearchParams()
     if (q) p.set('q', q)
     if (sort !== JOB_DEFAULT_SORT) p.set('sort', sort)
-    if (status) p.set('status', status)
     if (task) p.set('task', task)
     if (t === 'completed') p.set('tab', t)
     const qs = p.toString()
@@ -188,7 +173,7 @@ export default async function JobsPage({
         <PageHeader
           breadcrumb={[DASHBOARD_CRUMB, { label: 'Jobs' }]}
           title="Jobs"
-          actions={canEdit ? <AddJobButton csrf={csrf} /> : null}
+          actions={canEdit ? <AddEnquiryButton kind="job" csrf={csrf} /> : null}
         />
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
@@ -219,7 +204,7 @@ export default async function JobsPage({
         <div className="mt-4">
           {rows.length === 0 ? (
             <p className="py-16 text-center text-sm text-ink-muted">
-              {q || status || task
+              {q || task
                 ? 'No jobs match these filters.'
                 : tab === 'completed'
                   ? 'No completed jobs yet.'

@@ -4,7 +4,7 @@ const optionalText = (max: number) =>
   z
     .string()
     .trim()
-    .max(max)
+    .max(max, `Please keep this under ${max} characters.`)
     .optional()
     .or(z.literal(''))
     .transform((v) => (v ? v : undefined))
@@ -19,14 +19,14 @@ export const enquirySchema = z.object({
     .min(1, 'Please enter an email address.')
     .max(254, 'That email is too long.')
     .email('Please enter a valid email address.'),
-  phone: optionalText(40),
+  phone: optionalText(30), // enquiries.phone is VARCHAR(30)
   street: optionalText(200),
   suburb: optionalText(100),
   state: optionalText(100),
   postcode: optionalText(20),
   country: optionalText(100),
   isCompany: z.boolean().optional(),
-  eventType: optionalText(80),
+  eventType: optionalText(50), // enquiries.event_type is VARCHAR(50)
   message: optionalText(2000),
   source: optionalText(60),
 })

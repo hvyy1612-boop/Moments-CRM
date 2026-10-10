@@ -16,7 +16,7 @@ describe('payment schedule presets', () => {
   it('splits 25 / 75 with the balance due 14 days before the shoot', () => {
     expect(presetRows('D25_B75_SHOOT14', 8000, '2026-09-29', '2027-06-12')).toEqual([
       { label: 'Deposit (25%)', dueAt: '2026-09-29', amount: '2000.00' },
-      { label: 'Balance (75%)', dueAt: '2027-05-29', amount: '6000.00' },
+      { label: 'Final payment (75%)', dueAt: '2027-05-29', amount: '6000.00' },
     ])
   })
 
@@ -46,11 +46,11 @@ describe('payment schedule presets', () => {
 
     expect(presetRows('D50_B50_SHOOT', 500, '2026-09-29', null)).toEqual([
       { label: 'Deposit (50%)', dueAt: '2026-09-29', amount: '250.00' },
-      { label: 'Balance (50%)', dueAt: '2026-10-29', amount: '250.00' },
+      { label: 'Final payment (50%)', dueAt: '2026-10-29', amount: '250.00' },
     ])
     expect(presetRows('D25_B75_SHOOT14', 500, '2026-09-29', null)).toEqual([
       { label: 'Deposit (25%)', dueAt: '2026-09-29', amount: '125.00' },
-      { label: 'Balance (75%)', dueAt: '2026-10-29', amount: '375.00' },
+      { label: 'Final payment (75%)', dueAt: '2026-10-29', amount: '375.00' },
     ])
   })
 })

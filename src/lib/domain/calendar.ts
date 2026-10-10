@@ -1,8 +1,16 @@
+import { timingSafeEqual } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import { formatSydneyTime, sydneyLocalToUtc, sydneyYmd, systemClock } from '@/lib/time'
-import { addDays, ENQUIRY_TASK_SCHEDULE } from '@/features/enquiries/workflow'
-import { makeShootDateOf, resolveTaskDueDate, type BookingLike, type DueAnchor } from './deadline'
+import { daysUntilSydney, formatSydneyTime, sydneyLocalToUtc, sydneyYmd, systemClock } from '@/lib/time'
+import { leadTaskDue } from '@/features/tasks/due'
+import { JOB_SHOOT_SELECT, resolveTaskDueDate, shootDateOfJob, shootHasTime, type DueAnchor } from './deadline'
+import { CLOSED_PROJECT, OPEN_ENQUIRY } from './today'
+
+const LIVE_WORK: Prisma.WorkItemWhereInput[] = [
+  { enquiry: { status: { in: [...OPEN_ENQUIRY] } } },
+
+  { project: { lifecycleStatus: { notIn: [...CLOSED_PROJECT, 'BOOKING_REQUESTED'] } } },
+]
 
 export type CalCategory = 'lead' | 'job' | 'event' | 'payment'
 export type CalendarFilter = 'all' | 'lead' | 'job' | 'event' | 'payment'
@@ -10,7 +18,7 @@ export type CalendarView = 'month' | 'week'
 
 export type CalItem = {
   id: string
-  kind: 'booking' | 'event' | 'appointment' | 'task'
+  kind: 'shoot' | 'event' | 'appointment' | 'task'
   refId: string
   dayKey: string
   startMin: number | null
@@ -92,7 +100,7 @@ function resolveAnchor(dateKey: string | null | undefined, now: Date): { y: numb
 
 function tone(dueMs: number | null, done: boolean, nowMs: number): CalItem['tone'] {
   if (done || dueMs === null) return null
-  const diff = Math.floor((dueMs - nowMs) / 86_400_000)
+  const diff = daysUntilSydney(new Date(dueMs), new Date(nowMs))
   if (diff < 0) return 'overdue'
   if (diff === 0) return 'today'
   if (diff <= 3) return 'soon'
@@ -106,19 +114,16 @@ type CalWorkItem = {
   dueOffsetDays: number
   dueDateFixed: Date | null
   dueOverrideAt: Date | null
-  bookingId: string | null
   enquiry: { createdAt: Date } | null
-  project: { confirmedByClientAt: Date | null; bookings: BookingLike[] } | null
+  project:
+    | ({ confirmedByClientAt: Date | null } & Parameters<typeof shootDateOfJob>[0])
+    | null
 }
 
 function resolveCalendarDate(w: CalWorkItem): { date: Date | null; timed: boolean } {
-  if (w.enquiry) {
-    const offset = ENQUIRY_TASK_SCHEDULE[w.title]
-    const date = w.dueAt ?? (offset !== undefined ? addDays(w.enquiry.createdAt, offset) : null)
-    return { date, timed: Boolean(w.dueAt) }
-  }
+  if (w.enquiry) return leadTaskDue(w, w.enquiry.createdAt)
   const date = resolveTaskDueDate(w, {
-    shootDateOf: makeShootDateOf(w.project?.bookings ?? []),
+    shootDate: w.project ? shootDateOfJob(w.project) : null,
     jobConfirmedAt: w.project?.confirmedByClientAt ?? null,
   })
   return { date, timed: Boolean(w.dueOverrideAt) }
@@ -130,31 +135,53 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
   const items: CalItem[] = []
 
   if (want('job')) {
-    const bookings = await prisma.booking.findMany({
-      where: { startsAt: { gte: startUtc, lt: endUtc }, status: { not: 'CANCELLED' } },
-      select: { id: true, title: true, startsAt: true, endsAt: true, status: true, location: true,
-        project: { select: { id: true, client: { select: { displayName: true } } } } },
+    const jobs = await prisma.project.findMany({
+      where: { lifecycleStatus: { notIn: ['BOOKING_REQUESTED', 'CANCELLED', 'CLOSED'] } },
+      select: { id: true, client: { select: { displayName: true } }, ...JOB_SHOOT_SELECT },
     })
-    for (const b of bookings) {
+    for (const j of jobs) {
+      const at = shootDateOfJob(j)
+      if (!at || at.getTime() < startUtc.getTime() || at.getTime() >= endUtc.getTime()) continue
+      const timed = shootHasTime(j)
       items.push({
-        id: `b_${b.id}`, kind: 'booking', refId: b.id, dayKey: sydneyDateKey(b.startsAt),
-        startMin: sydneyMinutes(b.startsAt), endMin: b.endsAt ? sydneyMinutes(b.endsAt) : null,
-        primary: b.project.client.displayName, secondary: b.title?.trim() || 'Shoot',
-        category: 'job', tone: null, timeLabel: formatSydneyTime(b.startsAt),
-        href: `/jobs/${b.project.id}`, editable: true, location: b.location ?? null,
-        status: b.status, conflict: false, done: false,
+        id: `s_${j.id}`, kind: 'shoot', refId: j.id, dayKey: sydneyDateKey(at),
+        startMin: timed ? sydneyMinutes(at) : null, endMin: null,
+        primary: j.client.displayName, secondary: 'Shoot',
+        category: 'job', tone: null, timeLabel: timed ? formatSydneyTime(at) : null,
+        href: `/jobs/${j.id}`, editable: false, location: null,
+        status: null, conflict: false, done: false,
+      })
+    }
+
+    const extras = await prisma.workItem.findMany({
+      where: {
+        type: 'EXTRA_SHOOT',
+        status: { in: ['PENDING', 'COMPLETED'] },
+        dueOverrideAt: { gte: startUtc, lt: endUtc },
+        project: { lifecycleStatus: { notIn: ['BOOKING_REQUESTED', 'CANCELLED', 'CLOSED'] } },
+      },
+      select: { id: true, title: true, dueOverrideAt: true, status: true, project: { select: { id: true, client: { select: { displayName: true } } } } },
+    })
+    for (const w of extras) {
+      const at = w.dueOverrideAt!
+      items.push({
+        id: `x_${w.id}`, kind: 'shoot', refId: w.id, dayKey: sydneyDateKey(at),
+        startMin: sydneyMinutes(at), endMin: null,
+        primary: w.project!.client.displayName, secondary: w.title,
+        category: 'job', tone: null, timeLabel: formatSydneyTime(at),
+        href: `/jobs/${w.project!.id}`, editable: false, location: null,
+        status: null, conflict: false, done: w.status === 'COMPLETED',
       })
     }
   }
 
   if (want('lead') || want('job')) {
     const appts = await prisma.workItem.findMany({
-      where: { type: 'APPOINTMENT', status: { in: ['PENDING', 'COMPLETED'] } },
+      where: { type: 'APPOINTMENT', status: { in: ['PENDING', 'COMPLETED'] }, OR: LIVE_WORK },
       select: { id: true, title: true, dueAt: true, status: true,
-        dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true, bookingId: true,
+        dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true,
         enquiry: { select: { id: true, name: true, createdAt: true } },
-        project: { select: { id: true, confirmedByClientAt: true, client: { select: { displayName: true } },
-          bookings: { select: { id: true, startsAt: true, status: true, rescheduledFromId: true } } } } },
+        project: { select: { id: true, confirmedByClientAt: true, client: { select: { displayName: true } }, ...JOB_SHOOT_SELECT } } },
     })
     for (const w of appts) {
       const isLead = Boolean(w.enquiry)
@@ -177,11 +204,11 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
 
   if (want('lead') || want('job')) {
     const tasks = await prisma.workItem.findMany({
-      where: { type: { notIn: ['APPOINTMENT', 'AUTO'] }, status: 'PENDING' },
+      where: { type: { notIn: ['APPOINTMENT', 'AUTO', 'EXTRA_SHOOT'] }, status: 'PENDING', OR: LIVE_WORK },
       select: { id: true, title: true, dueAt: true,
-        dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true, bookingId: true,
+        dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true,
         enquiry: { select: { id: true, name: true, createdAt: true } },
-        project: { select: { id: true, confirmedByClientAt: true, client: { select: { displayName: true } }, bookings: { select: { id: true, startsAt: true, status: true, rescheduledFromId: true } } } } },
+        project: { select: { id: true, confirmedByClientAt: true, client: { select: { displayName: true } }, ...JOB_SHOOT_SELECT } } },
     })
     for (const w of tasks) {
       const isLead = Boolean(w.enquiry)
@@ -244,16 +271,9 @@ async function fetchItems(startUtc: Date, endUtc: Date, filter: CalendarFilter, 
 }
 
 function flagConflicts(items: CalItem[]): void {
-  const shoots = items.filter((i) => i.kind === 'booking' && i.startMin !== null)
-  for (let a = 0; a < shoots.length; a++) {
-    for (let b = a + 1; b < shoots.length; b++) {
-      const x = shoots[a], y = shoots[b]
-      if (!x || !y || x.dayKey !== y.dayKey || x.startMin === null || y.startMin === null) continue
-      const xEnd = x.endMin ?? x.startMin + 60
-      const yEnd = y.endMin ?? y.startMin + 60
-      if (x.startMin < yEnd && y.startMin < xEnd) { x.conflict = true; y.conflict = true }
-    }
-  }
+  const byDay = new Map<string, CalItem[]>()
+  for (const i of items) if (i.kind === 'shoot') byDay.set(i.dayKey, [...(byDay.get(i.dayKey) ?? []), i])
+  for (const same of byDay.values()) if (same.length > 1) for (const i of same) i.conflict = true
 }
 
 export async function getCalendarView(
@@ -333,26 +353,20 @@ export async function createCalendarEvent(input: CreateCalendarEventInput): Prom
   })
 }
 
-export async function moveCalendarItem(kind: 'booking' | 'event', refId: string, dateKey: string, startMin: number | null): Promise<void> {
+export async function moveCalendarEvent(refId: string, dateKey: string, startMin: number | null): Promise<void> {
   const hh = startMin === null ? '00' : pad(Math.floor(startMin / 60))
   const mm = startMin === null ? '00' : pad(startMin % 60)
   const newStart = sydneyLocalToUtc(`${dateKey}T${hh}:${mm}`)
-  if (kind === 'booking') {
-    const b = await prisma.booking.findUniqueOrThrow({ where: { id: refId }, select: { startsAt: true, endsAt: true } })
-    const duration = b.endsAt.getTime() - b.startsAt.getTime()
-    await prisma.booking.update({ where: { id: refId }, data: { startsAt: newStart, endsAt: new Date(newStart.getTime() + Math.max(duration, 0)) } })
-  } else {
-    const e = await prisma.calendarEvent.findUniqueOrThrow({ where: { id: refId }, select: { startsAt: true, endsAt: true, allDay: true } })
-    const duration = e.endsAt ? e.endsAt.getTime() - e.startsAt.getTime() : null
-    await prisma.calendarEvent.update({
-      where: { id: refId },
-      data: {
-        startsAt: newStart,
-        endsAt: duration !== null ? new Date(newStart.getTime() + duration) : null,
-        allDay: startMin === null ? true : false,
-      },
-    })
-  }
+  const e = await prisma.calendarEvent.findUniqueOrThrow({ where: { id: refId }, select: { startsAt: true, endsAt: true } })
+  const duration = e.endsAt ? e.endsAt.getTime() - e.startsAt.getTime() : null
+  await prisma.calendarEvent.update({
+    where: { id: refId },
+    data: {
+      startsAt: newStart,
+      endsAt: duration !== null ? new Date(newStart.getTime() + duration) : null,
+      allDay: startMin === null,
+    },
+  })
 }
 
 export async function getOrCreateFeedToken(): Promise<string> {
@@ -369,9 +383,28 @@ export async function getOrCreateFeedToken(): Promise<string> {
   return token
 }
 
+export async function rotateFeedToken(actorUserId: string): Promise<string> {
+  const company = await prisma.company.findFirst({ select: { id: true, settings: true } })
+  if (!company) throw new Error('No company configured.')
+  const settings = (company.settings ?? {}) as Record<string, unknown>
+  const token = randomToken()
+  await prisma.$transaction([
+    prisma.company.update({ where: { id: company.id }, data: { settings: { ...settings, calendarFeedToken: token } as Prisma.InputJsonValue } }),
+    prisma.auditLog.create({ data: { companyId: company.id, action: 'calendar.feed_link_reset', entityType: 'Company', entityId: company.id, actorUserId } }),
+  ])
+  return token
+}
+
+function sameToken(stored: unknown, given: string): boolean {
+  if (typeof stored !== 'string') return false
+  const a = Buffer.from(stored)
+  const b = Buffer.from(given)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
 function randomToken(): string {
 
-  const bytes = new Uint8Array(12)
+  const bytes = new Uint8Array(16)
   globalThis.crypto.getRandomValues(bytes)
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 }
@@ -406,30 +439,49 @@ export async function getIcsForToken(token: string): Promise<string | null> {
   const company = await prisma.company.findFirst({ select: { id: true, name: true, settings: true } })
   if (!company) return null
   const settings = (company.settings ?? {}) as Record<string, unknown>
-  if (settings.calendarFeedToken !== token) return null
+  if (!sameToken(settings.calendarFeedToken, token)) return null
 
   const now = systemClock.now()
   const start = new Date(now.getTime() - 30 * 86_400_000)
   const end = new Date(now.getTime() + 365 * 86_400_000)
 
-  const [bookings, events, appts] = await Promise.all([
-    prisma.booking.findMany({
-      where: { companyId: company.id, startsAt: { gte: start, lt: end }, status: { not: 'CANCELLED' } },
-      select: { id: true, title: true, startsAt: true, endsAt: true, location: true, project: { select: { client: { select: { displayName: true } } } } },
+  const [jobs, events, appts, extras] = await Promise.all([
+    prisma.project.findMany({
+      where: { companyId: company.id, lifecycleStatus: { notIn: ['BOOKING_REQUESTED', 'CANCELLED', 'CLOSED'] } },
+      select: { id: true, client: { select: { displayName: true } }, ...JOB_SHOOT_SELECT },
     }),
     prisma.calendarEvent.findMany({
       where: { companyId: company.id, startsAt: { gte: start, lt: end } },
       select: { id: true, title: true, startsAt: true, endsAt: true, allDay: true, location: true },
     }),
     prisma.workItem.findMany({
-      where: { companyId: company.id, type: 'APPOINTMENT', status: { in: ['PENDING', 'COMPLETED'] } },
-      select: { id: true, title: true, dueAt: true, dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true, bookingId: true, enquiry: { select: { name: true, createdAt: true } }, project: { select: { confirmedByClientAt: true, client: { select: { displayName: true } }, bookings: { select: { id: true, startsAt: true, status: true, rescheduledFromId: true } } } } },
+      where: { companyId: company.id, type: 'APPOINTMENT', status: { in: ['PENDING', 'COMPLETED'] }, OR: LIVE_WORK },
+      select: { id: true, title: true, dueAt: true, dueAnchor: true, dueOffsetDays: true, dueDateFixed: true, dueOverrideAt: true, enquiry: { select: { name: true, createdAt: true } }, project: { select: { confirmedByClientAt: true, client: { select: { displayName: true } }, ...JOB_SHOOT_SELECT } } },
+    }),
+    prisma.workItem.findMany({
+      where: {
+        companyId: company.id,
+        type: 'EXTRA_SHOOT',
+        status: { in: ['PENDING', 'COMPLETED'] },
+        dueOverrideAt: { gte: start, lt: end },
+        project: { lifecycleStatus: { notIn: ['BOOKING_REQUESTED', 'CANCELLED', 'CLOSED'] } },
+      },
+      select: { id: true, title: true, dueOverrideAt: true, project: { select: { client: { select: { displayName: true } } } } },
     }),
   ])
 
   const dtstamp = icsStamp(now)
   const lines: string[] = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Moments//Calendar//EN', 'CALSCALE:GREGORIAN', `X-WR-CALNAME:${icsEscape(company.name)}`]
-  for (const b of bookings) lines.push(...vevent(`b_${b.id}`, dtstamp, b.startsAt, b.endsAt, false, `${b.project.client.displayName} - ${b.title?.trim() || 'Shoot'}`, b.location))
+  for (const j of jobs) {
+    const at = shootDateOfJob(j)
+    if (!at || at.getTime() < start.getTime() || at.getTime() >= end.getTime()) continue
+    const timed = shootHasTime(j)
+    lines.push(...vevent(`s_${j.id}`, dtstamp, at, timed ? new Date(at.getTime() + 60 * 60_000) : null, !timed, `${j.client.displayName} - Shoot`, null))
+  }
+  for (const w of extras) {
+    const at = w.dueOverrideAt!
+    lines.push(...vevent(`x_${w.id}`, dtstamp, at, new Date(at.getTime() + 60 * 60_000), false, `${w.project!.client.displayName} - ${w.title}`, null))
+  }
   for (const e of events) lines.push(...vevent(`e_${e.id}`, dtstamp, e.startsAt, e.endsAt, e.allDay, e.title, e.location))
   for (const w of appts) {
     const isLead = Boolean(w.enquiry)

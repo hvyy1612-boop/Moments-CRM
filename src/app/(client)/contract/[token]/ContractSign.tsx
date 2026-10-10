@@ -14,7 +14,7 @@ export function ContractSign({ csrf, token }: { csrf: string; token: string }) {
   if (state.status === 'success') {
     return (
       <Alert tone="success" title="Thank you, your contract is signed">
-        Your booking is confirmed. We will be in touch with the next steps.
+        Your date is secured once the deposit is paid. We will be in touch with the next steps.
       </Alert>
     )
   }

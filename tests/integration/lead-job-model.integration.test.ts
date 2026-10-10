@@ -1,27 +1,16 @@
 import { randomUUID } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
-import { convertEnquiry, createEnquiry } from '@/lib/domain/enquiry'
-import { setProjectStatusByLabel } from '@/lib/domain/status-labels'
+import { convertEnquiry, createEnquiry, markEnquiryLost, setLeadJobComplete } from '@/lib/domain/enquiry'
+import { findOrCreateClient } from '@/lib/domain/client'
+import { recordPayment } from '@/lib/domain/finance'
+import { JOB_WHERE } from '@/lib/domain/project'
+import { acceptLeadAsJob, confirmDirectBooking, createDirectJob, getProjectBoard, moveJobBackToLead, setJobComplete, toggleProjectTask } from '@/lib/domain/project-workflow'
+import { toggleEnquiryTask } from '@/lib/domain/enquiry-workflow'
+import { createInvoice } from './helpers'
+import { acceptQuote, createQuoteForEnquiry, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 
 const email = () => `it-${randomUUID()}@moments.test`
-
-async function anyUserId(): Promise<string> {
-  const u = await prisma.user.findFirst({ select: { id: true } })
-  if (u) return u.id
-  const company = await prisma.company.findFirst({ select: { id: true } })
-  const created = await prisma.user.create({
-    data: {
-      companyId: company!.id,
-      email: `admin-${randomUUID()}@moments.test`,
-      passwordHash: 'x',
-      passwordAlgo: 'argon2id',
-      role: 'ADMIN',
-      name: 'Test Admin',
-    },
-  })
-  return created.id
-}
 
 beforeAll(async () => {
   const company = await prisma.company.findFirst()
@@ -31,19 +20,235 @@ beforeAll(async () => {
 describe('lead-job model (integration, real DB) - docs/24', () => {
   it('createEnquiry makes a NEW enquiry with a seeded workflow (exactly once)', async () => {
     const e = await createEnquiry({ name: 'Lead One', email: email() })
-    expect(e.status).toBe('NEW')
+    expect(e.status).toBe('NEW_ENQUIRY')
     expect(await prisma.workItem.count({ where: { enquiryId: e.id } })).toBeGreaterThan(0)
   })
 
-  it('convert: Project lands BOOKING_REQUESTED; enquiry CONVERTED + linked; open tasks closed', async () => {
+  it('convert (quote accepted): opens a BOOKING_REQUESTED booking file; the lead stays a workable lead', async () => {
     const e = await createEnquiry({ name: 'Lead Two', email: email() })
     const r = await convertEnquiry(e.id)
     const project = await prisma.project.findUnique({ where: { id: r.projectId! } })
     expect(project?.lifecycleStatus).toBe('BOOKING_REQUESTED')
     const enq = await prisma.enquiry.findUnique({ where: { id: e.id } })
-    expect(enq?.status).toBe('CONVERTED')
+    expect(enq?.status).toBe('AWAITING_BOOKING_CONFIRMATION')
     expect(enq?.convertedProjectId).toBe(r.projectId)
+
+    expect(await prisma.workItem.count({ where: { enquiryId: e.id, status: 'PENDING' } })).toBeGreaterThan(0)
+
+    await getProjectBoard(r.projectId!)
+    expect(await prisma.workItem.count({ where: { projectId: r.projectId! } })).toBe(0)
+    expect(await prisma.project.count({ where: { AND: [JOB_WHERE, { id: r.projectId! }] } })).toBe(0)
+  })
+
+  it('paying the deposit turns the lead into a Job and closes out the lead checklist', async () => {
+    const e = await createEnquiry({ name: 'Lead Deposit', email: email() })
+    const { projectId } = await convertEnquiry(e.id)
+    const inv = await createInvoice(projectId!, { type: 'DEPOSIT', description: 'Deposit', amount: '1000' }, null)
+    await recordPayment(inv.id, { paymentMethod: 'BANK_TRANSFER', amount: '1000' }, null)
+    const job = await prisma.project.findUniqueOrThrow({ where: { id: projectId! } })
+    expect(job.lifecycleStatus).toBe('CONFIRMED')
+    expect(job.confirmedByClientAt).not.toBeNull()
+    expect((await prisma.enquiry.findUniqueOrThrow({ where: { id: e.id } })).status).toBe('BOOKING_CONFIRMED')
     expect(await prisma.workItem.count({ where: { enquiryId: e.id, status: 'PENDING' } })).toBe(0)
+    expect(await prisma.workItem.count({ where: { projectId: projectId! } })).toBeGreaterThan(0)
+    expect(await prisma.project.count({ where: { AND: [JOB_WHERE, { id: projectId! }] } })).toBe(1)
+  })
+
+  it('"Final payment received" is a staff task: money alone never ticks it, and the job completes once staff do', async () => {
+    const lead = await createEnquiry({ name: 'Final Payment', email: email() })
+    const q = await createQuoteForEnquiry(lead.id, null)
+    await saveQuoteDraft(q.versionId, [{ description: 'Wedding package', quantity: 1, unitPrice: '5000' }], null)
+    await sendQuote(q.quoteId, null)
+    const { projectId } = await acceptQuote(q.quoteId, null)
+    const deposit = await createInvoice(projectId!, { type: 'DEPOSIT', description: 'Deposit', amount: '1000' }, null)
+    await recordPayment(deposit.id, { paymentMethod: 'BANK_TRANSFER', amount: '1000' }, null)
+    const balance = await createInvoice(projectId!, { type: 'BALANCE', description: 'Balance', amount: '4000' }, null)
+    await recordPayment(balance.id, { paymentMethod: 'BANK_TRANSFER', amount: '4000' }, null)
+    const finalPayment = async () => prisma.workItem.findFirstOrThrow({ where: { projectId: projectId!, kind: 'final_payment_received' } })
+    expect((await finalPayment()).status).toBe('PENDING')
+    const staff = await prisma.user.findFirstOrThrow({ select: { id: true } })
+    const others = await prisma.workItem.findMany({ where: { projectId: projectId!, status: 'PENDING', NOT: { kind: 'final_payment_received' } } })
+    for (const t of others) await toggleProjectTask(t.id, staff.id)
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: projectId! } })).lifecycleStatus).toBe('CONFIRMED')
+    await toggleProjectTask((await finalPayment()).id, staff.id)
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: projectId! } })).lifecycleStatus).toBe('COMPLETED')
+  })
+
+  const directJob = async (over: Partial<Parameters<typeof createDirectJob>[0]> = {}) => {
+    const staff = await prisma.user.findFirstOrThrow({ select: { id: true } })
+    const client = await findOrCreateClient({ email: email(), firstName: 'Bella', lastName: 'Ng' }, staff.id)
+    return createDirectJob(
+      {
+        clientId: client.id, name: 'Bella & Tom', eventType: 'Wedding', coverage: 'Both', coverageNote: null, heardAbout: 'Instagram',
+        shootDate: new Date('2027-03-14T00:00:00Z'), shootEndDate: null, shootStartTime: '14:30', shootEndTime: '22:00',
+        shootLocation: 'Gunners Barracks', note: 'Booked by phone', ...over,
+      },
+      staff.id,
+    )
+  }
+
+  it('Add job creates only the Job: no lead, no payment or contract invented; the job holds its details', async () => {
+    const job = await directJob()
+    expect(job.lifecycleStatus).toBe('CONFIRMED')
+    expect(job.confirmedByClientAt).not.toBeNull()
+    expect(await prisma.enquiry.count({ where: { convertedProjectId: job.id } })).toBe(0)
+    expect(await prisma.project.count({ where: { AND: [JOB_WHERE, { id: job.id }] } })).toBe(1)
+    expect(await prisma.invoice.count({ where: { projectId: job.id } })).toBe(0)
+    expect(await prisma.contract.count({ where: { projectId: job.id } })).toBe(0)
+    expect(job).toMatchObject({ eventType: 'Wedding', coverage: 'Both', heardAbout: 'Instagram', shootLocation: 'Gunners Barracks', shootEndTime: '22:00' })
+    const shoot = await prisma.workItem.findFirstOrThrow({ where: { projectId: job.id, type: 'SHOOT' } })
+    expect(shoot.dueOverrideAt?.toISOString()).toBe('2027-03-14T03:30:00.000Z')
+    expect((await prisma.communication.findFirstOrThrow({ where: { projectId: job.id, type: 'NOTE' } })).body).toBe('Booked by phone')
+  })
+
+  it('unticking "Job accepted" on a job added directly makes a lead from its details (Studio Ninja)', async () => {
+    const job = await directJob()
+    const { enquiryId } = await moveJobBackToLead(job.id, null)
+    const lead = await prisma.enquiry.findUniqueOrThrow({ where: { id: enquiryId } })
+    expect(lead).toMatchObject({ status: 'AWAITING_BOOKING_CONFIRMATION', convertedProjectId: job.id, name: 'Bella & Tom', coverage: 'Both', eventStartTime: '14:30', eventLocation: 'Gunners Barracks' })
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: job.id } })).lifecycleStatus).toBe('BOOKING_REQUESTED')
+    expect(await prisma.project.count({ where: { AND: [JOB_WHERE, { id: job.id }] } })).toBe(0)
+  })
+
+  it('ticking "Job accepted" on a lead (after the confirm) makes it a job at once; an archived lead cannot', async () => {
+    const lead = await createEnquiry({ name: 'Confirmed By Phone', email: email(), eventDate: new Date('2027-08-01T00:00:00Z'), eventStartTime: '15:00', coverage: 'Photography' })
+    const { projectId } = await acceptLeadAsJob(lead.id, null)
+    const job = await prisma.project.findUniqueOrThrow({ where: { id: projectId } })
+    expect(job.lifecycleStatus).toBe('CONFIRMED')
+    expect(job).toMatchObject({ coverage: 'Photography', shootStartTime: '15:00' })
+    expect(await prisma.project.count({ where: { AND: [JOB_WHERE, { id: projectId }] } })).toBe(1)
+    expect((await prisma.enquiry.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe('BOOKING_CONFIRMED')
+    expect(await prisma.workItem.count({ where: { enquiryId: lead.id, status: 'PENDING' } })).toBe(0)
+    expect(await prisma.invoice.count({ where: { projectId } })).toBe(0)
+    await expect(acceptLeadAsJob(lead.id, null)).rejects.toThrow(/already a job/)
+
+    const archived = await createEnquiry({ name: 'Went Elsewhere', email: email() })
+    await markEnquiryLost(archived.id, 'Archived', null)
+    await expect(acceptLeadAsJob(archived.id, null)).rejects.toThrow(/Restore/)
+  })
+
+  it('"Job complete" on a lead is recorded and the lead stays in Leads (only Job accepted moves it)', async () => {
+    const lead = await createEnquiry({ name: 'Mini Session', email: email() })
+    const ticked = await setLeadJobComplete(lead.id, true, null)
+    expect(ticked.jobCompleteAt).not.toBeNull()
+    expect(ticked.status).toBe('NEW_ENQUIRY')
+    expect(ticked.convertedProjectId).toBeNull()
+    expect((await setLeadJobComplete(lead.id, false, null)).jobCompleteAt).toBeNull()
+    await markEnquiryLost(lead.id, 'Archived', null)
+    await expect(setLeadJobComplete(lead.id, true, null)).rejects.toThrow(/Restore/)
+  })
+
+  it('the Leads status follows the furthest section ticked inside, both ways', async () => {
+    const staff = await prisma.user.findFirstOrThrow({ select: { id: true } })
+    const lead = await createEnquiry({ name: 'Status Follows Ticks', email: email() })
+    const status = async () => (await prisma.enquiry.findUniqueOrThrow({ where: { id: lead.id } })).status
+    const quoteTask = await prisma.workItem.findFirstOrThrow({ where: { enquiryId: lead.id, stage: 'quote' } })
+    await toggleEnquiryTask(quoteTask.id, staff.id)
+    expect(await status()).toBe('CONSULTATION')
+    await toggleEnquiryTask(quoteTask.id, staff.id)
+    expect(await status()).toBe('NEW_ENQUIRY')
+    const contactTask = await prisma.workItem.findFirstOrThrow({ where: { enquiryId: lead.id, stage: 'discussion' } })
+    await toggleEnquiryTask(contactTask.id, staff.id)
+    expect(await status()).toBe('CONTACTED')
+  })
+
+  it('"Job complete" on a job moves it to Completed and back; a closed job cannot change', async () => {
+    const job = await directJob()
+    await setJobComplete(job.id, true, null)
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: job.id } })).lifecycleStatus).toBe('COMPLETED')
+    await setJobComplete(job.id, false, null)
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: job.id } })).lifecycleStatus).toBe('CONFIRMED')
+    await prisma.project.update({ where: { id: job.id }, data: { lifecycleStatus: 'CLOSED' } })
+    await expect(setJobComplete(job.id, false, null)).rejects.toThrow(/completed job/)
+  })
+
+  it('the deposit must reach 20% of the accepted quote; a quote, an invoice or a small payment never books', async () => {
+    const lead = await createEnquiry({ name: 'Deposit Rule', email: email(), eventDate: new Date('2027-05-01T00:00:00Z'), eventLocation: 'Opera House' })
+    const q = await createQuoteForEnquiry(lead.id, null)
+    await saveQuoteDraft(q.versionId, [{ description: 'Wedding package', quantity: 1, unitPrice: '5000' }], null)
+    await sendQuote(q.quoteId, null)
+    const { projectId } = await acceptQuote(q.quoteId, null)
+    const status = async () => (await prisma.project.findUniqueOrThrow({ where: { id: projectId! } })).lifecycleStatus
+    const small = await createInvoice(projectId!, { type: 'DEPOSIT', description: 'Deposit', amount: '100' }, null)
+    expect(await status()).toBe('BOOKING_REQUESTED')
+    await recordPayment(small.id, { paymentMethod: 'BANK_TRANSFER', amount: '100' }, null)
+    expect(await status()).toBe('BOOKING_REQUESTED')
+    expect((await prisma.enquiry.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe('AWAITING_BOOKING_CONFIRMATION')
+    const rest = await createInvoice(projectId!, { type: 'DEPOSIT', description: 'Deposit top-up', amount: '900' }, null)
+    await recordPayment(rest.id, { paymentMethod: 'BANK_TRANSFER', amount: '900' }, null)
+    expect(await status()).toBe('CONFIRMED')
+    expect((await prisma.enquiry.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe('BOOKING_CONFIRMED')
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: projectId! } })).shootLocation).toBe('Opera House')
+  })
+
+  it("a booked lead's main shoot date and time become the job shoot; a date alone stays a day", async () => {
+    const timed = await createEnquiry({ name: 'Timed Shoot', email: email(), source: 'MANUAL', eventDate: new Date('2027-03-14T00:00:00Z'), eventStartTime: '14:30' })
+    const a = await convertEnquiry(timed.id)
+    await confirmDirectBooking(a.projectId!, null)
+    const shoot = await prisma.workItem.findFirstOrThrow({ where: { projectId: a.projectId!, type: 'SHOOT' } })
+    expect(shoot.dueOverrideAt?.toISOString()).toBe('2027-03-14T03:30:00.000Z')
+
+    const dayOnly = await createEnquiry({ name: 'All Day Shoot', email: email(), source: 'MANUAL', eventDate: new Date('2027-03-14T00:00:00Z') })
+    const b = await convertEnquiry(dayOnly.id)
+    await confirmDirectBooking(b.projectId!, null)
+    expect((await prisma.workItem.findFirstOrThrow({ where: { projectId: b.projectId!, type: 'SHOOT' } })).dueOverrideAt).toBeNull()
+  })
+
+  it('the job takes the name staff gave the lead; a lead named after its client keeps the event type', async () => {
+    const staff = await prisma.user.findFirstOrThrow({ select: { id: true } })
+    const jenny = await findOrCreateClient({ email: email(), firstName: 'Jenny', lastName: 'Smith' }, staff.id)
+    const named = await createEnquiry({ clientId: jenny.id, name: 'Jenny & Matt', email: jenny.email, eventType: 'Wedding' })
+    const a = await convertEnquiry(named.id)
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: a.projectId! } })).name).toBe('Jenny & Matt')
+
+    const plain = await createEnquiry({ name: 'Sam Lee', firstName: 'Sam', lastName: 'Lee', email: email(), eventType: 'Wedding' })
+    const b = await convertEnquiry(plain.id)
+    const job = await prisma.project.findUniqueOrThrow({ where: { id: b.projectId! }, include: { client: true } })
+    expect(job.client.displayName).toBe('Sam Lee')
+    expect(job.name).toBe('Wedding')
+  })
+
+  it('unticking "Job accepted" turns an unpaid job back into a lead waiting for its deposit', async () => {
+    const e = await createEnquiry({ name: 'Booked Too Early', email: email() })
+    const { projectId } = await convertEnquiry(e.id)
+    await confirmDirectBooking(projectId!, null)
+    expect(await prisma.workItem.count({ where: { enquiryId: e.id, status: 'PENDING' } })).toBe(0)
+
+    const { enquiryId } = await moveJobBackToLead(projectId!, null)
+    expect(enquiryId).toBe(e.id)
+    const file = await prisma.project.findUniqueOrThrow({ where: { id: projectId! } })
+    expect(file.lifecycleStatus).toBe('BOOKING_REQUESTED')
+    expect(file.confirmedByClientAt).toBeNull()
+    expect((await prisma.enquiry.findUniqueOrThrow({ where: { id: e.id } })).status).toBe('AWAITING_BOOKING_CONFIRMATION')
+    expect(await prisma.workItem.count({ where: { enquiryId: e.id, status: 'PENDING' } })).toBeGreaterThan(0)
+    expect(await prisma.project.count({ where: { AND: [JOB_WHERE, { id: projectId! }] } })).toBe(0)
+
+    const inv = await createInvoice(projectId!, { type: 'DEPOSIT', description: 'Deposit', amount: '800' }, null)
+    await recordPayment(inv.id, { paymentMethod: 'BANK_TRANSFER', amount: '800' }, null)
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: projectId! } })).lifecycleStatus).toBe('CONFIRMED')
+  })
+
+  it('"Job accepted" cannot be unticked once money is recorded (the deposit holds the date)', async () => {
+    const e = await createEnquiry({ name: 'Deposit Paid', email: email() })
+    const { projectId } = await convertEnquiry(e.id)
+    const inv = await createInvoice(projectId!, { type: 'DEPOSIT', description: 'Deposit', amount: '500' }, null)
+    await recordPayment(inv.id, { paymentMethod: 'BANK_TRANSFER', amount: '500' }, null)
+    await expect(moveJobBackToLead(projectId!, null)).rejects.toThrow(/payment is recorded/i)
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: projectId! } })).lifecycleStatus).toBe('CONFIRMED')
+    expect((await prisma.enquiry.findUniqueOrThrow({ where: { id: e.id } })).status).toBe('BOOKING_CONFIRMED')
+  })
+
+  it('a booking file cancelled before its deposit was never a Job; a cancelled confirmed job still is', async () => {
+    const declined = await createEnquiry({ name: 'Declined Early', email: email() })
+    const file = await convertEnquiry(declined.id)
+    await prisma.project.update({ where: { id: file.projectId! }, data: { lifecycleStatus: 'CANCELLED' } })
+    expect(await prisma.project.count({ where: { AND: [JOB_WHERE, { id: file.projectId! }] } })).toBe(0)
+
+    const booked = await createEnquiry({ name: 'Cancelled Job', email: email() })
+    const job = await convertEnquiry(booked.id)
+    await confirmDirectBooking(job.projectId!, null)
+    await prisma.project.update({ where: { id: job.projectId! }, data: { lifecycleStatus: 'CANCELLED' } })
+    expect(await prisma.project.count({ where: { AND: [JOB_WHERE, { id: job.projectId! }] } })).toBe(1)
   })
 
   it('convert is idempotent - a second convert makes no second Project', async () => {
@@ -52,15 +257,5 @@ describe('lead-job model (integration, real DB) - docs/24', () => {
     const r2 = await convertEnquiry(e.id)
     expect(r2.alreadyConverted).toBe(true)
     expect(r2.projectId).toBe(r1.projectId)
-  })
-
-  it('statusLabel is presentation only - it never moves lifecycle (FIX 10)', async () => {
-    const e = await createEnquiry({ name: 'Lead Four', email: email() })
-    const r = await convertEnquiry(e.id)
-
-    await setProjectStatusByLabel(r.projectId!, 'IN_PRODUCTION', await anyUserId())
-    const after = await prisma.project.findUnique({ where: { id: r.projectId! } })
-    expect(after?.lifecycleStatus).toBe('BOOKING_REQUESTED')
-    expect(after?.statusLabelId).toBe('IN_PRODUCTION')
   })
 })

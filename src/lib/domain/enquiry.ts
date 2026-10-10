@@ -10,6 +10,7 @@ import {
   type ClientMatch,
 } from './enquiry-match'
 import { cancelOpenWorkItems, seedEnquiryWorkflow } from './enquiry-workflow'
+import { cancelProjectTx } from './refund'
 
 export type CreateEnquiryInput = {
   name: string
@@ -25,6 +26,11 @@ export type CreateEnquiryInput = {
   isCompany?: boolean
   eventType?: string | null
   eventDate?: Date | null
+
+  eventEndDate?: Date | null
+  eventStartTime?: string | null
+  eventEndTime?: string | null
+  eventLocation?: string | null
   message?: string | null
   source?: EnquirySource
   ownerUserId?: string | null
@@ -32,6 +38,7 @@ export type CreateEnquiryInput = {
 
   partnerName?: string | null
   coverage?: string | null
+  coverageNote?: string | null
   gettingReadyLocation?: string | null
   ceremonyLocation?: string | null
   weddingDetails?: string | null
@@ -50,64 +57,91 @@ export async function createEnquiry(input: CreateEnquiryInput, actorUserId: stri
   }
 }
 
-async function runCreateEnquiry(input: CreateEnquiryInput, actorUserId: string | null) {
-  return prisma.$transaction(async (tx) => {
-    const company = await requireCompany(tx)
-    const enquiryNumber = await nextRecordNumber(tx, company.id, 'ENQUIRY')
-    const enquiry = await tx.enquiry.create({
-      data: {
-        companyId: company.id,
-        enquiryNumber,
-        ownerUserId: input.ownerUserId ?? null,
-        clientId: input.clientId ?? null,
-        name: input.name,
-        firstName: input.firstName ?? null,
-        lastName: input.lastName ?? null,
-        email: input.email,
-        phone: input.phone ?? null,
-        street: input.street ?? null,
-        suburb: input.suburb ?? null,
-        state: input.state ?? null,
-        postcode: input.postcode ?? null,
-        country: input.country ?? null,
-        isCompany: input.isCompany ?? false,
-        eventType: input.eventType ?? null,
-        eventDate: input.eventDate ?? null,
-        message: input.message ?? null,
-        partnerName: input.partnerName ?? null,
-        coverage: input.coverage ?? null,
-        gettingReadyLocation: input.gettingReadyLocation ?? null,
-        ceremonyLocation: input.ceremonyLocation ?? null,
-        weddingDetails: input.weddingDetails ?? null,
-        styleReason: input.styleReason ?? null,
-        heardAbout: input.heardAbout ?? null,
-        source: input.source ?? 'WEBSITE',
-        waitingOn: 'STUDIO',
-      },
-    })
-    await tx.auditLog.create({
-      data: {
-        companyId: company.id,
-        action: 'enquiry.created',
-        entityType: 'Enquiry',
-        entityId: enquiry.id,
-        actorUserId,
-        source: actorUserId ? 'staff.enquiry' : 'public.enquiry',
-        afterData: { email: enquiry.email },
-      },
-    })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'enquiry.created',
-        aggregateType: 'Enquiry',
-        aggregateId: enquiry.id,
-        payload: { enquiryId: enquiry.id, email: enquiry.email },
-      },
-    })
+function runCreateEnquiry(input: CreateEnquiryInput, actorUserId: string | null) {
+  return prisma.$transaction((tx) => createEnquiryTx(tx, input, actorUserId))
+}
 
-    await seedEnquiryWorkflow(tx, enquiry)
-    return enquiry
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+
+export async function createEnquiryTx(tx: Tx, input: CreateEnquiryInput, actorUserId: string | null) {
+  const company = await requireCompany(tx)
+  const enquiryNumber = await nextRecordNumber(tx, company.id, 'ENQUIRY')
+  const enquiry = await tx.enquiry.create({
+    data: {
+      companyId: company.id,
+      enquiryNumber,
+      ownerUserId: input.ownerUserId ?? null,
+      clientId: input.clientId ?? null,
+      name: input.name,
+      firstName: input.firstName ?? null,
+      lastName: input.lastName ?? null,
+      email: input.email,
+      phone: input.phone ?? null,
+      street: input.street ?? null,
+      suburb: input.suburb ?? null,
+      state: input.state ?? null,
+      postcode: input.postcode ?? null,
+      country: input.country ?? null,
+      isCompany: input.isCompany ?? false,
+      eventType: input.eventType ?? null,
+      eventDate: input.eventDate ?? null,
+      eventEndDate: input.eventEndDate ?? null,
+      eventStartTime: input.eventStartTime ?? null,
+      eventEndTime: input.eventEndTime ?? null,
+      eventLocation: input.eventLocation ?? null,
+      message: input.message ?? null,
+      partnerName: input.partnerName ?? null,
+      coverage: input.coverage ?? null,
+      coverageNote: input.coverageNote ?? null,
+      gettingReadyLocation: input.gettingReadyLocation ?? null,
+      ceremonyLocation: input.ceremonyLocation ?? null,
+      weddingDetails: input.weddingDetails ?? null,
+      styleReason: input.styleReason ?? null,
+      heardAbout: input.heardAbout ?? null,
+      source: input.source ?? 'WEBSITE',
+    },
   })
+  await tx.auditLog.create({
+    data: {
+      companyId: company.id,
+      action: 'enquiry.created',
+      entityType: 'Enquiry',
+      entityId: enquiry.id,
+      actorUserId,
+      source: actorUserId ? 'staff.enquiry' : 'public.enquiry',
+      afterData: { email: enquiry.email },
+    },
+  })
+
+  await seedEnquiryWorkflow(tx, enquiry)
+  return enquiry
+}
+
+export function bookingDetailsFromLead(e: {
+  eventType: string | null
+  coverage: string | null
+  coverageNote: string | null
+  heardAbout: string | null
+  eventDate: Date | null
+  eventEndDate: Date | null
+  eventStartTime: string | null
+  eventEndTime: string | null
+  eventLocation: string | null
+  ceremonyLocation: string | null
+}) {
+
+  const location = e.eventLocation?.trim() || e.ceremonyLocation?.split('\n')[0]?.trim() || null
+  return {
+    eventType: e.eventType,
+    coverage: e.coverage,
+    coverageNote: e.coverageNote,
+    heardAbout: e.heardAbout,
+    shootDate: e.eventDate,
+    shootEndDate: e.eventEndDate,
+    shootStartTime: e.eventStartTime,
+    shootEndTime: e.eventEndTime,
+    shootLocation: location ? location.slice(0, 300) : null,
+  }
 }
 
 export async function markEnquiryLost(
@@ -122,9 +156,27 @@ export async function markEnquiryLost(
     if (!enquiry) throw new Error('Lead not found.')
 
     if (enquiry.status === 'BOOKING_CONFIRMED') throw new Error('A confirmed booking cannot be declined - cancel the Job instead.')
+
+    let cancelledJobId: string | null = null
+    if (enquiry.convertedProjectId) {
+      const job = await tx.project.findUnique({ where: { id: enquiry.convertedProjectId }, select: { id: true, lifecycleStatus: true } })
+      if (job && job.lifecycleStatus === 'BOOKING_REQUESTED') {
+        await cancelProjectTx(tx, job.id, 'Lead declined before the booking was confirmed', actorUserId)
+        const accepted = await tx.quote.findMany({ where: { enquiryId, status: 'ACCEPTED' }, select: { id: true, currentVersionId: true } })
+        for (const q of accepted) {
+          await tx.quote.update({ where: { id: q.id }, data: { status: 'DECLINED' } })
+          if (q.currentVersionId) await tx.quoteVersion.update({ where: { id: q.currentVersionId }, data: { status: 'DECLINED' } })
+        }
+        cancelledJobId = job.id
+      }
+    }
+
     const updated = await tx.enquiry.update({
       where: { id: enquiryId },
-      data: { status: 'DECLINED', lostReason: reason, waitingOn: null },
+      data: {
+        status: 'DECLINED',
+        ...(cancelledJobId ? { convertedProjectId: null } : {}),
+      },
     })
     await cancelOpenWorkItems(tx, enquiryId)
     await tx.auditLog.create({
@@ -134,7 +186,7 @@ export async function markEnquiryLost(
         entityType: 'Enquiry',
         entityId: enquiryId,
         actorUserId,
-        afterData: { lostReason: reason },
+        afterData: { lostReason: reason, ...(cancelledJobId ? { cancelledJobId } : {}) },
       },
     })
     return updated
@@ -150,7 +202,7 @@ export async function reopenEnquiry(enquiryId: string, actorUserId: string | nul
     }
     const updated = await tx.enquiry.update({
       where: { id: enquiryId },
-      data: { status: 'CONTACTED', lostReason: null, waitingOn: 'STUDIO' },
+      data: { status: 'CONTACTED' },
     })
 
     await tx.workItem.updateMany({ where: { enquiryId, status: 'CANCELLED' }, data: { status: 'PENDING' } })
@@ -158,6 +210,26 @@ export async function reopenEnquiry(enquiryId: string, actorUserId: string | nul
       data: {
         companyId: enquiry.companyId,
         action: 'enquiry.reopened',
+        entityType: 'Enquiry',
+        entityId: enquiryId,
+        actorUserId,
+      },
+    })
+    return updated
+  })
+}
+
+export async function setLeadJobComplete(enquiryId: string, done: boolean, actorUserId: string | null = null) {
+  return prisma.$transaction(async (tx) => {
+    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId }, select: { status: true, companyId: true } })
+    if (!enquiry) throw new Error('Lead not found.')
+    if (enquiry.status === 'DECLINED') throw new Error('Restore this lead first.')
+    if (enquiry.status === 'BOOKING_CONFIRMED') throw new Error('This lead is a job now: use Job complete on the job.')
+    const updated = await tx.enquiry.update({ where: { id: enquiryId }, data: { jobCompleteAt: done ? new Date() : null } })
+    await tx.auditLog.create({
+      data: {
+        companyId: enquiry.companyId,
+        action: done ? 'enquiry.job_complete' : 'enquiry.job_complete_cleared',
         entityType: 'Enquiry',
         entityId: enquiryId,
         actorUserId,
@@ -191,6 +263,8 @@ export async function convertEnquiryCore(
   actorUserId: string | null,
   now: Date,
 ) {
+
+    await tx.$queryRaw`SELECT id FROM enquiries WHERE id = ${enquiryId} FOR UPDATE`
     const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
     if (!enquiry) throw new Error('Lead not found.')
 
@@ -206,14 +280,13 @@ export async function convertEnquiryCore(
     }
     const company = await requireCompany(tx)
 
-    let client = await tx.client.findUnique({ where: { email: enquiry.email } })
-    while (client?.mergedIntoClientId) {
-      client = await tx.client.findUnique({ where: { id: client.mergedIntoClientId } })
-    }
+    let client = enquiry.clientId ? await tx.client.findUnique({ where: { id: enquiry.clientId } }) : null
+    if (!client) client = await tx.client.findUnique({ where: { email: enquiry.email } })
     if (!client) {
       client = await tx.client.create({
         data: {
           companyId: company.id,
+          clientNumber: await nextRecordNumber(tx, company.id, 'CLIENT'), // C<YYYY><4> like every client
           type: enquiry.isCompany ? 'BUSINESS' : 'INDIVIDUAL',
           displayName: enquiry.name,
           firstName: enquiry.firstName,
@@ -236,14 +309,15 @@ export async function convertEnquiryCore(
         companyId: company.id,
         clientId: client.id,
         code: await nextProjectCode(tx, company.id, now),
-        name: enquiry.eventType ?? 'Project',
+
+        name: enquiry.name.trim() && enquiry.name.trim() !== client.displayName ? enquiry.name.trim() : (enquiry.eventType ?? 'Project'),
 
         lifecycleStatus: 'BOOKING_REQUESTED',
         commercialStatus: 'UNQUOTED',
         source: enquiry.source,
         ownerUserId: enquiry.ownerUserId ?? actorUserId,
         enquiryReceivedAt: enquiry.createdAt,
-        enquiryNotes: enquiry.message,
+        ...bookingDetailsFromLead(enquiry),
       },
     })
 
@@ -251,13 +325,11 @@ export async function convertEnquiryCore(
       where: { id: enquiry.id },
       data: {
         status: 'AWAITING_BOOKING_CONFIRMATION',
-        waitingOn: null,
+        clientId: enquiry.clientId ?? client.id, // a website lead becomes linked to its client here
         convertedClientId: client.id,
         convertedProjectId: project.id,
-        convertedAt: now,
       },
     })
-    await cancelOpenWorkItems(tx, enquiry.id)
 
     await tx.auditLog.create({
       data: {
@@ -267,14 +339,6 @@ export async function convertEnquiryCore(
         entityId: enquiry.id,
         actorUserId,
         afterData: { clientId: client.id, projectId: project.id, code: project.code },
-      },
-    })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'enquiry.converted',
-        aggregateType: 'Enquiry',
-        aggregateId: enquiry.id,
-        payload: { enquiryId: enquiry.id, clientId: client.id, projectId: project.id },
       },
     })
 
@@ -287,12 +351,7 @@ export async function cancelBooking(enquiryId: string, actorUserId: string | nul
     if (!enquiry) throw new Error('Lead not found.')
     if (enquiry.status !== 'BOOKING_CONFIRMED') throw new Error('This lead is not a confirmed booking.')
 
-    if (enquiry.convertedProjectId) {
-      await tx.project.update({
-        where: { id: enquiry.convertedProjectId },
-        data: { lifecycleStatus: 'CANCELLED' },
-      })
-    }
+    if (enquiry.convertedProjectId) await cancelProjectTx(tx, enquiry.convertedProjectId, 'Booking cancelled', actorUserId)
     await tx.auditLog.create({
       data: {
         companyId: enquiry.companyId,

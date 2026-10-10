@@ -6,6 +6,7 @@ import { Alert } from '@/components/ui/Alert'
 import { Button, secondaryLinkLg } from '@/components/ui/Button'
 import { MainAside } from '@/components/EditLayout'
 import { Field, Select, Textarea, TextInput } from '@/components/ui/form'
+import { submitKeepingValues } from '@/components/ui/submitKeepingValues'
 import { createInvoiceLinesAction, updateInvoiceLinesAction, type QuoteActionState } from '../actions'
 import { formatScheduleDate, presetRows, type ScheduleKey, type ScheduleRow } from '@/features/finance/payment-schedule'
 import { PaymentScheduleSelect } from './PaymentScheduleSelect'
@@ -13,7 +14,6 @@ import { PaymentScheduleSelect } from './PaymentScheduleSelect'
 const IDLE: QuoteActionState = { status: 'idle' }
 
 export type PackageOption = { id: string; name: string; price: string; description: string | null; inclusions: string | null; isAddOn: boolean }
-export type TemplateOption = { id: string; name: string; lines: { itemName?: string; description: string; quantity: number; unitPrice: string }[] }
 export type InitialInvoice = {
   type: string
   invoiceNumber: string
@@ -69,7 +69,6 @@ export function InvoiceEditor({
   csrf,
   projectId,
   packages,
-  templates,
   invoiceId,
   initial,
   job,
@@ -80,7 +79,6 @@ export function InvoiceEditor({
   csrf: string
   projectId: string
   packages: PackageOption[]
-  templates: TemplateOption[]
   invoiceId?: string
   initial?: InitialInvoice
   job?: JobContext
@@ -183,13 +181,6 @@ export function InvoiceEditor({
   function remove(id: number) {
     setLines((ls) => ls.filter((l) => l.id !== id))
   }
-  function applyTemplate(id: string) {
-    const t = templates.find((x) => x.id === id)
-    if (!t) return
-    let idc = nextId
-    setLines(t.lines.map((l) => ({ id: idc++, name: l.itemName ?? '', description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, discount: '' })))
-    setNextId(idc)
-  }
 
   const gross = lines.reduce((sum, l) => sum + amountOf(l), 0)
   const disc = Math.min(Number(discount) || 0, gross)
@@ -239,7 +230,8 @@ export function InvoiceEditor({
 
   return (
     <>
-      <form action={action} className="mt-4 border-t border-line pt-6">
+      {/* No React form reset after a refused save: the Due select and every field keep their values. */}
+      <form onSubmit={submitKeepingValues(action)} className="mt-4 border-t border-line pt-6">
         {state.status === 'error' ? <div className="mb-6"><Alert tone="danger" title={state.message} /></div> : null}
         <input type="hidden" name="csrf" value={csrf} />
         <input type="hidden" name="projectId" value={projectId} />
@@ -367,12 +359,6 @@ export function InvoiceEditor({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-semibold text-ink">Products &amp; packages</p>
             <div className="flex flex-wrap items-center gap-2">
-              {templates.length > 0 ? (
-                <Select aria-label="Apply a template" value="" onChange={(e) => { applyTemplate(e.target.value); e.currentTarget.value = '' }} className="h-8 max-w-xs">
-                  <option value="" disabled>Apply a template...</option>
-                  {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </Select>
-              ) : null}
               <Button type="button" variant="secondary" size="sm" onClick={openAdd}>
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
                 Add products &amp; packages

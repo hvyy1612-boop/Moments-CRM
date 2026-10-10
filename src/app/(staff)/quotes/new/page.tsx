@@ -22,7 +22,8 @@ export default async function CreateQuotePage() {
     where: { status: { in: ['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION', 'QUOTE_SENT'] } },
     orderBy: { createdAt: 'desc' },
     select: { id: true, enquiryNumber: true, name: true, eventType: true, createdAt: true, client: { select: { displayName: true } } },
-    take: 100,
+
+    take: 2000,
   })
 
   return (

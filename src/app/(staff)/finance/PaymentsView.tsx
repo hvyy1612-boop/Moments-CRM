@@ -15,7 +15,7 @@ export type Row = {
   group: 'unpaid' | 'paid'
   amount: string
   amountNum: number
-  dateKind: 'due' | 'paid' | 'draft'
+  dateKind: 'due' | 'paid'
   dateLabel: string | null
   urgencyLabel: string | null
   urgencyTone: 'over' | 'soon' | null
@@ -32,7 +32,7 @@ const aud = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' 
 const menuLink = 'block w-full px-3 py-2 text-left text-sm text-ink hover:bg-paper'
 
 function DateCell({ r }: { r: Row }) {
-  const kind = r.dateKind === 'paid' ? 'Paid' : r.dateKind === 'draft' ? 'Draft' : 'Due'
+  const kind = r.dateKind === 'paid' ? 'Paid' : 'Due'
   return (
     <div className="min-w-0">
       <span className="block whitespace-nowrap">
@@ -79,10 +79,9 @@ function RowMenu({ r }: { r: Row }) {
       {({ close }) => (
         <div className="py-1">
           <Link href={href} onClick={close} className={menuLink}>View invoice</Link>
-          {r.group === 'unpaid' && r.dateKind !== 'draft' ? (
+          {r.group === 'unpaid' ? (
             <Link href={href} onClick={close} className={menuLink}>Record payment</Link>
           ) : null}
-          {r.dateKind === 'draft' ? <Link href={href} onClick={close} className={menuLink}>Edit invoice</Link> : null}
           {r.group === 'paid' ? <Link href={href} onClick={close} className={menuLink}>Download PDF</Link> : null}
         </div>
       )}
@@ -115,7 +114,7 @@ const columns: DataColumn<Row>[] = [
   { key: 'actions', header: '', width: COL.fixed, align: 'right', cell: (r) => <RowMenu r={r} /> },
 ]
 
-export function PaymentsView({ rows, csrf }: { rows: Row[]; csrf: string }) {
+export function PaymentsView({ rows, csrf, canDelete = false }: { rows: Row[]; csrf: string;  canDelete?: boolean }) {
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -202,7 +201,7 @@ export function PaymentsView({ rows, csrf }: { rows: Row[]; csrf: string }) {
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 17v2a2 2 0 002 2h10a2 2 0 002-2v-2" /></svg>
               Export PDF
             </a>
-            <form
+            {canDelete ? <form
               action={deleteInvoicesAction}
               onSubmit={(e) => {
                 if (!window.confirm(`Delete ${selectedCount} invoice${selectedCount > 1 ? 's' : ''}? Invoices with recorded payments are kept. This can't be undone.`)) e.preventDefault()
@@ -214,7 +213,7 @@ export function PaymentsView({ rows, csrf }: { rows: Row[]; csrf: string }) {
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6" /></svg>
                 Delete
               </button>
-            </form>
+            </form> : null}
           </div>
         ) : null}
       </div>

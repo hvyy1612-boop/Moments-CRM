@@ -12,22 +12,33 @@ import { prisma } from '@/lib/db'
 import { formatSydneyDate, formatSydneyDateTime, formatSydneyTime, sydneyDateTimeParts } from '@/lib/time'
 import {
   ENQUIRY_STAGE_KIND,
+  leadDisplayStatus,
   ENQUIRY_STAGE_LABEL,
   isOpenEnquiry,
   waitingLabel,
 } from '@/features/enquiries/status'
 import { getEnquiryBoard } from '@/lib/domain/enquiry-workflow'
 import { formatAud } from '@/lib/money'
+import { computeDeposit } from '@/lib/domain/pricing'
+import { BOOKING_DEPOSIT_PERCENT } from '@/lib/domain/project-workflow'
 import { quoteView } from '@/features/quotes/status'
+import { invoiceStatusView } from '@/features/finance/invoice-detail'
+import { dueSpecOf, type DueSpec } from '@/features/tasks/due'
+import { formatShootWindow, jobTypeLabel } from '@/features/enquiries/new-lead'
 import { auditLabel } from '../../activity/audit'
 import { AppShell } from '../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
-import { convertEnquiryAction, updateEnquiryAction } from '../actions'
+import { updateEnquiryAction } from '../actions'
 import { createQuoteForEnquiryAction } from '../../quotes/actions'
+import { createContractAction } from '../../jobs/actions'
+import { ContractSend } from '../../jobs/[id]/ContractSend'
+import { Button } from '@/components/ui/Button'
 import { HistoryLog, type HistoryRow } from '../../finance/[invoiceId]/HistoryLog'
 import { EnquiryWorkflow } from './EnquiryWorkflow'
 import { LeadNotes } from './LeadNotes'
 import { SidebarCard } from './SidebarCard'
+import { LeadJobAcceptedRow } from './LeadJobAcceptedRow'
+import { LeadJobCompleteRow } from './LeadJobCompleteRow'
 import { MarkEnquiryViewed } from './MarkEnquiryViewed'
 
 export const runtime = 'nodejs'
@@ -35,9 +46,7 @@ export const metadata: Metadata = { title: 'Lead - Moments' }
 
 const PLUS = <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
 
-const INVOICE_TONE: Record<string, Tone> = {
-  DRAFT: 'neutral', ISSUED: 'info', SENT: 'info', PARTIALLY_PAID: 'warn', PAID: 'good', OVERDUE: 'bad', VOID: 'neutral',
-}
+const CONTRACT_TONE: Record<string, Tone> = { DRAFT: 'neutral', SENT: 'info', SIGNED: 'good' }
 
 function titleCase(value: string): string {
   return value
@@ -71,22 +80,29 @@ export default async function EnquiryDetailPage({
       phone: true,
       eventType: true,
       eventDate: true,
+      eventEndDate: true,
+      eventStartTime: true,
+      eventEndTime: true,
+      eventLocation: true,
       partnerName: true,
       coverage: true,
+      coverageNote: true,
       gettingReadyLocation: true,
       ceremonyLocation: true,
       weddingDetails: true,
       styleReason: true,
       heardAbout: true,
+      message: true,
       status: true,
-      waitingOn: true,
       convertedProjectId: true,
+      jobCompleteAt: true,
+      client: { select: { displayName: true } },
     },
   })
 
   if (!enquiry) notFound()
 
-  const [activity, quotes, invoices, noteComms] = await Promise.all([
+  const [activity, quotes, invoices, noteComms, contract] = await Promise.all([
     prisma.auditLog.findMany({
       where: { entityType: 'Enquiry', entityId: id },
       orderBy: { createdAt: 'asc' }, // oldest first, like the invoice history log
@@ -113,6 +129,14 @@ export default async function EnquiryDetailPage({
       orderBy: { createdAt: 'desc' },
       select: { id: true, body: true, createdAt: true, by: { select: { name: true } } },
     }),
+
+    enquiry.convertedProjectId
+      ? prisma.contract.findFirst({
+          where: { projectId: enquiry.convertedProjectId },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, currentVersion: { select: { status: true, signedByClientName: true, signedByClientAt: true } } },
+        })
+      : Promise.resolve(null),
   ])
   const leadNotes = noteComms.map((n) => ({ id: n.id, body: n.body, at: formatSydneyDateTime(n.createdAt), by: n.by?.name ?? null }))
   const historyRows: HistoryRow[] = activity.map((a) => ({
@@ -124,17 +148,50 @@ export default async function EnquiryDetailPage({
     details: '',
   }))
 
-  const hasJob = enquiry.convertedProjectId != null
   const confirmed = enquiry.status === 'BOOKING_CONFIRMED'
-  const open = isOpenEnquiry(enquiry.status) && !hasJob
+  const awaiting = enquiry.status === 'AWAITING_BOOKING_CONFIRMATION'
+  const declined = enquiry.status === 'DECLINED'
+
+  const jobComplete = enquiry.jobCompleteAt !== null && !confirmed && !declined
+  const displayStatus = leadDisplayStatus(enquiry.status, enquiry.jobCompleteAt)
+  const open = isOpenEnquiry(enquiry.status)
+  const bookingFileId = awaiting || confirmed ? enquiry.convertedProjectId : null
+
+  const fileEditable = awaiting && bookingFileId != null
+  const contractVersion = contract?.currentVersion ?? null
+  const quoteAccepted = quotes.some((q) => q.status === 'ACCEPTED')
+
+  const acceptedTotal = quotes.find((q) => q.status === 'ACCEPTED')?.currentVersion?.total ?? null
+  const depositNeeded = acceptedTotal ? computeDeposit(acceptedTotal, BOOKING_DEPOSIT_PERCENT).deposit : null
   const board = await getEnquiryBoard(id)
 
-  const datedTasks = await prisma.workItem.findMany({
-    where: { enquiryId: id, dueAt: { not: null } },
-    select: { id: true, dueAt: true },
+  const taskDueRows = await prisma.workItem.findMany({
+    where: { enquiryId: id },
+    select: { id: true, dueAt: true, dueAnchor: true, dueOffsetDays: true, dueDateFixed: true },
   })
   const taskTimes: Record<string, string> = {}
-  for (const w of datedTasks) if (w.dueAt) taskTimes[w.id] = sydneyDateTimeParts(w.dueAt).time
+  const taskDue: Record<string, DueSpec> = {}
+  for (const w of taskDueRows) {
+    if (w.dueAt) taskTimes[w.id] = sydneyDateTimeParts(w.dueAt).time
+    taskDue[w.id] = dueSpecOf(w)
+  }
+
+  const enquiryDetails: { label: string; value: string }[] = []
+  const addDetail = (label: string, v: string | null | undefined) => {
+    if (v && v.trim()) enquiryDetails.push({ label, value: v })
+  }
+  addDetail("Partner's name", enquiry.partnerName)
+  addDetail('Job type', jobTypeLabel(enquiry.coverage, enquiry.coverageNote))
+  addDetail('Workflow', enquiry.eventType ? titleCase(enquiry.eventType) : null)
+  addDetail('Main shoot', formatShootWindow(enquiry) ?? 'Date not confirmed yet')
+  addDetail('Location', enquiry.eventLocation)
+  addDetail('Getting-ready location/s', enquiry.gettingReadyLocation)
+  addDetail('Ceremony and reception location', enquiry.ceremonyLocation)
+  addDetail('About the wedding day (incl. guest numbers)', enquiry.weddingDetails)
+  addDetail('How they heard about us', enquiry.heardAbout)
+  addDetail('What draws them to our style', enquiry.styleReason)
+
+  addDetail('Message', enquiry.message)
 
   return (
     <AppShell user={user} csrf={csrf} active="enquiries" bareHeader>
@@ -145,213 +202,242 @@ export default async function EnquiryDetailPage({
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold text-ink">{enquiry.name}</h1>
           {enquiry.enquiryNumber ? <span className="tabular text-sm text-ink-muted">{enquiry.enquiryNumber}</span> : null}
-          <StatusTag kind={ENQUIRY_STAGE_KIND[enquiry.status] ?? 'hold'}>
-            {ENQUIRY_STAGE_LABEL[enquiry.status] ?? titleCase(enquiry.status)}
+          <StatusTag kind={ENQUIRY_STAGE_KIND[displayStatus] ?? 'hold'}>
+            {ENQUIRY_STAGE_LABEL[displayStatus] ?? titleCase(displayStatus)}
           </StatusTag>
+          {/* Archive a lead that is not going ahead (it leaves Active, nothing is deleted); Restore brings it back. */}
+          {open || declined ? (
+            <form action={updateEnquiryAction} className="ml-auto">
+              <input type="hidden" name="csrf" value={csrf} />
+              <input type="hidden" name="enquiryId" value={enquiry.id} />
+              <input type="hidden" name="op" value={declined ? 'reopen' : 'lost'} />
+              <button
+                type="submit"
+                data-write="hide"
+                className="inline-flex h-9 items-center rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-ink transition-colors hover:bg-sunk"
+              >
+                {declined ? 'Restore lead' : 'Archive'}
+              </button>
+            </form>
+          ) : null}
         </div>
         <p className="mt-1 text-base text-ink-muted">
           {enquiry.eventType ? titleCase(enquiry.eventType) : 'Lead'}
-          {open ? (
+          {open && !jobComplete ? (
             <>
               {' · Waiting for: '}
-              <span className="font-bold text-ink">{waitingLabel(enquiry.waitingOn)}</span>
+              <span className="font-bold text-ink">{waitingLabel(enquiry.status)}</span>
             </>
           ) : null}
         </p>
 
-        {/* Workflow (left, flexible) + a fixed-width rail of Client / Quotes / Invoices / Notes (right). */}
-        <div className="mt-6 grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20em]">
-          {/* MAIN: workflow + the lead outcome actions - the flexible column */}
-          <div className="flex min-w-0 flex-col gap-4">
-            {hasJob ? (
+        {/* Booking state, above the workflow and its rail */}
+        {awaiting || confirmed ? (
+          <div className="mt-6">
+            {awaiting ? (
               <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">
-                {confirmed
-                  ? 'Booking confirmed - the deposit is paid and the job is active. Open the job to continue the work.'
-                  : 'Awaiting booking confirmation - a job is held for this lead, but production starts once the booking deposit is paid.'}
+                {/* No accepted quote = a job whose "Job accepted" was unticked (e.g. added directly by mistake). */}
+                {quoteAccepted ? 'Quote accepted.' : 'Waiting for the deposit.'} The date is not held yet: this lead becomes a
+                job once {depositNeeded ? `the ${BOOKING_DEPOSIT_PERCENT}% deposit (${formatAud(depositNeeded)}) is received` : 'the deposit is paid'},
+                or when you tick Job accepted. Raise the deposit invoice under Invoices{quoteAccepted ? ', and send the contract if needed' : ''}.
+              </div>
+            ) : confirmed ? (
+              <div className="rounded-md bg-paper p-3 text-sm text-ink-muted">
+                Booking confirmed - the deposit is paid and the job is active. Open the job to continue the work.
               </div>
             ) : null}
-
-            <EnquiryWorkflow
-              stages={board.stages}
-              allDone={board.allDone}
-              enquiryId={enquiry.id}
-              csrf={csrf}
-              taskTimes={taskTimes}
-              readOnly={hasJob}
-            />
-
-            {/* Outcome actions */}
-            <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
-              {open ? (
-                <>
-                  <form action={convertEnquiryAction}>
-                    <input type="hidden" name="csrf" value={csrf} />
-                    <input type="hidden" name="enquiryId" value={enquiry.id} />
-                    <button type="submit" className="rounded-md bg-ink px-3 py-1.5 text-sm font-bold text-surface transition-opacity hover:opacity-90">
-                      Create Job
-                    </button>
-                  </form>
-                  <form action={updateEnquiryAction}>
-                    <input type="hidden" name="csrf" value={csrf} />
-                    <input type="hidden" name="enquiryId" value={enquiry.id} />
-                    <input type="hidden" name="op" value="lost" />
-                    <button type="submit" className="rounded-md border border-line-strong px-3 py-1.5 text-sm font-bold text-lost-ink transition-colors hover:bg-sunk">
-                      Decline
-                    </button>
-                  </form>
-                </>
-              ) : hasJob ? (
-                <>
-                  {enquiry.convertedProjectId ? (
-                    <Link href={`/jobs/${enquiry.convertedProjectId}`} className="font-bold text-accent-ink hover:underline">
-                      Open the job
-                    </Link>
-                  ) : null}
-                  {confirmed ? (
-
-                    <form action={updateEnquiryAction}>
-                      <input type="hidden" name="csrf" value={csrf} />
-                      <input type="hidden" name="enquiryId" value={enquiry.id} />
-                      <input type="hidden" name="op" value="cancel_job" />
-                      <button type="submit" className="rounded px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline">
-                        Cancel job
-                      </button>
-                    </form>
-                  ) : (
-                    <form action={updateEnquiryAction}>
-                      <input type="hidden" name="csrf" value={csrf} />
-                      <input type="hidden" name="enquiryId" value={enquiry.id} />
-                      <input type="hidden" name="op" value="lost" />
-                      <button type="submit" className="rounded px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline">
-                        Decline
-                      </button>
-                    </form>
-                  )}
-                </>
-              ) : (
-                <form action={updateEnquiryAction}>
-                  <input type="hidden" name="csrf" value={csrf} />
-                  <input type="hidden" name="enquiryId" value={enquiry.id} />
-                  <input type="hidden" name="op" value="reopen" />
-                  <button type="submit" className="rounded border border-line-strong px-3 py-1.5 text-sm font-bold text-ink-muted hover:text-ink">
-                    Reopen lead
-                  </button>
-                </form>
-              )}
-            </div>
           </div>
+        ) : null}
 
-          {/* RAIL: Client / Quotes / Invoices / Notes - one shared card shell, fixed-width column */}
-          <aside className="flex flex-col gap-4">
-            {/* Client - basic contact, first; a clean 2-column key/value list (labels align, values flow) */}
-            <SidebarCard title="Client">
-              <dl className="grid grid-cols-[5.5em_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2 text-sm">
-                <dt className="text-muted">Name</dt>
-                <dd className="min-w-0 break-words text-ink">{enquiry.name}</dd>
-                <dt className="text-muted">Email</dt>
-                <dd className="min-w-0 break-all text-ink">{enquiry.email}</dd>
-                <dt className="text-muted">Phone</dt>
-                <dd className="min-w-0 text-ink">{enquiry.phone ?? '-'}</dd>
-              </dl>
-            </SidebarCard>
+        {/* Workflow (left, flexible) + a fixed-width rail of Client / Enquiry details / Quotes / Invoices /
+            Contract / Notes (right). The rail starts level with the first box on the left, not the title. */}
+        <div className="mt-6">
+          <EnquiryWorkflow
+            stages={board.stages}
+            allDone={board.allDone}
+            enquiryId={enquiry.id}
+            csrf={csrf}
+            taskTimes={taskTimes}
+            taskDue={taskDue}
 
-            {/* Quotes */}
-            <SidebarCard
-              title="Quotes"
-              action={open ? (
-                <form action={createQuoteForEnquiryAction}>
-                  <input type="hidden" name="csrf" value={csrf} />
-                  <input type="hidden" name="enquiryId" value={enquiry.id} />
-                  <IconButton type="submit" label="Create quote" tone="accent" icon={PLUS} />
-                </form>
-              ) : undefined}
-            >
-              {quotes.length === 0 ? (
-                <p className="text-sm text-ink-muted">No quotes yet.</p>
-              ) : (
-                <ul>
-                  {quotes.map((q) => {
-                    const view = quoteView(q.status)
-                    const sent = q.currentVersion?.sentToClientAt
-                    return (
-                      <li key={q.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line py-2.5 first:border-t-0">
-                        <Link href={`/quotes/${q.id}`} className="tabular font-semibold text-ink hover:text-accent-ink hover:underline">
-                          {q.reference ?? 'Quote'}
-                        </Link>
-                        <StatusPill tone={view.tone}>{view.label}</StatusPill>
-                        <span className="tabular ml-auto text-sm font-medium text-ink">{q.currentVersion ? formatAud(q.currentVersion.total) : '-'}</span>
-                        <span className="w-full text-xs text-ink-muted">{sent ? `Sent ${formatSydneyDate(sent)}` : `Created ${formatSydneyDate(q.createdAt)}`}</span>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </SidebarCard>
+            readOnly={confirmed || declined || jobComplete}
+            muted={jobComplete}
+            footer={
+              <>
+                {/* "Job accepted" (Studio Ninja): ticks itself on the 20% deposit; staff may tick it (with a
+                    confirm) once the client has confirmed - the lead then becomes a job and leaves Leads. */}
+                {declined ? null : (
+                  <>
+                    <LeadJobAcceptedRow
+                      csrf={csrf}
+                      enquiryId={enquiry.id}
+                      jobId={confirmed ? enquiry.convertedProjectId : null}
+                      readOnly={declined || jobComplete}
+                      muted={jobComplete}
+                    />
+                    {/* "Job complete": staff tick it when the work is done; unlike "Job accepted" above it, the
+                        lead stays in Leads. A booked lead's completion lives on its job. */}
+                    {confirmed ? null : (
+                      <LeadJobCompleteRow
+                        csrf={csrf}
+                        enquiryId={enquiry.id}
+                        completedLabel={enquiry.jobCompleteAt ? formatSydneyDate(enquiry.jobCompleteAt) : null}
+                        readOnly={declined}
+                      />
+                    )}
+                  </>
+                )}
+                {confirmed ? (
 
-            {/* Invoices (live on the booked job; the + opens the New-invoice flow) */}
-            <SidebarCard
-              title="Invoices"
-              action={
-                <IconLink
-                  label="Create invoice"
-                  tone="accent"
-                  href={`/finance/new${enquiry.convertedProjectId ? `?job=${enquiry.convertedProjectId}` : ''}`}
-                  icon={PLUS}
-                />
-              }
-            >
-              {invoices.length === 0 ? (
-                <p className="text-sm text-ink-muted">No invoices yet.</p>
-              ) : (
-                <ul>
-                  {invoices.map((inv) => (
-                    <li key={inv.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line py-2.5 first:border-t-0">
-                      <Link href={`/finance/${inv.id}`} className="tabular font-semibold text-ink hover:text-accent-ink hover:underline">
-                        {inv.invoiceNumber}
-                      </Link>
-                      <StatusPill tone={INVOICE_TONE[inv.status] ?? 'neutral'}>{inv.status.toLowerCase().replace(/_/g, ' ')}</StatusPill>
-                      <span className="tabular ml-auto text-sm font-medium text-ink">{formatAud(inv.total)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </SidebarCard>
+                  <form action={updateEnquiryAction} className="flex justify-end">
+                    <input type="hidden" name="csrf" value={csrf} />
+                    <input type="hidden" name="enquiryId" value={enquiry.id} />
+                    <input type="hidden" name="op" value="cancel_job" />
+                    <button type="submit" className="rounded px-3 py-1.5 text-sm font-bold text-lost-ink hover:underline">
+                      Cancel job
+                    </button>
+                  </form>
+                ) : null}
+              </>
+            }
+            rail={
+              <>
+                {/* Client - basic contact, first; a clean 2-column key/value list (labels align, values flow) */}
+                <SidebarCard title="Client">
+                  <dl className="grid grid-cols-[5.5em_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2 text-sm">
+                    <dt className="text-muted">Name</dt>
+                    <dd className="min-w-0 break-words text-ink">{enquiry.client?.displayName ?? enquiry.name}</dd>
+                    <dt className="text-muted">Email</dt>
+                    <dd className="min-w-0 break-all text-ink">{enquiry.email}</dd>
+                    <dt className="text-muted">Phone</dt>
+                    <dd className="min-w-0 text-ink">{enquiry.phone ?? '-'}</dd>
+                  </dl>
+                </SidebarCard>
 
-            {/* Notes (replaces the old Conversation panel) */}
-            <LeadNotes enquiryId={enquiry.id} csrf={csrf} notes={leadNotes} />
-          </aside>
+                {/* Enquiry details (the Add lead form, or the website enquiry form) - right under the client */}
+                {enquiryDetails.length > 0 ? (
+                  <SidebarCard title="Enquiry details">
+                    <dl className="flex flex-col gap-3 text-sm">
+                      {enquiryDetails.map((d) => (
+                        <div key={d.label}>
+                          <dt className="text-muted">{d.label}</dt>
+                          <dd className="mt-0.5 whitespace-pre-line break-words text-ink">{d.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </SidebarCard>
+                ) : null}
+
+                {/* Quotes */}
+                <SidebarCard
+                  title="Quotes"
+
+                  action={open && !awaiting ? (
+                    <form action={createQuoteForEnquiryAction}>
+                      <input type="hidden" name="csrf" value={csrf} />
+                      <input type="hidden" name="enquiryId" value={enquiry.id} />
+                      <IconButton type="submit" label="Create quote" tone="accent" icon={PLUS} />
+                    </form>
+                  ) : undefined}
+                >
+                  {quotes.length === 0 ? (
+                    <p className="text-sm text-ink-muted">No quotes yet.</p>
+                  ) : (
+                    <ul>
+                      {quotes.map((q) => {
+                        const view = quoteView(q.status)
+                        const sent = q.currentVersion?.sentToClientAt
+                        return (
+                          <li key={q.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line py-2.5 first:border-t-0">
+                            <Link href={`/quotes/${q.id}`} className="tabular font-semibold text-ink hover:text-accent-ink hover:underline">
+                              {q.reference ?? 'Quote'}
+                            </Link>
+                            <StatusPill tone={view.tone}>{view.label}</StatusPill>
+                            <span className="tabular ml-auto text-sm font-medium text-ink">{q.currentVersion ? formatAud(q.currentVersion.total) : '-'}</span>
+                            <span className="w-full text-xs text-ink-muted">{sent ? `Sent ${formatSydneyDate(sent)}` : `Created ${formatSydneyDate(q.createdAt)}`}</span>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                </SidebarCard>
+
+                {/* Invoices live on the booking file, so the + appears once the quote is accepted (the deposit
+                    invoice is the first one); paying the deposit is what turns the lead into a job. */}
+                <SidebarCard
+                  title="Invoices"
+                  action={
+                    fileEditable ? (
+                      <IconLink label="Create invoice" tone="accent" href={`/finance/new?job=${bookingFileId}`} icon={PLUS} />
+                    ) : undefined
+                  }
+                >
+                  {invoices.length === 0 ? (
+                    <p className="text-sm text-ink-muted">
+                      {fileEditable
+                        ? 'No invoices yet. Raise the deposit invoice here.'
+                        : open
+                          ? 'The deposit invoice can be raised once the quote is accepted.'
+                          : 'No invoices.'}
+                    </p>
+                  ) : (
+                    <ul>
+                      {invoices.map((inv) => (
+                        <li key={inv.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line py-2.5 first:border-t-0">
+                          <Link href={`/finance/${inv.id}`} className="tabular font-semibold text-ink hover:text-accent-ink hover:underline">
+                            {inv.invoiceNumber}
+                          </Link>
+                          <StatusPill tone={invoiceStatusView(inv.status).tone}>{invoiceStatusView(inv.status).label}</StatusPill>
+                          <span className="tabular ml-auto text-sm font-medium text-ink">{formatAud(inv.total)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </SidebarCard>
+
+                {/* Contract: made from the accepted quote, sent for the client to sign. Signing records the
+                    agreement only - the booking is confirmed by the deposit. */}
+                {bookingFileId && quoteAccepted ? (
+                  <SidebarCard
+                    title="Contract"
+                    action={contractVersion ? <StatusPill tone={CONTRACT_TONE[contractVersion.status] ?? 'neutral'}>{titleCase(contractVersion.status)}</StatusPill> : undefined}
+                  >
+                    {!contract || !contractVersion ? (
+                      !fileEditable ? (
+                        <p className="text-sm text-ink-muted">No contract was sent for this booking.</p>
+                      ) : (
+                        <form action={createContractAction}>
+                          <input type="hidden" name="csrf" value={csrf} />
+                          <input type="hidden" name="projectId" value={bookingFileId} />
+                          <input type="hidden" name="enquiryId" value={enquiry.id} />
+                          <p className="text-sm text-ink-muted">Generate the booking contract from the accepted quote.</p>
+                          <Button type="submit" size="sm" className="mt-3">Create contract</Button>
+                        </form>
+                      )
+                    ) : contractVersion.status === 'DRAFT' ? (
+                      fileEditable ? (
+                        <ContractSend csrf={csrf} contractId={contract.id} projectId={bookingFileId} enquiryId={enquiry.id} />
+                      ) : (
+                        <p className="text-sm text-ink-muted">Not sent yet. Send it from the job.</p>
+                      )
+                    ) : contractVersion.status === 'SIGNED' ? (
+                      <p className="text-sm text-ink">
+                        Signed by {contractVersion.signedByClientName}
+                        {contractVersion.signedByClientAt ? ` on ${formatSydneyDate(contractVersion.signedByClientAt)}` : ''}.
+                        {awaiting ? ' The date is held once the deposit is paid.' : ''}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-ink-muted">Sent. Waiting for the client to sign.</p>
+                    )}
+                  </SidebarCard>
+                ) : null}
+
+                {/* Notes (replaces the old Conversation panel) */}
+                <LeadNotes enquiryId={enquiry.id} csrf={csrf} notes={leadNotes} />
+              </>
+            }
+          />
         </div>
-
-        {/* Enquiry details (wedding-enquiry fields captured on the add-client / website form) */}
-        {(() => {
-          const details: { label: string; value: string }[] = []
-          const add = (label: string, v: string | null | undefined) => {
-            if (v && v.trim()) details.push({ label, value: v })
-          }
-          add("Partner's name", enquiry.partnerName)
-          add('Photography, videography or both', enquiry.coverage)
-          add('Event type', enquiry.eventType ? titleCase(enquiry.eventType) : null)
-          add('Wedding / event date', enquiry.eventDate ? formatSydneyDate(enquiry.eventDate) : null)
-          add('Getting-ready location/s', enquiry.gettingReadyLocation)
-          add('Ceremony and reception location', enquiry.ceremonyLocation)
-          add('About the wedding day (incl. guest numbers)', enquiry.weddingDetails)
-          add('How they heard about us', enquiry.heardAbout)
-          add('What draws them to our style', enquiry.styleReason)
-          if (details.length === 0) return null
-          return (
-            <div className="mt-4 rounded-md border border-line bg-surface p-5">
-              <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Enquiry details</h2>
-              <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {details.map((d) => (
-                  <div key={d.label}>
-                    <dt className="text-xs font-medium uppercase tracking-wide text-muted">{d.label}</dt>
-                    <dd className="mt-0.5 whitespace-pre-line break-words text-sm text-ink">{d.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          )
-        })()}
 
         {/* History log (the lead's real audit trail, same component as the invoice/quote pages) */}
         <div className="mt-4">

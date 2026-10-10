@@ -1,12 +1,18 @@
-import { Prisma, type ProjectLifecycle } from '@prisma/client'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { systemClock } from '@/lib/time'
 import { nextRecordNumber } from './numbering'
 import { getJobBalance } from './money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
-import type { EnquiryInput } from '@/lib/validation/enquiry'
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+
+export const JOB_WHERE: Prisma.ProjectWhereInput = {
+  OR: [
+    { lifecycleStatus: { in: ['CONFIRMED', 'COMPLETED', 'CLOSED'] } },
+    { lifecycleStatus: 'CANCELLED', confirmedByClientAt: { not: null } },
+  ],
+}
 
 export async function requireCompany(tx: Tx) {
   const company = await tx.company.findFirst()
@@ -18,122 +24,11 @@ export async function nextProjectCode(tx: Tx, companyId: string, at: Date = syst
   return nextRecordNumber(tx, companyId, 'JOB', at)
 }
 
-export async function createProjectFromEnquiry(input: EnquiryInput) {
-  const now = systemClock.now()
-
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await runCreateProjectFromEnquiry(input, now)
-    } catch (error) {
-      const isUnique =
-        error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
-      if (isUnique && attempt < 4) continue
-      throw error
-    }
-  }
-}
-
-async function runCreateProjectFromEnquiry(input: EnquiryInput, now: Date) {
-  return prisma.$transaction(async (tx) => {
-    const company = await requireCompany(tx)
-
-    let client = await tx.client.findUnique({ where: { email: input.email } })
-    if (!client) {
-      client = await tx.client.create({
-        data: {
-          companyId: company.id,
-          type: input.isCompany ? 'BUSINESS' : 'INDIVIDUAL',
-          displayName: input.name,
-          firstName: input.firstName ?? null,
-          lastName: input.lastName ?? null,
-          email: input.email,
-          phone: input.phone ?? null,
-          street: input.street ?? null,
-          suburb: input.suburb ?? null,
-          state: input.state ?? null,
-          postcode: input.postcode ?? null,
-          country: input.country ?? null,
-          status: 'PROSPECT',
-        },
-      })
-    }
-
-    const project = await tx.project.create({
-      data: {
-        companyId: company.id,
-        clientId: client.id,
-        code: await nextProjectCode(tx, company.id, now),
-        name: input.eventType ?? 'Job',
-        lifecycleStatus: 'BOOKING_REQUESTED',
-        commercialStatus: 'UNQUOTED',
-        source: input.source ?? null,
-        enquiryReceivedAt: now,
-        enquiryNotes: input.message ?? null,
-      },
-    })
-
-    await tx.auditLog.create({
-      data: {
-        companyId: company.id,
-        action: 'project.created',
-        entityType: 'Project',
-        entityId: project.id,
-        source: 'public.enquiry',
-        afterData: { code: project.code, clientId: client.id },
-      },
-    })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'project.created',
-        aggregateType: 'Project',
-        aggregateId: project.id,
-        payload: { projectId: project.id, clientId: client.id },
-      },
-    })
-
-    return project
-  })
-}
-
-export async function setProjectLifecycle(
-  projectId: string,
-  status: ProjectLifecycle,
-  actorUserId: string,
-) {
-  return prisma.$transaction(async (tx) => {
-    const project = await tx.project.findUnique({
-      where: { id: projectId },
-      select: { id: true, companyId: true, lifecycleStatus: true },
-    })
-    if (!project) throw new Error('Project not found.')
-    if (project.lifecycleStatus === status) return project
-
-    const updated = await tx.project.update({
-      where: { id: projectId },
-      data: { lifecycleStatus: status },
-      select: { id: true, lifecycleStatus: true },
-    })
-    await tx.auditLog.create({
-      data: {
-        companyId: project.companyId,
-        actorUserId,
-        action: 'project.status_changed',
-        entityType: 'Project',
-        entityId: projectId,
-        source: 'staff.board',
-        beforeData: { lifecycleStatus: project.lifecycleStatus },
-        afterData: { lifecycleStatus: status },
-      },
-    })
-    return updated
-  })
-}
-
 export async function closeJob(projectId: string, actorUserId: string | null = null) {
   return prisma.$transaction(async (tx) => {
     const project = await tx.project.findUnique({
       where: { id: projectId },
-      select: { id: true, companyId: true, lifecycleStatus: true, packagePriceSnapshot: true },
+      select: { id: true, companyId: true, lifecycleStatus: true },
     })
     if (!project) throw new Error('Job not found.')
     if (project.lifecycleStatus === 'CLOSED') return { alreadyClosed: true }
@@ -151,7 +46,7 @@ export async function closeJob(projectId: string, actorUserId: string | null = n
       orderBy: { acceptedByClientAt: 'desc' },
       select: { total: true },
     })
-    const agreed = acceptedQuote?.total ?? project.packagePriceSnapshot ?? null
+    const agreed = acceptedQuote?.total ?? null
     const bal = getJobBalance(invoices.map(toInvoiceMoneyInput), agreed)
 
     const settled = bal.agreedValueKnown
@@ -180,14 +75,6 @@ export async function closeJob(projectId: string, actorUserId: string | null = n
         entityType: 'Project',
         entityId: projectId,
         source: 'staff.board',
-      },
-    })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'project.closed',
-        aggregateType: 'Project',
-        aggregateId: projectId,
-        payload: { projectId },
       },
     })
     return { alreadyClosed: false }

@@ -27,7 +27,6 @@ export const saveQuoteSchema = z.object({
     .optional()
     .or(z.literal(''))
     .transform((v) => (v ? v : undefined)),
-  introduction: z.string().trim().max(2000).optional().or(z.literal('')).transform((v) => (v ? v : null)),
   poNumber: z.string().trim().max(60).optional().or(z.literal('')).transform((v) => (v ? v : null)),
   notes: z.string().trim().max(2000).optional().or(z.literal('')).transform((v) => (v ? v : null)),
   depositPercent: z

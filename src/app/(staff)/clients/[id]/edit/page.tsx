@@ -7,8 +7,7 @@ import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
 import { AppShell } from '../../../AppShell'
 import { PageContainer } from '@/components/PageContainer'
-import { updateClientAction } from '../../actions'
-import { ClientForm } from '../../ClientForm'
+import { ClientFormWithErrors } from '../../ClientFormWithErrors'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Edit client - Moments' }
@@ -45,8 +44,8 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
       <PageContainer variant="standard">
         <Breadcrumb items={[DASHBOARD_CRUMB, { label: 'Clients', href: '/clients' }, { label: client.displayName, href: `/clients/${client.id}` }, { label: 'Edit' }]} />
         <h1 className="mt-3 text-2xl font-semibold text-ink">Edit {client.displayName}</h1>
-        <ClientForm
-          action={updateClientAction}
+        <ClientFormWithErrors
+          mode="update"
           csrf={csrf}
           clientId={client.id}
           submitLabel="Save changes"

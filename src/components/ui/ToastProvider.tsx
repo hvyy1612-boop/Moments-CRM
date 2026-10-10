@@ -11,7 +11,8 @@ export const useToast = () => useContext(ToastCtx)
 const CODE_MAP: Record<string, ToastInput> = {
   'client-added': { title: 'Client added' },
   'enquiry-added': { title: 'Lead added' },
-  'job-created': { title: 'Converted to job' },
+  'job-added': { title: 'Job added' },
+  'moved-to-lead': { title: 'Moved back to Leads' },
   'payment-recorded': { title: 'Payment recorded' },
   'invoice-created': { title: 'Invoice created' },
   'invoice-updated': { title: 'Invoice saved' },

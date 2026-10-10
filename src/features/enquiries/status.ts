@@ -7,7 +7,9 @@ export const ENQUIRY_STAGE_LABEL: Record<string, string> = {
   QUOTE_SENT: 'Quote sent',
   AWAITING_BOOKING_CONFIRMATION: 'Awaiting booking confirmation',
   BOOKING_CONFIRMED: 'Booking confirmed',
-  DECLINED: 'Declined',
+  DECLINED: 'Archived', // DB value DECLINED; staff archive a lead that is not going ahead (Studio Ninja)
+
+  JOB_COMPLETE: 'Job complete',
 }
 
 export const ENQUIRY_STAGE_KIND: Record<string, StatusKind> = {
@@ -18,6 +20,11 @@ export const ENQUIRY_STAGE_KIND: Record<string, StatusKind> = {
   AWAITING_BOOKING_CONFIRMATION: 'booked',
   BOOKING_CONFIRMED: 'delivered',
   DECLINED: 'lost',
+  JOB_COMPLETE: 'delivered',
+}
+
+export function leadDisplayStatus(status: string, jobCompleteAt: Date | null): string {
+  return jobCompleteAt && status !== 'DECLINED' && status !== 'BOOKING_CONFIRMED' ? 'JOB_COMPLETE' : status
 }
 
 export const STAGE_ORDER = [
@@ -35,10 +42,10 @@ export function isOpenEnquiry(status: string): boolean {
   return OPEN_STATUSES.has(status)
 }
 
-export function waitingLabel(waitingOn: string | null): string {
-  if (waitingOn === 'STUDIO') return 'You'
-  if (waitingOn === 'CLIENT') return 'Client'
-  return '-'
+export const STUDIO_TO_ACT = ['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION'] as const
+
+export function waitingLabel(status: string): string {
+  return (STUDIO_TO_ACT as readonly string[]).includes(status) ? 'You' : 'Client'
 }
 
 export const ENQUIRY_STAGE_TABS: { key: string; label: string }[] = [
@@ -47,6 +54,7 @@ export const ENQUIRY_STAGE_TABS: { key: string; label: string }[] = [
   { key: 'CONSULTATION', label: 'Consultation' },
   { key: 'QUOTE_SENT', label: 'Quote sent' },
   { key: 'AWAITING_BOOKING_CONFIRMATION', label: 'Awaiting booking confirmation' },
-  { key: 'BOOKING_CONFIRMED', label: 'Booking confirmed' },
-  { key: 'DECLINED', label: 'Declined' },
+
+  { key: 'JOB_COMPLETE', label: 'Job complete' },
+  { key: 'DECLINED', label: 'Archived' },
 ]

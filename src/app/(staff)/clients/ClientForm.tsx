@@ -1,6 +1,7 @@
 import type { FormEventHandler, ReactNode } from 'react'
+import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
-import { Checkbox, Field, FormActions, FormBlock, FormCell, PageForm, Select, TextInput, Textarea } from '@/components/ui/form'
+import { Checkbox, Field, FormActions, FormBlock, FormCell, PageForm, TextInput, Textarea } from '@/components/ui/form'
 
 export type ClientFormValues = {
   firstName?: string | null
@@ -25,24 +26,25 @@ export function ClientForm({
   values = {},
   clientId,
   submitLabel,
-  showEnquiryFields = false,
   bare = false,
   footer,
   errors,
   requireContact = false,
   onSubmit,
+  formError,
 }: {
   action: (formData: FormData) => void | Promise<void>
   csrf: string
   values?: ClientFormValues
   clientId?: string
   submitLabel: string
-  showEnquiryFields?: boolean
   bare?: boolean
   footer?: ReactNode
   errors?: ContactErrors
   requireContact?: boolean
   onSubmit?: FormEventHandler<HTMLFormElement>
+
+  formError?: string
 }) {
   const v = values
   const e = errors ?? {}
@@ -112,79 +114,13 @@ export function ClientForm({
       <TextInput id="country" name="country" defaultValue={v.country ?? ''} autoComplete="country-name" />
     </Field>
   )
-  const partnerName = (
-    <Field label="Partner's name" htmlFor="partnerName">
-      <TextInput id="partnerName" name="partnerName" placeholder="Their partner (optional)" />
-    </Field>
-  )
-  const coverage = (
-    <Field label="Photography, videography or both?" htmlFor="coverage">
-      <Select id="coverage" name="coverage" defaultValue="">
-        <option value="">Not sure yet</option>
-        <option value="Photography">Photography</option>
-        <option value="Videography">Videography</option>
-        <option value="Both">Both</option>
-      </Select>
-    </Field>
-  )
-  const eventType = (
-    <Field label="Event type" htmlFor="eventType">
-      <TextInput id="eventType" name="eventType" placeholder="Wedding" />
-    </Field>
-  )
-  const eventDate = (
-    <Field label="Wedding / event date" htmlFor="eventDate">
-      <TextInput id="eventDate" name="eventDate" type="date" />
-    </Field>
-  )
-  const heardAbout = (
-    <Field label="How did they hear about us?" htmlFor="heardAbout">
-      <Select id="heardAbout" name="heardAbout" defaultValue="">
-        <option value="">Choose an option</option>
-        <option value="Google">Google</option>
-        <option value="Gemini">Gemini</option>
-        <option value="ChatGPT">ChatGPT</option>
-        <option value="Word of mouth">Word of mouth</option>
-        <option value="Instagram">Instagram</option>
-        <option value="Facebook">Facebook</option>
-        <option value="TikTok">TikTok</option>
-        <option value="Pinterest">Pinterest</option>
-        <option value="Easy Weddings">Easy Weddings</option>
-        <option value="Wedshed">Wedshed</option>
-        <option value="One Fine Day">One Fine Day</option>
-        <option value="Blog post">Blog post</option>
-        <option value="Unknown">Unknown</option>
-      </Select>
-    </Field>
-  )
-
-  const gettingReady = (
-    <Field label="Where is the 'getting-ready' location/s? (if known, or if they'd like it photographed / filmed)" htmlFor="gettingReadyLocation">
-      <Textarea id="gettingReadyLocation" name="gettingReadyLocation" placeholder="Enter the getting-ready location/s" />
-    </Field>
-  )
-  const ceremony = (
-    <Field label="Where is the ceremony and reception location?" htmlFor="ceremonyLocation">
-      <Textarea id="ceremonyLocation" name="ceremonyLocation" placeholder="Enter the ceremony and reception location" />
-    </Field>
-  )
-  const weddingDetails = (
-    <Field label="Tell us more about the wedding day, including how many guests are attending" htmlFor="weddingDetails">
-      <Textarea id="weddingDetails" name="weddingDetails" placeholder="Number of guests, the style of the day, and anything else they've shared." />
-    </Field>
-  )
-  const styleReason = (
-    <Field label="What draws them to our photography / videography style?" htmlFor="styleReason">
-      <Textarea id="styleReason" name="styleReason" placeholder="What appealed to them about our photography / videography (optional)" />
-    </Field>
-  )
-  const notesLabel = showEnquiryFields ? 'Note' : 'Notes'
+  const notesLabel = 'Notes'
   const notesTextarea = (
     <Textarea
       id="notes"
       name="notes"
       defaultValue={v.notes ?? ''}
-      placeholder={showEnquiryFields ? 'What are they looking for?' : 'Anything worth remembering about this client.'}
+      placeholder="Anything worth remembering about this client."
     />
   )
   const notes = (
@@ -198,6 +134,7 @@ export function ClientForm({
       <form action={action} onSubmit={onSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
         {hidden}
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          {formError ? <div className="mb-5"><Alert tone="danger" title={formError} /></div> : null}
           <div className="mb-5">{isCompanyBox}</div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {firstName}
@@ -211,25 +148,6 @@ export function ClientForm({
             {postcode}
             {country}
           </div>
-          {showEnquiryFields ? (
-
-            <div className="mt-8">
-              <p className="mb-4 text-xs font-bold uppercase tracking-wide text-muted">Enquiry</p>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {partnerName}
-                {coverage}
-                {eventType}
-                {eventDate}
-                {heardAbout}
-              </div>
-              <div className="mt-4 flex flex-col gap-4">
-                {gettingReady}
-                {ceremony}
-                {weddingDetails}
-                {styleReason}
-              </div>
-            </div>
-          ) : null}
           <div className="mt-4">{notes}</div>
         </div>
         <div className="border-t border-line px-6 py-4">
@@ -242,6 +160,7 @@ export function ClientForm({
   return (
     <form action={action} className="mt-8">
       {hidden}
+      {formError ? <div className="mb-6"><Alert tone="danger" title={formError} /></div> : null}
       <PageForm>
         <FormBlock title="Contact details" description="Who this client is and how to reach them.">
           <FormCell>{isCompanyBox}</FormCell>
@@ -260,24 +179,10 @@ export function ClientForm({
           <FormCell span={6}>{country}</FormCell>
         </FormBlock>
 
-        {showEnquiryFields ? (
-          <FormBlock title="Enquiry" description="Adding the client also opens a lead with these details.">
-            <FormCell span={6}>{partnerName}</FormCell>
-            <FormCell span={6}>{coverage}</FormCell>
-            <FormCell span={4}>{eventType}</FormCell>
-            <FormCell span={4}>{eventDate}</FormCell>
-            <FormCell span={4}>{heardAbout}</FormCell>
-            <FormCell>{gettingReady}</FormCell>
-            <FormCell>{ceremony}</FormCell>
-            <FormCell>{weddingDetails}</FormCell>
-            <FormCell>{styleReason}</FormCell>
-          </FormBlock>
-        ) : null}
-
         {/* The group heading already names this field, so its label is for screen readers only. */}
         <FormBlock
           title={notesLabel}
-          description={showEnquiryFields ? 'What they are looking for, in your words.' : 'Anything worth remembering about this client.'}
+          description="Anything worth remembering about this client."
         >
           <FormCell>
             <label htmlFor="notes" className="sr-only">{notesLabel}</label>

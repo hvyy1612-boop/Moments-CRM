@@ -12,9 +12,7 @@ const fee = z.object({
 
 const reschedule = z.object({
   kind: z.literal('reschedule'),
-  bookingId: z.string().min(1),
-  newStartsAt: z.string().min(1),
-  newEndsAt: z.string().min(1),
+  newStartsAt: z.string().min(1, 'Choose the new shoot date and time.'),
   fee: fee.optional(),
 })
 

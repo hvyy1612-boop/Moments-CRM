@@ -2,16 +2,13 @@ import { randomUUID } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
 import { createEnquiry, convertEnquiry } from '@/lib/domain/enquiry'
-import { createBooking, rescheduleBooking } from '@/lib/domain/booking'
-import { cancelProject } from '@/lib/domain/refund'
-import { createInvoice, issueInvoice, recordPayment } from '@/lib/domain/finance'
+import { recordPayment } from '@/lib/domain/finance'
+import { createInvoice } from './helpers'
 import type { SendResult } from '@/lib/email'
 import { setAutomationSettings } from '@/lib/domain/automation'
 import {
   claimDispatch,
   enqueueDispatch,
-  invalidateShootReminders,
-  processOutboxOnce,
   recipientHashOf,
   reconcileBufferedEvents,
   recordDeliveryEvent,
@@ -45,7 +42,6 @@ async function newProject(): Promise<string> {
 
 async function issuedInvoiceDue(projectId: string, amount: string, dueDays: number): Promise<string> {
   const inv = await createInvoice(projectId, { type: 'BALANCE', description: 'Coverage', amount }, null)
-  await issueInvoice(inv.id, null)
   await prisma.invoice.update({ where: { id: inv.id }, data: { dueAt: daysFromNow(dueDays) } })
   return inv.id
 }
@@ -201,16 +197,6 @@ describe('Notifications & reminders against a real DB (docs/25 Part 4)', () => {
     expect(sent).toEqual({ sendState: 'PROVIDER_ACCEPTED' })
   })
 
-  it('N-i: rescheduling invalidates the old schedule’s unsent shoot reminder', async () => {
-    const projectId = await newProject()
-    await prisma.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'CONFIRMED' } })
-    const b = await createBooking(projectId, { startsAt: '2027-06-20T10:00', endsAt: '2027-06-20T18:00' }, null)
-    const id = (await enqueueDispatch(prisma, { kind: 'shoot_reminder', targetType: 'Booking', targetId: b.id, milestone: 'shoot_-1', recipientEmail: email(), subject: 's', body: 'b' }))!
-    await rescheduleBooking(b.id, { startsAt: '2027-07-04T10:00', endsAt: '2027-07-04T18:00' }, null)
-    const row = await prisma.notificationDispatch.findUnique({ where: { id }, select: { sendState: true } })
-    expect(row?.sendState).toBe('SKIPPED_STALE')
-  })
-
   it('N-j: after +7 overdue the scanner opens ONE follow-up task, which resolves when paid', async () => {
     await setAutomation({ clientEmailsEnabled: true, internalFollowupsEnabled: true, remindersActiveFrom: null })
     const projectId = await newProject()
@@ -226,23 +212,6 @@ describe('Notifications & reminders against a real DB (docs/25 Part 4)', () => {
     await recordPayment(invId, { paymentMethod: 'BANK_TRANSFER', amount: '1000' }, null)
     expect(await resolveSettledOverdueFollowups()).toBeGreaterThanOrEqual(1)
     expect(await prisma.workItem.count({ where: { projectId, kind: 'OVERDUE_FOLLOWUP', status: 'PENDING' } })).toBe(0)
-  })
-
-  it('N-1: the outbox processor turns invoice.issued into a dispatch, once, and marks the event PROCESSED', async () => {
-    await setAutomation({ clientEmailsEnabled: true })
-    const projectId = await newProject()
-    const inv = await createInvoice(projectId, { type: 'DEPOSIT', description: 'Deposit', amount: '500' }, null)
-    await issueInvoice(inv.id, null)
-
-    let guard = 0
-    while ((await processOutboxOnce()).processed > 0 && guard++ < 200) {
-      /* keep draining */
-    }
-    await processOutboxOnce()
-    const dispatches = await prisma.notificationDispatch.count({ where: { kind: 'invoice_issued', targetId: inv.id } })
-    expect(dispatches).toBe(1)
-    const pending = await prisma.outboxEvent.count({ where: { eventType: 'invoice.issued', aggregateId: inv.id, status: 'PENDING' } })
-    expect(pending).toBe(0)
   })
 
   it('N-n: a duplicate webhook (same providerEventId) is applied only once', async () => {
@@ -267,33 +236,5 @@ describe('Notifications & reminders against a real DB (docs/25 Part 4)', () => {
     await recordDeliveryEvent({ providerEventId: `evt_${randomUUID()}`, providerMessageId: msgId, type: 'delivered' })
     const row = await prisma.notificationDispatch.findUnique({ where: { id }, select: { deliveryResult: true } })
     expect(row?.deliveryResult).toBe('BOUNCED')
-  })
-
-  it('cancel primitive: invalidateShootReminders stops the old schedule’s unsent reminders (any cancel path reuses this)', async () => {
-    const invId = await issuedInvoiceDue(await newProject(), '1000', 30)
-    const bookingId = `bk_${randomUUID().slice(0, 8)}`
-    const id = (await enqueueDispatch(prisma, { kind: 'shoot_reminder', targetType: 'Booking', targetId: bookingId, milestone: 'shoot_-1', recipientEmail: email(), subject: 's', body: 'b' }))!
-    void invId
-    const n = await invalidateShootReminders(prisma, bookingId)
-    expect(n).toBe(1)
-    const row = await prisma.notificationDispatch.findUnique({ where: { id }, select: { sendState: true } })
-    expect(row?.sendState).toBe('SKIPPED_STALE')
-  })
-
-  it('cancel flow end-to-end: cancelProject invalidates the shoot reminder AND the worker re-checks status', async () => {
-    await setAutomation({ clientEmailsEnabled: true })
-    const projectId = await newProject()
-    await prisma.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'CONFIRMED' } })
-    const booking = await createBooking(projectId, { startsAt: '2027-06-20T10:00', endsAt: '2027-06-20T18:00' }, null)
-    const wiredId = (await enqueueDispatch(prisma, { kind: 'shoot_reminder', targetType: 'Booking', targetId: booking.id, milestone: 'shoot_-1', recipientEmail: email(), subject: 's', body: 'b' }))!
-
-    await cancelProject(projectId, 'client cancelled', null)
-    expect((await prisma.booking.findUnique({ where: { id: booking.id }, select: { status: true } }))?.status).toBe('CANCELLED')
-    expect((await prisma.notificationDispatch.findUnique({ where: { id: wiredId }, select: { sendState: true } }))?.sendState).toBe('SKIPPED_STALE')
-
-    const strayId = (await enqueueDispatch(prisma, { kind: 'shoot_reminder', targetType: 'Booking', targetId: booking.id, milestone: 'shoot_0', recipientEmail: email(), subject: 's', body: 'b' }))!
-    const res = await sendDispatch(strayId, { sender: throwingSender })
-    expect(res).toEqual({ skipped: true })
-    expect((await prisma.notificationDispatch.findUnique({ where: { id: strayId }, select: { sendState: true } }))?.sendState).toBe('SKIPPED_STALE')
   })
 })

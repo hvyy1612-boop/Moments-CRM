@@ -132,6 +132,8 @@ function SendInvoiceDialog({
   resend: boolean
 }) {
   const [state, send, sending] = useActionState(sendInvoiceAction, IDLE)
+
+  const typed = state.status === 'idle' ? undefined : state.values
   const defaultSubject = `Invoice ${invoiceNumber} from Moments Photography & Film`
   const defaultMessage =
     `Dear ${clientName},\n\n` +
@@ -149,13 +151,13 @@ function SendInvoiceDialog({
           <input type="hidden" name="invoiceId" value={invoiceId} />
           <input type="hidden" name="projectId" value={projectId} />
           <Field label="To" htmlFor="si-to" hint="The client's email address.">
-            <TextInput id="si-to" name="to" type="email" defaultValue={clientEmail} required placeholder="client@example.com" />
+            <TextInput id="si-to" name="to" type="email" defaultValue={typed?.to ?? clientEmail} required placeholder="client@example.com" />
           </Field>
           <Field label="Subject" htmlFor="si-subject">
-            <TextInput id="si-subject" name="subject" defaultValue={defaultSubject} maxLength={200} />
+            <TextInput id="si-subject" name="subject" defaultValue={typed?.subject ?? defaultSubject} maxLength={200} />
           </Field>
           <Field label="Message" htmlFor="si-message" hint="A 'View invoice' link is added automatically.">
-            <Textarea id="si-message" name="message" rows={8} defaultValue={defaultMessage} maxLength={4000} />
+            <Textarea id="si-message" name="message" rows={8} defaultValue={typed?.message ?? defaultMessage} maxLength={4000} />
           </Field>
           <div className="flex items-center gap-2">
             <Button type="submit" loading={sending}>{resend ? 'Resend invoice' : 'Send invoice'}</Button>

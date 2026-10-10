@@ -7,6 +7,7 @@ import type { Alert } from '@/lib/domain/alerts'
 import { ToastProvider } from '@/components/ui/ToastProvider'
 import { Sidebar, type SidebarItem } from './Sidebar'
 import { TopNav } from './TopNav'
+import { ReadOnlyGuard } from '@/components/auth/ReadOnlyGuard'
 
 const COLLAPSE_KEY = 'sidebar.collapsed'
 
@@ -19,6 +20,7 @@ export function AppChrome({
   userRole,
   csrf,
   alerts,
+  notificationsSeenAt = null,
   notifKeys = [],
   children,
 }: {
@@ -30,6 +32,7 @@ export function AppChrome({
   userRole: string
   csrf: string
   alerts: Alert[]
+  notificationsSeenAt?: Date | null
 
   notifKeys?: string[]
   children: ReactNode
@@ -58,6 +61,7 @@ export function AppChrome({
 
   return (
     <ToastProvider>
+    <ReadOnlyGuard active={userRole === 'SUPERVISOR'} />
     <div className="min-h-screen bg-paper">
       <TopNav
         collapsed={collapsed}
@@ -67,6 +71,7 @@ export function AppChrome({
         userRole={userRole}
         csrf={csrf}
         alerts={alerts}
+        notificationsSeenAt={notificationsSeenAt}
       />
 
       {/* Mobile navigation (below md, where the sidebar is hidden). */}

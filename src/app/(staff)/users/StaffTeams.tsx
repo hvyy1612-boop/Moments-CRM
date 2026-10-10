@@ -11,6 +11,8 @@ export type StaffRowData = {
   roleLabel: string
   isActive: boolean
   lastLogin: string
+
+  isAdminAccount: boolean
 }
 
 export type TeamGroup = {
@@ -25,8 +27,10 @@ const RESET_INITIAL: ResetState = { status: 'idle' }
 const btn =
   'rounded border border-line-strong px-2.5 py-1 text-sm font-medium outline-none transition-colors duration-150 hover:bg-sunk focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60'
 
-function StaffRow({ staff, csrf, isSelf }: { staff: StaffRowData; csrf: string; isSelf: boolean }) {
+function StaffRow({ staff, csrf, isSelf, viewerIsAdmin }: { staff: StaffRowData; csrf: string; isSelf: boolean; viewerIsAdmin: boolean }) {
   const [reset, resetAction, resetting] = useActionState(resetStaffPasswordAction, RESET_INITIAL)
+
+  const canManage = viewerIsAdmin || !staff.isAdminAccount
 
   return (
     <div className={`border-t border-line py-3 first:border-t-0 ${staff.isActive ? '' : 'opacity-70'}`}>
@@ -41,14 +45,19 @@ function StaffRow({ staff, csrf, isSelf }: { staff: StaffRowData; csrf: string; 
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="tabular text-sm text-ink-muted">{staff.lastLogin}</span>
-          <form action={resetAction}>
-            <input type="hidden" name="csrf" value={csrf} />
-            <input type="hidden" name="userId" value={staff.id} />
-            <button type="submit" disabled={resetting} className={btn}>
-              {resetting ? 'Resetting…' : 'Reset password'}
-            </button>
-          </form>
-          {!isSelf ? (
+          {/* Your own password is changed via Change password: resetting it here would sign you out. */}
+          {isSelf ? (
+            <a href="/change-password" className={btn}>Change password</a>
+          ) : canManage ? (
+            <form action={resetAction}>
+              <input type="hidden" name="csrf" value={csrf} />
+              <input type="hidden" name="userId" value={staff.id} />
+              <button type="submit" disabled={resetting} className={btn}>
+                {resetting ? 'Resetting…' : 'Reset password'}
+              </button>
+            </form>
+          ) : null}
+          {!isSelf && canManage ? (
             <form action={setStaffActiveAction}>
               <input type="hidden" name="csrf" value={csrf} />
               <input type="hidden" name="userId" value={staff.id} />
@@ -58,11 +67,11 @@ function StaffRow({ staff, csrf, isSelf }: { staff: StaffRowData; csrf: string; 
               </button>
             </form>
           ) : null}
-          {!isSelf ? (
+          {!isSelf && canManage ? (
             <form
               action={removeStaffAction}
               onSubmit={(e) => {
-                if (!confirm(`Remove ${staff.name}? They will lose access immediately and be taken off the team list.`)) {
+                if (!window.confirm(`Remove ${staff.name}? They will lose access immediately and be taken off the team list.`)) {
                   e.preventDefault()
                 }
               }}
@@ -86,7 +95,7 @@ function StaffRow({ staff, csrf, isSelf }: { staff: StaffRowData; csrf: string; 
   )
 }
 
-export function StaffTeams({ teams, csrf, currentUserId }: { teams: TeamGroup[]; csrf: string; currentUserId: string }) {
+export function StaffTeams({ teams, csrf, currentUserId, viewerIsAdmin }: { teams: TeamGroup[]; csrf: string; currentUserId: string; viewerIsAdmin: boolean }) {
   if (teams.length === 0) {
     return <p className="text-sm text-ink-muted">No staff yet. Add your first account above.</p>
   }
@@ -111,7 +120,7 @@ export function StaffTeams({ teams, csrf, currentUserId }: { teams: TeamGroup[];
             </Link>
           </div>
           {team.members.map((s) => (
-            <StaffRow key={s.id} staff={s} csrf={csrf} isSelf={s.id === currentUserId} />
+            <StaffRow key={s.id} staff={s} csrf={csrf} isSelf={s.id === currentUserId} viewerIsAdmin={viewerIsAdmin} />
           ))}
         </section>
       ))}

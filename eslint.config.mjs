@@ -1,6 +1,7 @@
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FlatCompat } from '@eslint/eslintrc'
+import { BROWSER_GLOBALS } from './scripts/browser-globals.mjs'
 
 const compat = new FlatCompat({ baseDirectory: dirname(fileURLToPath(import.meta.url)) })
 
@@ -11,6 +12,8 @@ const config = [
       '.next/**',
 
       '.next-e2e/**',
+
+      '.next-preview/**',
       'coverage/**',
       'playwright-report/**',
       'test-results/**',
@@ -25,6 +28,8 @@ const config = [
     rules: {
 
       '@typescript-eslint/no-explicit-any': 'error',
+
+      'no-restricted-globals': ['error', ...BROWSER_GLOBALS],
     },
   },
 ]

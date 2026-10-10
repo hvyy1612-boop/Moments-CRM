@@ -6,6 +6,7 @@ import { Alert } from '@/components/ui/Alert'
 import { IconButton } from '@/components/ui/IconButton'
 import { TextInput, Select, Textarea } from '@/components/ui/form'
 import { AddEnquiryButton } from '../../leads/AddEnquiryButton'
+import { restoreClientAction } from '../actions'
 import { DeleteClientButton } from './DeleteClientButton'
 import { saveClientDetailAction, type SaveDetailState } from './actions'
 
@@ -21,6 +22,7 @@ export type ClientDetailData = {
   status: string
   addressLine: string
   createdLabel: string
+  archived: boolean
 }
 export type EnquiryDetailData = {
   id: string
@@ -43,6 +45,7 @@ const IconPencil = () => (<svg className="h-4 w-4" {...svg}><path d="M4 20h4l10-
 const IconCheck = () => (<svg className="h-4 w-4" {...svg} strokeWidth={2}><path d="M5 12.5l4.5 4.5L19 7" /></svg>)
 const IconX = () => (<svg className="h-4 w-4" {...svg}><path d="M6 6l12 12M18 6 6 18" /></svg>)
 const IconPerson = () => (<svg className="h-5 w-5" {...svg}><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 4-6 8-6s8 2 8 6" /></svg>)
+const IconRestore = () => (<svg className="h-4 w-4" {...svg}><path d="M4 12a8 8 0 1 0 2.4-5.7" /><path d="M4 4v4h4" /></svg>)
 const IconDoc = () => (<svg className="h-5 w-5" {...svg}><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h4" /></svg>)
 
 function initials(name: string): string {
@@ -53,10 +56,12 @@ function label(value: string): string {
   return value ? value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ') : value
 }
 
-const SOURCE_OPTIONS = ['DIRECT_BOOKING', 'ENQUIRY', 'REFERRAL', 'MANUAL', 'OTHER']
-const STATUS_OPTIONS = ['PROSPECT', 'ACTIVE', 'ARCHIVED']
+const SOURCE_OPTIONS = ['ENQUIRY', 'REFERRAL', 'MANUAL', 'OTHER']
+
+const STATUS_OPTIONS = ['PROSPECT', 'ACTIVE']
 const CONTACT_OPTIONS = ['Email', 'Phone', 'Text message']
-const COVERAGE_OPTIONS = ['Photography', 'Videography', 'Both']
+
+const COVERAGE_OPTIONS = ['Photography', 'Videography', 'Both', 'Other']
 
 function DocSection({ title, icon, action, children }: { title: string; icon: ReactNode; action?: ReactNode; children: ReactNode }) {
   return (
@@ -130,6 +135,9 @@ export function ClientDetail({
     }
   }, [state])
 
+  const typed = state.status === 'error' ? state.values : undefined
+  const v = (name: string, saved: string | null | undefined) => typed?.[name] ?? saved ?? ''
+
   const startEdit = () => { setDirty(false); setEditing(true) }
   const cancelEdit = () => { setDirty(false); setEditing(false) }
 
@@ -151,7 +159,19 @@ export function ClientDetail({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <AddEnquiryButton csrf={csrf} clientId={client.id} clientName={client.displayName} trigger="icon" />
+          {client.archived ? (
+            <form action={restoreClientAction}>
+              <input type="hidden" name="csrf" value={csrf} />
+              <input type="hidden" name="clientId" value={client.id} />
+              <IconButton type="submit" label="Restore client" tone="accent" icon={<IconRestore />} />
+            </form>
+          ) : (
+            <>
+              <AddEnquiryButton csrf={csrf} clientId={client.id} clientName={client.displayName} clientEmail={client.email} trigger="icon" />
+              {/* Studio Ninja's client profile offers both: a new enquiry (lead) or a booking already confirmed (job). */}
+              <AddEnquiryButton kind="job" csrf={csrf} clientId={client.id} clientName={client.displayName} clientEmail={client.email} trigger="icon" />
+            </>
+          )}
           {editing ? (
             <>
               {dirty ? <IconButton label="Save changes" tone="accent" icon={<IconCheck />} form={FORM_ID} type="submit" disabled={pending} /> : null}
@@ -160,56 +180,58 @@ export function ClientDetail({
           ) : (
             <IconButton label="Edit" tone="accent" icon={<IconPencil />} onClick={startEdit} />
           )}
-          {canDelete ? <DeleteClientButton clientId={client.id} name={client.displayName} csrf={csrf} /> : null}
+          {canDelete && !client.archived ? <DeleteClientButton clientId={client.id} name={client.displayName} csrf={csrf} /> : null}
         </div>
       </div>
 
+      {client.archived ? <div className="mt-4"><Alert tone="info" title="This client is archived. Restore them to bring them back to the Active list." /></div> : null}
       {state.status === 'error' ? <div className="mt-4"><Alert tone="danger" title={state.message} /></div> : null}
 
       <form id={FORM_ID} action={formAction} onChange={() => setDirty(true)}>
         <input type="hidden" name="csrf" value={csrf} />
         <input type="hidden" name="clientId" value={client.id} />
         {enquiry ? <input type="hidden" name="enquiryId" value={enquiry.id} /> : null}
+        <input type="hidden" name="addressOriginal" value={client.addressLine} />
 
         {/* Client details */}
         <DocSection title="Client details" icon={<IconPerson />}>
           <Slot label="Client name" required>
-            {editing ? <TextInput name="displayName" defaultValue={client.displayName} autoComplete="off" /> : <ViewBox value={client.displayName} />}
+            {editing ? <TextInput name="displayName" defaultValue={v('displayName', client.displayName)} maxLength={150} autoComplete="off" /> : <ViewBox value={client.displayName} />}
           </Slot>
           <Slot label="Partner name">
-            {editing ? <TextInput name="partnerName" defaultValue={client.partnerName ?? ''} autoComplete="off" /> : <ViewBox value={client.partnerName} />}
+            {editing ? <TextInput name="partnerName" defaultValue={v('partnerName', client.partnerName)} maxLength={150} autoComplete="off" /> : <ViewBox value={client.partnerName} />}
           </Slot>
           <Slot label="Email" required>
-            {editing ? <TextInput name="email" type="email" defaultValue={client.email} autoComplete="off" /> : <ViewBox value={client.email} />}
+            {editing ? <TextInput name="email" type="email" defaultValue={v('email', client.email)} autoComplete="off" /> : <ViewBox value={client.email} />}
           </Slot>
           <Slot label="Mobile" required>
-            {editing ? <TextInput name="phone" defaultValue={client.phone ?? ''} autoComplete="off" /> : <ViewBox value={client.phone} />}
+            {editing ? <TextInput name="phone" defaultValue={v('phone', client.phone)} maxLength={30} autoComplete="off" /> : <ViewBox value={client.phone} />}
           </Slot>
           <Slot label="Wedding / Event date">
             {editing && enquiry ? (
-              <TextInput name="eventDate" type="date" defaultValue={enquiry.eventDateISO} />
+              <TextInput name="eventDate" type="date" defaultValue={v('eventDate', enquiry.eventDateISO)} />
             ) : (
               <ViewBox value={enquiry?.eventDateLabel ?? null} />
             )}
           </Slot>
           <Slot label="Photography or Videography or Both?">
             {editing && enquiry ? (
-              <OptionSelect name="coverage" value={enquiry.coverage} options={COVERAGE_OPTIONS} includeBlank />
+              <OptionSelect name="coverage" value={v('coverage', enquiry.coverage) || null} options={COVERAGE_OPTIONS} includeBlank />
             ) : (
               <ViewBox value={enquiry?.coverage ?? null} />
             )}
           </Slot>
           <Slot label="Address / Suburb">
-            {editing ? <TextInput name="address" defaultValue={client.addressLine} autoComplete="off" /> : <ViewBox value={client.addressLine} />}
+            {editing ? <TextInput name="address" defaultValue={v('address', client.addressLine)} maxLength={200} autoComplete="off" /> : <ViewBox value={client.addressLine} />}
           </Slot>
           <Slot label="Preferred contact">
-            {editing ? <OptionSelect name="preferredContact" value={client.preferredContact} options={CONTACT_OPTIONS} includeBlank /> : <ViewBox value={client.preferredContact} />}
+            {editing ? <OptionSelect name="preferredContact" value={v('preferredContact', client.preferredContact) || null} options={CONTACT_OPTIONS} includeBlank /> : <ViewBox value={client.preferredContact} />}
           </Slot>
           <Slot label="Source">
-            {editing ? <OptionSelect name="source" value={client.source} options={SOURCE_OPTIONS} /> : <ViewBox value={label(client.source)} />}
+            {editing ? <OptionSelect name="source" value={v('source', client.source)} options={SOURCE_OPTIONS} /> : <ViewBox value={label(client.source)} />}
           </Slot>
           <Slot label="Status">
-            {editing ? <OptionSelect name="status" value={client.status} options={STATUS_OPTIONS} /> : <ViewBox value={label(client.status)} />}
+            {editing && !client.archived ? <OptionSelect name="status" value={v('status', client.status)} options={STATUS_OPTIONS} /> : <ViewBox value={label(client.status)} />}
           </Slot>
           <Slot label="Client since">
             <ViewBox value={client.createdLabel} />
@@ -231,22 +253,22 @@ export function ClientDetail({
           {enquiry ? (
             <>
               <Slot label="Where is your 'getting-ready' location?" required>
-                {editing ? <Textarea name="gettingReadyLocation" rows={3} defaultValue={enquiry.gettingReadyLocation ?? ''} /> : <ViewBox value={enquiry.gettingReadyLocation} multiline />}
+                {editing ? <Textarea name="gettingReadyLocation" rows={3} defaultValue={v('gettingReadyLocation', enquiry.gettingReadyLocation)} /> : <ViewBox value={enquiry.gettingReadyLocation} multiline />}
               </Slot>
               <Slot label="Where is your ceremony and reception location?" required>
-                {editing ? <Textarea name="ceremonyLocation" rows={3} defaultValue={enquiry.ceremonyLocation ?? ''} /> : <ViewBox value={enquiry.ceremonyLocation} multiline />}
+                {editing ? <Textarea name="ceremonyLocation" rows={3} defaultValue={v('ceremonyLocation', enquiry.ceremonyLocation)} /> : <ViewBox value={enquiry.ceremonyLocation} multiline />}
               </Slot>
               <Slot label="Wedding day details / guest numbers" required>
-                {editing ? <Textarea name="weddingDetails" rows={3} defaultValue={enquiry.weddingDetails ?? ''} /> : <ViewBox value={enquiry.weddingDetails} multiline />}
+                {editing ? <Textarea name="weddingDetails" rows={3} defaultValue={v('weddingDetails', enquiry.weddingDetails)} /> : <ViewBox value={enquiry.weddingDetails} multiline />}
               </Slot>
               <Slot label="What draws you to our photography / videography style?" required>
-                {editing ? <Textarea name="styleReason" rows={3} defaultValue={enquiry.styleReason ?? ''} /> : <ViewBox value={enquiry.styleReason} multiline />}
+                {editing ? <Textarea name="styleReason" rows={3} defaultValue={v('styleReason', enquiry.styleReason)} /> : <ViewBox value={enquiry.styleReason} multiline />}
               </Slot>
               <Slot label="How did you hear about us?">
-                {editing ? <Textarea name="heardAbout" rows={3} maxLength={5000} defaultValue={enquiry.heardAbout ?? ''} /> : <ViewBox value={enquiry.heardAbout} multiline />}
+                {editing ? <Textarea name="heardAbout" rows={3} maxLength={5000} defaultValue={v('heardAbout', enquiry.heardAbout)} /> : <ViewBox value={enquiry.heardAbout} multiline />}
               </Slot>
               <Slot label="Additional notes">
-                {editing ? <Textarea name="additionalNotes" rows={3} defaultValue={enquiry.message ?? ''} /> : <ViewBox value={enquiry.message} multiline />}
+                {editing ? <Textarea name="additionalNotes" rows={3} defaultValue={v('additionalNotes', enquiry.message)} /> : <ViewBox value={enquiry.message} multiline />}
               </Slot>
             </>
           ) : (

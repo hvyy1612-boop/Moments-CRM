@@ -6,8 +6,8 @@ import { notFound, redirect } from 'next/navigation'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { JOB_SHOOT_SELECT, shootDateOfJob } from '@/lib/domain/deadline'
 import { listActivePackages } from '@/lib/domain/package'
-import { listInvoiceTemplates } from '@/lib/domain/finance'
 import { currentNumberYear, formatRecordNumber } from '@/lib/domain/numbering'
 import { sydneyYmd } from '@/lib/time'
 import { titleCase } from '@/lib/text'
@@ -19,7 +19,7 @@ import { NewInvoiceJobPicker } from './NewInvoiceJobPicker'
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'New invoice - Moments' }
 
-const CLOSED: ProjectLifecycle[] = ['CANCELLED', 'LOST']
+const CLOSED: ProjectLifecycle[] = ['CANCELLED']
 
 export default async function NewInvoicePage({ searchParams }: { searchParams: Promise<{ job?: string; client?: string }> }) {
   const user = await requireRole('/finance/new')
@@ -34,7 +34,7 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
         id: true, name: true, code: true, companyId: true, lifecycleStatus: true,
         client: { select: { displayName: true, email: true, phone: true } },
 
-        bookings: { where: { status: { not: 'CANCELLED' } }, orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true } },
+        ...JOB_SHOOT_SELECT,
       },
     })
     if (!project) notFound()
@@ -46,7 +46,6 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
       inclusions: p.inclusions,
       isAddOn: p.isAddOn,
     }))
-    const templates = await listInvoiceTemplates()
     const isClosed = CLOSED.includes(project.lifecycleStatus)
 
     const year = currentNumberYear()
@@ -59,7 +58,7 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
     const defaultType = priorInvoices === 0 ? 'DEPOSIT' : 'BALANCE'
     const td = sydneyYmd(new Date())
     const issueDefault = `${td.year}-${String(td.month).padStart(2, '0')}-${String(td.day).padStart(2, '0')}`
-    const shoot = project.bookings[0]?.startsAt
+    const shoot = shootDateOfJob(project)
     const sd = shoot ? sydneyYmd(shoot) : null
     const shootDate = sd ? `${sd.year}-${String(sd.month).padStart(2, '0')}-${String(sd.day).padStart(2, '0')}` : null
 
@@ -78,7 +77,6 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
             csrf={csrf}
             projectId={project.id}
             packages={packages}
-            templates={templates}
             contact={{
               jobName: project.name,
               clientName: project.client.displayName,
@@ -97,9 +95,9 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
   }
 
   const jobs = await prisma.project.findMany({
-    where: { lifecycleStatus: { notIn: CLOSED }, archivedAt: null, ...(sp.client ? { clientId: sp.client } : {}) },
+    where: { lifecycleStatus: { notIn: CLOSED }, ...(sp.client ? { clientId: sp.client } : {}) },
     orderBy: { updatedAt: 'desc' },
-    select: { id: true, name: true, code: true, client: { select: { displayName: true } } },
+    select: { id: true, name: true, code: true, lifecycleStatus: true, client: { select: { displayName: true } } },
   })
 
   if (sp.client && jobs.length === 1 && jobs[0]) {
@@ -122,7 +120,15 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
         </p>
       ) : (
         <div className="mt-7">
-          <NewInvoiceJobPicker rows={jobs.map((j) => ({ id: j.id, code: j.code, client: j.client.displayName, job: j.name }))} />
+          <NewInvoiceJobPicker
+            rows={jobs.map((j) => ({
+              id: j.id,
+              code: j.code,
+              client: j.client.displayName,
+
+              job: j.lifecycleStatus === 'BOOKING_REQUESTED' ? `${j.name} (lead, awaiting deposit)` : j.name,
+            }))}
+          />
         </div>
       )}
     </PageContainer>

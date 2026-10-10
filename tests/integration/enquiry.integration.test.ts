@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/db'
-import { mergeClients } from '@/lib/domain/client'
 import {
   convertEnquiry,
   createEnquiry,
@@ -20,7 +19,7 @@ beforeAll(async () => {
 describe('enquiry backbone (integration, real DB)', () => {
   it('captures a lead without creating a client or project', async () => {
     const e = await createEnquiry({ name: 'Lead One', email: email(), source: 'WEBSITE' })
-    expect(e.status).toBe('NEW')
+    expect(e.status).toBe('NEW_ENQUIRY')
     expect(e.convertedClientId).toBeNull()
     expect(e.convertedProjectId).toBeNull()
   })
@@ -54,7 +53,7 @@ describe('enquiry backbone (integration, real DB)', () => {
   it('lost keeps the record; convert is blocked until reopened', async () => {
     const e = await createEnquiry({ name: 'Ghost', email: email() })
     await markEnquiryLost(e.id, 'No response after 3 follow-ups')
-    expect((await prisma.enquiry.findUnique({ where: { id: e.id } }))?.status).toBe('LOST')
+    expect((await prisma.enquiry.findUnique({ where: { id: e.id } }))?.status).toBe('DECLINED')
 
     await expect(convertEnquiry(e.id)).rejects.toThrow()
     await reopenEnquiry(e.id)
@@ -67,25 +66,6 @@ describe('enquiry backbone (integration, real DB)', () => {
   it('a reason is required to mark an enquiry lost', async () => {
     const e = await createEnquiry({ name: 'NoReason', email: email() })
     await expect(markEnquiryLost(e.id, '   ')).rejects.toThrow()
-  })
-
-  it('merge moves projects to the survivor; a later enquiry resolves to the survivor', async () => {
-    const mailB = email()
-    const a = await convertEnquiry((await createEnquiry({ name: 'Client A', email: email() })).id)
-    const b = await convertEnquiry((await createEnquiry({ name: 'Client B', email: mailB })).id)
-
-    const res = await mergeClients(a.clientId!, b.clientId!)
-    expect(res.movedProjects).toBeGreaterThanOrEqual(1)
-
-    const dup = await prisma.client.findUnique({ where: { id: b.clientId! } })
-    expect(dup?.mergedIntoClientId).toBe(a.clientId)
-    expect(dup?.status).toBe('ARCHIVED')
-
-    const movedProject = await prisma.project.findUnique({ where: { id: b.projectId! } })
-    expect(movedProject?.clientId).toBe(a.clientId)
-
-    const c3 = await convertEnquiry((await createEnquiry({ name: 'Returns', email: mailB })).id)
-    expect(c3.clientId).toBe(a.clientId)
   })
 
   it('findClientMatches suggests by name/phone, with no exact-email match for a stranger', async () => {

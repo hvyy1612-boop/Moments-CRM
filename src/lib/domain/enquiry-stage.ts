@@ -15,12 +15,12 @@ const GROUP_TO_STAGE: [string, OpenStage][] = [
 ]
 
 export function deriveOpenStage(tasks: DeriveTask[]): OpenStage {
-  const real = tasks.filter((t) => t.type !== 'AUTO')
-  for (const [group, stage] of GROUP_TO_STAGE) {
-    const groupTasks = real.filter((t) => t.stage === group)
-    if (groupTasks.some((t) => t.status !== 'COMPLETED')) return stage
+  const ticked = tasks.filter((t) => t.type !== 'AUTO' && t.status === 'COMPLETED')
+  let stage: OpenStage = 'NEW_ENQUIRY'
+  for (const [group, s] of GROUP_TO_STAGE) {
+    if (ticked.some((t) => t.stage === group)) stage = s
   }
-  return 'CONSULTATION'
+  return stage
 }
 
 export async function syncEnquiryStageFromTasks(tx: Tx, enquiryId: string, actorUserId: string) {
@@ -34,7 +34,7 @@ export async function syncEnquiryStageFromTasks(tx: Tx, enquiryId: string, actor
     select: { stage: true, status: true, type: true },
   })
   const derived = deriveOpenStage(items)
-  if (OPEN_STAGE_ORDER.indexOf(derived) <= OPEN_STAGE_ORDER.indexOf(enquiry.status as OpenStage)) return
+  if (derived === enquiry.status) return
 
   await tx.enquiry.update({ where: { id: enquiryId }, data: { status: derived } })
   await tx.auditLog.create({

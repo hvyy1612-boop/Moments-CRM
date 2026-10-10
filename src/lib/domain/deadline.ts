@@ -1,22 +1,49 @@
 import { addDays, MS_PER_DAY } from '@/features/enquiries/workflow'
 import { sydneyYmd } from '@/lib/time'
 
-export type DueAnchor = 'SHOOT' | 'JOB_CONFIRMED' | 'FIXED'
+export type DueAnchor = 'SHOOT' | 'JOB_CONFIRMED' | 'FIXED' | 'LEAD_CREATED'
 
 export type DeadlineTask = {
   dueAnchor: DueAnchor | null
   dueOffsetDays: number
   dueDateFixed: Date | null
   dueOverrideAt: Date | null
-
-  bookingId: string | null
 }
 
 export type DeadlineContext = {
 
-  shootDateOf: (bookingId: string | null) => Date | null
+  shootDate: Date | null
 
   jobConfirmedAt: Date | null
+}
+
+export const SHOOT_TASK_TYPE = 'SHOOT'
+
+export function jobShootDate(
+  tasks: { type: string; status?: string; dueOverrideAt: Date | null }[],
+  shootDay: Date | null | undefined,
+): Date | null {
+  const set = tasks.find((t) => t.type === SHOOT_TASK_TYPE && t.status !== 'CANCELLED' && t.dueOverrideAt)
+  return set?.dueOverrideAt ?? shootDay ?? null
+}
+
+export const JOB_SHOOT_INCLUDE = {
+  workItems: { where: { type: SHOOT_TASK_TYPE }, select: { type: true, status: true, dueOverrideAt: true } },
+
+  convertedFromEnquiries: { select: { id: true, enquiryNumber: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+} as const
+
+export const JOB_SHOOT_SELECT = { shootDate: true, shootLocation: true, ...JOB_SHOOT_INCLUDE } as const
+
+export function shootDateOfJob(p: {
+  workItems: { type: string; status: string; dueOverrideAt: Date | null }[]
+  shootDate: Date | null
+}): Date | null {
+  return jobShootDate(p.workItems, p.shootDate)
+}
+
+export function shootHasTime(p: { workItems: { type: string; status: string; dueOverrideAt: Date | null }[] }): boolean {
+  return p.workItems.some((t) => t.type === SHOOT_TASK_TYPE && t.status !== 'CANCELLED' && t.dueOverrideAt != null)
 }
 
 export function resolveTaskDueDate(task: DeadlineTask, ctx: DeadlineContext): Date | null {
@@ -26,10 +53,8 @@ export function resolveTaskDueDate(task: DeadlineTask, ctx: DeadlineContext): Da
       return task.dueDateFixed
     case 'JOB_CONFIRMED':
       return ctx.jobConfirmedAt ? addDays(ctx.jobConfirmedAt, task.dueOffsetDays) : null
-    case 'SHOOT': {
-      const shoot = ctx.shootDateOf(task.bookingId)
-      return shoot ? addDays(shoot, task.dueOffsetDays) : null
-    }
+    case 'SHOOT':
+      return ctx.shootDate ? addDays(ctx.shootDate, task.dueOffsetDays) : null
     default:
       return null
   }
@@ -58,29 +83,4 @@ export function getTaskDueState(
 ): { dueAt: Date | null; tone: DueTone } {
   const dueAt = resolveTaskDueDate(task, ctx)
   return { dueAt, tone: dueToneFor(dueAt, now) }
-}
-
-export type BookingLike = {
-  id: string
-  startsAt: Date
-  status: string
-  rescheduledFromId: string | null
-}
-
-export function makeShootDateOf(bookings: BookingLike[]): (bookingId: string | null) => Date | null {
-  const active = bookings.filter((b) => b.status !== 'CANCELLED')
-  const activeById = new Map(active.map((b) => [b.id, b]))
-
-  const successorOf = new Map<string, BookingLike>()
-  for (const b of active) {
-    if (b.rescheduledFromId) successorOf.set(b.rescheduledFromId, b)
-  }
-  const primary = active.slice().sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())[0] ?? null
-  return (bookingId: string | null): Date | null => {
-    if (bookingId === null) return primary ? primary.startsAt : null
-    const direct = activeById.get(bookingId)
-    if (direct) return direct.startsAt
-    const successor = successorOf.get(bookingId)
-    return successor ? successor.startsAt : null
-  }
 }

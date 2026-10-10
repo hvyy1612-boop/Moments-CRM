@@ -31,7 +31,6 @@ export default async function QuotePreviewPage({ params }: { params: Promise<{ i
     clientName,
     issueDate: v.issueDate,
     validUntil: v.validUntil,
-    introduction: v.introduction,
     lines: v.lines,
     subtotal: v.subtotal,
     taxTotal: v.taxTotal,

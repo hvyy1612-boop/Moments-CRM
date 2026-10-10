@@ -39,9 +39,10 @@ const S = {
   strokeLinecap: 'round',
   strokeLinejoin: 'round',
 } as const
+
 function svg(children: ReactNode): ReactNode {
   return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" {...S}>
+    <svg key="nav-icon" viewBox="0 0 24 24" className="h-5 w-5 shrink-0" {...S}>
       {children}
     </svg>
   )
@@ -81,8 +82,10 @@ export async function AppShell({
   const initial = user.name.trim().charAt(0).toUpperCase() || 'U'
   const alerts = await getRecentAlerts()
 
+  const me = await prisma.user.findUnique({ where: { id: user.id }, select: { notificationsSeenAt: true } })
+
   const unreadEnquiries = await prisma.enquiry.count({
-    where: { viewedAt: null, convertedProjectId: null, status: { not: 'DECLINED' } },
+    where: { viewedAt: null, status: { notIn: ['DECLINED', 'BOOKING_CONFIRMED'] } },
   })
   const notifKeys = unreadEnquiries > 0 ? ['enquiries'] : []
 
@@ -96,6 +99,7 @@ export async function AppShell({
       userRole={user.role}
       csrf={csrf}
       alerts={alerts}
+      notificationsSeenAt={me?.notificationsSeenAt ?? null}
       notifKeys={notifKeys}
     >
       {children}

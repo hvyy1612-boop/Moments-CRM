@@ -70,7 +70,6 @@ export default async function QuoteEditPage({ params }: { params: Promise<{ id: 
             referenceId: l.referenceId,
             details: l.details,
           }))}
-          initialIntroduction={version.introduction ?? ''}
           initialPoNumber={version.poNumber ?? ''}
           initialNotes={version.notes ?? ''}
           initialDepositPercent={version.depositPercent != null ? String(version.depositPercent) : ''}

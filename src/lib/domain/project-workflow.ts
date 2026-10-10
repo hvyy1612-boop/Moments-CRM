@@ -1,8 +1,13 @@
 import { prisma } from '@/lib/db'
+import { cancelOpenWorkItems } from './enquiry-workflow'
+import { bookingDetailsFromLead, convertEnquiryCore, createEnquiryTx } from './enquiry'
+import { nextProjectCode } from './project'
+import { asTaskDue, projectDueData, type TaskDue } from '@/features/tasks/due'
 import { formatSydneyDate, daysUntilSydney } from '@/lib/time'
 import { getJobBalance } from './money'
+import { computeDeposit } from './pricing'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from './invoice-money'
-import { makeShootDateOf, resolveTaskDueDate, type DeadlineContext } from './deadline'
+import { jobShootDate, resolveTaskDueDate, type DeadlineContext } from './deadline'
 import {
   buildProjectBoard,
   DEFAULT_PROJECT_TASKS,
@@ -12,7 +17,6 @@ import {
   PROJECT_TASK_SCHEDULE,
   stageLabel,
   type ProjectBoard,
-  type ProjectFacts,
   type TaskInput,
 } from '@/features/projects/workflow'
 
@@ -25,6 +29,12 @@ async function seedIfNeeded(tx: Tx, projectId: string, companyId: string) {
     where: { entityType: 'Project', entityId: projectId, action: SEED_ACTION },
   })
   if (seeded > 0) return
+
+  const job = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { shootDate: true, shootStartTime: true } })
+  const shootAt =
+    job.shootDate && job.shootStartTime
+      ? projectDueData({ kind: 'absolute', date: job.shootDate.toISOString().slice(0, 10), time: job.shootStartTime }).dueOverrideAt
+      : null
   await tx.workItem.createMany({
     data: DEFAULT_PROJECT_TASKS.map((t, i) => ({
       companyId,
@@ -38,6 +48,7 @@ async function seedIfNeeded(tx: Tx, projectId: string, companyId: string) {
 
       dueAnchor: 'SHOOT' as const,
       dueOffsetDays: PROJECT_TASK_SCHEDULE[t.title] ?? 0,
+      dueOverrideAt: t.type === 'SHOOT' ? shootAt : null,
     })),
   })
   await tx.auditLog.create({
@@ -50,11 +61,214 @@ export async function seedProjectWorkflow(projectId: string) {
   await prisma.$transaction((tx) => seedIfNeeded(tx, projectId, project.companyId))
 }
 
+export async function setJobComplete(projectId: string, done: boolean, actorUserId: string | null) {
+  return prisma.$transaction(async (tx) => {
+    const project = await tx.project.findUnique({ where: { id: projectId }, select: { companyId: true, lifecycleStatus: true } })
+    if (!project) throw new Error('Job not found.')
+    if (done) {
+      if (project.lifecycleStatus === 'COMPLETED') return
+      if (project.lifecycleStatus !== 'CONFIRMED') throw new Error('Only an active job can be marked complete.')
+    } else {
+      if (project.lifecycleStatus === 'CONFIRMED') return
+      if (project.lifecycleStatus !== 'COMPLETED') throw new Error('Only a completed job can go back to Active.')
+    }
+    await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: done ? 'COMPLETED' : 'CONFIRMED' } })
+    await tx.auditLog.create({
+      data: {
+        companyId: project.companyId,
+        actorUserId,
+        action: done ? 'project.completed_manual' : 'project.reopened',
+        entityType: 'Project',
+        entityId: projectId,
+        afterData: { lifecycleStatus: done ? 'COMPLETED' : 'CONFIRMED' },
+      },
+    })
+  })
+}
+
+export const BOOKING_DEPOSIT_PERCENT = 20
+
+export async function bookingDepositReached(tx: Tx, projectId: string): Promise<boolean | null> {
+  const accepted = await tx.quoteVersion.findFirst({
+    where: { quote: { projectId }, status: 'ACCEPTED' },
+    orderBy: { acceptedByClientAt: 'desc' },
+    select: { total: true },
+  })
+  if (!accepted) return null
+  const invoices = await tx.invoice.findMany({ where: { projectId }, select: INVOICE_MONEY_SELECT })
+  const received = getJobBalance(invoices.map(toInvoiceMoneyInput), accepted.total).paidNet
+  return received.greaterThanOrEqualTo(computeDeposit(accepted.total, BOOKING_DEPOSIT_PERCENT).deposit)
+}
+
+export async function acceptLeadAsJob(enquiryId: string, actorUserId: string | null) {
+  const now = new Date()
+  return prisma.$transaction(async (tx) => {
+    const lead = await tx.enquiry.findUnique({ where: { id: enquiryId }, select: { status: true, companyId: true } })
+    if (!lead) throw new Error('Lead not found.')
+    if (lead.status === 'DECLINED') throw new Error('Restore this lead before marking it as a job.')
+    if (lead.status === 'BOOKING_CONFIRMED') throw new Error('This lead is already a job.')
+    const { projectId } = await convertEnquiryCore(tx, enquiryId, actorUserId, now)
+    if (!projectId) throw new Error('The job could not be created.')
+    await confirmBookingByDepositTx(tx, projectId, actorUserId)
+    await tx.auditLog.create({
+      data: { companyId: lead.companyId, actorUserId, action: 'enquiry.job_accepted', entityType: 'Enquiry', entityId: enquiryId, afterData: { projectId } },
+    })
+    return { projectId }
+  })
+}
+
+export async function confirmDirectBooking(projectId: string, actorUserId: string | null) {
+  await prisma.$transaction((tx) => confirmBookingByDepositTx(tx, projectId, actorUserId))
+}
+
+export type DirectJobInput = {
+  clientId: string
+  name: string
+  eventType: string | null
+  coverage: string | null
+  coverageNote: string | null
+  heardAbout: string | null
+  shootDate: Date | null
+  shootEndDate: Date | null
+  shootStartTime: string | null
+  shootEndTime: string | null
+  shootLocation: string | null
+  note: string | null
+}
+
+export async function createDirectJob(input: DirectJobInput, actorUserId: string | null) {
+  return prisma.$transaction(async (tx) => {
+    const client = await tx.client.findUnique({ where: { id: input.clientId }, select: { id: true, companyId: true, archivedAt: true } })
+    if (!client || client.archivedAt) throw new Error('That client is no longer available.')
+    const now = new Date()
+    const project = await tx.project.create({
+      data: {
+        companyId: client.companyId,
+        clientId: client.id,
+        code: await nextProjectCode(tx, client.companyId, now),
+        name: input.name,
+        lifecycleStatus: 'CONFIRMED',
+        commercialStatus: 'UNQUOTED',
+        source: 'MANUAL',
+        ownerUserId: actorUserId,
+
+        confirmedByClientAt: now,
+        enquiryReceivedAt: now,
+        eventType: input.eventType,
+        coverage: input.coverage,
+        coverageNote: input.coverageNote,
+        heardAbout: input.heardAbout,
+        shootDate: input.shootDate,
+        shootEndDate: input.shootEndDate,
+        shootStartTime: input.shootStartTime,
+        shootEndTime: input.shootEndTime,
+        shootLocation: input.shootLocation,
+      },
+    })
+    if (input.note) {
+      await tx.communication.create({
+        data: { projectId: project.id, type: 'NOTE', direction: 'internal', internal: true, body: input.note, byUserId: actorUserId },
+      })
+    }
+    await tx.auditLog.create({
+      data: { companyId: client.companyId, actorUserId, action: 'project.created_direct', entityType: 'Project', entityId: project.id, afterData: { code: project.code } },
+    })
+    await seedIfNeeded(tx, project.id, client.companyId)
+    return project
+  })
+}
+
+export function moveBackToLeadBlocker(job: { lifecycleStatus: string; paidNet: { greaterThan(n: number): boolean } }): string | null {
+  if (job.lifecycleStatus !== 'CONFIRMED') return 'Only an active job can go back to being a lead.'
+
+  if (job.paidNet.greaterThan(0)) return 'A payment is recorded on this job, so it stays a job. Refund the payment first to move it back to Leads.'
+  return null
+}
+
+export async function moveJobBackToLead(projectId: string, actorUserId: string | null) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM projects WHERE id = ${projectId} FOR UPDATE`
+    const project = await tx.project.findUnique({
+      where: { id: projectId },
+      select: {
+        companyId: true, lifecycleStatus: true, name: true, ownerUserId: true, invoices: { select: INVOICE_MONEY_SELECT },
+        eventType: true, coverage: true, coverageNote: true, heardAbout: true,
+        shootDate: true, shootEndDate: true, shootStartTime: true, shootEndTime: true, shootLocation: true,
+        client: { select: { id: true, firstName: true, lastName: true, email: true, phone: true, street: true, suburb: true, state: true, postcode: true, country: true, type: true } },
+      },
+    })
+    if (!project) throw new Error('Job not found.')
+    const blocker = moveBackToLeadBlocker({
+      lifecycleStatus: project.lifecycleStatus,
+      paidNet: getJobBalance(project.invoices.map(toInvoiceMoneyInput), null).paidNet,
+    })
+    if (blocker) throw new Error(blocker)
+
+    await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'BOOKING_REQUESTED', confirmedByClientAt: null } })
+    let lead = await tx.enquiry.findFirst({ where: { convertedProjectId: projectId }, select: { id: true } })
+    if (lead) {
+      await tx.enquiry.update({ where: { id: lead.id }, data: { status: 'AWAITING_BOOKING_CONFIRMATION' } })
+
+      await tx.workItem.updateMany({ where: { enquiryId: lead.id, status: 'CANCELLED' }, data: { status: 'PENDING' } })
+    } else {
+
+      const c = project.client
+      const created = await createEnquiryTx(
+        tx,
+        {
+          clientId: c.id,
+          name: project.name,
+          firstName: c.firstName,
+          lastName: c.lastName,
+          email: c.email,
+          phone: c.phone,
+          street: c.street,
+          suburb: c.suburb,
+          state: c.state,
+          postcode: c.postcode,
+          country: c.country,
+          isCompany: c.type === 'BUSINESS',
+          eventType: project.eventType,
+          eventDate: project.shootDate,
+          eventEndDate: project.shootEndDate,
+          eventStartTime: project.shootStartTime,
+          eventEndTime: project.shootEndTime,
+          eventLocation: project.shootLocation,
+          coverage: project.coverage,
+          coverageNote: project.coverageNote,
+          heardAbout: project.heardAbout,
+          ownerUserId: project.ownerUserId,
+          source: 'MANUAL',
+        },
+        actorUserId,
+      )
+      await tx.enquiry.update({
+        where: { id: created.id },
+        data: { status: 'AWAITING_BOOKING_CONFIRMATION', convertedClientId: c.id, convertedProjectId: projectId },
+      })
+      lead = { id: created.id }
+    }
+    await tx.auditLog.create({
+      data: { companyId: project.companyId, actorUserId, action: 'project.moved_back_to_lead', entityType: 'Project', entityId: projectId, afterData: { enquiryId: lead.id } },
+    })
+    await tx.auditLog.create({
+      data: { companyId: project.companyId, actorUserId, action: 'enquiry.moved_back_to_lead', entityType: 'Enquiry', entityId: lead.id, afterData: { projectId } },
+    })
+    return { enquiryId: lead.id }
+  })
+}
+
 export async function confirmBookingByDepositTx(tx: Tx, projectId: string, actorUserId: string | null) {
   const project = await tx.project.findUnique({ where: { id: projectId }, select: { companyId: true, lifecycleStatus: true } })
   if (!project) return
   if (project.lifecycleStatus === 'BOOKING_REQUESTED') {
-    await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'CONFIRMED' } })
+
+    const lead = await tx.enquiry.findFirst({ where: { convertedProjectId: projectId } })
+
+    await tx.project.update({
+      where: { id: projectId },
+      data: { lifecycleStatus: 'CONFIRMED', confirmedByClientAt: new Date(), ...(lead ? bookingDetailsFromLead(lead) : {}) },
+    })
   }
   await seedIfNeeded(tx, projectId, project.companyId)
   const enquiry = await tx.enquiry.findFirst({
@@ -63,6 +277,7 @@ export async function confirmBookingByDepositTx(tx: Tx, projectId: string, actor
   })
   if (enquiry && enquiry.status === 'AWAITING_BOOKING_CONFIRMATION') {
     await tx.enquiry.update({ where: { id: enquiry.id }, data: { status: 'BOOKING_CONFIRMED' } })
+    await cancelOpenWorkItems(tx, enquiry.id)
     await tx.auditLog.create({
       data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.booking_confirmed', entityType: 'Enquiry', entityId: enquiry.id, afterData: { projectId } },
     })
@@ -74,18 +289,20 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
     where: { id: projectId },
     select: {
       companyId: true,
+      lifecycleStatus: true,
       confirmedByClientAt: true,
       owner: { select: { name: true } },
-      invoices: { select: INVOICE_MONEY_SELECT },
-      galleries: { select: { status: true } },
-      bookings: { select: { id: true, startsAt: true, status: true, rescheduledFromId: true } },
+      shootDate: true,
     },
   })
 
-  await prisma.$transaction((tx) => seedIfNeeded(tx, projectId, project.companyId))
+  if (project.lifecycleStatus !== 'BOOKING_REQUESTED') {
+    await prisma.$transaction((tx) => seedIfNeeded(tx, projectId, project.companyId))
+  }
 
   const items = await prisma.workItem.findMany({
-    where: { projectId },
+
+    where: { projectId, status: { not: 'CANCELLED' } },
     orderBy: { order: 'asc' },
     select: {
       id: true,
@@ -98,7 +315,6 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
       dueOffsetDays: true,
       dueDateFixed: true,
       dueOverrideAt: true,
-      bookingId: true,
       order: true,
       completedAt: true,
       completedBy: { select: { name: true } },
@@ -106,19 +322,8 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
   })
 
   const ctx: DeadlineContext = {
-    shootDateOf: makeShootDateOf(project.bookings),
+    shootDate: jobShootDate(items, project.shootDate),
     jobConfirmedAt: project.confirmedByClientAt,
-  }
-
-  const jobMoney = getJobBalance(project.invoices.map(toInvoiceMoneyInput), null)
-  const gallerySent = project.galleries.some((g) => g.status === 'PUBLISHED')
-  const finalPaid = jobMoney.invoicedObligation.greaterThan(0) && jobMoney.outstanding.lessThanOrEqualTo(0)
-  const facts: ProjectFacts = {
-
-    shootScheduled: project.bookings.some((b) => b.status !== 'CANCELLED' && b.startsAt != null),
-    gallerySent,
-    finalPaid,
-    deliveryComplete: gallerySent && finalPaid,
   }
 
   const tasks: TaskInput[] = items.map((w) => ({
@@ -137,7 +342,7 @@ export async function getProjectBoard(projectId: string): Promise<ProjectBoard> 
 
   const now = new Date()
   const daysUntil = (d: Date) => daysUntilSydney(d, now)
-  return buildProjectBoard(facts, tasks, formatSydneyDate, now, daysUntil, project.owner?.name ?? null)
+  return buildProjectBoard(tasks, formatSydneyDate, now, daysUntil, project.owner?.name ?? null)
 }
 
 async function loadTask(taskId: string) {
@@ -184,14 +389,14 @@ export async function addProjectStageBlock(projectId: string, stage: string, act
   })
 }
 
-const ADDABLE = new Set(['TODO', 'AUTO_EMAIL', 'APPOINTMENT', 'SHOOT'])
+const ADDABLE = new Set(['TODO', 'EXTRA_SHOOT', 'APPOINTMENT'])
 
 export async function addProjectTask(
   projectId: string,
   stage: string,
   title: string,
   type: string,
-  dueAt: Date | null,
+  due: TaskDue | Date | null,
   actorUserId: string,
 ) {
   const clean = title.trim()
@@ -218,7 +423,7 @@ export async function addProjectTask(
         status: 'PENDING',
         order: (last?.order ?? 0) + 1,
 
-        dueOverrideAt: dueAt,
+        ...projectDueData(asTaskDue(due)),
       },
     })
     await tx.auditLog.create({
@@ -240,8 +445,11 @@ export async function addProjectStage(projectId: string, stageName: string, acto
   if (PROJECT_STAGE_KEYS.has(key)) throw new Error('That stage already exists.')
   return prisma.$transaction(async (tx) => {
     const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { companyId: true } })
+    if (await tx.workItem.count({ where: { projectId, stage: key } })) throw new Error('A stage with that name already exists.')
+
+    const last = await tx.workItem.aggregate({ where: { projectId, stage: { not: null }, kind: { not: 'OVERDUE_FOLLOWUP' } }, _max: { order: true } })
     await tx.workItem.create({
-      data: { companyId: project.companyId, projectId, kind: 'CUSTOM', stage: key, type: 'TODO', title: 'New task', status: 'PENDING', order: 1, dueOverrideAt: null },
+      data: { companyId: project.companyId, projectId, kind: 'CUSTOM', stage: key, type: 'TODO', title: 'New task', status: 'PENDING', order: (last._max.order ?? 0) + 1, dueOverrideAt: null },
     })
     await tx.auditLog.create({
       data: { companyId: project.companyId, actorUserId, action: 'project.stage_added', entityType: 'Project', entityId: projectId, afterData: { stage: key } },
@@ -255,6 +463,7 @@ export async function renameProjectStage(projectId: string, fromStage: string, t
   if (PROJECT_STAGE_KEYS.has(fromStage) || PROJECT_STAGE_KEYS.has(to)) throw new Error('The core stages cannot be renamed.')
   return prisma.$transaction(async (tx) => {
     const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { companyId: true } })
+    if (to !== fromStage && (await tx.workItem.count({ where: { projectId, stage: to } }))) throw new Error('A stage with that name already exists.')
     const res = await tx.workItem.updateMany({ where: { projectId, stage: fromStage }, data: { stage: to } })
     if (res.count > 0) {
       await tx.auditLog.create({
@@ -277,12 +486,14 @@ export async function deleteProjectStage(projectId: string, stage: string, actor
   })
 }
 
-export async function updateProjectTask(taskId: string, title: string, dueAt: Date | null, actorUserId: string | null) {
+export async function updateProjectTask(taskId: string, title: string, due: TaskDue | Date | null, actorUserId: string | null) {
   const clean = title.trim()
   if (!clean) throw new Error('A task needs a title.')
   const task = await loadTask(taskId)
   await prisma.$transaction(async (tx) => {
-    await tx.workItem.update({ where: { id: taskId }, data: { title: clean, dueOverrideAt: dueAt } })
+
+    const dueData = due === null ? { dueOverrideAt: null } : projectDueData(asTaskDue(due))
+    await tx.workItem.update({ where: { id: taskId }, data: { title: clean, ...dueData } })
     await tx.auditLog.create({
       data: {
         companyId: task.companyId,
@@ -359,9 +570,10 @@ export async function toggleProjectTask(taskId: string, actorUserId: string) {
         select: { id: true, stage: true, order: true },
       })
 
+      const targetIsCore = stageRank.has(targetStage) && !optionalStages.has(targetStage)
       const ids = pending
         .filter((t) => rankOf(t) <= target)
-        .filter((t) => !optionalStages.has(t.stage ?? '') || (t.stage ?? '') === targetStage)
+        .filter((t) => (targetIsCore ? !optionalStages.has(t.stage ?? '') && stageRank.has(t.stage ?? '') : false) || (t.stage ?? '') === targetStage)
         .map((t) => t.id)
       await tx.workItem.updateMany({
         where: { id: { in: ids } },
@@ -398,12 +610,12 @@ export async function toggleProjectTask(taskId: string, actorUserId: string) {
   })
 }
 
-const AUTO_COMPLETE_FROM = new Set(['BOOKING_REQUESTED', 'CONFIRMED', 'IN_PRODUCTION'])
+const AUTO_COMPLETE_FROM = new Set(['CONFIRMED'])
 
 export async function maybeAutoCompleteJob(tx: Tx, projectId: string, actorUserId: string | null) {
   const project = await tx.project.findUnique({
     where: { id: projectId },
-    select: { companyId: true, lifecycleStatus: true, packagePriceSnapshot: true, invoices: { select: INVOICE_MONEY_SELECT } },
+    select: { companyId: true, lifecycleStatus: true },
   })
   if (!project || !AUTO_COMPLETE_FROM.has(project.lifecycleStatus)) return
 
@@ -412,19 +624,6 @@ export async function maybeAutoCompleteJob(tx: Tx, projectId: string, actorUserI
     tx.workItem.count({ where: { projectId, type: { not: 'AUTO' }, status: 'PENDING' } }),
   ])
   if (total === 0 || pending > 0) return
-
-  const acceptedQuote = await tx.quoteVersion.findFirst({
-    where: { quote: { projectId }, status: 'ACCEPTED' },
-    orderBy: { acceptedByClientAt: 'desc' },
-    select: { total: true },
-  })
-  const agreed = acceptedQuote?.total ?? project.packagePriceSnapshot ?? null
-  const bal = getJobBalance(project.invoices.map(toInvoiceMoneyInput), agreed)
-
-  const settled = bal.agreedValueKnown
-    ? bal.isFullySettled
-    : bal.outstanding.lessThanOrEqualTo(0) && bal.overpaymentToResolve.lessThanOrEqualTo(0)
-  if (!settled) return
 
   await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'COMPLETED' } })
   await tx.auditLog.create({

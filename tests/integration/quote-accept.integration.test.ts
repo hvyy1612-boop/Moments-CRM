@@ -41,14 +41,13 @@ describe('acceptQuote — enquiry-stage quote → job (docs/31, integration)', (
 
     expect(quote?.status).toBe('ACCEPTED')
     expect(quote?.projectId).toBe(res.projectId)
-    expect(enquiry?.status).toBe('CONVERTED')
+    expect(enquiry?.status).toBe('AWAITING_BOOKING_CONFIRMATION')
     expect(enquiry?.convertedProjectId).toBe(res.projectId)
-    expect(project?.sourceQuoteId).toBe(quoteId)
     expect(project?.lifecycleStatus).toBe('BOOKING_REQUESTED')
     expect(project?.commercialStatus).toBe('ACCEPTED')
   })
 
-  it('accepting one quote supersedes the enquiry\'s other open quotes', async () => {
+  it('accepting one quote deletes the lead\'s other open quotes (redundant alternatives, c9eb30e)', async () => {
     const enquiry = await createEnquiry({ name: 'Lead', email: email() })
     const q1 = await createQuoteForEnquiry(enquiry.id, null)
     await saveQuoteDraft(q1.versionId, [{ description: 'Option A', quantity: 1, unitPrice: '3000' }], null)
@@ -61,7 +60,7 @@ describe('acceptQuote — enquiry-stage quote → job (docs/31, integration)', (
     const a = await prisma.quote.findUnique({ where: { id: q1.quoteId } })
     const b = await prisma.quote.findUnique({ where: { id: q2.quoteId } })
     expect(b?.status).toBe('ACCEPTED')
-    expect(a?.status).toBe('SUPERSEDED')
+    expect(a).toBeNull()
   })
 
   it('only a SENT quote can be accepted; a draft cannot', async () => {
@@ -80,10 +79,18 @@ describe('acceptQuote — enquiry-stage quote → job (docs/31, integration)', (
   it('an expired quote cannot be accepted', async () => {
     const enquiry = await createEnquiry({ name: 'Lead', email: email() })
     const q = await createQuoteForEnquiry(enquiry.id, null)
-    const past = new Date(Date.now() - 24 * 60 * 60 * 1000)
-    await saveQuoteDraft(q.versionId, [{ description: 'X', quantity: 1, unitPrice: '2000' }], past)
+    await saveQuoteDraft(q.versionId, [{ description: 'X', quantity: 1, unitPrice: '2000' }], null)
     await sendQuote(q.quoteId, null)
+
+    await prisma.quoteVersion.update({ where: { id: q.versionId }, data: { validUntil: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) } })
     await expect(acceptQuote(q.quoteId, null)).rejects.toThrow(/expired/i)
+  })
+
+  it('a quote whose valid-until date has already passed cannot be sent', async () => {
+    const enquiry = await createEnquiry({ name: 'Lead', email: email() })
+    const q = await createQuoteForEnquiry(enquiry.id, null)
+    await saveQuoteDraft(q.versionId, [{ description: 'X', quantity: 1, unitPrice: '2000' }], new Date(Date.now() - 2 * 24 * 60 * 60 * 1000))
+    await expect(sendQuote(q.quoteId, null)).rejects.toThrow(/valid until/i)
   })
 
   it('accepting does NOT create a deposit invoice (workflow does that later)', async () => {

@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import type { EnquiryStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { INTERNAL_LOGIN_DOMAINS } from '@/lib/auth/staff'
 import { getEnquiryBoard } from '@/lib/domain/enquiry-workflow'
 import { getProjectBoard } from '@/lib/domain/project-workflow'
 import { markOverdueInvoices } from '@/lib/domain/finance'
 import { sendTaskDigestEmail } from '@/lib/email'
 import {
-  processOutboxOnce,
   reconcileBufferedEvents,
   releaseExpiredLeases,
   resolveSettledOverdueFollowups,
@@ -28,10 +28,6 @@ export async function GET(req: Request): Promise<Response> {
 
   await releaseExpiredLeases()
   await reconcileBufferedEvents()
-  let outboxGuard = 0
-  while ((await processOutboxOnce()).processed > 0 && outboxGuard++ < 50) {
-    /* drain the business-event backlog into dispatches */
-  }
   const reminderScan = await scanPaymentReminders()
   const reminders = { enqueued: reminderScan.enqueued, followups: reminderScan.followups }
   await resolveSettledOverdueFollowups()
@@ -57,7 +53,7 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const projects = await prisma.project.findMany({
-    where: { lifecycleStatus: { notIn: Array.from(CLOSED_STATUSES) } },
+    where: { lifecycleStatus: { notIn: [...Array.from(CLOSED_STATUSES), 'BOOKING_REQUESTED'] } },
     select: { id: true, client: { select: { displayName: true } } },
   })
   for (const p of projects) {
@@ -76,7 +72,7 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const staff = await prisma.user.findMany({
-    where: { isActive: true, status: 'ACTIVE' },
+    where: { isActive: true, status: 'ACTIVE', AND: INTERNAL_LOGIN_DOMAINS.map((d) => ({ NOT: { email: { endsWith: `@${d}` } } })) },
     select: { email: true, name: true },
   })
   for (const u of staff) {

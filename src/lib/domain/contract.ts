@@ -111,14 +111,6 @@ export async function createContractFromAcceptedQuote(projectId: string, created
         afterData: { projectId, total: snapshot.total },
       },
     })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'contract.created',
-        aggregateType: 'Contract',
-        aggregateId: contract.id,
-        payload: { contractId: contract.id, projectId },
-      },
-    })
 
     return { contractId: contract.id, versionId: version.id, signToken: contract.signToken }
   })
@@ -144,17 +136,11 @@ export async function sendContract(contractId: string, actorUserId: string | nul
         actorUserId,
       },
     })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'contract.sent',
-        aggregateType: 'Contract',
-        aggregateId: contractId,
-        payload: { contractId, signToken: contract.signToken },
-      },
-    })
     return { signToken: contract.signToken }
   })
 }
+
+const STOPPED = new Set(['CANCELLED', 'CLOSED'])
 
 export async function signContractByToken(signToken: string, signedName: string, ip: string) {
   const now = systemClock.now()
@@ -168,6 +154,9 @@ export async function signContractByToken(signToken: string, signedName: string,
     if (version.status === 'SIGNED') return { alreadySigned: true }
     if (version.status !== 'SENT') throw new Error('This contract cannot be signed.')
 
+    const project = await tx.project.findUnique({ where: { id: contract.projectId }, select: { lifecycleStatus: true } })
+    if (!project || STOPPED.has(project.lifecycleStatus)) throw new Error('This booking is no longer active, so the contract cannot be signed. Please contact the studio.')
+
     await tx.contractVersion.update({
       where: { id: version.id },
       data: {
@@ -178,10 +167,7 @@ export async function signContractByToken(signToken: string, signedName: string,
       },
     })
     await tx.contract.update({ where: { id: contract.id }, data: { status: 'SIGNED' } })
-    await tx.project.update({
-      where: { id: contract.projectId },
-      data: { lifecycleStatus: 'CONFIRMED' },
-    })
+
     await tx.auditLog.create({
       data: {
         action: 'contract.signed',
@@ -189,14 +175,6 @@ export async function signContractByToken(signToken: string, signedName: string,
         entityId: contract.id,
         source: 'client.contract',
         afterData: { signedName },
-      },
-    })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'contract.signed',
-        aggregateType: 'Contract',
-        aggregateId: contract.id,
-        payload: { contractId: contract.id, projectId: contract.projectId },
       },
     })
     return { alreadySigned: false }

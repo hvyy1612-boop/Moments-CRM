@@ -1,15 +1,16 @@
 import Link from 'next/link'
 import { Breadcrumb, DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { notFound } from 'next/navigation'
-import { Button } from '@/components/ui/Button'
+import { Button, buttonClass } from '@/components/ui/Button'
 import { IconLink } from '@/components/ui/IconButton'
 import { StatusPill, type Tone } from '@/components/ui/StatusPill'
 import { SentToast } from '@/components/ui/SentToast'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { JOB_SHOOT_INCLUDE, shootDateOfJob, shootHasTime } from '@/lib/domain/deadline'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, formatSydneyDateTime, sydneyDateTimeParts } from '@/lib/time'
-import { getProjectBoard } from '@/lib/domain/project-workflow'
+import { getProjectBoard, moveBackToLeadBlocker } from '@/lib/domain/project-workflow'
 import { getJobBalance } from '@/lib/domain/money'
 import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
 import { listActivePackages } from '@/lib/domain/package'
@@ -28,6 +29,9 @@ import { ContractSend } from './ContractSend'
 import type { HistoryEntry } from './HistoryLogModal'
 import { JobSidebar } from './JobSidebar'
 import { ProjectWorkflow } from './ProjectWorkflow'
+import { JobAcceptedRow } from './JobAcceptedRow'
+import { JobCompleteRow } from './JobCompleteRow'
+import { dueSpecOf, type DueSpec } from '@/features/tasks/due'
 import { QuoteBuilder } from './QuoteBuilder'
 import { ChangeRequestsSection } from './ChangeRequestsSection'
 import {
@@ -51,6 +55,11 @@ function label(value: string): string {
   return value.toLowerCase().replace(/_/g, ' ')
 }
 
+function titleWord(value: string): string {
+  const v = label(value)
+  return v.charAt(0).toUpperCase() + v.slice(1)
+}
+
 function historyActionType(action: string): string {
   const base = action.replace(/^project\./, '').replace(/_/g, ' ')
   return base.charAt(0).toUpperCase() + base.slice(1)
@@ -60,6 +69,11 @@ function historyDetails(action: string, after: unknown): string {
   if (action === 'project.task_completed') return `${title} was completed.`
   if (action === 'project.task_reopened') return `${title} was reopened.`
   if (action === 'enquiry.converted') return 'Job was created from a lead.'
+  if (action === 'project.created_direct') return 'Job was added as an already confirmed booking.'
+  if (action === 'project.completed_manual') return 'Job complete was ticked; the job moved to Completed Jobs.'
+  if (action === 'project.reopened') return 'Job complete was unticked; the job is back in Active Jobs.'
+  if (action === 'project.auto_completed') return 'Every task done (Final payment received included): Job complete ticked itself.'
+  if (action === 'project.moved_back_to_lead') return 'Job accepted was unticked; it went back to Leads.'
   return historyActionType(action)
 }
 
@@ -108,25 +122,11 @@ export async function CaseDetail({
         orderBy: { createdAt: 'desc' },
         include: { currentVersion: true },
       },
-      bookings: {
-        orderBy: { startsAt: 'asc' },
-        include: {
-          assignments: {
-            where: { status: 'ACTIVE' },
-            include: { resource: { select: { name: true } } },
-          },
-        },
-      },
+
+      ...JOB_SHOOT_INCLUDE,
       invoices: { select: { ...INVOICE_MONEY_SELECT, id: true } },
-      galleries: {
-        orderBy: { createdAt: 'desc' },
-        include: { items: { orderBy: { sortOrder: 'asc' } } },
-      },
       requirements: { orderBy: { sortOrder: 'asc' } },
-      teamMembers: {
-        orderBy: { sortOrder: 'asc' },
-        include: { resource: { include: { linkedUser: { select: { email: true } } } } },
-      },
+      teamMembers: { orderBy: { sortOrder: 'asc' } },
     },
   })
   if (!project) notFound()
@@ -136,18 +136,21 @@ export async function CaseDetail({
   const contract = project.contracts[0]
   const contractVersion = contract?.currentVersion ?? null
   const quoteAccepted = version?.status === 'ACCEPTED'
-  const isConfirmed = (['CONFIRMED', 'IN_PRODUCTION', 'COMPLETED'] as const).some(
-    (s) => s === project.lifecycleStatus,
-  )
-  const canInvoice = project.lifecycleStatus !== 'CANCELLED' && project.lifecycleStatus !== 'LOST'
+  const isConfirmed = (['CONFIRMED', 'COMPLETED'] as const).some((s) => s === project.lifecycleStatus)
+  const canInvoice = project.lifecycleStatus !== 'CANCELLED'
 
   const board = await getProjectBoard(project.id)
-  const taskOverrides = await prisma.workItem.findMany({
-    where: { projectId: project.id, dueOverrideAt: { not: null } },
-    select: { id: true, dueOverrideAt: true },
+
+  const taskDueRows = await prisma.workItem.findMany({
+    where: { projectId: project.id },
+    select: { id: true, dueOverrideAt: true, dueAnchor: true, dueOffsetDays: true, dueDateFixed: true },
   })
   const taskTimes: Record<string, string> = {}
-  for (const w of taskOverrides) if (w.dueOverrideAt) taskTimes[w.id] = sydneyDateTimeParts(w.dueOverrideAt).time
+  const taskDue: Record<string, DueSpec> = {}
+  for (const w of taskDueRows) {
+    if (w.dueOverrideAt) taskTimes[w.id] = sydneyDateTimeParts(w.dueOverrideAt).time
+    taskDue[w.id] = dueSpecOf(w)
+  }
 
   const internalNotes = await prisma.communication.findMany({
     where: { projectId: project.id, internal: true },
@@ -160,12 +163,6 @@ export async function CaseDetail({
       by: { select: { name: true } },
       editedBy: { select: { name: true } },
     },
-  })
-
-  const teamResourceOptions = await prisma.resource.findMany({
-    where: { companyId: project.companyId, status: 'active' },
-    orderBy: { name: 'asc' },
-    select: { id: true, name: true },
   })
 
   const history: HistoryEntry[] = (
@@ -186,11 +183,31 @@ export async function CaseDetail({
   const invoiceCount = project.invoices.length
   const invoiceOutstanding = getJobBalance(project.invoices.map(toInvoiceMoneyInput), null).outstanding
 
+  const showAccepted = project.lifecycleStatus !== 'CANCELLED'
+  const acceptedBlocker = moveBackToLeadBlocker({
+    lifecycleStatus: project.lifecycleStatus,
+    paidNet: getJobBalance(project.invoices.map(toInvoiceMoneyInput), null).paidNet,
+  })
+
+  const notYetInvoiced = quoteAccepted && version
+    ? getJobBalance(project.invoices.map(toInvoiceMoneyInput), version.total).uninvoicedRemainder
+    : null
+
   const isDelivered = project.lifecycleStatus === 'COMPLETED'
+
+  const jobComplete = isDelivered || project.lifecycleStatus === 'CLOSED'
+  const completedAt = jobComplete
+    ? (await prisma.auditLog.findFirst({
+        where: { entityType: 'Project', entityId: project.id, action: { in: ['project.auto_completed', 'project.completed_manual'] } },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      }))?.createdAt ?? null
+    : null
+  const completedLabel = completedAt ? formatSydneyDate(completedAt) : null
   const isClosed = project.lifecycleStatus === 'CLOSED'
-  const blockingCount = isDelivered
-    ? await prisma.workItem.count({ where: { projectId: project.id, status: 'PENDING', type: { not: 'AUTO' } } })
-    : 0
+
+  const openTaskCount = await prisma.workItem.count({ where: { projectId: project.id, status: 'PENDING', type: { not: 'AUTO' } } })
+  const blockingCount = isDelivered ? openTaskCount : 0
   const canClose = isDelivered && invoiceOutstanding.lessThanOrEqualTo(0) && blockingCount === 0
 
   const packageOptions = (await listActivePackages()).map((p) => ({
@@ -203,9 +220,10 @@ export async function CaseDetail({
     isAddOn: p.isAddOn,
   }))
 
-  const shootBooking = project.bookings[0] ?? null
-  const shootDateLabel = shootBooking ? formatSydneyDateTime(shootBooking.startsAt) : null
-  const shootLocation = shootBooking?.location ?? null
+  const shootAt = shootDateOfJob(project)
+  const shootDateLabel = shootAt ? (shootHasTime(project) ? formatSydneyDateTime(shootAt) : formatSydneyDate(shootAt)) : null
+  const lead = project.convertedFromEnquiries[0]
+  const shootLocation = project.shootLocation
 
   const hasBoard = Boolean(board && board.stages.length > 0)
   const corePhases = board?.stages.filter((s) => !s.optional) ?? []
@@ -245,7 +263,7 @@ export async function CaseDetail({
     editedByName: n.editedBy?.name ?? null,
     editedLabel: n.editedAt ? formatSydneyDateTime(n.editedAt) : null,
   }))
-  const overviewTeam = project.teamMembers.map((t) => ({ id: t.id, name: t.name, role: t.role, email: t.resource?.linkedUser?.email ?? null }))
+  const overviewTeam = project.teamMembers.map((t) => ({ id: t.id, name: t.name, role: t.role }))
 
   return (
     <AppShell user={user} csrf={csrf} active={section} bareHeader>
@@ -261,6 +279,12 @@ export async function CaseDetail({
               <span className="flex items-center gap-1.5"><IconUsers className="h-4 w-4" /> {project.client.displayName}</span>
               {shootDateLabel ? <span className="flex items-center gap-1.5"><IconCalendar className="h-4 w-4" /> {shootDateLabel}</span> : null}
               {shootLocation ? <span className="flex items-center gap-1.5"><IconPin className="h-4 w-4" /> {shootLocation}</span> : null}
+              {/* The lead this job was booked from (its enquiry details, quote history and notes). */}
+              {lead ? (
+                <Link href={`/leads/${lead.id}`} className="hover:text-ink hover:underline">
+                  From lead {lead.enquiryNumber ?? ''}
+                </Link>
+              ) : null}
             </div>
           </div>
 
@@ -352,16 +376,42 @@ export async function CaseDetail({
                 projectId={project.id}
                 csrf={csrf}
                 taskTimes={taskTimes}
+                taskDue={taskDue}
                 history={history}
+                bookingRow={
+                  showAccepted ? (
+                    <JobAcceptedRow
+                      key="job-accepted"
+                      csrf={csrf}
+                      projectId={project.id}
+                      acceptedLabel={project.confirmedByClientAt ? formatSydneyDate(project.confirmedByClientAt) : null}
+                      blocker={acceptedBlocker}
+                    />
+                  ) : null
+                }
+                muted={jobComplete}
+                completeRow={
+                  <JobCompleteRow
+                    key="job-complete"
+                    csrf={csrf}
+                    projectId={project.id}
+                    done={jobComplete}
+                    dateLabel={completedLabel}
+                    readOnly={project.lifecycleStatus === 'CLOSED' || project.lifecycleStatus === 'CANCELLED'}
+                    openTasks={openTaskCount}
+                    outstandingLabel={invoiceOutstanding.greaterThan(0) ? formatAud(invoiceOutstanding) : null}
+                  />
+                }
                 rail={
+
                   <JobSidebar
+                    key="job-sidebar"
                     projectId={project.id}
                     csrf={csrf}
                     client={overviewClient}
                     requirements={overviewRequirements}
                     notes={overviewNotes}
                     team={overviewTeam}
-                    resources={teamResourceOptions}
                   />
                 }
               />
@@ -405,7 +455,6 @@ export async function CaseDetail({
                       referenceId: line.referenceId,
                       details: line.details,
                     }))}
-                    initialIntroduction={version.introduction ?? ''}
                     initialPoNumber={version.poNumber ?? ''}
                     initialNotes={version.notes ?? ''}
                     initialDepositPercent={version.depositPercent != null ? String(version.depositPercent) : ''}
@@ -438,7 +487,7 @@ export async function CaseDetail({
                       <span className="tabular-nums text-ink">{formatAud(version.total)}</span>
                     </div>
                     {version.acceptedByClientAt ? (
-                      <p className="mt-2 text-sm text-ink">Accepted by {version.acceptedByClientName} on {formatSydneyDate(version.acceptedByClientAt)}.</p>
+                      <p className="mt-2 text-sm text-ink">Accepted on {formatSydneyDate(version.acceptedByClientAt)}.</p>
                     ) : null}
                   </div>
                 )}
@@ -449,7 +498,7 @@ export async function CaseDetail({
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h2 className="text-lg font-semibold text-ink">Contract</h2>
                     <div className="flex items-center gap-2">
-                      {contractVersion ? <StatusPill tone={CONTRACT_TONE[contractVersion.status] ?? 'neutral'}>{label(contractVersion.status)}</StatusPill> : null}
+                      {contractVersion ? <StatusPill tone={CONTRACT_TONE[contractVersion.status] ?? 'neutral'}>{titleWord(contractVersion.status)}</StatusPill> : null}
                       {quote ? <IconLink label="Edit quote" tone="accent" href={`/quotes/${quote.id}`} icon={EDIT_ICON} /> : null}
                     </div>
                   </div>
@@ -478,7 +527,9 @@ export async function CaseDetail({
                     <div>
                       <h2 className="text-lg font-semibold text-ink">Invoices &amp; payments</h2>
                       <p className="mt-1 text-sm text-ink-muted">
-                        {invoiceCount} invoice{invoiceCount === 1 ? '' : 's'} · {formatAud(invoiceOutstanding)} outstanding · managed in Payments.
+                        {invoiceCount} invoice{invoiceCount === 1 ? '' : 's'} · {formatAud(invoiceOutstanding)} outstanding
+                        {notYetInvoiced && notYetInvoiced.greaterThan(0) ? ` · ${formatAud(notYetInvoiced)} of the quote not invoiced yet` : ''} · managed in
+                        Payments.
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -490,8 +541,8 @@ export async function CaseDetail({
                           icon={EDIT_ICON}
                         />
                       ) : null}
-                      <Link href="/finance"><Button variant="secondary" size="sm">Open Payments</Button></Link>
-                      <Link href={`/finance/new?job=${project.id}`}><Button size="sm">New invoice</Button></Link>
+                      <Link href="/finance" className={buttonClass('secondary', 'sm')}>Open Payments</Link>
+                      <Link href={`/finance/new?job=${project.id}`} className={buttonClass('primary', 'sm')}>New invoice</Link>
                     </div>
                   </div>
                 </section>

@@ -19,6 +19,11 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   return { id: user.id, email: user.email, name: user.name, role: user.role, mustChangePassword: user.mustChangePassword }
 }
 
+export async function getActionUser(): Promise<SessionUser | null> {
+  const user = await getSessionUser()
+  return user && !user.mustChangePassword ? user : null
+}
+
 export async function requireRole(routeId: string): Promise<SessionUser> {
   const permission = ROUTE_PERMISSIONS[routeId]
   if (!permission || !('roles' in permission)) {

@@ -3,36 +3,32 @@
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { appBaseUrl } from '@/lib/app-url'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { getSessionUser } from '@/lib/auth/guard'
+import { can } from '@/lib/auth/authz'
+import { getActionUser } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { sydneyLocalToUtc } from '@/lib/time'
-import { assignResource, createBooking } from '@/lib/domain/booking'
-import { logCommunication } from '@/lib/domain/communication'
-import { closeJob, createProjectFromEnquiry } from '@/lib/domain/project'
+import { JOB_DUE_ANCHORS, parseTaskForm } from '@/features/tasks/due'
+import { closeJob } from '@/lib/domain/project'
 import {
   addProjectStage,
   addProjectStageBlock,
   addProjectTask,
   deleteProjectStage,
+  moveJobBackToLead,
+  setJobComplete,
   deleteProjectTask,
   moveProjectTask,
   renameProjectStage,
   toggleProjectTask,
   updateProjectTask,
 } from '@/lib/domain/project-workflow'
-import { enquirySchema } from '@/lib/validation/enquiry'
 import { createContractFromAcceptedQuote, sendContract } from '@/lib/domain/contract'
-import { addGalleryItem, createGallery, publishGallery } from '@/lib/domain/delivery'
-import { createInvoice, createInvoiceWithLines, deleteInvoice, issueInvoice, recordPayment, saveInvoiceTemplate, updateInvoiceWithLines, voidInvoice } from '@/lib/domain/finance'
+import { createInvoiceWithLines, deleteInvoice, recordPayment, updateInvoiceWithLines, voidInvoice } from '@/lib/domain/finance'
 import { refundPayment } from '@/lib/domain/refund'
-import { createPackage } from '@/lib/domain/package'
 import { createQuote, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
-import { createQuestionnaire } from '@/lib/domain/questionnaire'
 import { sendContractEmail, sendQuoteEmail } from '@/lib/email'
-import { assignResourceSchema, createBookingSchema } from '@/lib/validation/booking'
-import { addGalleryItemSchema, createGallerySchema } from '@/lib/validation/delivery'
-import { createInvoiceLinesSchema, createInvoiceSchema, recordPaymentSchema } from '@/lib/validation/finance'
+import { createInvoiceLinesSchema, recordPaymentSchema } from '@/lib/validation/finance'
 import { saveQuoteSchema } from '@/lib/validation/quote'
 
 export type QuoteActionState =
@@ -41,7 +37,7 @@ export type QuoteActionState =
   | { status: 'error'; message: string }
 
 async function requireStaff() {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDIO')) {
     throw new Error('Not authorised.')
   }
@@ -76,6 +72,39 @@ export async function closeJobAction(formData: FormData): Promise<void> {
   revalidatePath(`/jobs/${projectId}`)
 }
 
+export async function setJobCompleteAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  if (!projectId) return
+  try {
+    await setJobComplete(projectId, formData.get('done') === 'true', user.id)
+  } catch (error) {
+    redirect(`/jobs/${projectId}?completeError=${encodeURIComponent(error instanceof Error ? error.message : 'Could not update the job.')}`)
+  }
+  revalidatePath('/jobs')
+  revalidatePath(`/jobs/${projectId}`)
+}
+
+export async function moveJobBackToLeadAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const projectId = String(formData.get('projectId') ?? '')
+  if (!projectId) return
+  let enquiryId: string
+  try {
+    ;({ enquiryId } = await moveJobBackToLead(projectId, user.id))
+  } catch (error) {
+    redirect(`/jobs/${projectId}?moveError=${encodeURIComponent(error instanceof Error ? error.message : 'Could not move this job back to Leads.')}`)
+  }
+  revalidatePath('/jobs')
+  revalidatePath('/leads')
+  revalidatePath(`/leads/${enquiryId}`)
+  redirect(`/leads/${enquiryId}?toast=moved-to-lead`)
+}
+
 export async function saveQuoteAction(
   _prev: QuoteActionState,
   formData: FormData,
@@ -100,7 +129,6 @@ export async function saveQuoteAction(
     reference: formData.get('reference') ?? '',
     issueDate: formData.get('issueDate') ?? '',
     validUntil: formData.get('validUntil') ?? '',
-    introduction: formData.get('introduction') ?? '',
     poNumber: formData.get('poNumber') ?? '',
     notes: formData.get('notes') ?? '',
     depositPercent: formData.get('depositPercent') ?? '',
@@ -112,7 +140,6 @@ export async function saveQuoteAction(
 
   try {
     await saveQuoteDraft(versionId, parsed.data.lines, validUntil, {
-      introduction: parsed.data.introduction,
       poNumber: parsed.data.poNumber,
       notes: parsed.data.notes,
       depositPercent: parsed.data.depositPercent,
@@ -152,7 +179,7 @@ export async function sendQuoteAction(
   let recipient = ''
   if (quote?.project) {
     recipient = quote.project.client.email ?? ''
-    const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    const base = await appBaseUrl()
     await sendQuoteEmail({
       to: quote.project.client.email,
       clientName: quote.project.client.displayName,
@@ -176,6 +203,9 @@ export async function createContractAction(formData: FormData): Promise<void> {
     // The button only shows in a valid state; a double submit ("already exists") is a no-op here.
   }
   revalidatePath(`/jobs/${projectId}`)
+
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  if (enquiryId) revalidatePath(`/leads/${enquiryId}`)
 }
 
 export async function sendContractAction(
@@ -202,7 +232,7 @@ export async function sendContractAction(
     include: { project: { include: { client: { select: { email: true, displayName: true } } } } },
   })
   if (contract) {
-    const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    const base = await appBaseUrl()
     await sendContractEmail({
       to: contract.project.client.email,
       clientName: contract.project.client.displayName,
@@ -210,64 +240,8 @@ export async function sendContractAction(
     })
   }
   revalidatePath(`/jobs/${projectId}`)
-  return { status: 'success' }
-}
-
-export async function createBookingAction(
-  _prev: QuoteActionState,
-  formData: FormData,
-): Promise<QuoteActionState> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
-    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  }
-  const user = await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-
-  const parsed = createBookingSchema.safeParse({
-    title: formData.get('title') ?? '',
-    startsAt: formData.get('startsAt') ?? '',
-    endsAt: formData.get('endsAt') ?? '',
-    location: formData.get('location') ?? '',
-    notes: formData.get('notes') ?? '',
-  })
-  if (!parsed.success) {
-    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the booking.' }
-  }
-  try {
-    await createBooking(projectId, parsed.data, user.id)
-  } catch (error) {
-    return { status: 'error', message: error instanceof Error ? error.message : 'Could not schedule.' }
-  }
-  revalidatePath(`/jobs/${projectId}`)
-  return { status: 'success' }
-}
-
-export async function assignResourceAction(
-  _prev: QuoteActionState,
-  formData: FormData,
-): Promise<QuoteActionState> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
-    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  }
-  const user = await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const bookingId = String(formData.get('bookingId') ?? '')
-
-  const parsed = assignResourceSchema.safeParse({
-    resourceId: formData.get('resourceId') ?? '',
-    role: formData.get('role') ?? '',
-  })
-  if (!parsed.success) {
-    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please pick a resource.' }
-  }
-  try {
-    await assignResource(bookingId, parsed.data, user.id)
-  } catch (error) {
-    return { status: 'error', message: error instanceof Error ? error.message : 'Could not assign.' }
-  }
-  revalidatePath(`/jobs/${projectId}`)
+  const enquiryId = String(formData.get('enquiryId') ?? '')
+  if (enquiryId) revalidatePath(`/leads/${enquiryId}`)
   return { status: 'success' }
 }
 
@@ -381,11 +355,15 @@ export async function refundPaymentAction(
     return { status: 'error', message: 'Your session expired. Refresh and try again.' }
   }
   const user = await requireStaff()
+  if (!can(user, 'MONEY_ADMIN')) return { status: 'error', message: 'Only an admin can refund a payment.' }
   const paymentId = String(formData.get('paymentId') ?? '')
   const invoiceId = String(formData.get('invoiceId') ?? '')
   const amount = String(formData.get('amount') ?? '')
   const reason = String(formData.get('reason') ?? '').trim() || undefined
   if (!paymentId || !amount) return { status: 'error', message: 'Missing refund details.' }
+  if (!/^\d{1,9}(\.\d{1,2})?$/.test(amount.trim()) || Number(amount) <= 0) {
+    return { status: 'error', message: 'Please enter the refund as an amount like 250 or 250.00.' }
+  }
   try {
     await refundPayment(paymentId, amount, { reason }, user.id)
   } catch (error) {
@@ -400,126 +378,42 @@ export async function voidInvoiceAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
   if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
   const user = await requireStaff()
+  if (!can(user, 'MONEY_ADMIN')) return
   const invoiceId = String(formData.get('invoiceId') ?? '')
   if (!invoiceId) return
-  await voidInvoice(invoiceId, user.id)
+  try {
+    await voidInvoice(invoiceId, user.id)
+  } catch {
+    // Refused (e.g. money recorded since the page loaded): the re-render shows the real state.
+  }
   revalidatePath('/finance')
   revalidatePath(`/finance/${invoiceId}`)
   const projectId = String(formData.get('projectId') ?? '')
   if (projectId) revalidatePath(`/jobs/${projectId}`)
-}
-
-export async function createQuestionnaireAction(
-  _prev: QuoteActionState,
-  formData: FormData,
-): Promise<QuoteActionState> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
-    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  }
-  await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const title = String(formData.get('title') ?? '')
-  const questions = String(formData.get('questions') ?? '').split('\n')
-  try {
-    await createQuestionnaire(projectId, title, questions)
-  } catch (error) {
-    return { status: 'error', message: error instanceof Error ? error.message : 'Could not create the questionnaire.' }
-  }
-  revalidatePath(`/jobs/${projectId}`)
-  return { status: 'success' }
-}
-
-export async function saveInvoiceTemplateAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) throw new Error('Invalid request.')
-  await requireStaff()
-  let lines: unknown = []
-  try {
-    lines = JSON.parse(String(formData.get('lines') ?? '[]'))
-  } catch {
-    return
-  }
-  if (!Array.isArray(lines) || lines.length === 0) return
-  await saveInvoiceTemplate(
-    String(formData.get('name') ?? ''),
-    lines as { itemName?: string; description: string; quantity: number; unitPrice: string }[],
-  )
-  const projectId = String(formData.get('projectId') ?? '')
-  if (projectId) revalidatePath(`/jobs/${projectId}`)
-}
-
-export async function saveReusableItemAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  const user = await requireStaff()
-  const name = String(formData.get('name') ?? '').trim()
-  const price = String(formData.get('unitPrice') ?? '').trim()
-  if (!name || !/^\d+(\.\d{1,2})?$/.test(price)) return
-  const description = String(formData.get('description') ?? '').trim()
-  await createPackage({ name, inclusions: description || null, basePriceInclGst: price }, user.id)
-  revalidatePath('/finance')
-}
-
-export async function createInvoiceAction(
-  _prev: QuoteActionState,
-  formData: FormData,
-): Promise<QuoteActionState> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
-    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  }
-  const user = await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-
-  const parsed = createInvoiceSchema.safeParse({
-    type: formData.get('type') ?? '',
-    description: formData.get('description') ?? '',
-    amount: formData.get('amount') ?? '',
-  })
-  if (!parsed.success) {
-    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the invoice.' }
-  }
-  try {
-    await createInvoice(projectId, parsed.data, user.id)
-  } catch (error) {
-    return { status: 'error', message: error instanceof Error ? error.message : 'Could not raise the invoice.' }
-  }
-  revalidatePath(`/jobs/${projectId}`)
-  return { status: 'success' }
-}
-
-export async function issueInvoiceAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  const user = await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const invoiceId = String(formData.get('invoiceId') ?? '')
-  if (!invoiceId) return
-  try {
-    await issueInvoice(invoiceId, user.id)
-  } catch {
-    // A double submit ("already issued") is a no-op here; the re-render shows the real state.
-  }
-  revalidatePath(`/jobs/${projectId}`)
-  revalidatePath('/finance')
-  revalidatePath(`/finance/${invoiceId}`)
 }
 
 export async function deleteInvoiceAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
   if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
   const user = await requireStaff()
+  if (!can(user, 'MONEY_ADMIN')) return
   const invoiceId = String(formData.get('invoiceId') ?? '')
   if (!invoiceId) return
-  await deleteInvoice(invoiceId, user.id)
+  try {
+    await deleteInvoice(invoiceId, user.id)
+  } catch {
+
+    revalidatePath(`/finance/${invoiceId}`)
+    return
+  }
   revalidatePath('/finance')
   const projectId = String(formData.get('projectId') ?? '')
   if (projectId) revalidatePath(`/jobs/${projectId}`)
   const clientId = String(formData.get('clientId') ?? '')
   if (clientId) revalidatePath(`/clients/${clientId}`)
+
   const back = String(formData.get('back') ?? '')
-  if (back) redirect(back)
+  if (/^\/(?!\/)/.test(back)) redirect(back)
 }
 
 export async function recordPaymentAction(
@@ -553,79 +447,10 @@ export async function recordPaymentAction(
   return { status: 'success' }
 }
 
-export async function createGalleryAction(
-  _prev: QuoteActionState,
-  formData: FormData,
-): Promise<QuoteActionState> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
-    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  }
-  const user = await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-
-  const parsed = createGallerySchema.safeParse({ title: formData.get('title') ?? '' })
-  if (!parsed.success) {
-    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the gallery.' }
-  }
-  try {
-    await createGallery(projectId, parsed.data, user.id)
-  } catch (error) {
-    return { status: 'error', message: error instanceof Error ? error.message : 'Could not create the gallery.' }
-  }
-  revalidatePath(`/jobs/${projectId}`)
-  return { status: 'success' }
-}
-
-export async function addGalleryItemAction(
-  _prev: QuoteActionState,
-  formData: FormData,
-): Promise<QuoteActionState> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
-    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  }
-  const user = await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const galleryId = String(formData.get('galleryId') ?? '')
-
-  const parsed = addGalleryItemSchema.safeParse({
-    caption: formData.get('caption') ?? '',
-    url: formData.get('url') ?? '',
-  })
-  if (!parsed.success) {
-    return { status: 'error', message: parsed.error.issues[0]?.message ?? 'Please check the item.' }
-  }
-  try {
-    await addGalleryItem(galleryId, parsed.data, user.id)
-  } catch (error) {
-    return { status: 'error', message: error instanceof Error ? error.message : 'Could not add the item.' }
-  }
-  revalidatePath(`/jobs/${projectId}`)
-  return { status: 'success' }
-}
-
-export async function publishGalleryAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  const user = await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const galleryId = String(formData.get('galleryId') ?? '')
-  if (!galleryId) return
-  try {
-    await publishGallery(galleryId, user.id)
-  } catch {
-    // The button only shows on a draft with items; a double submit is a no-op here.
-  }
-  revalidatePath(`/jobs/${projectId}`)
-}
-
-function parseDue(formData: FormData): Date | null {
-  const date = String(formData.get('dueAt') ?? '').trim()
-  if (!date) return null
-  const time = String(formData.get('dueTime') ?? '').trim() || '09:00'
-  const d = sydneyLocalToUtc(`${date}T${time}`)
-  return Number.isNaN(d.getTime()) ? null : d
+const CALENDAR_TYPES = new Set(['EXTRA_SHOOT', 'APPOINTMENT'])
+function readJobTask(formData: FormData, type: string) {
+  const parsed = parseTaskForm(formData, { anchors: JOB_DUE_ANCHORS, calendarItem: CALENDAR_TYPES.has(type) })
+  return parsed.ok ? parsed : null
 }
 
 export async function toggleProjectTaskAction(formData: FormData): Promise<void> {
@@ -650,11 +475,11 @@ export async function addProjectTaskAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
   const projectId = String(formData.get('projectId') ?? '')
   const stage = String(formData.get('stage') ?? '')
-  const title = String(formData.get('title') ?? '')
   const type = String(formData.get('type') ?? 'TODO')
-  if (!projectId || !stage || !title.trim()) return
+  const task = readJobTask(formData, type)
+  if (!projectId || !stage || !task) return
   try {
-    await addProjectTask(projectId, stage, title, type, parseDue(formData), user.id)
+    await addProjectTask(projectId, stage, task.title, type, task.due, user.id)
   } catch {
     // Invalid stage / empty title: the re-render shows the real state.
   }
@@ -667,10 +492,12 @@ export async function updateProjectTaskAction(formData: FormData): Promise<void>
   const user = await requireStaff()
   const projectId = String(formData.get('projectId') ?? '')
   const workItemId = String(formData.get('workItemId') ?? '')
-  const title = String(formData.get('title') ?? '')
-  if (!projectId || !workItemId || !title.trim()) return
+  if (!projectId || !workItemId) return
+  const existing = await prisma.workItem.findUnique({ where: { id: workItemId }, select: { type: true } })
+  const task = existing ? readJobTask(formData, existing.type) : null
+  if (!task) return
   try {
-    await updateProjectTask(workItemId, title, parseDue(formData), user.id)
+    await updateProjectTask(workItemId, task.title, task.due, user.id)
   } catch {
     // no-op on stale id
   }
@@ -769,86 +596,6 @@ export async function moveProjectTaskAction(formData: FormData): Promise<void> {
   revalidatePath(`/jobs/${projectId}`)
 }
 
-export async function sendProjectReplyAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  const user = await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const body = String(formData.get('body') ?? '').trim()
-  if (!projectId || !body) return
-  await logCommunication(projectId, {
-    type: 'CLIENT_MESSAGE',
-    direction: 'outbound',
-    body,
-    byUserId: user.id,
-  })
-  revalidatePath(`/jobs/${projectId}`)
-}
-
-export async function logProjectClientReplyAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const body = String(formData.get('body') ?? '').trim()
-  if (!projectId || !body) return
-  await logCommunication(projectId, {
-    type: 'CLIENT_MESSAGE',
-    direction: 'inbound',
-    body,
-  })
-  revalidatePath(`/jobs/${projectId}`)
-}
-
-export type StaffEnquiryState =
-  | { status: 'idle' }
-  | {
-      status: 'error'
-      message?: string
-      errors?: { name?: string; email?: string; phone?: string; message?: string }
-    }
-
-export async function createStaffEnquiryAction(
-  _prev: StaffEnquiryState,
-  formData: FormData,
-): Promise<StaffEnquiryState> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) {
-    return { status: 'error', message: 'Your session expired. Refresh and try again.' }
-  }
-  await requireStaff()
-
-  const parsed = enquirySchema.safeParse({
-    name: formData.get('name'),
-    email: formData.get('email'),
-    phone: formData.get('phone') ?? '',
-    eventType: formData.get('eventType') ?? '',
-    message: formData.get('message') ?? '',
-    source: 'staff',
-  })
-  if (!parsed.success) {
-    const fields = parsed.error.flatten().fieldErrors
-    return {
-      status: 'error',
-      errors: {
-        name: fields.name?.[0],
-        email: fields.email?.[0],
-        phone: fields.phone?.[0],
-        message: fields.message?.[0],
-      },
-    }
-  }
-
-  let projectId: string
-  try {
-    const project = await createProjectFromEnquiry(parsed.data)
-    projectId = project.id
-  } catch {
-    return { status: 'error', message: 'Could not create the job. Please try again.' }
-  }
-  redirect(`/jobs/${projectId}`)
-}
-
 export async function addRequirementAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
   if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
@@ -873,61 +620,16 @@ export async function deleteRequirementAction(formData: FormData): Promise<void>
   revalidatePath(`/jobs/${projectId}`)
 }
 
-export async function addMessageToRequirementsAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const communicationId = String(formData.get('communicationId') ?? '')
-  if (!projectId || !communicationId) return
-  const message = await prisma.communication.findFirst({ where: { id: communicationId, projectId }, select: { body: true } })
-  if (!message) return
-  const sortOrder = await prisma.projectRequirement.count({ where: { projectId } })
-  await prisma.projectRequirement.create({ data: { projectId, label: 'Client request', detail: message.body, sortOrder } })
-  revalidatePath(`/jobs/${projectId}`)
-}
-
-export async function addMoodboardItemAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const url = String(formData.get('url') ?? '').trim()
-  const caption = String(formData.get('caption') ?? '').trim() || null
-  const kind = String(formData.get('kind') ?? 'image') === 'link' ? 'link' : 'image'
-  if (!projectId || !url) return
-  const sortOrder = await prisma.moodboardItem.count({ where: { projectId } })
-  await prisma.moodboardItem.create({ data: { projectId, url, caption, kind, sortOrder } })
-  revalidatePath(`/jobs/${projectId}`)
-}
-
-export async function deleteMoodboardItemAction(formData: FormData): Promise<void> {
-  const cookieStore = await cookies()
-  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
-  await requireStaff()
-  const projectId = String(formData.get('projectId') ?? '')
-  const id = String(formData.get('itemId') ?? '')
-  if (!projectId || !id) return
-  await prisma.moodboardItem.deleteMany({ where: { id, projectId } })
-  revalidatePath(`/jobs/${projectId}`)
-}
-
 export async function addTeamMemberAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
   if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
   await requireStaff()
   const projectId = String(formData.get('projectId') ?? '')
-  const role = String(formData.get('role') ?? '').trim()
-  const resourceId = String(formData.get('resourceId') ?? '').trim() || null
-  let name = String(formData.get('name') ?? '').trim()
-  if (!projectId || !role) return
-  if (resourceId && !name) {
-    const resource = await prisma.resource.findFirst({ where: { id: resourceId }, select: { name: true } })
-    name = resource?.name ?? ''
-  }
-  if (!name) return
+  const role = String(formData.get('role') ?? '').trim().slice(0, 80)
+  const name = String(formData.get('name') ?? '').trim().slice(0, 150)
+  if (!projectId || !role || !name) return
   const sortOrder = await prisma.projectTeamMember.count({ where: { projectId } })
-  await prisma.projectTeamMember.create({ data: { projectId, resourceId, name, role, sortOrder } })
+  await prisma.projectTeamMember.create({ data: { projectId, name, role, sortOrder } })
   revalidatePath(`/jobs/${projectId}`)
 }
 

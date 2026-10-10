@@ -77,7 +77,7 @@ export default async function CalendarPage({
         title="Calendar"
         actions={
           <>
-            <SyncButton feedPath={feedPath} />
+            <SyncButton feedPath={feedPath} csrf={csrf} canReset={user.role !== 'SUPERVISOR'} />
             {canManage ? <AddEventButton csrf={csrf} clients={clients} date={cockpit ? '' : (data?.todayDateKey ?? '')} /> : null}
           </>
         }

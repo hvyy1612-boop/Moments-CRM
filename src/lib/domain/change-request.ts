@@ -3,13 +3,11 @@ import { prisma } from '@/lib/db'
 import { splitGstInclusive } from '@/lib/money'
 import { sydneyLocalToUtc, systemClock } from '@/lib/time'
 import { changeRequestPayloadSchema, type ChangeRequestPayload } from '@/lib/validation/change-request'
-import { rescheduleBookingTx } from './booking'
+import { JOB_SHOOT_SELECT, shootDateOfJob, SHOOT_TASK_TYPE } from './deadline'
 import { createInvoiceTx, issueCreditNoteTx } from './finance'
 import { reviseQuoteTx } from './quote'
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
-
-const APPROVAL_THRESHOLD = new Prisma.Decimal(500)
 
 const TYPE_BY_KIND: Record<ChangeRequestPayload['kind'], ChangeRequestType> = {
   reschedule: 'OPERATIONAL',
@@ -22,7 +20,7 @@ const TYPE_BY_KIND: Record<ChangeRequestPayload['kind'], ChangeRequestType> = {
 function describe(p: ChangeRequestPayload): string {
   switch (p.kind) {
     case 'reschedule':
-      return `Reschedule shoot to ${p.newStartsAt}${p.fee ? ` (fee ${p.fee.amount})` : ''}`
+      return `Move the shoot to ${p.newStartsAt}${p.fee ? ` (fee ${p.fee.amount})` : ''}`
     case 'scopeChange':
       return `Scope change: ${p.summary} (fee ${p.fee.amount})`
     case 'priceDecrease':
@@ -49,16 +47,18 @@ function parseSydney(local: string): Date {
   return sydneyLocalToUtc(local.includes('T') ? local : `${local}T00:00`)
 }
 
+async function currentShootDate(tx: Tx, projectId: string): Promise<Date | null> {
+  const job = await tx.project.findUnique({ where: { id: projectId }, select: JOB_SHOOT_SELECT })
+  return job ? shootDateOfJob(job) : null
+}
+
 async function assertChangeAllowed(tx: Tx, projectId: string, p: ChangeRequestPayload): Promise<void> {
   const project = await tx.project.findUnique({ where: { id: projectId }, select: { lifecycleStatus: true } })
   if (!project) throw new Error('Job not found.')
-  if (project.lifecycleStatus === 'LOST') throw new Error('This job is lost; no change requests apply.')
   if (p.kind === 'reschedule') {
     if (project.lifecycleStatus === 'CANCELLED') throw new Error('A cancelled job has no shoot to reschedule.')
-    const booking = await tx.booking.findUnique({ where: { id: p.bookingId }, select: { startsAt: true, status: true } })
-    if (!booking) throw new Error('Booking not found.')
-    if (booking.status === 'CANCELLED') throw new Error('That shoot was already cancelled or rescheduled.')
-    if (booking.startsAt.getTime() < systemClock.now().getTime()) {
+    const shoot = await currentShootDate(tx, projectId)
+    if (shoot && shoot.getTime() < systemClock.now().getTime()) {
       throw new Error('That shoot has already happened; it cannot be rescheduled.')
     }
   }
@@ -94,7 +94,6 @@ export async function createChangeRequest(
         description: describe(payload),
         reason: meta.reason ?? null,
         payload: payload as unknown as Prisma.InputJsonValue,
-        payloadVersion: 1,
       },
     })
     await tx.auditLog.create({
@@ -111,45 +110,6 @@ export async function createChangeRequest(
   })
 }
 
-export async function editChangeRequestPayload(changeRequestId: string, rawPayload: unknown, actorUserId: string | null = null) {
-  const payload = changeRequestPayloadSchema.parse(rawPayload)
-  return prisma.$transaction(async (tx) => {
-    const cr = await tx.changeRequest.findUnique({ where: { id: changeRequestId }, include: { project: { select: { companyId: true } } } })
-    if (!cr) throw new Error('Change request not found.')
-    if (cr.status === 'APPLIED') throw new Error('An applied change request cannot be edited.')
-    await assertChangeAllowed(tx, cr.projectId, payload)
-    const updated = await tx.changeRequest.update({
-      where: { id: changeRequestId },
-      data: {
-        payload: payload as unknown as Prisma.InputJsonValue,
-        payloadVersion: cr.payloadVersion + 1,
-        type: TYPE_BY_KIND[payload.kind],
-        description: describe(payload),
-        status: 'PENDING',
-        approvedByUserId: null,
-        approvedAt: null,
-        assessedBookingVersion: null,
-        assessedQuoteVersionId: null,
-        clientAgreedVia: null,
-        clientAgreedAt: null,
-        clientAgreedByUserId: null,
-        agreedQuoteVersionId: null,
-      },
-    })
-    await tx.auditLog.create({
-      data: {
-        companyId: cr.project.companyId,
-        action: 'change_request.payload_edited',
-        entityType: 'ChangeRequest',
-        entityId: changeRequestId,
-        actorUserId,
-        afterData: { payloadVersion: updated.payloadVersion },
-      },
-    })
-    return updated
-  })
-}
-
 export async function assessChangeRequest(changeRequestId: string, actorUserId: string | null = null) {
   return prisma.$transaction(async (tx) => {
     const cr = await tx.changeRequest.findUnique({ where: { id: changeRequestId }, include: { project: { select: { companyId: true } } } })
@@ -158,11 +118,10 @@ export async function assessChangeRequest(changeRequestId: string, actorUserId: 
     const payload = changeRequestPayloadSchema.parse(cr.payload)
     await assertChangeAllowed(tx, cr.projectId, payload)
 
-    let assessedBookingVersion: string | null = null
+    let assessedShootDate: string | null = null
     let assessedQuoteVersionId: string | null = null
     if (payload.kind === 'reschedule') {
-      const booking = await tx.booking.findUnique({ where: { id: payload.bookingId }, select: { updatedAt: true } })
-      assessedBookingVersion = booking ? booking.updatedAt.toISOString() : null
+      assessedShootDate = (await currentShootDate(tx, cr.projectId))?.toISOString() ?? 'none'
     }
     if (payload.kind === 'scopeChange') {
       const accepted = await tx.quoteVersion.findFirst({ where: { quote: { projectId: cr.projectId }, status: 'ACCEPTED' }, select: { id: true } })
@@ -174,8 +133,7 @@ export async function assessChangeRequest(changeRequestId: string, actorUserId: 
       data: {
         status: 'IMPACT_ASSESSMENT',
         commercialImpact: commercialAmount(payload),
-        scheduleImpact: payload.kind === 'reschedule',
-        assessedBookingVersion,
+        assessedShootDate,
         assessedQuoteVersionId,
       },
     })
@@ -192,14 +150,6 @@ export async function approveChangeRequest(changeRequestId: string, actorUserId:
     const cr = await tx.changeRequest.findUnique({ where: { id: changeRequestId }, include: { project: { select: { companyId: true } } } })
     if (!cr) throw new Error('Change request not found.')
     if (cr.status !== 'IMPACT_ASSESSMENT') throw new Error('Assess the change request before approving it.')
-    const payload = changeRequestPayloadSchema.parse(cr.payload)
-
-    if (commercialAmount(payload).greaterThanOrEqualTo(APPROVAL_THRESHOLD) && actorUserId) {
-      const actor = await tx.user.findUnique({ where: { id: actorUserId }, select: { role: true } })
-      if (actor && actor.role !== 'ADMIN') {
-        throw new Error('A change of this value needs a manager to approve it.')
-      }
-    }
 
     const updated = await tx.changeRequest.update({
       where: { id: changeRequestId },
@@ -268,10 +218,9 @@ export async function applyChangeRequest(changeRequestId: string, actorUserId: s
     }
 
     if (payload.kind === 'reschedule') {
-      const booking = await tx.booking.findUnique({ where: { id: payload.bookingId }, select: { updatedAt: true, status: true } })
-      if (!booking || booking.status === 'CANCELLED') throw new Error('That shoot changed since assessment; re-assess the change request.')
-      if (cr.assessedBookingVersion && booking.updatedAt.toISOString() !== cr.assessedBookingVersion) {
-        throw new Error('That shoot changed since assessment; re-assess the change request.')
+      const shootNow = (await currentShootDate(tx, cr.projectId))?.toISOString() ?? 'none'
+      if (cr.assessedShootDate && shootNow !== cr.assessedShootDate) {
+        throw new Error('The shoot date changed since assessment; re-assess the change request.')
       }
     }
     if (payload.kind === 'scopeChange') {
@@ -288,10 +237,17 @@ export async function applyChangeRequest(changeRequestId: string, actorUserId: s
 
     if (payload.kind === 'reschedule') {
       const startsAt = parseSydney(payload.newStartsAt)
-      const endsAt = parseSydney(payload.newEndsAt)
       if (startsAt.getTime() < now.getTime()) throw new Error('The new shoot date is in the past.')
-      if (endsAt <= startsAt) throw new Error('The end time must be after the start time.')
-      await rescheduleBookingTx(tx, payload.bookingId, { startsAt, endsAt, reason: cr.reason }, actorUserId)
+
+      const shootTask = await tx.workItem.findFirst({ where: { projectId: cr.projectId, type: SHOOT_TASK_TYPE }, select: { id: true, dueOverrideAt: true } })
+      if (!shootTask) throw new Error('This job has no Shoot task to move.')
+      await tx.workItem.update({ where: { id: shootTask.id }, data: { dueOverrideAt: startsAt } })
+      await tx.auditLog.create({
+        data: {
+          companyId: cr.project.companyId, action: 'project.shoot_rescheduled', entityType: 'Project', entityId: cr.projectId, actorUserId,
+          beforeData: { shootAt: shootTask.dueOverrideAt?.toISOString() ?? null }, afterData: { shootAt: startsAt.toISOString(), reason: cr.reason },
+        },
+      })
       if (payload.fee) await issueAdjustmentInvoiceTx(tx, cr.projectId, payload.fee.amount, `Rescheduling fee`, actorUserId, now)
     } else if (payload.kind === 'scopeChange') {
       resultingQuoteVersionId = await applyScopeChangeTx(tx, cr.projectId, payload, actorUserId, now)
@@ -305,9 +261,6 @@ export async function applyChangeRequest(changeRequestId: string, actorUserId: s
     await tx.auditLog.create({
       data: { companyId: cr.project.companyId, action: 'change_request.applied', entityType: 'ChangeRequest', entityId: changeRequestId, actorUserId, afterData: { kind: payload.kind, resultingQuoteVersionId } },
     })
-    await tx.outboxEvent.create({
-      data: { eventType: 'change_request.applied', aggregateType: 'ChangeRequest', aggregateId: changeRequestId, payload: { changeRequestId, projectId: cr.projectId, kind: payload.kind } },
-    })
     return updated
   })
 }
@@ -315,7 +268,6 @@ export async function applyChangeRequest(changeRequestId: string, actorUserId: s
 async function issueAdjustmentInvoiceTx(tx: Tx, projectId: string, amount: string, description: string, actorUserId: string | null, now: Date) {
   const invoice = await createInvoiceTx(tx, projectId, { type: 'SUPPLEMENTARY', description, amount }, actorUserId)
   await tx.invoice.update({ where: { id: invoice.id }, data: { status: 'ISSUED', issuedAt: now } })
-  await tx.outboxEvent.create({ data: { eventType: 'invoice.issued', aggregateType: 'Invoice', aggregateId: invoice.id, payload: { invoiceId: invoice.id } } })
   return invoice
 }
 
@@ -355,6 +307,8 @@ async function applyScopeChangeTx(
       acceptedByClientAt: now,
     },
   })
+
+  await tx.quote.update({ where: { id: quote.id }, data: { status: 'ACCEPTED' } })
   await issueAdjustmentInvoiceTx(tx, projectId, payload.fee.amount, `Scope change: ${payload.summary}`, actorUserId, now)
   return rev.versionId
 }

@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { leadDisplayStatus } from '@/features/enquiries/status'
 import { formatSydneyDate } from '@/lib/time'
 import { titleCase } from '@/lib/text'
 import { AppShell } from '../AppShell'
@@ -18,6 +19,8 @@ export default async function EnquiriesPage() {
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
   const enquiries = await prisma.enquiry.findMany({
+
+    where: { status: { not: 'BOOKING_CONFIRMED' } },
     orderBy: { updatedAt: 'asc' }, // oldest-waiting first (the default sort)
     select: {
       id: true,
@@ -28,11 +31,11 @@ export default async function EnquiriesPage() {
       eventType: true,
       eventDate: true,
       status: true,
-      waitingOn: true,
       convertedProjectId: true,
       updatedAt: true,
       createdAt: true,
       viewedAt: true,
+      jobCompleteAt: true,
     },
   })
 
@@ -41,8 +44,8 @@ export default async function EnquiriesPage() {
     number: e.enquiryNumber,
     name: e.name,
     event: e.eventType ? titleCase(e.eventType) : 'Not specified',
-    status: e.status,
-    waitingOn: e.waitingOn,
+
+    status: leadDisplayStatus(e.status, e.jobCompleteAt),
     shootDate: e.eventDate ? formatSydneyDate(e.eventDate) : null,
     email: e.email,
     phone: e.phone,

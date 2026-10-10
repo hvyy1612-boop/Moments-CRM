@@ -5,6 +5,9 @@ import { checkPasswordPolicy, hashPassword, type PasswordPolicyError } from './p
 import { revokeAllSessions } from './session'
 
 const RESET_TTL_MS = 60 * 60 * 1000
+const RESET_LIMIT_WINDOW_MS = 60 * 60 * 1000
+const RESET_LIMIT_PER_ACCOUNT = 3
+const RESET_LIMIT_PER_ADDRESS = 10
 
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex')
@@ -22,6 +25,13 @@ export async function requestPasswordReset(
   const now = clock.now()
   const user = await prisma.user.findUnique({ where: { email }, select: { id: true, isActive: true } })
   if (!user || !user.isActive) return null
+
+  const hourAgo = new Date(now.getTime() - RESET_LIMIT_WINDOW_MS)
+  const [forAccount, fromAddress] = await Promise.all([
+    prisma.signInLog.count({ where: { eventType: 'password_reset_requested', userId: user.id, createdAt: { gte: hourAgo } } }),
+    prisma.signInLog.count({ where: { eventType: 'password_reset_requested', ipAddress: ip, createdAt: { gte: hourAgo } } }),
+  ])
+  if (forAccount >= RESET_LIMIT_PER_ACCOUNT || fromAddress >= RESET_LIMIT_PER_ADDRESS) return null
 
   await prisma.passwordReset.updateMany({
     where: { userId: user.id, usedAt: null },

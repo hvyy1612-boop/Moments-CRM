@@ -1,6 +1,6 @@
 
 
-export type InvoiceStatusCode = 'DRAFT' | 'ISSUED' | 'SENT' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'VOID'
+export type InvoiceStatusCode = 'ISSUED' | 'SENT' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'VOID'
 
 export type Tone = 'neutral' | 'info' | 'good' | 'warn' | 'bad'
 
@@ -20,8 +20,6 @@ export function instalmentStatus(
   invoiceStatus: InvoiceStatusCode,
 ): InstalmentStatus {
   if (invoiceStatus === 'VOID') return { label: 'Void', tone: 'neutral' }
-
-  if (invoiceStatus === 'DRAFT') return dueYmd && dueYmd > todayYmd ? { label: 'Upcoming', tone: 'neutral' } : { label: 'Unpaid', tone: 'neutral' }
   if (state === 'PAID') return { label: 'Paid', tone: 'good' }
   if (state === 'PARTIAL') return { label: 'Partially paid', tone: 'warn' }
   if (dueYmd && dueYmd < todayYmd) return { label: 'Overdue', tone: 'bad' }

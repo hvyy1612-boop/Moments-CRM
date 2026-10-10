@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import type { Alert } from '@/lib/domain/alerts'
+import { markNotificationsReadAction } from '@/app/(staff)/notifications/actions'
 
 function ago(at: Date): string {
   const s = Math.max(0, Math.round((Date.now() - new Date(at).getTime()) / 1000))
@@ -15,17 +16,35 @@ function ago(at: Date): string {
   return `${d}d ago`
 }
 
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+type Tab = 'all' | 'unread'
 
-export function NotificationBell({ alerts }: { alerts: Alert[] }) {
+export function NotificationBell({
+  alerts,
+  seenAt,
+  canViewActivity,
+}: {
+  alerts: Alert[]
+  seenAt: Date | null
+
+  canViewActivity: boolean
+}) {
   const [open, setOpen] = useState(false)
-  const [recent, setRecent] = useState(0)
+  const [tab, setTab] = useState<Tab>('all')
+
+  const [markedAt, setMarkedAt] = useState<Date | null>(null)
+  const [, startTransition] = useTransition()
   const ref = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const now = Date.now()
-    setRecent(alerts.filter((a) => now - new Date(a.at).getTime() < WEEK_MS).length)
-  }, [alerts])
+  const effectiveSeen = markedAt ?? seenAt
+  const isUnread = (a: Alert) => !effectiveSeen || new Date(a.at).getTime() > new Date(effectiveSeen).getTime()
+  const unread = alerts.filter(isUnread)
+  const visible = tab === 'unread' ? unread : alerts
+
+  const markRead = () => {
+    if (unread.length === 0) return
+    setMarkedAt(new Date())
+    startTransition(() => { void markNotificationsReadAction() })
+  }
 
   useEffect(() => {
     if (!open) return
@@ -43,16 +62,16 @@ export function NotificationBell({ alerts }: { alerts: Alert[] }) {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={recent > 0 ? `Notifications, ${recent} recent` : 'Notifications'}
+        aria-label={unread.length > 0 ? `Notifications, ${unread.length} unread` : 'Notifications'}
         className="relative flex h-9 w-9 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-sunk hover:text-ink"
       >
         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.7 21a2 2 0 0 1-3.4 0" />
         </svg>
-        {recent > 0 ? (
+        {unread.length > 0 ? (
           <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-xs font-bold leading-none text-surface">
-            {recent > 9 ? '9+' : recent}
+            {unread.length > 9 ? '9+' : unread.length}
           </span>
         ) : null}
       </button>
@@ -61,21 +80,32 @@ export function NotificationBell({ alerts }: { alerts: Alert[] }) {
         <div role="menu" className="absolute right-0 top-11 z-50 w-80 overflow-hidden rounded-lg border border-line bg-surface shadow-lg">
           <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
             <span className="text-sm font-semibold text-ink">Notifications</span>
-            <Link href="/activity" onClick={() => setOpen(false)} className="text-xs font-medium text-accent-ink hover:underline">
-              View activity
-            </Link>
+            {unread.length > 0 ? (
+              <button type="button" onClick={markRead} className="text-xs font-medium text-accent-ink hover:underline">Mark all read</button>
+            ) : null}
           </div>
-          {alerts.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-ink-muted">You&apos;re all caught up.</p>
+
+          {/* Tabs: All / Unread */}
+          <div className="flex gap-1 border-b border-line px-2 py-1.5">
+            {(['all', 'unread'] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${tab === t ? 'bg-ink text-surface' : 'text-ink-muted hover:bg-paper'}`}
+              >
+                {t === 'unread' ? `Unread${unread.length > 0 ? ` (${unread.length})` : ''}` : 'All'}
+              </button>
+            ))}
+          </div>
+
+          {visible.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-ink-muted">{tab === 'unread' ? 'No unread notifications.' : "You're all caught up."}</p>
           ) : (
             <ul className="max-h-96 overflow-y-auto py-1">
-              {alerts.map((a) => (
+              {visible.map((a) => (
                 <li key={a.id}>
-                  <Link
-                    href={a.href}
-                    onClick={() => setOpen(false)}
-                    className="flex items-start gap-3 px-4 py-2.5 hover:bg-paper"
-                  >
+                  <Link href={a.href} onClick={() => setOpen(false)} className="flex items-start gap-3 px-4 py-2.5 hover:bg-paper">
                     <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${a.kind === 'payment' ? 'bg-delivered text-delivered-ink' : 'bg-accent-tint text-accent-ink'}`}>
                       {a.kind === 'payment' ? (
                         <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 6.5C17 4.5 14.8 3.5 12 3.5S7 4.7 7 6.8s2 2.7 5 3.4 5 1.4 5 3.5-2.2 3.3-5 3.3-5-1.1-5-3" /></svg>
@@ -87,12 +117,26 @@ export function NotificationBell({ alerts }: { alerts: Alert[] }) {
                       <span className="block text-sm font-medium text-ink">{a.title}</span>
                       {a.detail ? <span className="block truncate text-sm text-ink-muted">{a.detail}</span> : null}
                     </span>
-                    <span className="shrink-0 text-xs text-muted">{ago(a.at)}</span>
+                    <span className="flex shrink-0 flex-col items-end gap-1">
+                      <span className="text-xs text-muted">{ago(a.at)}</span>
+                      {isUnread(a) ? <span className="h-2 w-2 rounded-full bg-accent" aria-label="Unread" /> : null}
+                    </span>
                   </Link>
                 </li>
               ))}
             </ul>
           )}
+
+          <div className="flex items-center justify-between border-t border-line px-4 py-2">
+            <Link href="/notifications" onClick={() => setOpen(false)} className="text-xs font-medium text-accent-ink hover:underline">
+              See all notifications
+            </Link>
+            {canViewActivity ? (
+              <Link href="/activity" onClick={() => setOpen(false)} className="text-xs font-medium text-ink-muted hover:text-ink hover:underline">
+                Activity
+              </Link>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>

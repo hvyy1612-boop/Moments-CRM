@@ -16,6 +16,10 @@ export type Permission =
   | 'AUTH_LOG_VIEW'
   | 'AUDIT_LOG_VIEW'
   | 'SETTINGS_EDIT'
+  // Heavy / irreversible money operations: mark an invoice uncollectible, refund a payment, delete
+  // invoices or quotes. Held by ADMIN and STUDIO (Staff) since 2026-10-10 - see STAFF_FULL below.
+  // (Supersedes the old ADMIN-only rule in docs/33 §2.)
+  | 'MONEY_ADMIN'
 
 const STAFF_CRM: Permission[] = [
   'ENQUIRY_VIEW',
@@ -31,10 +35,18 @@ const STAFF_CRM: Permission[] = [
   'CALENDAR_MANAGE',
 ]
 
+const READ_ONLY: Permission[] = ['ENQUIRY_VIEW', 'PROJECT_VIEW', 'CLIENT_VIEW', 'QUOTE_VIEW', 'FINANCE_VIEW', 'CALENDAR_VIEW']
+
+const STAFF_FULL: Permission[] = [...STAFF_CRM, 'USER_MANAGE', 'SETTINGS_EDIT', 'MONEY_ADMIN']
+
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
-  ADMIN: [...STAFF_CRM, 'USER_MANAGE', 'AUTH_LOG_VIEW', 'AUDIT_LOG_VIEW', 'SETTINGS_EDIT'],
-  STUDIO: STAFF_CRM,
-  EDITOR: ['ENQUIRY_VIEW', 'PROJECT_VIEW', 'CLIENT_VIEW', 'QUOTE_VIEW', 'FINANCE_VIEW', 'CALENDAR_VIEW'],
+  ADMIN: [...STAFF_FULL, 'AUTH_LOG_VIEW', 'AUDIT_LOG_VIEW'],
+  STUDIO: STAFF_FULL,
+  SUPERVISOR: READ_ONLY,
+}
+
+export function isReadOnly(user: { role: Role } | null | undefined): boolean {
+  return user?.role === 'SUPERVISOR'
 }
 
 export function can(user: { role: Role } | null | undefined, permission: Permission): boolean {

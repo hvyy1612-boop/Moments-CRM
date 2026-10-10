@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
-import { Prisma, type DeclineReason } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import { systemClock } from '@/lib/time'
+import { sydneyDateTimeParts, systemClock } from '@/lib/time'
 import type { QuoteLineInput } from '@/lib/validation/quote'
 import { convertEnquiryCore } from './enquiry'
 import { nextRecordNumber } from './numbering'
@@ -53,16 +53,12 @@ export async function createQuote(projectId: string, createdByUserId: string | n
     if (!version) throw new Error('Quote version was not created.')
     await tx.quote.update({ where: { id: quote.id }, data: { currentVersionId: version.id } })
 
-    await tx.project.update({
-      where: { id: projectId },
-      data: { commercialStatus: 'QUOTED' },
-    })
+    await tx.project.updateMany({ where: { id: projectId, commercialStatus: 'UNQUOTED' }, data: { commercialStatus: 'QUOTED' } })
     return { quoteId: quote.id, versionId: version.id }
   })
 }
 
 export type QuotePresentation = {
-  introduction?: string | null
   poNumber?: string | null
   notes?: string | null
   depositPercent?: number | null
@@ -93,7 +89,6 @@ export async function saveQuoteDraft(
         taxTotal,
         total,
         validUntil,
-        introduction: presentation.introduction ?? null,
         poNumber: presentation.poNumber ?? null,
         notes: presentation.notes ?? null,
         depositPercent: presentation.depositPercent ?? null,
@@ -118,6 +113,7 @@ export async function sendQuote(quoteId: string, actorUserId: string | null) {
     const version = quote.currentVersion
     if (version.status !== 'DRAFT') throw new Error('This quote has already been sent.')
     if (version.total.lessThanOrEqualTo(0)) throw new Error('This quote has no items yet. Add a package or add-on to the quote before sending it.')
+    if (quoteValidityPassed(version.validUntil, now)) throw new Error('The "valid until" date has passed. Choose a later date before sending the quote.')
 
     await tx.quoteVersion.update({ where: { id: version.id }, data: { status: 'SENT', sentToClientAt: now } })
     await tx.quote.update({ where: { id: quoteId }, data: { status: 'SENT' } })
@@ -135,20 +131,22 @@ export async function sendQuote(quoteId: string, actorUserId: string | null) {
     await tx.auditLog.create({
       data: { action: 'quote.sent', entityType: 'Quote', entityId: quoteId, actorUserId },
     })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'quote.sent',
-        aggregateType: 'Quote',
-        aggregateId: quoteId,
-        payload: { quoteId, viewToken: quote.viewToken },
-      },
-    })
     return { viewToken: quote.viewToken }
   })
 }
 
+export async function clientVisibleQuoteVersionId(quoteId: string): Promise<string | null> {
+  const quote = await prisma.quote.findUnique({ where: { id: quoteId }, select: { currentVersion: { select: { id: true, status: true } } } })
+  if (quote?.currentVersion && quote.currentVersion.status !== 'DRAFT') return quote.currentVersion.id
+  const sent = await prisma.quoteVersion.findFirst({
+    where: { quoteId, sentToClientAt: { not: null } },
+    orderBy: { versionNumber: 'desc' },
+    select: { id: true },
+  })
+  return sent?.id ?? null
+}
+
 export async function markQuoteViewed(viewToken: string) {
-  const now = systemClock.now()
   const quote = await prisma.quote.findUnique({
     where: { viewToken },
     include: { currentVersion: true },
@@ -156,31 +154,14 @@ export async function markQuoteViewed(viewToken: string) {
   if (quote?.currentVersion?.status === 'SENT') {
     await prisma.quoteVersion.update({
       where: { id: quote.currentVersion.id },
-      data: { status: 'VIEWED', viewedByClientAt: now },
+      data: { status: 'VIEWED' },
     })
   }
 }
 
-export async function declineQuote(
-  quoteId: string,
-  reason: DeclineReason,
-  actorUserId: string | null = null,
-) {
-  return runDeclineQuote({ id: quoteId }, reason, actorUserId, 'staff.quote')
-}
-
-export async function declineQuoteByToken(viewToken: string, reason: DeclineReason) {
-  return runDeclineQuote({ viewToken }, reason, null, 'client.quote')
-}
-
-async function runDeclineQuote(
-  where: Prisma.QuoteWhereUniqueInput,
-  reason: DeclineReason,
-  actorUserId: string | null,
-  source: string,
-) {
+export async function declineQuote(quoteId: string, actorUserId: string | null = null) {
   return prisma.$transaction(async (tx) => {
-    const quote = await tx.quote.findUnique({ where, include: { currentVersion: true } })
+    const quote = await tx.quote.findUnique({ where: { id: quoteId }, include: { currentVersion: true } })
     if (!quote || !quote.currentVersion) throw new Error('Quote not found.')
     const version = quote.currentVersion
     if (version.status === 'DECLINED') return { alreadyDeclined: true }
@@ -191,7 +172,7 @@ async function runDeclineQuote(
 
     await tx.quoteVersion.update({
       where: { id: version.id },
-      data: { status: 'DECLINED', declineReason: reason },
+      data: { status: 'DECLINED' },
     })
     await tx.quote.update({ where: { id: quote.id }, data: { status: 'DECLINED' } })
 
@@ -201,16 +182,7 @@ async function runDeclineQuote(
         entityType: 'Quote',
         entityId: quote.id,
         actorUserId,
-        source,
-        afterData: { reason },
-      },
-    })
-    await tx.outboxEvent.create({
-      data: {
-        eventType: 'quote.declined',
-        aggregateType: 'Quote',
-        aggregateId: quote.id,
-        payload: { quoteId: quote.id, projectId: quote.projectId, reason },
+        source: 'staff.quote',
       },
     })
     return { alreadyDeclined: false }
@@ -253,6 +225,11 @@ export async function reviseQuoteTx(
       taxTotal: current.taxTotal,
       total: current.total,
       validUntil: current.validUntil,
+
+      poNumber: current.poNumber,
+      notes: current.notes,
+      depositPercent: current.depositPercent,
+      issueDate: current.issueDate,
       createdByUserId: actorUserId,
     },
   })
@@ -263,6 +240,7 @@ export async function reviseQuoteTx(
         lineType: line.lineType,
         referenceId: line.referenceId,
         description: line.description,
+        details: line.details, // package inclusions shown on the quote
         quantity: line.quantity,
         unitPrice: line.unitPrice,
         discount: line.discount,
@@ -328,14 +306,32 @@ export async function acceptQuote(quoteId: string, actorUserId: string | null = 
   for (let attempt = 0; ; attempt++) {
     try {
       return await prisma.$transaction(async (tx) => {
-        const quote = await tx.quote.findUnique({ where: { id: quoteId }, include: { currentVersion: true, enquiry: true } })
+        const quote = await tx.quote.findUnique({
+          where: { id: quoteId },
+          include: { currentVersion: true, enquiry: true, project: { select: { id: true, lifecycleStatus: true } } },
+        })
         if (!quote) throw new Error('Quote not found.')
-        if (!quote.enquiryId || !quote.enquiry) throw new Error('This quote is not linked to an enquiry.')
         const version = quote.currentVersion
         if (!version) throw new Error('This quote has no version to accept.')
         if (quote.status !== 'SENT' && quote.status !== 'VIEWED') throw new Error('Only a sent quote can be accepted.')
         if (version.total.lessThanOrEqualTo(0)) throw new Error('Add at least one line before accepting.')
-        if (version.validUntil && version.validUntil.getTime() < now.getTime()) throw new Error('This quote has expired; revise it before accepting.')
+        if (quoteValidityPassed(version.validUntil, now)) throw new Error('This quote has expired; revise it before accepting.')
+
+        if (!quote.enquiryId || !quote.enquiry) {
+          const job = quote.project
+          if (!job) throw new Error('This quote is not linked to a lead or a job.')
+          if (job.lifecycleStatus === 'CANCELLED' || job.lifecycleStatus === 'CLOSED') throw new Error('This job is closed or cancelled, so its quote cannot be accepted.')
+          const agreed = await tx.quote.findFirst({ where: { projectId: job.id, status: 'ACCEPTED', NOT: { id: quote.id } }, select: { id: true } })
+          if (agreed) throw new Error('This job already has an accepted quote. Use a change request to change what was agreed.')
+          await tx.quoteVersion.update({ where: { id: version.id }, data: { status: 'ACCEPTED', acceptedByClientAt: now } })
+          await tx.quote.update({ where: { id: quote.id }, data: { status: 'ACCEPTED' } })
+
+          await tx.quote.deleteMany({ where: { projectId: job.id, enquiryId: null, NOT: { id: quote.id }, status: { in: ['DRAFT', 'SENT', 'VIEWED'] } } })
+
+          await tx.project.updateMany({ where: { id: job.id, commercialStatus: { in: ['UNQUOTED', 'QUOTED'] } }, data: { commercialStatus: 'ACCEPTED' } })
+          await tx.auditLog.create({ data: { action: 'quote.accepted', entityType: 'Quote', entityId: quote.id, actorUserId, afterData: { projectId: job.id } } })
+          return { quoteId: quote.id, projectId: job.id, enquiryId: null }
+        }
         if (quote.enquiry.status === 'DECLINED') throw new Error('Reopen the lead before accepting a quote.')
 
         const otherAccepted = await tx.quote.findFirst({ where: { enquiryId: quote.enquiryId, status: 'ACCEPTED', NOT: { id: quote.id } }, select: { id: true } })
@@ -350,12 +346,11 @@ export async function acceptQuote(quoteId: string, actorUserId: string | null = 
 
         const conv = await convertEnquiryCore(tx, quote.enquiryId, actorUserId, now)
         if (!conv.projectId) throw new Error('Converting the lead did not produce a job.')
-        await tx.project.update({ where: { id: conv.projectId }, data: { sourceQuoteId: quote.id, commercialStatus: 'ACCEPTED' } })
+        await tx.project.update({ where: { id: conv.projectId }, data: { commercialStatus: 'ACCEPTED' } })
         await tx.quote.update({ where: { id: quote.id }, data: { projectId: conv.projectId } })
 
         await tx.auditLog.create({ data: { action: 'quote.accepted', entityType: 'Quote', entityId: quote.id, actorUserId, afterData: { enquiryId: quote.enquiryId, projectId: conv.projectId } } })
-        await tx.outboxEvent.create({ data: { eventType: 'quote.accepted', aggregateType: 'Quote', aggregateId: quote.id, payload: { quoteId: quote.id, enquiryId: quote.enquiryId, projectId: conv.projectId } } })
-        return { quoteId: quote.id, projectId: conv.projectId }
+        return { quoteId: quote.id, projectId: conv.projectId, enquiryId: quote.enquiryId }
       })
     } catch (error) {
       const isUnique = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
@@ -375,8 +370,12 @@ export type QuoteListRow = {
 }
 type QuoteStatusValue = 'DRAFT' | 'SENT' | 'VIEWED' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED' | 'SUPERSEDED'
 
+export function quoteValidityPassed(validUntil: Date | null, now: Date = systemClock.now()): boolean {
+  return validUntil != null && sydneyDateTimeParts(now).date > sydneyDateTimeParts(validUntil).date
+}
+
 export function effectiveQuoteStatus(status: string, validUntil: Date | null, now: Date = systemClock.now()): QuoteStatusValue {
-  if ((status === 'DRAFT' || status === 'SENT' || status === 'VIEWED') && validUntil && validUntil.getTime() < now.getTime()) {
+  if ((status === 'DRAFT' || status === 'SENT' || status === 'VIEWED') && quoteValidityPassed(validUntil, now)) {
     return 'EXPIRED'
   }
   return status as QuoteStatusValue
@@ -407,10 +406,10 @@ export async function deleteQuotes(ids: string[]): Promise<{ deleted: number; sk
   if (unique.length === 0) return { deleted: 0, skipped: 0 }
   const quotes = await prisma.quote.findMany({
     where: { id: { in: unique } },
-    select: { id: true, status: true, projectId: true, sourcedProject: { select: { id: true } } },
+    select: { id: true, status: true, projectId: true },
   })
   const deletable = quotes
-    .filter((q) => q.status !== 'ACCEPTED' && !q.projectId && !q.sourcedProject)
+    .filter((q) => q.status !== 'ACCEPTED' && !q.projectId)
     .map((q) => q.id)
   if (deletable.length > 0) {
     await prisma.quote.deleteMany({ where: { id: { in: deletable } } })

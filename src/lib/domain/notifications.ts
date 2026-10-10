@@ -30,13 +30,12 @@ export type DispatchSpec = {
   targetId: string
   milestone: string
   recipientEmail: string
-  scheduleVersion?: number
   subject: string
   body: string
 }
 
 function dedupeKeyOf(s: DispatchSpec, recipientHash: string): string {
-  return `${s.kind}:${s.targetType}:${s.targetId}:${s.milestone}:${recipientHash}:${s.scheduleVersion ?? 1}`
+  return `${s.kind}:${s.targetType}:${s.targetId}:${s.milestone}:${recipientHash}`
 }
 
 export async function enqueueDispatch(client: Client, spec: DispatchSpec): Promise<string | null> {
@@ -55,7 +54,6 @@ export async function enqueueDispatch(client: Client, spec: DispatchSpec): Promi
         targetId: spec.targetId,
         milestone: spec.milestone,
         recipientHash,
-        scheduleVersion: spec.scheduleVersion ?? 1,
         dedupeKey,
         recipientEmail: spec.recipientEmail,
         subject: spec.subject,
@@ -107,19 +105,11 @@ export async function releaseExpiredLeases(now: Date = systemClock.now()): Promi
   return res.count
 }
 
-async function isStillRelevant(
-  d: { kind: string; targetType: string; targetId: string; milestone: string },
-  now: Date,
-): Promise<boolean> {
+async function isStillRelevant(d: { kind: string; targetType: string; targetId: string }): Promise<boolean> {
   if (d.kind === 'payment_reminder' && d.targetType === 'Invoice') {
     const bal = await getInvoiceBalanceById(d.targetId)
     if (!bal) return false
     return bal.owed.greaterThan(0)
-  }
-  if (d.kind === 'shoot_reminder' && d.targetType === 'Booking') {
-    const b = await prisma.booking.findUnique({ where: { id: d.targetId }, select: { status: true, startsAt: true } })
-    if (!b || b.status === 'CANCELLED') return false
-    return b.startsAt.getTime() > now.getTime()
   }
   return true
 }
@@ -128,10 +118,6 @@ async function dispatchCompanyId(d: { targetType: string; targetId: string }): P
   if (d.targetType === 'Invoice') {
     const inv = await prisma.invoice.findUnique({ where: { id: d.targetId }, select: { project: { select: { companyId: true } } } })
     return inv?.project.companyId ?? null
-  }
-  if (d.targetType === 'Booking') {
-    const b = await prisma.booking.findUnique({ where: { id: d.targetId }, select: { project: { select: { companyId: true } } } })
-    return b?.project.companyId ?? null
   }
   return null
 }
@@ -148,7 +134,7 @@ export async function sendDispatch(
   if (!before) throw new Error('Dispatch not found.')
   if (before.sendState !== 'PENDING') return { sendState: before.sendState }
 
-  if (!(await isStillRelevant(before, now))) {
+  if (!(await isStillRelevant(before))) {
     await prisma.notificationDispatch.update({ where: { id: dispatchId }, data: { sendState: 'SKIPPED_STALE' } })
     return { skipped: true }
   }
@@ -237,14 +223,6 @@ async function applyDeliveryToDispatch(dispatchId: string, recipientHash: string
       update: { reason: result === 'BOUNCED' ? 'bounced' : 'complained' },
     })
   }
-}
-
-export async function invalidateShootReminders(client: Client, bookingId: string): Promise<number> {
-  const res = await client.notificationDispatch.updateMany({
-    where: { kind: 'shoot_reminder', targetType: 'Booking', targetId: bookingId, sendState: 'PENDING' },
-    data: { sendState: 'SKIPPED_STALE' },
-  })
-  return res.count
 }
 
 export type ReminderImpactItem =
@@ -341,44 +319,8 @@ async function ensureOverdueFollowup(invoiceId: string, projectId: string, compa
   return !existing
 }
 
-export async function processOutboxOnce(now: Date = systemClock.now()): Promise<{ processed: number }> {
-  const events = await prisma.outboxEvent.findMany({
-    where: { status: 'PENDING', availableAt: { lte: now } },
-    orderBy: { createdAt: 'asc' },
-    take: 100,
-  })
-  let processed = 0
-  for (const evt of events) {
-    if (evt.eventType === 'invoice.issued') {
-      const invoiceId = (evt.payload as { invoiceId?: string } | null)?.invoiceId
-      if (invoiceId) {
-        const inv = await prisma.invoice.findUnique({
-          where: { id: invoiceId },
-          select: { id: true, invoiceNumber: true, billingEmailSnapshot: true, total: true, project: { select: { companyId: true, client: { select: { email: true } } } } },
-        })
-        const recipient = inv?.billingEmailSnapshot ?? inv?.project.client.email ?? null
-
-        if (inv && recipient && (await getAutomationSettings(inv.project.companyId)).clientEmailsEnabled) {
-          await enqueueDispatch(prisma, {
-            kind: 'invoice_issued',
-            targetType: 'Invoice',
-            targetId: inv.id,
-            milestone: 'issued',
-            recipientEmail: recipient,
-            subject: `Invoice ${inv.invoiceNumber}`,
-            body: `Your invoice ${inv.invoiceNumber} for ${inv.total.toFixed(2)} is ready. Thank you - Moments Photography and Film.`,
-          })
-        }
-      }
-    }
-    await prisma.outboxEvent.update({ where: { id: evt.id }, data: { status: 'PROCESSED', processedAt: now, attemptCount: { increment: 1 } } })
-    processed++
-  }
-  return { processed }
-}
-
 export async function resolveSettledOverdueFollowups(): Promise<number> {
-  const open = await prisma.workItem.findMany({ where: { kind: 'OVERDUE_FOLLOWUP', status: 'PENDING' }, select: { id: true, title: true } })
+  const open = await prisma.workItem.findMany({ where: { kind: 'OVERDUE_FOLLOWUP', status: 'PENDING' }, select: { id: true, title: true, projectId: true } })
   let resolved = 0
   for (const t of open) {
     const match = /\(([^)]+)\)\s*$/.exec(t.title)
@@ -388,6 +330,12 @@ export async function resolveSettledOverdueFollowups(): Promise<number> {
     if (bal && bal.owed.lessThanOrEqualTo(0)) {
       await prisma.workItem.update({ where: { id: t.id }, data: { status: 'CANCELLED' } })
       resolved++
+
+      if (t.projectId) {
+        const { maybeAutoCompleteJob } = await import('./project-workflow')
+        const projectId = t.projectId
+        await prisma.$transaction((tx) => maybeAutoCompleteJob(tx, projectId, null))
+      }
     }
   }
   return resolved

@@ -10,8 +10,6 @@
     "build": "prisma generate && next build",
     "set-password": "tsx scripts/set-password.ts",
     "create-admin": "tsx scripts/create-admin.ts",
-    "seed:demo": "tsx prisma/seed-demo.ts",
-    "seed:demo:quotes": "tsx prisma/seed-demo-quotes.ts",
     "show-logs": "tsx scripts/show-logs.ts",
     "start": "next start",
     "typecheck": "tsc --noEmit",
@@ -27,13 +25,13 @@
     "check:passwordhash": "node scripts/check-passwordhash.mjs",
     "check:tokens": "node scripts/check-design-tokens.mjs",
     "check:money": "node scripts/check-money-number.mjs",
-    "verify": "npm run typecheck && npm run lint && npm run test && npm run check:routes && npm run check:passwordhash && npm run check:tokens && npm run check:money && npm run e2e && npm run audit:high"
+    "check:globals": "node scripts/check-browser-globals.mjs",
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run check:routes && npm run check:passwordhash && npm run check:tokens && npm run check:money && npm run check:globals && npm run e2e && npm run audit:high"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
     "@prisma/client": "~6.12.0",
     "@react-pdf/renderer": "^4.9.0",
-    "google-auth-library": "^11.0.2",
     "next": "^15.1.0",
     "nodemailer": "^6.10.1",
     "react": "^19.0.0",

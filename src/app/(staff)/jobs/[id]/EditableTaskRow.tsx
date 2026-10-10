@@ -44,6 +44,11 @@ export function OwnerCell({ name, system = false }: { name: string | null; syste
   )
 }
 
+export function TaskTypeTag({ label }: { label: string }) {
+  if (!label) return null
+  return <span className="shrink-0 whitespace-nowrap rounded-full bg-sunk px-2 py-0.5 text-xs font-medium text-ink-muted">{label}</span>
+}
+
 export function CheckBox({ done, muted = false }: { done: boolean; muted?: boolean }) {
   return (
     <span
@@ -117,6 +122,7 @@ export function EditableTaskRow({
       <button
         type="button"
         onClick={toggle}
+        data-write="lock"
         aria-label={done ? 'Reopen task' : 'Mark done'}
         aria-pressed={done}
         className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-xs transition-colors ${
@@ -130,6 +136,7 @@ export function EditableTaskRow({
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <span className={`truncate text-base ${done ? 'text-ink-muted line-through' : 'text-ink'}`}>{task.title}</span>
+          <TaskTypeTag label={task.typeLabel} />
           {attention ? <AttentionDot /> : null}
         </div>
         {task.note ? <span className="block truncate text-sm text-muted">{task.note}</span> : null}

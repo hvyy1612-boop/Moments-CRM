@@ -1,51 +1,29 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import { systemClock } from '@/lib/time'
 import { lockInvoiceRow, refreshInvoiceAmountPaid } from './invoice-ledger'
-import { invalidateShootReminders } from './notifications'
 
-export async function cancelProject(
-  projectId: string,
-  reason: string | null = null,
-  actorUserId: string | null = null,
-) {
-  const now = systemClock.now()
-  return prisma.$transaction(async (tx) => {
-    const project = await tx.project.findUnique({ where: { id: projectId } })
-    if (!project) throw new Error('Project not found.')
-    if (project.lifecycleStatus === 'CANCELLED') return project
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
-    const updated = await tx.project.update({
-      where: { id: projectId },
-      data: { lifecycleStatus: 'CANCELLED', commercialStatus: 'CANCELLED' },
-    })
-    await tx.resourceAssignment.updateMany({
-      where: { booking: { projectId }, status: 'ACTIVE' },
-      data: { status: 'CANCELLED' },
-    })
+export async function cancelProjectTx(tx: Tx, projectId: string, reason: string | null = null, actorUserId: string | null = null) {
+  const project = await tx.project.findUnique({ where: { id: projectId } })
+  if (!project) throw new Error('Project not found.')
+  if (project.lifecycleStatus === 'CANCELLED') return project
 
-    const cancelledBookings = await tx.booking.findMany({
-      where: { projectId, status: { in: ['TENTATIVE', 'CONFIRMED'] } },
-      select: { id: true },
-    })
-    await tx.booking.updateMany({
-      where: { projectId, status: { in: ['TENTATIVE', 'CONFIRMED'] } },
-      data: { status: 'CANCELLED', cancelledAt: now },
-    })
-
-    for (const b of cancelledBookings) await invalidateShootReminders(tx, b.id)
-    await tx.auditLog.create({
-      data: {
-        companyId: project.companyId,
-        action: 'project.cancelled',
-        entityType: 'Project',
-        entityId: projectId,
-        actorUserId,
-        afterData: { reason },
-      },
-    })
-    return updated
+  const updated = await tx.project.update({
+    where: { id: projectId },
+    data: { lifecycleStatus: 'CANCELLED', commercialStatus: 'CANCELLED' },
   })
+  await tx.auditLog.create({
+    data: {
+      companyId: project.companyId,
+      action: 'project.cancelled',
+      entityType: 'Project',
+      entityId: projectId,
+      actorUserId,
+      afterData: { reason },
+    },
+  })
+  return updated
 }
 
 export type RefundInput = { reason?: string | null; externalReference?: string | null }
@@ -58,7 +36,6 @@ export async function refundPayment(
 ) {
   const refundAmount = new Prisma.Decimal(amount)
   if (refundAmount.lessThanOrEqualTo(0)) throw new Error('Refund amount must be positive.')
-  const now = systemClock.now()
 
   return prisma.$transaction(async (tx) => {
     const payment = await tx.payment.findUnique({
@@ -69,14 +46,14 @@ export async function refundPayment(
 
     await lockInvoiceRow(tx, payment.invoiceId)
     const txns = await tx.paymentTransaction.findMany({
-      where: { paymentId, status: 'SUCCEEDED' },
+      where: { paymentId },
       select: { type: true, amount: true },
     })
     const captured = txns
       .filter((t) => t.type === 'CHARGE')
       .reduce((sum, t) => sum.add(t.amount), new Prisma.Decimal(0))
     const alreadyRefunded = txns
-      .filter((t) => t.type === 'REFUND' || t.type === 'REVERSAL')
+      .filter((t) => t.type === 'REFUND')
       .reduce((sum, t) => sum.add(t.amount), new Prisma.Decimal(0))
     if (alreadyRefunded.add(refundAmount).greaterThan(captured)) {
       throw new Error('Refund exceeds the amount captured on this payment.')
@@ -88,9 +65,7 @@ export async function refundPayment(
         amount: refundAmount,
         currency: payment.currency,
         reason: input.reason ?? null,
-        status: 'SUCCEEDED',
         externalReference: input.externalReference ?? null,
-        processedAt: now,
       },
     })
     await tx.paymentTransaction.create({
@@ -100,8 +75,6 @@ export async function refundPayment(
         type: 'REFUND',
         amount: refundAmount,
         currency: payment.currency,
-        status: 'SUCCEEDED',
-        processedAt: now,
       },
     })
 

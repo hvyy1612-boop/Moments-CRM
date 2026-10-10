@@ -1,10 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useActionState, useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { ClientForm, type ContactErrors } from './ClientForm'
-import { createClientAction } from './actions'
+import { createClientFormAction, type ClientFormState } from './actions'
+
+const IDLE: ClientFormState = { status: 'idle' }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -27,6 +29,8 @@ export function AddClientButton({ csrf }: { csrf: string }) {
   const [open, setOpen] = useState(false)
   const [errors, setErrors] = useState<ContactErrors>({})
 
+  const [state, formAction] = useActionState(createClientFormAction, IDLE)
+
   const close = () => {
     setErrors({})
     setOpen(false)
@@ -36,6 +40,7 @@ export function AddClientButton({ csrf }: { csrf: string }) {
     <>
       <button
         type="button"
+        data-write="hide"
         onClick={() => {
           setErrors({})
           setOpen(true)
@@ -52,15 +57,16 @@ export function AddClientButton({ csrf }: { csrf: string }) {
         open={open}
         onClose={close}
         title="Add a client"
-        description="Record the client and their enquiry. This opens a lead you can work through in Leads, and becomes a job once it is booked."
+        description="Record the client's contact details. Then use Add lead on their page when they enquire."
         size="lg"
         headerBorder={false}
       >
         <ClientForm
-          action={createClientAction}
+          action={formAction}
+          values={state.status === 'error' ? state.values : undefined}
+          formError={state.status === 'error' ? state.message : undefined}
           csrf={csrf}
           submitLabel="Save client"
-          showEnquiryFields
           bare
           requireContact
           errors={errors}

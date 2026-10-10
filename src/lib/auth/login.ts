@@ -4,7 +4,8 @@ import { hashPassword, needsRehash, verifyPassword } from './password'
 import { createSession, type CreatedSession } from './session'
 
 const LOCKOUT_THRESHOLD = 5
-const LOCKOUT_WINDOW_MS = 15 * 60 * 1000
+const LOCKOUT_WINDOW_MS = 5 * 60 * 1000
+const KNOWN_ADDRESS_MS = 30 * 24 * 60 * 60 * 1000
 
 export type LoginResult = { ok: true; session: CreatedSession } | { ok: false }
 
@@ -65,7 +66,19 @@ export async function attemptLogin(
   }
 
   if (user.lockedUntil && user.lockedUntil.getTime() > now.getTime()) {
-    return fail(user.id)
+    const knownAddress = await prisma.signInLog.count({
+      where: {
+        eventType: 'login_success',
+        userId: user.id,
+        ipAddress: meta.ipAddress,
+        createdAt: { gte: new Date(now.getTime() - KNOWN_ADDRESS_MS) },
+      },
+    })
+    if (knownAddress === 0) {
+      const dummy = await dummyHash()
+      await verifyPassword(dummy.hash, dummy.algo, input.password)
+      return fail(user.id)
+    }
   }
   let failedAttempts = user.failedAttempts
   if (user.lockedUntil && user.lockedUntil.getTime() <= now.getTime()) {

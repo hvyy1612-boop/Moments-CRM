@@ -19,8 +19,9 @@ import { AddClientButton } from './AddClientButton'
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Clients - Moments' }
 
+const RECENT_ADD_MS = 10 * 60 * 1000
 const SORTS: SortValue[] = ['newest', 'oldest', 'name-asc', 'name-desc', 'most-jobs', 'fewest-jobs']
-const SOURCES: ClientSource[] = ['DIRECT_BOOKING', 'ENQUIRY', 'REFERRAL', 'MANUAL', 'OTHER']
+const SOURCES: ClientSource[] = ['ENQUIRY', 'REFERRAL', 'MANUAL', 'OTHER']
 const TYPES: ClientType[] = ['INDIVIDUAL', 'BUSINESS']
 
 function orderFor(sort: SortValue): Prisma.ClientOrderByWithRelationInput {
@@ -37,7 +38,7 @@ function orderFor(sort: SortValue): Prisma.ClientOrderByWithRelationInput {
 export default async function ClientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; sort?: string; source?: string; type?: string; jobs?: string; imported?: string }>
+  searchParams: Promise<{ q?: string; sort?: string; source?: string; type?: string; jobs?: string; imported?: string; tab?: string }>
 }) {
   const user = await requireRole('/clients')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
@@ -50,8 +51,9 @@ export default async function ClientsPage({
   const source = sp.source ?? ''
   const type = sp.type ?? ''
   const jobs = sp.jobs ?? ''
+  const tab: 'active' | 'archived' = sp.tab === 'archived' ? 'archived' : 'active'
 
-  const where: Prisma.ClientWhereInput = { mergedIntoClientId: null, archivedAt: null }
+  const where: Prisma.ClientWhereInput = { archivedAt: tab === 'archived' ? { not: null } : null }
   if (q) {
     where.OR = [
       { displayName: { contains: q, mode: 'insensitive' } },
@@ -64,7 +66,7 @@ export default async function ClientsPage({
   if (jobs === 'none') where.projects = { none: {} }
   if (jobs === 'has' || jobs === '2plus') where.projects = { some: {} }
 
-  const clients = await prisma.client.findMany({
+  const [clients, otherTabCount] = await Promise.all([prisma.client.findMany({
     where,
     orderBy: orderFor(sort),
     select: {
@@ -78,8 +80,9 @@ export default async function ClientsPage({
       createdAt: true,
       _count: { select: { projects: true } },
     },
-  })
+  }), prisma.client.count({ where: { ...where, archivedAt: tab === 'archived' ? null : { not: null } } })])
 
+  const now = Date.now()
   const allRows = clients.map((c) => ({
     id: c.id,
     number: c.clientNumber,
@@ -90,6 +93,8 @@ export default async function ClientsPage({
     phone: c.phone,
     projects: c._count.projects,
     since: c.createdAt,
+
+    recent: now - c.createdAt.getTime() < RECENT_ADD_MS,
   }))
 
   const rows = jobs === '2plus' ? allRows.filter((r) => r.projects >= 2) : allRows
@@ -100,7 +105,16 @@ export default async function ClientsPage({
   if (source) listQs.set('source', source)
   if (type) listQs.set('type', type)
   if (jobs) listQs.set('jobs', jobs)
+  if (tab === 'archived') listQs.set('tab', 'archived')
   const listQsStr = listQs.toString()
+  const tabHref = (t: 'active' | 'archived') => {
+    const p = new URLSearchParams(listQs)
+    if (t === 'archived') p.set('tab', 'archived')
+    else p.delete('tab')
+    const qs = p.toString()
+    return qs ? `/clients?${qs}` : '/clients'
+  }
+  const counts = { active: tab === 'active' ? rows.length : otherTabCount, archived: tab === 'archived' ? rows.length : otherTabCount }
   const backParam = listQsStr ? `?back=${encodeURIComponent(listQsStr)}` : ''
   const exportHref = `/clients/export${listQsStr ? `?${listQsStr}` : ''}`
 
@@ -141,8 +155,22 @@ export default async function ClientsPage({
 
         {/* Toolbar */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
-          <div className="text-sm text-ink">
-            All clients <span className="text-ink-muted">· {rows.length}</span>
+          <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Client status">
+            {([['active', 'Active'], ['archived', 'Archived']] as const).map(([key, label]) => {
+              const on = tab === key
+              return (
+                <Link
+                  key={key}
+                  href={tabHref(key)}
+                  role="tab"
+                  aria-selected={on}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${on ? 'bg-sunk font-medium text-ink' : 'text-ink-muted hover:bg-paper hover:text-ink'}`}
+                >
+                  {label}
+                  <span className={`tabular rounded-full px-1.5 py-0.5 text-xs leading-none ${on ? 'bg-line text-ink-muted' : 'bg-sunk text-ink-muted'}`}>{counts[key]}</span>
+                </Link>
+              )
+            })}
           </div>
           <div className="flex items-center gap-1">
             <FilterMenu source={source} type={type} jobs={jobs} />
@@ -155,10 +183,10 @@ export default async function ClientsPage({
         <div className="mt-4">
           {rows.length === 0 ? (
             <p className="py-16 text-center text-sm text-ink-muted">
-              {q ? `No clients match "${q}".` : 'No clients yet. Add your first client above, or convert a lead.'}
+              {q ? `No clients match "${q}".` : tab === 'archived' ? 'No archived clients.' : 'No clients yet. Add your first client above, or convert a lead.'}
             </p>
           ) : (
-            <ClientsTable rows={rows} csrf={csrf} canDelete={user.role === 'ADMIN'} backParam={backParam} />
+            <ClientsTable rows={rows} csrf={csrf} canDelete={user.role !== 'SUPERVISOR'} backParam={backParam} />
           )}
         </div>
       </PageContainer>

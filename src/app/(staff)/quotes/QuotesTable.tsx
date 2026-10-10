@@ -24,7 +24,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'declined', label: 'Declined' },
 ]
 
-export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) {
+export function QuotesTable({ rows, csrf, canDeleteQuotes = false }: { rows: QuoteRow[]; csrf: string;  canDeleteQuotes?: boolean }) {
   const [tab, setTab] = useState<TabKey>('active')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
@@ -49,7 +49,7 @@ export function QuotesTable({ rows, csrf }: { rows: QuoteRow[]; csrf: string }) 
     setSelectedIds(new Set())
   }
 
-  const canDelete = (r: QuoteRow) => r.status !== 'ACCEPTED'
+  const canDelete = (r: QuoteRow) => canDeleteQuotes && r.status !== 'ACCEPTED'
   const selection = {
     isSelected: (id: string) => selectedIds.has(id),
     isSelectable: canDelete,

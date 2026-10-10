@@ -81,7 +81,7 @@ export async function verifyActivityPin(userId: string, pin: string): Promise<Pi
   return { ok: false, reason: 'wrong', attemptsLeft: MAX_ATTEMPTS - attempts }
 }
 
-type ActivityPinEvent = 'auth.activity_pin_set' | 'auth.activity_pin_reset' | 'auth.activity_password_unlock'
+type ActivityPinEvent = 'auth.activity_pin_set' | 'auth.activity_pin_reset' | 'auth.activity_password_unlock' | 'auth.activity_password_failed'
 
 export async function logActivityPinEvent(userId: string, action: ActivityPinEvent): Promise<void> {
   const row = await prisma.user.findUnique({ where: { id: userId }, select: { companyId: true } })

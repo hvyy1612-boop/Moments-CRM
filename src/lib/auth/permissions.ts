@@ -1,6 +1,6 @@
 
 
-export type Role = 'ADMIN' | 'STUDIO' | 'EDITOR'
+export type Role = 'ADMIN' | 'STUDIO' | 'SUPERVISOR'
 
 export type RoutePermission =
   | { public: true }
@@ -18,57 +18,51 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   '/api/webhooks/resend': { secret: true },
   '/api/calendar/feed': { token: true },
 
-  '/api/auth/google': { public: true },
-  '/api/auth/google/callback': { public: true },
-
   '/login': { public: true },
+  '/register': { public: true },
   '/forgot': { public: true },
   '/reset/[token]': { public: true },
 
-  '/change-password': { roles: ['ADMIN', 'STUDIO', 'EDITOR'] },
+  '/change-password': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
 
-  '/dashboard': { roles: ['ADMIN', 'STUDIO'] },
-  '/leads': { roles: ['ADMIN', 'STUDIO'] },
-  '/leads/report': { roles: ['ADMIN', 'STUDIO'] },
-  '/leads/[id]': { roles: ['ADMIN', 'STUDIO'] },
-  '/jobs': { roles: ['ADMIN', 'STUDIO'] },
-  '/jobs/report': { roles: ['ADMIN', 'STUDIO'] },
-  '/jobs/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  '/dashboard': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/notifications': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/leads': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/leads/report': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/leads/[id]': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/jobs': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/jobs/report': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/jobs/[id]': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
 
-  '/quotes': { roles: ['ADMIN', 'STUDIO'] },
+  '/quotes': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   '/quotes/new': { roles: ['ADMIN', 'STUDIO'] },
-  '/quotes/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  '/quotes/[id]': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   '/quotes/[id]/edit': { roles: ['ADMIN', 'STUDIO'] },
-  '/quotes/[id]/preview': { roles: ['ADMIN', 'STUDIO'] },
-  '/jobs/[id]/invoice/[invoiceId]': { roles: ['ADMIN', 'STUDIO'] },
+  '/quotes/[id]/preview': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   '/finance/new': { roles: ['ADMIN', 'STUDIO'] },
-  '/finance/report': { roles: ['ADMIN', 'STUDIO'] },
-  '/finance/[invoiceId]': { roles: ['ADMIN', 'STUDIO'] },
+  '/finance/report': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/finance/[invoiceId]': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   '/finance/[invoiceId]/edit': { roles: ['ADMIN', 'STUDIO'] },
-  '/clients': { roles: ['ADMIN', 'STUDIO'] },
-  '/clients/new': { roles: ['ADMIN', 'STUDIO'] },
+  '/clients': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   '/clients/import': { roles: ['ADMIN', 'STUDIO'] },
-  '/clients/export': { roles: ['ADMIN', 'STUDIO'] },
-  '/clients/[id]': { roles: ['ADMIN', 'STUDIO'] },
+  '/clients/export': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/clients/[id]': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
   '/clients/[id]/edit': { roles: ['ADMIN', 'STUDIO'] },
-  '/calendar': { roles: ['ADMIN', 'STUDIO'] },
-  '/finance': { roles: ['ADMIN', 'STUDIO'] },
+  '/calendar': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
+  '/finance': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
 
-  '/pricing': { roles: ['ADMIN', 'STUDIO'] },
+  '/pricing': { roles: ['ADMIN', 'STUDIO', 'SUPERVISOR'] },
 
-  '/settings': { roles: ['ADMIN'] },
+  '/settings': { roles: ['ADMIN', 'STUDIO'] },
 
-  '/settings/notifications': { roles: ['ADMIN'] },
-  '/users': { roles: ['ADMIN'] },
+  '/settings/notifications': { roles: ['ADMIN', 'STUDIO'] },
+  '/users': { roles: ['ADMIN', 'STUDIO'] },
 
-  '/users/roster/[team]': { roles: ['ADMIN'] },
+  '/users/roster/[team]': { roles: ['ADMIN', 'STUDIO'] },
 
   '/activity': { roles: ['ADMIN'] },
 
   '/quote/[token]': { token: true },
   '/contract/[token]': { token: true },
-  '/gallery/[token]': { token: true },
   '/invoice/[token]': { token: true },
-  '/questionnaire/[token]': { token: true },
-  '/portal/[token]': { token: true },
 }

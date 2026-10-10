@@ -2,9 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   dueToneFor,
   getTaskDueState,
-  makeShootDateOf,
+  jobShootDate,
   resolveTaskDueDate,
-  type BookingLike,
   type DeadlineContext,
   type DeadlineTask,
 } from '@/lib/domain/deadline'
@@ -16,12 +15,11 @@ const task = (over: Partial<DeadlineTask>): DeadlineTask => ({
   dueOffsetDays: 0,
   dueDateFixed: null,
   dueOverrideAt: null,
-  bookingId: null,
   ...over,
 })
 
 const ctx = (over: Partial<DeadlineContext>): DeadlineContext => ({
-  shootDateOf: () => null,
+  shootDate: null,
   jobConfirmedAt: null,
   ...over,
 })
@@ -30,8 +28,8 @@ describe('resolveTaskDueDate (docs/25 Part 2)', () => {
   it('override wins over every anchor (Rule D1)', () => {
     const d = syd('2026-06-10')
     const r = resolveTaskDueDate(
-      task({ dueOverrideAt: d, dueAnchor: 'SHOOT', dueOffsetDays: -3, bookingId: 'b1' }),
-      ctx({ shootDateOf: () => syd('2026-06-20') }),
+      task({ dueOverrideAt: d, dueAnchor: 'SHOOT', dueOffsetDays: -3 }),
+      ctx({ shootDate: syd('2026-06-20') }),
     )
     expect(r?.toISOString()).toBe(d.toISOString())
   })
@@ -43,16 +41,12 @@ describe('resolveTaskDueDate (docs/25 Part 2)', () => {
     )
   })
 
-  it('SHOOT adds the offset to the linked shoot date', () => {
-    const shoot = syd('2026-06-20')
-    const r = resolveTaskDueDate(
-      task({ dueAnchor: 'SHOOT', dueOffsetDays: -3, bookingId: 'b1' }),
-      ctx({ shootDateOf: (id) => (id === 'b1' ? shoot : null) }),
-    )
+  it("SHOOT adds the offset to the job's shoot date", () => {
+    const r = resolveTaskDueDate(task({ dueAnchor: 'SHOOT', dueOffsetDays: -3 }), ctx({ shootDate: syd('2026-06-20') }))
     expect(r?.getUTCDate()).toBe(17)
   })
 
-  it('SHOOT with no shoot yet → null (undated until a shoot exists)', () => {
+  it('SHOOT with no shoot date yet → null (undated until the job has one)', () => {
     expect(resolveTaskDueDate(task({ dueAnchor: 'SHOOT', dueOffsetDays: 1 }), ctx({}))).toBeNull()
   })
 
@@ -82,8 +76,8 @@ describe('dueToneFor — Sydney day boundaries (Rule N9)', () => {
 
   it('getTaskDueState resolves then tones', () => {
     const s = getTaskDueState(
-      task({ dueAnchor: 'SHOOT', dueOffsetDays: 0, bookingId: 'b1' }),
-      ctx({ shootDateOf: () => syd('2026-06-15') }),
+      task({ dueAnchor: 'SHOOT', dueOffsetDays: 0 }),
+      ctx({ shootDate: syd('2026-06-15') }),
       now,
     )
     expect(s.tone).toBe('TODAY')
@@ -91,43 +85,17 @@ describe('dueToneFor — Sydney day boundaries (Rule N9)', () => {
   })
 })
 
-describe('makeShootDateOf (Rule D3/D5)', () => {
-  const b = (over: Partial<BookingLike>): BookingLike => ({
-    id: 'x',
-    startsAt: syd('2026-06-20'),
-    status: 'TENTATIVE',
-    rescheduledFromId: null,
-    ...over,
+describe("jobShootDate - the job's shoot date", () => {
+  const lead = syd('2026-11-14')
+  it("is the lead's event date until staff set one", () => {
+    expect(jobShootDate([{ type: 'SHOOT', status: 'PENDING', dueOverrideAt: null }], lead)?.toISOString()).toBe(lead.toISOString())
   })
-
-  it('null returns the earliest active shoot (primary), not the latest', () => {
-    const f = makeShootDateOf([
-      b({ id: 'wed', startsAt: syd('2026-06-20') }),
-      b({ id: 'eng', startsAt: syd('2026-05-01') }),
-    ])
-    expect(f(null)?.toISOString()).toBe(syd('2026-05-01').toISOString())
+  it('the date staff set on the Shoot task wins', () => {
+    const set = syd('2026-11-21')
+    expect(jobShootDate([{ type: 'TODO', status: 'PENDING', dueOverrideAt: syd('2026-01-01') }, { type: 'SHOOT', status: 'PENDING', dueOverrideAt: set }], lead)?.toISOString()).toBe(set.toISOString())
   })
-
-  it('a linked task follows its own booking, not the primary', () => {
-    const f = makeShootDateOf([
-      b({ id: 'wed', startsAt: syd('2026-06-20') }),
-      b({ id: 'eng', startsAt: syd('2026-05-01') }),
-    ])
-    expect(f('wed')?.toISOString()).toBe(syd('2026-06-20').toISOString())
-  })
-
-  it('a cancelled booking with an active successor resolves to the successor date (reschedule follows)', () => {
-    const f = makeShootDateOf([
-      b({ id: 'old', startsAt: syd('2026-06-20'), status: 'CANCELLED' }),
-      b({ id: 'new', startsAt: syd('2026-07-04'), status: 'TENTATIVE', rescheduledFromId: 'old' }),
-    ])
-    expect(f('old')?.toISOString()).toBe(syd('2026-07-04').toISOString())
-    expect(f('new')?.toISOString()).toBe(syd('2026-07-04').toISOString())
-  })
-
-  it('a cancelled booking with no successor resolves to null', () => {
-    const f = makeShootDateOf([b({ id: 'old', status: 'CANCELLED' })])
-    expect(f('old')).toBeNull()
-    expect(f(null)).toBeNull()
+  it('ignores a cancelled Shoot task, and is null with no date at all', () => {
+    expect(jobShootDate([{ type: 'SHOOT', status: 'CANCELLED', dueOverrideAt: syd('2026-11-21') }], lead)?.toISOString()).toBe(lead.toISOString())
+    expect(jobShootDate([], null)).toBeNull()
   })
 })

@@ -6,7 +6,7 @@ import { PageContainer } from '@/components/PageContainer'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
-import { listInvoiceTemplates } from '@/lib/domain/finance'
+import { JOB_SHOOT_SELECT, shootDateOfJob } from '@/lib/domain/deadline'
 import { listActivePackages } from '@/lib/domain/package'
 import { sydneyYmd } from '@/lib/time'
 import { AppShell } from '../../../AppShell'
@@ -38,7 +38,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ in
         select: {
           id: true, name: true,
           client: { select: { displayName: true, email: true, phone: true } },
-          bookings: { where: { status: { not: 'CANCELLED' } }, orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true } },
+          ...JOB_SHOOT_SELECT,
         },
       },
     },
@@ -47,7 +47,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ in
   const editable = inv.amountPaid.lte(0) && !['VOID', 'PAID', 'PARTIALLY_PAID'].includes(inv.status)
   if (!editable) redirect(`/finance/${inv.id}`)
 
-  const [packages, templates] = await Promise.all([listActivePackages(), listInvoiceTemplates()])
+  const packages = await listActivePackages()
 
   const discountLine = inv.lines.find((l) => l.itemName === 'Discount' && l.unitPrice.lessThan(0))
   const issueDate = inv.invoiceDate ? ymd(inv.invoiceDate) : ymd(new Date())
@@ -55,7 +55,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ in
   const dueDays = inv.instalments.length <= 1 && inv.dueAt && inv.invoiceDate
     ? Math.round((inv.dueAt.getTime() - inv.invoiceDate.getTime()) / 86_400_000)
     : 0
-  const shoot = inv.project.bookings[0]?.startsAt
+  const shoot = shootDateOfJob(inv.project)
 
   return (
     <AppShell user={user} csrf={csrf} active="finance">
@@ -76,7 +76,6 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ in
           packages={packages.map((p) => ({
             id: p.id, name: p.name, price: p.basePriceInclGst.toString(), description: p.description, inclusions: p.inclusions, isAddOn: p.isAddOn,
           }))}
-          templates={templates}
           initial={{
             type: inv.type,
             invoiceNumber: inv.invoiceNumber,

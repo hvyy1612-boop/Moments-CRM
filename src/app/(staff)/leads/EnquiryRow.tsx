@@ -5,7 +5,6 @@ export type EnquiryRowData = {
   name: string
   event: string
   status: string
-  waitingOn: string | null
   shootDate: string | null
   email: string
   phone: string | null

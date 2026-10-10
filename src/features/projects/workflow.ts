@@ -1,11 +1,10 @@
 
 import { dueToneFor, TASK_TYPE_LABEL, type DueTone, type TaskType } from '@/features/enquiries/workflow'
 import type { DueAnchor } from '@/lib/domain/deadline'
+import { sydneyDateTimeParts } from '@/lib/time'
 
-export { ADDABLE_TASK_TYPES } from '@/features/enquiries/workflow'
+export { JOB_TASK_TYPES } from '@/features/enquiries/workflow'
 export type { TaskType } from '@/features/enquiries/workflow'
-
-export type ProjectFacts = { shootScheduled: boolean; gallerySent: boolean; finalPaid: boolean; deliveryComplete: boolean }
 
 type StageDef = { key: string; label: string; color: string; optional?: boolean }
 
@@ -25,11 +24,6 @@ export function stageLabel(key: string): string {
   return PROJECT_STAGES.find((s) => s.key === key)?.label ?? key
 }
 
-export const AUTO_MILESTONES: { stage: string; key: string; title: string; fact: keyof ProjectFacts; note: string }[] = [
-  { stage: 'delivery', key: 'final_payment_received', title: 'Final payment received', fact: 'finalPaid', note: 'Confirmed automatically when the balance is paid in full.' },
-  { stage: 'delivery', key: 'delivery_complete', title: 'Delivery complete', fact: 'deliveryComplete', note: 'Confirmed automatically once the gallery is delivered and paid.' },
-]
-
 export const DEFAULT_PROJECT_TASKS: { stage: string; key: string; title: string; type: TaskType }[] = [
   { stage: 'preshoot', key: 'confirm_shoot_details', title: 'Confirm shoot details', type: 'TODO' },
   { stage: 'preshoot', key: 'send_pre_shoot_reminder', title: 'Send pre-shoot reminder', type: 'TODO' },
@@ -44,6 +38,7 @@ export const DEFAULT_PROJECT_TASKS: { stage: string; key: string; title: string;
   { stage: 'delivery', key: 'prepare_client_gallery', title: 'Prepare client gallery', type: 'TODO' },
   { stage: 'delivery', key: 'send_client_gallery', title: 'Send client gallery', type: 'TODO' },
   { stage: 'delivery', key: 'issue_final_invoice', title: 'Issue final invoice', type: 'TODO' },
+  { stage: 'delivery', key: 'final_payment_received', title: 'Final payment received', type: 'TODO' },
 ]
 
 export const CORE_TASK_KEY_BY_TITLE: Record<string, string> = Object.fromEntries(
@@ -86,6 +81,7 @@ export const PROJECT_TASK_NOTE: Record<string, string> = {
   'Prepare client gallery': 'Assemble the gallery and any files for delivery.',
   'Send client gallery': 'Deliver the gallery to the client.',
   'Issue final invoice': 'Raise the final invoice for the remaining balance.',
+  'Final payment received': 'Tick once the final balance is in the bank.',
   'Send client welcome email': 'Sent automatically once the booking is confirmed.',
   'Collect wedding and shoot details': 'Gather the timeline, venues, and key people.',
   'Confirm timeline and venue details': 'Confirm the run sheet and locations.',
@@ -146,6 +142,7 @@ export const PROJECT_TASK_SCHEDULE: Record<string, number> = {
   'Prepare client gallery': 35,
   'Send client gallery': 42,
   'Issue final invoice': 42,
+  'Final payment received': 49, // a week after the final invoice
   'Send client welcome email': -60,
   'Collect wedding and shoot details': -45,
   'Confirm timeline and venue details': -30,
@@ -196,6 +193,7 @@ export const PROJECT_TASK_SCHEDULE: Record<string, number> = {
 }
 
 export const PROJECT_TASK_BLOCKED_BY: Record<string, string> = {
+  'Final payment received': 'Issue final invoice',
   'Edit wedding images': 'Cull wedding images',
   'Finalise wedding gallery': 'Edit wedding images',
   'Send final gallery to client': 'Finalise wedding gallery',
@@ -271,11 +269,10 @@ export type ProjectBoard = {
 export const ATTENTION_DAYS = 3
 
 function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10)
+  return sydneyDateTimeParts(d).date
 }
 
 export function buildProjectBoard(
-  facts: ProjectFacts,
   tasks: TaskInput[],
   formatDate: (d: Date) => string,
   now: Date | null = null,
@@ -326,32 +323,6 @@ export function buildProjectBoard(
         }
       })
 
-  const autoRowsFor = (stageKey: string): BoardTaskRow[] =>
-    AUTO_MILESTONES.filter((m) => m.stage === stageKey).map((m) => ({
-      id: `auto:${stageKey}:${m.key}`,
-      key: m.key,
-      title: m.title,
-      type: 'AUTO' as TaskType,
-      typeLabel: TASK_TYPE_LABEL.AUTO ?? 'Auto',
-      note: m.note,
-      editable: false,
-      isSystem: true,
-      done: facts[m.fact],
-      needsAttention: false,
-      owner: 'System',
-      dueLabel: null,
-      dueValue: null,
-      noDate: false,
-      dueTone: dueToneFor(null, facts[m.fact], now),
-      blocked: false,
-      blockedBy: null,
-      completedByName: facts[m.fact] ? 'System' : null,
-      completedAt: null,
-      canComplete: false,
-      canEdit: false,
-      canDelete: false,
-    }))
-
   const coreStages: BoardStage[] = PROJECT_STAGES.map((stage) => {
     const manualRows = manualRowsFor(stage.key)
     return {
@@ -363,7 +334,7 @@ export function buildProjectBoard(
       active: false,
       done: manualRows.filter((t) => t.done).length,
       total: manualRows.length,
-      tasks: [...manualRows, ...autoRowsFor(stage.key)],
+      tasks: manualRows,
     }
   })
 
@@ -374,7 +345,7 @@ export function buildProjectBoard(
     if (prev === undefined || t.order < prev) firstOrder.set(t.stage, t.order)
   }
   const customStages: BoardStage[] = [...firstOrder.keys()]
-    .sort((a, b) => firstOrder.get(a)! - firstOrder.get(b)!)
+    .sort((a, b) => firstOrder.get(a)! - firstOrder.get(b)! || a.localeCompare(b))
     .map((key) => {
       const manualRows = manualRowsFor(key)
       return {

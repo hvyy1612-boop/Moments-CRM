@@ -11,8 +11,8 @@ export type QuoteDocData = {
   clientLocation?: string | null
   issueDate: Date | null
   validUntil: Date | null
-  introduction: string | null
-  lines: { id: string; description: string; details: string | null; quantity: number; unitPrice: Prisma.Decimal; lineTotal: Prisma.Decimal }[]
+
+  lines: { id: string; description: string; details: string | null; quantity: number; unitPrice: Prisma.Decimal; discount?: Prisma.Decimal | null; lineTotal: Prisma.Decimal }[]
   subtotal: Prisma.Decimal
   taxTotal: Prisma.Decimal
   total: Prisma.Decimal
@@ -90,7 +90,6 @@ export function QuoteDocument({ doc }: { doc: QuoteDocData }) {
         </div>
 
         {/* Optional greeting */}
-        {doc.introduction ? <p className="mt-4 whitespace-pre-line text-sm leading-normal text-ink">{doc.introduction}</p> : null}
 
         {/* Line items — accent header, even column rules, zebra rows */}
         <table className="mt-6 w-full table-fixed border-collapse border border-line-strong text-sm">
@@ -117,6 +116,7 @@ export function QuoteDocument({ doc }: { doc: QuoteDocData }) {
                 <td className="border border-line px-3 py-2 align-top">
                   <div className="break-words font-semibold text-ink">{line.description}</div>
                   {line.details ? <p className="mt-1 whitespace-pre-line break-words text-xs leading-normal text-ink-muted">{line.details}</p> : null}
+                  {line.discount && line.discount.greaterThan(0) ? <p className="tabular mt-1 text-xs font-medium text-ink">Discount -{formatAud(line.discount)}</p> : null}
                 </td>
                 <td className="tabular border border-line px-3 py-2 text-center align-top text-ink">{line.quantity}</td>
                 <td className="tabular border border-line px-3 py-2 text-right align-top text-ink">{formatAud(line.unitPrice)}</td>

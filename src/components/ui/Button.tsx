@@ -30,6 +30,10 @@ export const secondaryLinkLg =
   'px-6 text-base font-medium whitespace-nowrap text-ink outline-none transition-colors duration-150 ' +
   'hover:bg-paper focus-visible:ring-2 focus-visible:ring-accent'
 
+export function buttonClass(variant: Variant = 'primary', size: Size = 'md'): string {
+  return `${base} ${variants[variant]} ${sizes[size]}`
+}
+
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: Variant
   size?: Size

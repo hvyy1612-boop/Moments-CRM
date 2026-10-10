@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { getSessionUser } from '@/lib/auth/guard'
+import { getActionUser } from '@/lib/auth/guard'
 import {
   applyChangeRequest,
   approveChangeRequest,
@@ -16,7 +16,7 @@ import {
 import { changeRequestPayloadSchema, type ChangeRequestPayload } from '@/lib/validation/change-request'
 
 async function requireStaff() {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDIO')) throw new Error('Not authorised.')
   return user
 }
@@ -32,7 +32,7 @@ function payloadFromForm(fd: FormData): ChangeRequestPayload {
   let raw: unknown
   switch (kind) {
     case 'reschedule':
-      raw = { kind, bookingId: str(fd, 'bookingId'), newStartsAt: str(fd, 'newStartsAt'), newEndsAt: str(fd, 'newEndsAt'), ...(fee ? { fee } : {}) }
+      raw = { kind, newStartsAt: str(fd, 'newStartsAt'), ...(fee ? { fee } : {}) }
       break
     case 'scopeChange':
       raw = { kind, summary: str(fd, 'summary'), fee: { amount: feeAmount, reason: str(fd, 'feeReason') || null } }
@@ -51,7 +51,8 @@ function payloadFromForm(fd: FormData): ChangeRequestPayload {
 
 function backTo(projectId: string, error?: string): never {
   revalidatePath(`/jobs/${projectId}`)
-  redirect(error ? `/jobs/${projectId}?crError=${encodeURIComponent(error)}#change-requests` : `/jobs/${projectId}#change-requests`)
+
+  redirect(error ? `/jobs/${projectId}?tab=finance&crError=${encodeURIComponent(error)}#change-requests` : `/jobs/${projectId}?tab=finance#change-requests`)
 }
 
 export async function createChangeRequestAction(formData: FormData): Promise<void> {

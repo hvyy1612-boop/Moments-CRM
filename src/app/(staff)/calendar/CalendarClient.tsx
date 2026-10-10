@@ -6,8 +6,9 @@ import { useRouter } from 'next/navigation'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { Checkbox, Field, Select, TextInput, Textarea } from '@/components/ui/form'
+import { submitKeepingValues } from '@/components/ui/submitKeepingValues'
 import type { CalItem, CalendarViewData } from '@/lib/domain/calendar'
-import { createCalendarEventAction, moveCalendarItemAction, type CalendarActionState } from './actions'
+import { createCalendarEventAction, moveCalendarItemAction, resetCalendarFeedAction, type CalendarActionState } from './actions'
 
 const IDLE: CalendarActionState = { status: 'idle' }
 const ROW_H = 48
@@ -22,7 +23,7 @@ function catClass(item: CalItem): string {
     item.category === 'payment' ? 'bg-peach text-ink'
     : item.category === 'event' ? 'bg-sunk text-ink'
     : item.category === 'lead' ? 'bg-lav text-ink'
-    : item.kind === 'booking' ? 'bg-sage text-ink'
+    : item.kind === 'shoot' ? 'bg-sage text-ink'
     : 'bg-lost text-ink'
   return item.tone === 'overdue' ? `${base} ring-1 ring-lost-ink/40` : base
 }
@@ -73,10 +74,10 @@ export function CalendarClient({
   }, [])
 
   const doMove = useCallback((item: CalItem, dateKey: string, startMin: number | null) => {
-    if (item.kind !== 'booking' && item.kind !== 'event') return
+    if (item.kind !== 'event') return
     if (item.dayKey === dateKey && item.startMin === startMin) return
     const fd = new FormData()
-    fd.set('csrf', csrf); fd.set('kind', item.kind); fd.set('refId', item.refId)
+    fd.set('csrf', csrf); fd.set('refId', item.refId)
     fd.set('date', dateKey); fd.set('startMin', startMin === null ? '' : String(startMin))
     setMoveErr(null)
     startMove(async () => {
@@ -358,7 +359,7 @@ function WeekBlock({ item, startHour, canManage, onPeek, onHide, onMove }: {
     style: { top, height },
     onMouseEnter: (e: ReactMouseEvent) => onPeek(item, e),
     onMouseLeave: onHide,
-    onPointerDown: draggable ? (e: ReactPointerEvent) => beginDrag(e, item, onMove, () => { dragged.current = true }) : undefined,
+    onPointerDown: draggable ? (e: ReactPointerEvent) => beginDrag(e, item, onMove, () => { dragged.current = true }, startHour) : undefined,
   }
   return item.href
     ? <Link href={item.href} className={cls} {...handlers} onClick={(e) => { if (dragged.current) { e.preventDefault(); dragged.current = false } }}>{inner}</Link>
@@ -370,6 +371,8 @@ function beginDrag(
   item: CalItem,
   onMove: (item: CalItem, dateKey: string, startMin: number | null) => void,
   markDragged: () => void,
+
+  startHour = 0,
 ) {
   const startX = e.clientX, startY = e.clientY
   let moved = false
@@ -399,7 +402,7 @@ function beginDrag(
     if (col) {
       const dateKey = col.getAttribute('data-datekey')!
       const rect = col.getBoundingClientRect()
-      const startHour = 7
+
       const min = startHour * 60 + Math.max(0, Math.floor(((ev.clientY - rect.top) / ROW_H) * 60 / 15) * 15)
       onMove(item, dateKey, min)
     } else if (cell) {
@@ -450,7 +453,7 @@ export function AddEventButton({ csrf, clients, date }: { csrf: string; clients:
   )
 }
 
-export function SyncButton({ feedPath }: { feedPath: string }) {
+export function SyncButton({ feedPath, csrf, canReset }: { feedPath: string; csrf: string; canReset: boolean }) {
   const [open, setOpen] = useState(false)
   const [url, setUrl] = useState(feedPath)
   const [copied, setCopied] = useState(false)
@@ -475,6 +478,17 @@ export function SyncButton({ feedPath }: { feedPath: string }) {
           </div>
           <a href={webcal} className="mt-2 block text-xs font-bold text-accent hover:underline">Open in Apple Calendar (.ics)</a>
           <p className="mt-2 text-xs text-ink-muted">Google Calendar: Other calendars → From URL → paste the link.</p>
+          {canReset ? (
+            <form
+              action={resetCalendarFeedAction}
+              onSubmit={(e) => { if (!window.confirm('Make a new link? Every phone or calendar using the current link stops updating until it subscribes again.')) e.preventDefault() }}
+              className="mt-3 border-t border-line pt-3"
+            >
+              <input type="hidden" name="csrf" value={csrf} />
+              <button type="submit" className="text-xs font-bold text-danger hover:underline">Reset link</button>
+              <p className="mt-1 text-xs text-ink-muted">Use this if the link was shared by mistake or a phone was lost.</p>
+            </form>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -500,7 +514,8 @@ function AddEventModal({ csrf, clients, prefill, onClose }: { csrf: string; clie
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         </div>
-        <form action={action} className="flex flex-col gap-4 px-5 py-4">
+        {/* No React form reset after a refused save: the All day tick keeps its value (submitKeepingValues). */}
+        <form onSubmit={submitKeepingValues(action)} className="flex flex-col gap-4 px-5 py-4">
           <input type="hidden" name="csrf" value={csrf} />
           {state.status === 'error' ? <Alert tone="danger" title={state.message ?? 'Please check the form.'} /> : null}
           <Field label="Type" htmlFor="ev-kind">

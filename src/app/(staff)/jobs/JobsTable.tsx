@@ -6,7 +6,6 @@ import { useRowSelection } from '@/components/ui/useRowSelection'
 import { ExportBar } from '@/components/ui/ExportBar'
 import { COL } from '@/components/ui/tableColumns'
 import { formatSydneyDate } from '@/lib/time'
-import type { StatusLabel } from '@/features/projects/labels'
 import { JobRowMenu } from './JobRowMenu'
 
 export type JobRow = {
@@ -15,7 +14,6 @@ export type JobRow = {
   name: string
   client: string
   clientId: string
-  label: StatusLabel
   closed: boolean
   cancelled: boolean
   completed: boolean

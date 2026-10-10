@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
-import { TEAMS } from '@/lib/auth/teams'
+import { ROLE_LABEL, TEAMS } from '@/lib/auth/teams'
 import { prisma } from '@/lib/db'
 import { formatSydneyDate } from '@/lib/time'
 import { PageHeader } from '@/components/PageHeader'
@@ -10,12 +10,12 @@ import { DASHBOARD_CRUMB } from '@/components/Breadcrumb'
 import { AppShell } from '../AppShell'
 import { PageContainer } from '@/components/PageContainer'
 import { AddStaffForm } from './AddStaffForm'
+import { signupOptions } from '@/lib/auth/register'
+import { setSignupOpenAction } from './actions'
 import { StaffTeams, type StaffRowData, type TeamGroup } from './StaffTeams'
 
 export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Staff - Moments' }
-
-const ROLE_LABEL: Record<string, string> = { ADMIN: 'Admin', STUDIO: 'Studio', EDITOR: 'Editor' }
 
 export default async function UsersPage() {
   const user = await requireRole('/users')
@@ -23,7 +23,7 @@ export default async function UsersPage() {
   const csrf = cookieValue ? csrfFieldValue(cookieValue) : ''
 
   const users = await prisma.user.findMany({
-    where: { NOT: { OR: [{ status: 'DELETED' }, { email: { endsWith: '@example.invalid' } }] } },
+    where: { status: { not: 'DELETED' } },
     orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
     select: { id: true, name: true, email: true, role: true, isActive: true, lastLoginAt: true },
   })
@@ -35,6 +35,7 @@ export default async function UsersPage() {
     roleLabel: ROLE_LABEL[u.role] ?? u.role,
     isActive: u.isActive,
     lastLogin: u.lastLoginAt ? `Last in ${formatSydneyDate(u.lastLoginAt)}` : 'Never signed in',
+    isAdminAccount: u.role === 'ADMIN',
   })
 
   const teams: TeamGroup[] = TEAMS.map((t) => {
@@ -43,6 +44,7 @@ export default async function UsersPage() {
   }).filter((t) => t.members.length > 0)
 
   const totalActive = teams.reduce((n, t) => n + t.activeCount, 0)
+  const signup = await signupOptions()
 
   return (
     <AppShell user={user} csrf={csrf} active="users">
@@ -54,7 +56,23 @@ export default async function UsersPage() {
 
         <section className="rounded-md border border-line bg-surface p-5">
           <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Add staff</h2>
-          <AddStaffForm csrf={csrf} />
+          <AddStaffForm csrf={csrf} canCreateAdmin={user.role === 'ADMIN'} />
+        </section>
+
+        <section className="mt-4 flex flex-col gap-3 rounded-md border border-line bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-wide text-muted">Staff sign-up</h2>
+            <p className="mt-1 text-base text-ink">
+              {signup.open ? 'Open: anyone with the link can create a Staff or Supervisor account at /register.' : 'Closed: new accounts can only be added above.'}
+            </p>
+          </div>
+          <form action={setSignupOpenAction}>
+            <input type="hidden" name="csrf" value={csrf} />
+            <input type="hidden" name="open" value={signup.open ? '0' : '1'} />
+            <button type="submit" className="rounded border border-line bg-surface px-4 py-2 text-sm font-medium text-ink hover:bg-paper">
+              {signup.open ? 'Close sign-up' : 'Open sign-up'}
+            </button>
+          </form>
         </section>
 
         <div className="mt-6 mb-1 flex items-center justify-between">
@@ -66,7 +84,7 @@ export default async function UsersPage() {
           <span className="font-semibold text-ink">Disable</span> blocks sign-in but keeps the account ·{' '}
           <span className="font-semibold text-ink">Remove</span> deletes the account and revokes access
         </p>
-        <StaffTeams teams={teams} csrf={csrf} currentUserId={user.id} />
+        <StaffTeams teams={teams} csrf={csrf} currentUserId={user.id} viewerIsAdmin={user.role === 'ADMIN'} />
       </PageContainer>
     </AppShell>
   )

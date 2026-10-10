@@ -5,11 +5,12 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { can } from '@/lib/auth/authz'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { getSessionUser } from '@/lib/auth/guard'
-import { createCalendarEvent, moveCalendarItem } from '@/lib/domain/calendar'
+import { getActionUser } from '@/lib/auth/guard'
+import { createCalendarEvent, moveCalendarEvent, rotateFeedToken } from '@/lib/domain/calendar'
 import { toggleEnquiryTask } from '@/lib/domain/enquiry-workflow'
 import { toggleProjectTask } from '@/lib/domain/project-workflow'
 import { prisma } from '@/lib/db'
+import { JOB_WHERE } from '@/lib/domain/project'
 
 export type CalendarActionState = { status: 'idle' | 'success' | 'error'; message?: string }
 
@@ -31,7 +32,7 @@ const createSchema = z
   })
 
 export async function createCalendarEventAction(_prev: CalendarActionState, formData: FormData): Promise<CalendarActionState> {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || !can(user, 'CALENDAR_MANAGE')) return { status: 'error', message: 'Not authorised.' }
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value
   if (!verifyCsrf(cookieValue, formData.get('csrf'))) return { status: 'error', message: 'Invalid request.' }
@@ -54,31 +55,34 @@ export async function createCalendarEventAction(_prev: CalendarActionState, form
 }
 
 const moveSchema = z.object({
-  kind: z.enum(['booking', 'event']),
   refId: z.string().min(1),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   startMin: z.coerce.number().int().min(0).max(1439).nullable(),
 })
 
 export async function moveCalendarItemAction(formData: FormData): Promise<CalendarActionState> {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || !can(user, 'CALENDAR_MANAGE')) return { status: 'error', message: 'Not authorised.' }
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value
   if (!verifyCsrf(cookieValue, formData.get('csrf'))) return { status: 'error', message: 'Invalid request.' }
 
   const raw = formData.get('startMin')
   const parsed = moveSchema.safeParse({
-    kind: formData.get('kind'), refId: formData.get('refId'), date: formData.get('date'),
+    refId: formData.get('refId'), date: formData.get('date'),
     startMin: raw === '' || raw === null ? null : raw,
   })
   if (!parsed.success) return { status: 'error', message: 'Could not move the event.' }
-  await moveCalendarItem(parsed.data.kind, parsed.data.refId, parsed.data.date, parsed.data.startMin)
+  try {
+    await moveCalendarEvent(parsed.data.refId, parsed.data.date, parsed.data.startMin)
+  } catch {
+    return { status: 'error', message: 'Could not move the event.' }
+  }
   revalidatePath('/calendar')
   return { status: 'success' }
 }
 
 export async function markTaskDoneAction(formData: FormData): Promise<void> {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user) throw new Error('Not authorised.')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value
   if (!verifyCsrf(cookieValue, formData.get('csrf'))) throw new Error('Invalid request.')
@@ -100,7 +104,7 @@ export async function markTaskDoneAction(formData: FormData): Promise<void> {
 export type SearchHit = { type: 'Client' | 'Lead' | 'Job' | 'Invoice'; label: string; sub: string | null; href: string }
 
 export async function searchEntitiesAction(query: string): Promise<SearchHit[]> {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user) return []
   const q = query.trim()
   if (q.length < 2) return []
@@ -111,10 +115,10 @@ export async function searchEntitiesAction(query: string): Promise<SearchHit[]> 
       ? prisma.client.findMany({ where: { archivedAt: null, OR: [{ displayName: contains }, { email: contains }] }, take: 5, select: { id: true, displayName: true, email: true } })
       : Promise.resolve([]),
     can(user, 'ENQUIRY_VIEW')
-      ? prisma.enquiry.findMany({ where: { OR: [{ name: contains }, { email: contains }] }, take: 5, select: { id: true, name: true, eventType: true } })
+      ? prisma.enquiry.findMany({ where: { status: { not: 'BOOKING_CONFIRMED' }, OR: [{ name: contains }, { email: contains }] }, take: 5, select: { id: true, name: true, eventType: true } })
       : Promise.resolve([]),
     can(user, 'PROJECT_VIEW')
-      ? prisma.project.findMany({ where: { OR: [{ name: contains }, { code: contains }, { client: { displayName: contains } }] }, take: 5, select: { id: true, name: true, code: true, client: { select: { displayName: true } } } })
+      ? prisma.project.findMany({ where: { AND: [JOB_WHERE, { OR: [{ name: contains }, { code: contains }, { client: { displayName: contains } }] }] }, take: 5, select: { id: true, name: true, code: true, client: { select: { displayName: true } } } })
       : Promise.resolve([]),
     can(user, 'FINANCE_VIEW')
       ? prisma.invoice.findMany({ where: { OR: [{ invoiceNumber: contains }, { project: { client: { displayName: contains } } }] }, take: 5, orderBy: { createdAt: 'desc' }, select: { id: true, invoiceNumber: true, project: { select: { client: { select: { displayName: true } } } } } })
@@ -127,4 +131,13 @@ export async function searchEntitiesAction(query: string): Promise<SearchHit[]> 
     ...projects.map((p): SearchHit => ({ type: 'Job', label: p.client.displayName, sub: `${p.name} - ${p.code}`, href: `/jobs/${p.id}` })),
     ...invoices.map((inv): SearchHit => ({ type: 'Invoice', label: inv.project.client.displayName, sub: inv.invoiceNumber, href: `/finance/${inv.id}` })),
   ]
+}
+
+export async function resetCalendarFeedAction(formData: FormData): Promise<void> {
+  const user = await getActionUser()
+  if (!user || user.role === 'SUPERVISOR') return
+  const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value
+  if (!verifyCsrf(cookieValue, formData.get('csrf'))) return
+  await rotateFeedToken(user.id)
+  revalidatePath('/calendar')
 }

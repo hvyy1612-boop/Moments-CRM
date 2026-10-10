@@ -2,7 +2,10 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
+import { can } from '@/lib/auth/authz'
 import { requireRole } from '@/lib/auth/guard'
+import { INVOICE_MONEY_SELECT, toInvoiceMoneyInput } from '@/lib/domain/invoice-money'
+import { getInvoiceBalance, nextPaymentDue } from '@/lib/domain/money'
 import { prisma } from '@/lib/db'
 import { formatAud } from '@/lib/money'
 import { formatSydneyDate, sydneyDateTimeParts } from '@/lib/time'
@@ -44,21 +47,18 @@ export default async function FinancePage() {
   const invoices = await prisma.invoice.findMany({
     orderBy: { createdAt: 'desc' },
     select: {
+      ...INVOICE_MONEY_SELECT,
       id: true,
       invoiceNumber: true,
-      status: true,
-      total: true,
-      dueAt: true,
       issuedAt: true,
       project: {
         select: {
           client: { select: { displayName: true } },
-          package: { select: { name: true } },
-          convertedFromEnquiries: { select: { eventType: true }, take: 1 },
+          eventType: true,
         },
       },
       payments: {
-        select: { transactions: { where: { status: 'SUCCEEDED', type: 'CHARGE' }, select: { createdAt: true } } },
+        select: { transactions: { select: { type: true, amount: true, createdAt: true } } },
       },
     },
   })
@@ -67,14 +67,15 @@ export default async function FinancePage() {
   const rows: Row[] = invoices.flatMap((inv) => {
     if (inv.status === 'VOID') return []
     const isPaid = inv.status === 'PAID'
-    const isDraft = inv.status === 'DRAFT'
-    const charges = inv.payments.flatMap((p) => p.transactions)
+    const charges = inv.payments.flatMap((p) => p.transactions).filter((t) => t.type === 'CHARGE')
     const paidAt = charges.length ? new Date(Math.max(...charges.map((c) => c.createdAt.getTime()))) : inv.issuedAt
     const service = titleCase(
-      inv.project.convertedFromEnquiries[0]?.eventType ?? inv.project.package?.name ?? 'Photography',
+      inv.project.eventType ?? 'Photography',
     )
-    const dateSource = isPaid ? paidAt : isDraft ? null : inv.dueAt
-    const urgency = !isPaid && !isDraft ? urgencyFor(inv.dueAt, now) : null
+
+    const nextDue = isPaid ? null : (nextPaymentDue(getInvoiceBalance(toInvoiceMoneyInput(inv))) ?? inv.dueAt)
+    const dateSource = isPaid ? paidAt : nextDue
+    const urgency = !isPaid ? urgencyFor(nextDue, now) : null
     return [
       {
         id: inv.id,
@@ -84,7 +85,7 @@ export default async function FinancePage() {
         group: isPaid ? ('paid' as const) : ('unpaid' as const),
         amount: formatAud(inv.total),
         amountNum: inv.total.toNumber(),
-        dateKind: isDraft ? ('draft' as const) : isPaid ? ('paid' as const) : ('due' as const),
+        dateKind: isPaid ? ('paid' as const) : ('due' as const),
         dateLabel: dateSource ? formatSydneyDate(dateSource) : null,
         urgencyLabel: urgency?.label ?? null,
         urgencyTone: urgency?.tone ?? null,
@@ -111,7 +112,7 @@ export default async function FinancePage() {
           }
         />
 
-        <PaymentsView rows={rows} csrf={csrf} />
+        <PaymentsView rows={rows} csrf={csrf} canDelete={can(user, 'MONEY_ADMIN')} />
       </PageContainer>
     </AppShell>
   )

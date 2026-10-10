@@ -186,7 +186,7 @@ export type ContractEmail = { to: string; clientName: string; contractLink: stri
 export async function sendContractEmail(email: ContractEmail): Promise<void> {
   const html = shell(
     'Your booking contract',
-    `<p>Hi ${email.clientName}, please review and sign your booking contract.</p><p>${button(email.contractLink, 'Review and sign')}</p>`,
+    `<p>Hi ${escapeHtml(email.clientName)}, please review and sign your booking contract.</p><p>${button(email.contractLink, 'Review and sign')}</p>`,
   )
   await deliver({ to: email.to, subject: 'Your Moments booking contract', html, event: 'email.contract_sent', devLink: email.contractLink })
 }
@@ -196,25 +196,14 @@ export type TaskDigestEmail = { to: string; name: string; overdue: string[]; tod
 export async function sendTaskDigestEmail(email: TaskDigestEmail): Promise<void> {
   const list = (items: string[]) =>
     `<ul style="margin:6px 0 16px;padding-left:18px">${items
-      .map((i) => `<li style="margin:3px 0">${i}</li>`)
+      // Task lines carry lead/client names typed on the PUBLIC enquiry form: always escaped, never HTML.
+      .map((i) => `<li style="margin:3px 0">${escapeHtml(i)}</li>`)
       .join('')}</ul>`
   const section = (title: string, items: string[]) =>
     items.length ? `<h2 style="font-size:15px;font-weight:700;margin:16px 0 4px">${title}</h2>${list(items)}` : ''
   const html = shell(
     'What needs you today',
-    `<p>Hi ${email.name},</p>${section('Overdue', email.overdue)}${section('Due today', email.today)}`,
+    `<p>Hi ${escapeHtml(email.name)},</p>${section('Overdue', email.overdue)}${section('Due today', email.today)}`,
   )
   await deliver({ to: email.to, subject: 'Moments - tasks due today', html, event: 'email.task_digest' })
-}
-
-export type PasswordResetEmail = { to: string; resetLink: string }
-
-export async function sendPasswordResetEmail(email: PasswordResetEmail): Promise<void> {
-  const html = shell(
-    'Reset your password',
-    `<p>We received a request to reset your Moments password. This link works once and expires in 60 minutes.</p>
-     <p>${button(email.resetLink, 'Set a new password')}</p>
-     <p style="color:#9c948b;font-size:13px">If you did not request this, you can safely ignore this email.</p>`,
-  )
-  await deliver({ to: email.to, subject: 'Reset your Moments password', html, event: 'email.password_reset_sent', devLink: email.resetLink })
 }

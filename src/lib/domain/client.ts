@@ -1,8 +1,6 @@
 import { prisma } from '@/lib/db'
-import { systemClock } from '@/lib/time'
 import type { ClientInput } from '@/lib/validation/client'
 import { requireCompany } from './project'
-import { INVOICE_MONEY_SELECT } from './invoice-money'
 import { nextRecordNumber, isUniqueViolation } from './numbering'
 
 function deriveDisplayName(input: ClientInput): string {
@@ -143,13 +141,13 @@ export async function clientHasHistory(clientId: string): Promise<boolean> {
     where: { id: clientId },
     select: {
       _count: {
-        select: { projects: true, enquiries: true, convertedFromEnquiries: true, mergedFrom: true },
+        select: { projects: true, enquiries: true, convertedFromEnquiries: true },
       },
     },
   })
   if (!client) return false
   const n = client._count
-  return n.projects > 0 || n.enquiries > 0 || n.convertedFromEnquiries > 0 || n.mergedFrom > 0
+  return n.projects > 0 || n.enquiries > 0 || n.convertedFromEnquiries > 0
 }
 
 export type DeleteEmptyClientsResult = { deleted: number; skipped: number }
@@ -171,7 +169,6 @@ export async function deleteEmptyClients(
           projects: true, // any job (Project FK is Restrict - deleting would fail anyway)
           enquiries: true, // a lead currently pointing at this client
           convertedFromEnquiries: true, // an enquiry that already converted to this client
-          mergedFrom: true, // another duplicate was merged into this one
         },
       },
     },
@@ -181,8 +178,7 @@ export async function deleteEmptyClients(
     (c) =>
       c._count.projects === 0 &&
       c._count.enquiries === 0 &&
-      c._count.convertedFromEnquiries === 0 &&
-      c._count.mergedFrom === 0,
+      c._count.convertedFromEnquiries === 0,
   )
 
   let deleted = 0
@@ -191,8 +187,6 @@ export async function deleteEmptyClients(
 
       await tx.calendarEvent.deleteMany({ where: { clientId: client.id } })
       await tx.communication.deleteMany({ where: { clientId: client.id } })
-      await tx.contact.deleteMany({ where: { clientId: client.id } })
-      await tx.clientNote.deleteMany({ where: { clientId: client.id } })
       await tx.client.delete({ where: { id: client.id } })
       await tx.auditLog.create({
         data: {
@@ -208,111 +202,4 @@ export async function deleteEmptyClients(
   }
 
   return { deleted, skipped: ids.length - deleted }
-}
-
-export async function updateClientNotes(clientId: string, notes: string, actorUserId: string) {
-  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, companyId: true } })
-  if (!client) throw new Error('Client not found.')
-  await prisma.client.update({ where: { id: clientId }, data: { notes: notes.trim() || null } })
-  await prisma.auditLog.create({
-    data: { companyId: client.companyId, actorUserId, action: 'client.notes_updated', entityType: 'Client', entityId: clientId },
-  })
-}
-
-export async function mergeClients(
-  survivorId: string,
-  duplicateId: string,
-  actorUserId: string | null = null,
-) {
-  if (survivorId === duplicateId) throw new Error('Cannot merge a client into itself.')
-  const now = systemClock.now()
-  return prisma.$transaction(async (tx) => {
-    const [survivor, duplicate] = await Promise.all([
-      tx.client.findUnique({ where: { id: survivorId } }),
-      tx.client.findUnique({ where: { id: duplicateId } }),
-    ])
-    if (!survivor) throw new Error('Survivor client not found.')
-    if (!duplicate) throw new Error('Duplicate client not found.')
-    if (duplicate.mergedIntoClientId) throw new Error('This client has already been merged.')
-    if (survivor.companyId !== duplicate.companyId) {
-      throw new Error('Cannot merge clients from different companies.')
-    }
-
-    const moved = await tx.project.updateMany({
-      where: { clientId: duplicateId },
-      data: { clientId: survivorId },
-    })
-    await tx.enquiry.updateMany({
-      where: { convertedClientId: duplicateId },
-      data: { convertedClientId: survivorId },
-    })
-    await tx.client.update({
-      where: { id: duplicateId },
-      data: { mergedIntoClientId: survivorId, status: 'ARCHIVED', archivedAt: now },
-    })
-
-    await tx.auditLog.create({
-      data: {
-        companyId: survivor.companyId,
-        action: 'client.merged',
-        entityType: 'Client',
-        entityId: duplicateId,
-        actorUserId,
-        afterData: { survivorId, movedProjects: moved.count },
-      },
-    })
-    return { survivorId, duplicateId, movedProjects: moved.count }
-  })
-}
-
-export async function addClientNote(clientId: string, title: string, body: string, actorUserId: string) {
-  if (!body.trim()) throw new Error('Write a note.')
-  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { id: true } })
-  if (!client) throw new Error('Client not found.')
-  await prisma.clientNote.create({
-    data: { clientId, title: title.trim().slice(0, 150) || null, body: body.trim().slice(0, 5000), createdByUserId: actorUserId },
-  })
-}
-
-export async function deleteClientNote(noteId: string) {
-  await prisma.clientNote.delete({ where: { id: noteId } })
-}
-
-export async function setClientConsent(clientId: string, consent: boolean) {
-  await prisma.client.update({ where: { id: clientId }, data: { marketingConsent: consent, consentUpdatedAt: new Date() } })
-}
-
-function portalTokenValue(): string {
-  const bytes = new Uint8Array(16)
-  globalThis.crypto.getRandomValues(bytes)
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
-}
-
-export async function ensureClientPortalToken(clientId: string): Promise<string> {
-  const c = await prisma.client.findUnique({ where: { id: clientId }, select: { portalToken: true } })
-  if (c?.portalToken) return c.portalToken
-  const token = portalTokenValue()
-  await prisma.client.update({ where: { id: clientId }, data: { portalToken: token } })
-  return token
-}
-
-export async function getClientPortalByToken(token: string) {
-  if (!token || token.length < 16) return null
-  return prisma.client.findUnique({
-    where: { portalToken: token },
-    select: {
-      displayName: true,
-      company: { select: { name: true } },
-      projects: {
-        orderBy: { enquiryReceivedAt: 'desc' },
-        select: {
-          id: true, name: true, code: true, lifecycleStatus: true,
-          bookings: { where: { status: { not: 'CANCELLED' } }, orderBy: { startsAt: 'asc' }, take: 1, select: { startsAt: true } },
-          invoices: { orderBy: { createdAt: 'desc' }, select: { accessToken: true, invoiceNumber: true, ...INVOICE_MONEY_SELECT } },
-          galleries: { where: { status: 'PUBLISHED' }, orderBy: { createdAt: 'desc' }, select: { accessToken: true, title: true } },
-          questionnaires: { orderBy: { createdAt: 'desc' }, select: { accessToken: true, title: true, status: true } },
-        },
-      },
-    },
-  })
 }

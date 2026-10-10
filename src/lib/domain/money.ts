@@ -1,4 +1,4 @@
-import { Prisma, type InvoiceStatus, type TransactionType, type TransactionStatus } from '@prisma/client'
+import { Prisma, type InvoiceStatus, type TransactionType } from '@prisma/client'
 
 type D = Prisma.Decimal
 const ZERO = new Prisma.Decimal(0)
@@ -13,9 +13,9 @@ const OBLIGATION_STATES: ReadonlySet<InvoiceStatus> = new Set<InvoiceStatus>([
   'OVERDUE',
 ])
 
-export type LedgerTxn = { type: TransactionType; status: TransactionStatus; amount: D }
+export type LedgerTxn = { type: TransactionType; amount: D }
 
-export type CreditNote = { amount: D; status?: TransactionStatus }
+export type CreditNote = { amount: D }
 export type InstalmentInput = { label: string | null; dueAt: Date | null; amount: D; sortOrder: number }
 
 export type InvoiceMoneyInput = {
@@ -62,13 +62,8 @@ export type JobBalance = {
   invoices: InvoiceBalance[]
 }
 
-const creditNoteIsEffective = (cn: CreditNote): boolean => cn.status === undefined || cn.status === 'SUCCEEDED'
-
 export function computePaidNet(transactions: LedgerTxn[]): D {
-  return transactions.reduce((sum, t) => {
-    if (t.status !== 'SUCCEEDED') return sum
-    return t.type === 'CHARGE' ? sum.add(t.amount) : sum.sub(t.amount)
-  }, ZERO)
+  return transactions.reduce((sum, t) => (t.type === 'CHARGE' ? sum.add(t.amount) : sum.sub(t.amount)), ZERO)
 }
 
 export function allocatePaymentsToInstalments(paidNet: D, instalments: InstalmentInput[]): InstalmentBalance[] {
@@ -93,8 +88,11 @@ export function allocatePaymentsToInstalments(paidNet: D, instalments: Instalmen
 
 export function getInvoiceBalance(inv: InvoiceMoneyInput): InvoiceBalance {
   const issuedTotal = OBLIGATION_STATES.has(inv.status) ? inv.total : ZERO
-  const creditedTotal = inv.creditNotes.filter(creditNoteIsEffective).reduce((s, c) => s.add(c.amount), ZERO)
-  const obligation = issuedTotal.sub(creditedTotal)
+
+  const creditedTotal = OBLIGATION_STATES.has(inv.status)
+    ? inv.creditNotes.reduce((s, c) => s.add(c.amount), ZERO)
+    : ZERO
+  const obligation = dMax(issuedTotal.sub(creditedTotal), ZERO)
   const paidNet = computePaidNet(inv.transactions)
   const owed = dMax(obligation.sub(paidNet), ZERO)
   const overpaymentToResolve = dMax(paidNet.sub(obligation), ZERO)
@@ -112,6 +110,11 @@ export function getInvoiceBalance(inv: InvoiceMoneyInput): InvoiceBalance {
   }
 }
 
+export function nextPaymentDue(bal: InvoiceBalance): Date | null {
+  if (bal.owed.lessThanOrEqualTo(ZERO)) return null
+  return bal.instalments.find((i) => i.state !== 'PAID')?.dueAt ?? null
+}
+
 export function getJobBalance(invoices: InvoiceMoneyInput[], agreedContractValue: D | null): JobBalance {
   const per = invoices.map(getInvoiceBalance)
   const invoicedObligation = per.reduce((s, b) => s.add(b.obligation), ZERO)
@@ -119,7 +122,9 @@ export function getJobBalance(invoices: InvoiceMoneyInput[], agreedContractValue
   const outstanding = per.reduce((s, b) => s.add(b.owed), ZERO)
   const overpaymentToResolve = per.reduce((s, b) => s.add(b.overpaymentToResolve), ZERO)
   const agreedValueKnown = agreedContractValue !== null
-  const uninvoicedRemainder = agreedContractValue !== null ? dMax(agreedContractValue.sub(invoicedObligation), ZERO) : null
+
+  const invoicedGross = per.reduce((s, b) => s.add(b.issuedTotal), ZERO)
+  const uninvoicedRemainder = agreedContractValue !== null ? dMax(agreedContractValue.sub(invoicedGross), ZERO) : null
   const netPosition = invoicedObligation.sub(paidNet)
   const isFullySettled =
     agreedValueKnown &&

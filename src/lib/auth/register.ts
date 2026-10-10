@@ -1,50 +1,78 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import { requireCompany } from '@/lib/domain/project'
-import { checkPasswordPolicy, hashPassword } from './password'
+import { systemClock, type Clock } from '@/lib/time'
+import type { Role } from './permissions'
+import { issueRecoveryCodes } from './recovery-codes'
+import { nextStaffLoginId } from './staff'
+import { passwordCredentials } from './user-password'
 
-export type RegisterResult = { ok: true } | { ok: false; error: string }
+export const SIGNUP_LIMIT_PER_IP = 5
+const SIGNUP_WINDOW_MS = 60 * 60 * 1000
 
-export async function registerUser(input: {
-  name: string
-  email: string
-  password: string
-}): Promise<RegisterResult> {
-  if (checkPasswordPolicy(input.password)) {
-    return { ok: false, error: 'Use at least 8 characters with a letter, a number, and a special character, and avoid common passwords.' }
-  }
-  const hashed = await hashPassword(input.password)
-  try {
-    await prisma.$transaction(async (tx) => {
-      const existing = await tx.user.findUnique({ where: { email: input.email }, select: { id: true } })
-      if (existing) throw new Error('EMAIL_TAKEN')
-      const company = await requireCompany(tx)
-      const created = await tx.user.create({
-        data: {
-          companyId: company.id,
-          email: input.email,
-          name: input.name,
-          passwordHash: hashed.hash,
-          passwordAlgo: hashed.algo,
-          role: 'STUDIO',
-          isActive: false,
-          status: 'PENDING',
-        },
-      })
-      await tx.auditLog.create({
-        data: {
-          companyId: company.id,
-          action: 'auth.user_registered',
-          entityType: 'User',
-          entityId: created.id,
-          afterData: { email: created.email, name: created.name },
-        },
-      })
+type CompanySettings = Record<string, unknown>
+
+function settingsOf(raw: Prisma.JsonValue | null | undefined): CompanySettings {
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as CompanySettings) : {}
+}
+
+export async function signupOptions(): Promise<{ open: boolean; roles: Role[] }> {
+  const company = await prisma.company.findFirst({ select: { settings: true } })
+  const open = settingsOf(company?.settings).signupOpen !== false
+  const hasAdmin = (await prisma.user.count({ where: { role: 'ADMIN', status: 'ACTIVE', isActive: true } })) > 0
+  return { open, roles: hasAdmin ? ['STUDIO', 'SUPERVISOR'] : ['ADMIN', 'STUDIO', 'SUPERVISOR'] }
+}
+
+export async function setSignupOpen(open: boolean, actorUserId: string): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const company = await tx.company.findFirstOrThrow({ select: { id: true, settings: true } })
+    const next = { ...settingsOf(company.settings), signupOpen: open }
+    await tx.company.update({ where: { id: company.id }, data: { settings: next as Prisma.InputJsonValue } })
+    await tx.auditLog.create({
+      data: { companyId: company.id, actorUserId, action: open ? 'auth.signup_opened' : 'auth.signup_closed', entityType: 'Company', entityId: company.id },
     })
-  } catch (e) {
-    if (e instanceof Error && e.message === 'EMAIL_TAKEN') {
-      return { ok: false, error: 'An account with this email already exists.' }
+  })
+}
+
+export type RegisterResult =
+  | { ok: true; loginId: string; codes: string[] }
+  | { ok: false; reason: 'closed' | 'role' | 'rate' }
+
+export async function registerAccount(
+  input: { name: string; role: Role; password: string },
+  meta: { ipAddress: string; userAgent?: string | null },
+  clock: Clock = systemClock,
+): Promise<RegisterResult> {
+  const options = await signupOptions()
+  if (!options.open) return { ok: false, reason: 'closed' }
+  if (!options.roles.includes(input.role)) return { ok: false, reason: 'role' }
+
+  const since = new Date(clock.now().getTime() - SIGNUP_WINDOW_MS)
+  const recent = await prisma.signInLog.count({ where: { eventType: 'account_registered', ipAddress: meta.ipAddress, createdAt: { gte: since } } })
+  if (recent >= SIGNUP_LIMIT_PER_IP) return { ok: false, reason: 'rate' }
+
+  const creds = await passwordCredentials(input.password)
+  for (let attempt = 0; ; attempt++) {
+    const loginId = await nextStaffLoginId(input.role)
+    try {
+      const user = await prisma.$transaction(async (tx) => {
+        const company = await tx.company.findFirstOrThrow({ select: { id: true } })
+        const created = await tx.user.create({
+          data: { companyId: company.id, email: loginId, name: input.name, ...creds, role: input.role, isActive: true, status: 'ACTIVE', mustChangePassword: false },
+        })
+        await tx.auditLog.create({
+          data: { companyId: company.id, actorUserId: created.id, action: 'auth.staff_registered', entityType: 'User', entityId: created.id, afterData: { loginId, name: input.name, role: input.role } },
+        })
+        await tx.signInLog.create({
+          data: { eventType: 'account_registered', userId: created.id, emailAttempted: loginId, ipAddress: meta.ipAddress, userAgent: meta.userAgent ?? null, outcome: 'SUCCESS' },
+        })
+        return created
+      })
+      const codes = await issueRecoveryCodes(user.id, meta)
+      return { ok: true, loginId, codes }
+    } catch (e) {
+
+      if (attempt < 3 && e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') continue
+      throw e
     }
-    return { ok: false, error: 'Could not create the account. Please try again.' }
   }
-  return { ok: true }
 }

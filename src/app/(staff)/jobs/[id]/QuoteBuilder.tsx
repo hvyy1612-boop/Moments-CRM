@@ -47,7 +47,6 @@ export function QuoteBuilder({
   versionId,
   validUntil,
   initialLines,
-  initialIntroduction,
   initialPoNumber,
   initialNotes,
   initialDepositPercent,
@@ -69,7 +68,6 @@ export function QuoteBuilder({
   versionId: string
   validUntil: string
   initialLines: InitialLine[]
-  initialIntroduction: string
   initialPoNumber: string
   initialNotes: string
   initialDepositPercent: string

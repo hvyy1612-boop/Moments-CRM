@@ -26,24 +26,23 @@ async function sentQuote() {
 }
 
 describe('quote outcomes (integration, real DB)', () => {
-  it('decline: version DECLINED + reason; operational lifecycle unchanged; idempotent', async () => {
+  it('decline: version DECLINED; operational lifecycle unchanged; idempotent', async () => {
     const { projectId, quoteId } = await sentQuote()
-    const r = await declineQuote(quoteId, 'PRICE')
+    const r = await declineQuote(quoteId, null)
     expect(r.alreadyDeclined).toBe(false)
 
     const project = await prisma.project.findUnique({ where: { id: projectId } })
 
     expect(project?.lifecycleStatus).toBe('BOOKING_REQUESTED')
-    expect(project?.lostReason).toBeNull()
 
     const quote = await prisma.quote.findUnique({
       where: { id: quoteId },
       include: { currentVersion: true },
     })
     expect(quote?.status).toBe('DECLINED')
-    expect(quote?.currentVersion?.declineReason).toBe('PRICE')
+    expect(quote?.currentVersion?.status).toBe('DECLINED')
 
-    const r2 = await declineQuote(quoteId, 'PRICE')
+    const r2 = await declineQuote(quoteId, null)
     expect(r2.alreadyDeclined).toBe(true)
   })
 

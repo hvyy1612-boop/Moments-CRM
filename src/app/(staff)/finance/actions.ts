@@ -3,15 +3,27 @@
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { appBaseUrl } from '@/lib/app-url'
 import { CSRF_COOKIE, verifyCsrf } from '@/lib/auth/csrf'
-import { getSessionUser } from '@/lib/auth/guard'
+import { can } from '@/lib/auth/authz'
+import { getActionUser } from '@/lib/auth/guard'
 import { deleteInvoice, sendInvoice } from '@/lib/domain/finance'
 
-export type SendInvoiceState = { status: 'idle' } | { status: 'error' | 'notice'; message: string }
+export type SendInvoiceState =
+  | { status: 'idle' }
+  // `values` = the typed recipient/subject/message, handed back so the dialog keeps them after an error.
+  | { status: 'error' | 'notice'; message: string; values?: { to: string; subject: string; message: string } }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export async function sendInvoiceAction(_prev: SendInvoiceState, formData: FormData): Promise<SendInvoiceState> {
+  const result = await sendInvoiceFromForm(formData)
+  if (result.status === 'idle') return result
+  const values = { to: String(formData.get('to') ?? ''), subject: String(formData.get('subject') ?? ''), message: String(formData.get('message') ?? '') }
+  return { ...result, values }
+}
+
+async function sendInvoiceFromForm(formData: FormData): Promise<SendInvoiceState> {
   const cookieStore = await cookies()
   if (!verifyCsrf(cookieStore.get(CSRF_COOKIE)?.value, formData.get('csrf'))) {
     return { status: 'error', message: 'Your session expired. Refresh and try again.' }
@@ -30,7 +42,7 @@ export async function sendInvoiceAction(_prev: SendInvoiceState, formData: FormD
         to,
         subject: String(formData.get('subject') ?? ''),
         body: String(formData.get('message') ?? ''),
-        baseUrl: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+        baseUrl: await appBaseUrl(),
       },
       user.id,
     ))
@@ -48,7 +60,7 @@ export async function sendInvoiceAction(_prev: SendInvoiceState, formData: FormD
 }
 
 async function requireStaff() {
-  const user = await getSessionUser()
+  const user = await getActionUser()
   if (!user || (user.role !== 'ADMIN' && user.role !== 'STUDIO')) throw new Error('Not authorised.')
   return user
 }
@@ -57,6 +69,7 @@ export async function deleteInvoicesAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies()
   if (!verifyCsrf(cookieStore.get(CSRF_COOKIE)?.value, formData.get('csrf'))) return
   const user = await requireStaff()
+  if (!can(user, 'MONEY_ADMIN')) return
   const ids = String(formData.get('ids') ?? '')
     .split(',')
     .map((s) => s.trim())

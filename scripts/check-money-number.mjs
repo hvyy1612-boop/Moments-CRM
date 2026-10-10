@@ -23,6 +23,7 @@ function scan(file) {
     .split('\n')
     .forEach((line, i) => {
       const m = RE.exec(line)
+      if (m && (/(?:Cents|Percent)\s*[?!]?\s*:/.test(m[0]) || /money-ok:\s*\S/.test(line))) return
       if (m) violations.push({ file: rel, line: i + 1, match: m[0], text: line.trim() })
     })
 }

@@ -18,6 +18,8 @@ import type { EnquiryRowData } from './EnquiryRow'
 const DATE_FMT = new Intl.DateTimeFormat('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
 const createdLabel = (ms: number) => DATE_FMT.format(new Date(ms))
 
+const inProgress = (r: { status: string }) => r.status !== 'DECLINED'
+
 function broadType(event: string): string {
   const e = event.toLowerCase()
   if (/wedding|elopement/.test(e)) return 'Wedding'
@@ -32,7 +34,7 @@ type SortKey = 'newest' | 'oldest' | 'name'
 const SORTS: { key: SortKey; label: string }[] = [
   { key: 'newest', label: 'Created date: newest' },
   { key: 'oldest', label: 'Created date: oldest' },
-  { key: 'name', label: 'Client A-Z' },
+  { key: 'name', label: 'Lead name A-Z' },
 ]
 
 export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: string }) {
@@ -41,13 +43,13 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
   const { selectedIds, selection } = useRowSelection<EnquiryRowData>()
 
   const counts = useMemo(() => {
-    const map: Record<string, number> = { all: rows.filter((r) => r.status !== 'DECLINED').length }
+    const map: Record<string, number> = { all: rows.filter(inProgress).length }
     for (const t of ENQUIRY_STAGE_TABS) map[t.key] = rows.filter((r) => r.status === t.key).length
     return map
   }, [rows])
 
   const visible = useMemo(() => {
-    let out = tab === 'all' ? rows.filter((r) => r.status !== 'DECLINED') : rows.filter((r) => r.status === tab)
+    let out = tab === 'all' ? rows.filter(inProgress) : rows.filter((r) => r.status === tab)
     out = [...out]
     if (sort === 'newest') out.sort((a, b) => b.createdMs - a.createdMs)
     else if (sort === 'oldest') out.sort((a, b) => a.createdMs - b.createdMs)
@@ -56,7 +58,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
   }, [rows, tab, sort])
 
   const sortLabel = SORTS.find((s) => s.key === sort)!.label
-  const TABS: { key: TabKey; label: string }[] = [{ key: 'all', label: 'All' }, ...ENQUIRY_STAGE_TABS]
+  const TABS: { key: TabKey; label: string }[] = [{ key: 'all', label: 'Active' }, ...ENQUIRY_STAGE_TABS]
 
   const columns: DataColumn<EnquiryRowData>[] = [
     {
@@ -81,7 +83,8 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
     { key: 'created', header: 'Created', width: 'minmax(8.5em, 1fr)', cell: (r) => <span className="tabular whitespace-nowrap text-ink-muted">{createdLabel(r.createdMs)}</span> },
     {
       key: 'client',
-      header: 'Client',
+
+      header: 'Lead',
       width: 'minmax(11em, 1.5fr)',
       cell: (r) => (
         <Link href={`/leads/${r.id}`} className={`block truncate text-ink transition-colors hover:text-accent-ink ${r.unread ? 'font-semibold' : ''}`}>
@@ -98,7 +101,7 @@ export function EnquiriesList({ rows, csrf }: { rows: EnquiryRowData[]; csrf: st
     },
     {
       key: 'stage',
-      header: 'Stage',
+      header: 'Status',
       width: 'minmax(16em, 1.4fr)',
       cell: (r) => (
         <StatusTag kind={ENQUIRY_STAGE_KIND[r.status] ?? 'enquiry'}>

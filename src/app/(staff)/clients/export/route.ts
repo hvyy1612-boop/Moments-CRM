@@ -1,17 +1,14 @@
 import { Prisma, type ClientSource, type ClientType } from '@prisma/client'
 import { requireRole } from '@/lib/auth/guard'
+import { csvCell } from '@/lib/csv'
 import { prisma } from '@/lib/db'
 import { titleCase } from '@/lib/text'
 import { formatSydneyDate } from '@/lib/time'
 
 export const runtime = 'nodejs'
 
-const SOURCES: ClientSource[] = ['DIRECT_BOOKING', 'ENQUIRY', 'REFERRAL', 'MANUAL', 'OTHER']
+const SOURCES: ClientSource[] = ['ENQUIRY', 'REFERRAL', 'MANUAL', 'OTHER']
 const TYPES: ClientType[] = ['INDIVIDUAL', 'BUSINESS']
-
-function cell(value: string): string {
-  return /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
-}
 
 export async function GET(request: Request): Promise<Response> {
   await requireRole('/clients/export')
@@ -21,7 +18,7 @@ export async function GET(request: Request): Promise<Response> {
   const type = params.get('type') ?? ''
   const jobs = params.get('jobs') ?? ''
 
-  const where: Prisma.ClientWhereInput = { mergedIntoClientId: null, archivedAt: null }
+  const where: Prisma.ClientWhereInput = { archivedAt: params.get('tab') === 'archived' ? { not: null } : null }
   if (q) {
     where.OR = [
       { displayName: { contains: q, mode: 'insensitive' } },
@@ -53,7 +50,7 @@ export async function GET(request: Request): Promise<Response> {
         String(c._count.projects),
         formatSydneyDate(c.createdAt),
       ]
-        .map((v) => cell(String(v)))
+        .map((v) => csvCell(String(v)))
         .join(','),
     )
   }

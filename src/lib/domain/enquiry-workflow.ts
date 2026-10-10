@@ -4,15 +4,15 @@ import {
   buildEnquiryBoard,
   DEFAULT_ENQUIRY_TASKS,
   ENQUIRY_STAGE_KEYS,
+  ENQUIRY_TASK_SCHEDULE,
   enquiryStageLabel,
   type EnquiryBoard,
   type TaskInput,
 } from '@/features/enquiries/workflow'
+import { asTaskDue, leadDueData, type TaskDue } from '@/features/tasks/due'
 import { syncEnquiryStageFromTasks } from './enquiry-stage'
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
-
-const OPEN = new Set(['NEW_ENQUIRY', 'CONTACTED', 'CONSULTATION'])
 
 export async function seedEnquiryWorkflow(
   tx: Tx,
@@ -25,7 +25,6 @@ export async function seedEnquiryWorkflow(
         type: 'CLIENT_MESSAGE',
         direction: 'inbound',
         body: enquiry.message,
-        channel: enquiry.source === 'WEBSITE' ? 'WEBSITE' : (enquiry.source ?? null),
       },
     })
   }
@@ -40,6 +39,8 @@ export async function seedEnquiryWorkflow(
       status: t.done ? ('COMPLETED' as const) : ('PENDING' as const),
       completedAt: t.done ? new Date() : null,
       order: i,
+
+      ...(ENQUIRY_TASK_SCHEDULE[t.title] !== undefined ? { dueAnchor: 'LEAD_CREATED' as const, dueOffsetDays: ENQUIRY_TASK_SCHEDULE[t.title] } : {}),
     })),
   })
 }
@@ -68,6 +69,9 @@ export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> 
       stage: true,
       type: true,
       dueAt: true,
+      dueAnchor: true,
+      dueOffsetDays: true,
+      dueDateFixed: true,
       order: true,
       completedAt: true,
       completedBy: { select: { name: true } },
@@ -80,52 +84,14 @@ export async function getEnquiryBoard(enquiryId: string): Promise<EnquiryBoard> 
     stage: w.stage,
     type: w.type,
     dueAt: w.dueAt,
+    dueAnchor: w.dueAnchor,
+    dueOffsetDays: w.dueOffsetDays,
+    dueDateFixed: w.dueDateFixed,
     order: w.order,
     completedByName: w.completedBy?.name ?? null,
     completedAt: w.completedAt ?? null,
   }))
   return buildEnquiryBoard(tasks, formatSydneyDate, enquiry?.createdAt ?? null, new Date(), booked, enquiry?.owner?.name ?? null)
-}
-
-export async function sendStaffReply(enquiryId: string, body: string, actorUserId: string) {
-  const text = body.trim()
-  if (!text) throw new Error('A reply cannot be empty.')
-  return prisma.$transaction(async (tx) => {
-    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Lead not found.')
-    if (!OPEN.has(enquiry.status)) throw new Error('This lead is already closed.')
-
-    await tx.communication.create({
-      data: { enquiryId, type: 'CLIENT_MESSAGE', direction: 'outbound', body: text, byUserId: actorUserId },
-    })
-    await tx.enquiry.update({
-      where: { id: enquiryId },
-      data: { status: enquiry.status === 'NEW_ENQUIRY' ? 'CONTACTED' : enquiry.status, waitingOn: 'CLIENT' },
-    })
-    await tx.auditLog.create({
-      data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.replied', entityType: 'Enquiry', entityId: enquiryId },
-    })
-    return enquiry
-  })
-}
-
-export async function logClientReply(enquiryId: string, body: string, actorUserId: string) {
-  const text = body.trim()
-  if (!text) throw new Error('The client message cannot be empty.')
-  return prisma.$transaction(async (tx) => {
-    const enquiry = await tx.enquiry.findUnique({ where: { id: enquiryId } })
-    if (!enquiry) throw new Error('Lead not found.')
-    if (!OPEN.has(enquiry.status)) throw new Error('This lead is already closed.')
-
-    await tx.communication.create({
-      data: { enquiryId, type: 'CLIENT_MESSAGE', direction: 'inbound', body: text, byUserId: null },
-    })
-    await tx.enquiry.update({ where: { id: enquiryId }, data: { waitingOn: 'STUDIO' } })
-    await tx.auditLog.create({
-      data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.client_replied', entityType: 'Enquiry', entityId: enquiryId },
-    })
-    return enquiry
-  })
 }
 
 export async function addEnquiryNote(enquiryId: string, body: string, actorUserId: string) {
@@ -150,14 +116,14 @@ async function loadTask(taskId: string) {
   return task
 }
 
-const ADDABLE = new Set(['TODO', 'AUTO_EMAIL', 'APPOINTMENT', 'SHOOT'])
+const ADDABLE = new Set(['TODO', 'APPOINTMENT'])
 
 export async function addEnquiryTask(
   enquiryId: string,
   stage: string,
   title: string,
   type: string,
-  dueAt: Date | null,
+  due: TaskDue | Date | null,
   actorUserId: string,
 ) {
   const clean = title.trim()
@@ -183,7 +149,7 @@ export async function addEnquiryTask(
         title: clean,
         status: 'PENDING',
         order: (last?.order ?? 0) + 1,
-        dueAt,
+        ...leadDueData(asTaskDue(due)),
       },
     })
     await tx.auditLog.create({
@@ -205,6 +171,9 @@ export async function addEnquiryStage(enquiryId: string, stageName: string, acto
   if (ENQUIRY_STAGE_KEYS.has(key)) throw new Error('That stage already exists.')
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUniqueOrThrow({ where: { id: enquiryId }, select: { companyId: true } })
+    if (await tx.workItem.count({ where: { enquiryId, stage: key } })) throw new Error('A stage with that name already exists.')
+
+    const last = await tx.workItem.aggregate({ where: { enquiryId }, _max: { order: true } })
     await tx.workItem.create({
       data: {
         companyId: enquiry.companyId,
@@ -214,7 +183,7 @@ export async function addEnquiryStage(enquiryId: string, stageName: string, acto
         type: 'TODO',
         title: 'New task',
         status: 'PENDING',
-        order: 1,
+        order: (last._max.order ?? 0) + 1,
         dueAt: null,
       },
     })
@@ -230,6 +199,7 @@ export async function renameEnquiryStage(enquiryId: string, fromStage: string, t
   if (ENQUIRY_STAGE_KEYS.has(fromStage) || ENQUIRY_STAGE_KEYS.has(to)) throw new Error('The core stages cannot be renamed.')
   return prisma.$transaction(async (tx) => {
     const enquiry = await tx.enquiry.findUniqueOrThrow({ where: { id: enquiryId }, select: { companyId: true } })
+    if (to !== fromStage && (await tx.workItem.count({ where: { enquiryId, stage: to } }))) throw new Error('A stage with that name already exists.')
     const res = await tx.workItem.updateMany({ where: { enquiryId, stage: fromStage }, data: { stage: to } })
     if (res.count > 0) {
       await tx.auditLog.create({
@@ -249,15 +219,18 @@ export async function deleteEnquiryStage(enquiryId: string, stage: string, actor
         data: { companyId: enquiry.companyId, actorUserId, action: 'enquiry.stage_deleted', entityType: 'Enquiry', entityId: enquiryId, afterData: { stage } },
       })
     }
+    await syncEnquiryStageFromTasks(tx, enquiryId, actorUserId)
   })
 }
 
-export async function updateEnquiryTask(taskId: string, title: string, dueAt: Date | null, actorUserId: string) {
+export async function updateEnquiryTask(taskId: string, title: string, due: TaskDue | Date | null, actorUserId: string) {
   const clean = title.trim()
   if (!clean) throw new Error('A task needs a title.')
   const task = await loadTask(taskId)
   await prisma.$transaction(async (tx) => {
-    await tx.workItem.update({ where: { id: taskId }, data: { title: clean, dueAt } })
+
+    const dueData = due === null ? { dueAt: null } : leadDueData(asTaskDue(due))
+    await tx.workItem.update({ where: { id: taskId }, data: { title: clean, ...dueData } })
     await tx.auditLog.create({
       data: { companyId: task.companyId, actorUserId, action: 'enquiry.task_edited', entityType: 'Enquiry', entityId: task.enquiryId!, afterData: { title: clean } },
     })
@@ -271,6 +244,8 @@ export async function deleteEnquiryTask(taskId: string, actorUserId: string) {
     await tx.auditLog.create({
       data: { companyId: task.companyId, actorUserId, action: 'enquiry.task_deleted', entityType: 'Enquiry', entityId: task.enquiryId!, afterData: { title: task.title } },
     })
+
+    await syncEnquiryStageFromTasks(tx, task.enquiryId!, actorUserId)
   })
 }
 
