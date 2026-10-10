@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { deriveOpenStage, OPEN_STAGE_ORDER } from '@/lib/domain/enquiry-stage'
-import { ENQUIRY_STAGE_LABEL, ENQUIRY_STAGE_TABS, STAGE_ORDER, isOpenEnquiry } from '@/features/enquiries/status'
+import { ENQUIRY_STAGE_LABEL, ENQUIRY_STAGE_TABS, STAGE_ORDER, isOpenEnquiry, leadDisplayStatus } from '@/features/enquiries/status'
 
 const task = (stage: string, status = 'PENDING', type = 'STANDARD') => ({ stage, status, type })
 
 describe('enquiry sales lifecycle', () => {
-  it('exposes exactly the seven staff-facing stages, in lifecycle order', () => {
+  it('exposes exactly the seven stored stages, in lifecycle order, plus the display-only Job complete', () => {
     expect(Object.keys(ENQUIRY_STAGE_LABEL)).toEqual([
       'NEW_ENQUIRY',
       'CONTACTED',
@@ -14,6 +14,7 @@ describe('enquiry sales lifecycle', () => {
       'AWAITING_BOOKING_CONFIRMATION',
       'BOOKING_CONFIRMED',
       'DECLINED',
+      'JOB_COMPLETE', // not a DB value: "Job complete" ticked on the lead (leadDisplayStatus)
     ])
   })
 
@@ -37,8 +38,17 @@ describe('enquiry sales lifecycle', () => {
     expect(isOpenEnquiry('DECLINED')).toBe(false)
   })
 
-  it('offers one filter tab per lead stage + Archived; a booked lead is a job, not listed in Leads', () => {
-    expect(ENQUIRY_STAGE_TABS.map((t) => t.key)).toEqual([...STAGE_ORDER.filter((s) => s !== 'BOOKING_CONFIRMED'), 'DECLINED'])
+  it('offers one filter tab per lead stage + Job complete + Archived; a booked lead is a job, not listed', () => {
+    expect(ENQUIRY_STAGE_TABS.map((t) => t.key)).toEqual([...STAGE_ORDER.filter((s) => s !== 'BOOKING_CONFIRMED'), 'JOB_COMPLETE', 'DECLINED'])
+  })
+
+  it('shows "Job complete" once it is ticked on the lead, except for an archived or booked lead', () => {
+    const at = new Date()
+    expect(leadDisplayStatus('CONSULTATION', at)).toBe('JOB_COMPLETE')
+    expect(ENQUIRY_STAGE_LABEL[leadDisplayStatus('CONSULTATION', at)]).toBe('Job complete')
+    expect(leadDisplayStatus('CONSULTATION', null)).toBe('CONSULTATION')
+    expect(leadDisplayStatus('DECLINED', at)).toBe('DECLINED')
+    expect(leadDisplayStatus('BOOKING_CONFIRMED', at)).toBe('BOOKING_CONFIRMED')
   })
 
   it('only the three early stages are derived from the checklist; later stages are event-driven', () => {

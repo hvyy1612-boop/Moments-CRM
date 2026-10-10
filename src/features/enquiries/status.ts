@@ -19,6 +19,8 @@ export const ENQUIRY_STAGE_LABEL: Record<string, string> = {
   AWAITING_BOOKING_CONFIRMATION: 'Awaiting booking confirmation',
   BOOKING_CONFIRMED: 'Booking confirmed',
   DECLINED: 'Archived', // DB value DECLINED; staff archive a lead that is not going ahead (Studio Ninja)
+  // Display only (not a DB value): "Job complete" ticked on the lead - it stays in Leads (leadDisplayStatus).
+  JOB_COMPLETE: 'Job complete',
 }
 
 /** Restrained status-pill tone per stage (no rainbow): progress reads through the neutral kinds. */
@@ -30,6 +32,15 @@ export const ENQUIRY_STAGE_KIND: Record<string, StatusKind> = {
   AWAITING_BOOKING_CONFIRMATION: 'booked',
   BOOKING_CONFIRMED: 'delivered',
   DECLINED: 'lost',
+  JOB_COMPLETE: 'delivered',
+}
+
+/**
+ * The status staff see for a lead: "Job complete" once it is ticked on the lead (Studio Ninja - the lead stays
+ * in Leads), otherwise its stored status. An archived or booked lead keeps its own status.
+ */
+export function leadDisplayStatus(status: string, jobCompleteAt: Date | null): string {
+  return jobCompleteAt && status !== 'DECLINED' && status !== 'BOOKING_CONFIRMED' ? 'JOB_COMPLETE' : status
 }
 
 /** Stage order for progression checks (excludes the DECLINED terminal branch). */
@@ -71,5 +82,6 @@ export const ENQUIRY_STAGE_TABS: { key: string; label: string }[] = [
   { key: 'QUOTE_SENT', label: 'Quote sent' },
   { key: 'AWAITING_BOOKING_CONFIRMATION', label: 'Awaiting booking confirmation' },
   // A booked lead is a Job now: it leaves the Leads page (kept in the database, opened from its job).
+  { key: 'JOB_COMPLETE', label: 'Job complete' },
   { key: 'DECLINED', label: 'Archived' },
 ]

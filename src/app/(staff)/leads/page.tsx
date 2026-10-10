@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { CSRF_COOKIE, csrfFieldValue } from '@/lib/auth/csrf'
 import { requireRole } from '@/lib/auth/guard'
 import { prisma } from '@/lib/db'
+import { leadDisplayStatus } from '@/features/enquiries/status'
 import { formatSydneyDate } from '@/lib/time'
 import { titleCase } from '@/lib/text'
 import { AppShell } from '../AppShell'
@@ -38,6 +39,7 @@ export default async function EnquiriesPage() {
       updatedAt: true,
       createdAt: true,
       viewedAt: true,
+      jobCompleteAt: true,
     },
   })
 
@@ -46,7 +48,8 @@ export default async function EnquiriesPage() {
     number: e.enquiryNumber,
     name: e.name,
     event: e.eventType ? titleCase(e.eventType) : 'Not specified',
-    status: e.status,
+    // "Job complete" ticked on the lead shows as its status (it stays in Leads).
+    status: leadDisplayStatus(e.status, e.jobCompleteAt),
     shootDate: e.eventDate ? formatSydneyDate(e.eventDate) : null,
     email: e.email,
     phone: e.phone,

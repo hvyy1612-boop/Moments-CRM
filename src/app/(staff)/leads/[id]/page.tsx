@@ -12,6 +12,7 @@ import { prisma } from '@/lib/db'
 import { formatSydneyDate, formatSydneyDateTime, formatSydneyTime, sydneyDateTimeParts } from '@/lib/time'
 import {
   ENQUIRY_STAGE_KIND,
+  leadDisplayStatus,
   ENQUIRY_STAGE_LABEL,
   isOpenEnquiry,
   waitingLabel,
@@ -158,6 +159,10 @@ export default async function EnquiryDetailPage({
   const confirmed = enquiry.status === 'BOOKING_CONFIRMED'
   const awaiting = enquiry.status === 'AWAITING_BOOKING_CONFIRMATION'
   const declined = enquiry.status === 'DECLINED'
+  // "Job complete" ticked on the lead (it stays in Leads): the workflow above it shows greyed out and closed
+  // until it is unticked (Studio Ninja).
+  const jobComplete = enquiry.jobCompleteAt !== null && !confirmed && !declined
+  const displayStatus = leadDisplayStatus(enquiry.status, enquiry.jobCompleteAt)
   const open = isOpenEnquiry(enquiry.status)
   const bookingFileId = awaiting || confirmed ? enquiry.convertedProjectId : null
   // Invoices and the contract are worked on HERE only while the lead waits for its deposit; once it is a
@@ -211,8 +216,8 @@ export default async function EnquiryDetailPage({
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold text-ink">{enquiry.name}</h1>
           {enquiry.enquiryNumber ? <span className="tabular text-sm text-ink-muted">{enquiry.enquiryNumber}</span> : null}
-          <StatusTag kind={ENQUIRY_STAGE_KIND[enquiry.status] ?? 'hold'}>
-            {ENQUIRY_STAGE_LABEL[enquiry.status] ?? titleCase(enquiry.status)}
+          <StatusTag kind={ENQUIRY_STAGE_KIND[displayStatus] ?? 'hold'}>
+            {ENQUIRY_STAGE_LABEL[displayStatus] ?? titleCase(displayStatus)}
           </StatusTag>
           {/* Archive a lead that is not going ahead (it leaves Active, nothing is deleted); Restore brings it back. */}
           {open || declined ? (
@@ -232,7 +237,7 @@ export default async function EnquiryDetailPage({
         </div>
         <p className="mt-1 text-base text-ink-muted">
           {enquiry.eventType ? titleCase(enquiry.eventType) : 'Lead'}
-          {open ? (
+          {open && !jobComplete ? (
             <>
               {' · Waiting for: '}
               <span className="font-bold text-ink">{waitingLabel(enquiry.status)}</span>
@@ -269,7 +274,8 @@ export default async function EnquiryDetailPage({
             taskTimes={taskTimes}
             taskDue={taskDue}
             // Booked (it is a job now) or archived (closed until Restore): nothing to work here.
-            readOnly={confirmed || declined}
+            readOnly={confirmed || declined || jobComplete}
+            muted={jobComplete}
             footer={
               <>
                 {/* "Job accepted" (Studio Ninja): ticks itself on the 20% deposit; staff may tick it (with a
@@ -280,7 +286,8 @@ export default async function EnquiryDetailPage({
                       csrf={csrf}
                       enquiryId={enquiry.id}
                       jobId={confirmed ? enquiry.convertedProjectId : null}
-                      readOnly={declined}
+                      readOnly={declined || jobComplete}
+                      muted={jobComplete}
                     />
                     {/* "Job complete": staff tick it when the work is done; unlike "Job accepted" above it, the
                         lead stays in Leads. A booked lead's completion lives on its job. */}

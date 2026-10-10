@@ -404,6 +404,7 @@ export async function CaseDetail({
                     />
                   ) : null
                 }
+                muted={jobComplete}
                 completeRow={
                   <JobCompleteRow
                     key="job-complete"

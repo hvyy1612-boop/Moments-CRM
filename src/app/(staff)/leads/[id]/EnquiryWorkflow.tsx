@@ -39,6 +39,7 @@ export function EnquiryWorkflow({
   taskTimes = {},
   taskDue = {},
   readOnly = false,
+  muted = false,
   rail,
   footer,
 }: {
@@ -51,6 +52,8 @@ export function EnquiryWorkflow({
   taskDue?: Record<string, DueSpec>
   /** A booked lead: render the ticked checklist as a read-only record (no toggling, editing, adding). */
   readOnly?: boolean
+  /** "Job complete" ticked: the sections show greyed out (Studio Ninja); untick it to work on them again. */
+  muted?: boolean
   /** Cards in a fixed-width column on the right (client, quotes, invoices...). They start level with the
    *  first box of the workflow, not with its title row. */
   rail?: ReactNode
@@ -121,6 +124,7 @@ export function EnquiryWorkflow({
       )}
 
       <div className="flex min-w-0 flex-col gap-4 lg:col-start-1 lg:row-start-2">
+        <div className={`flex min-w-0 flex-col gap-4 ${muted ? 'opacity-55' : ''}`}>
         {/* Attention banner */}
         {!readOnly && attentionCount > 0 ? (
           <div className="flex items-start gap-3 rounded-md border border-danger bg-danger/5 px-4 py-3">
@@ -393,6 +397,7 @@ export function EnquiryWorkflow({
             + Add stage
           </button>
         )}
+        </div>
         {footer}
       </div>
 

@@ -38,7 +38,11 @@ export function LeadJobCompleteRow({
         </button>
         <div className="min-w-0 flex-1">
           <span className="text-base text-ink">Job complete</span>
-          <span className="block text-sm text-muted">The end of the job: tick it when the work is done. The lead stays in Leads.</span>
+          <span className="block text-sm text-muted">
+            {done
+              ? 'Done: the workflow above is closed and greyed out. Untick it to work on the lead again. The lead stays in Leads.'
+              : 'The end of the job: tick it when the work is done. The lead stays in Leads.'}
+          </span>
         </div>
         {completedLabel ? <span className="whitespace-nowrap text-sm text-muted">{completedLabel}</span> : null}
       </form>

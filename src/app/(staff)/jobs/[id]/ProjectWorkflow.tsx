@@ -38,6 +38,7 @@ export function ProjectWorkflow({
   rail,
   bookingRow,
   completeRow,
+  muted = false,
 }: {
   board: ProjectBoard
   projectId: string
@@ -52,6 +53,9 @@ export function ProjectWorkflow({
   bookingRow?: ReactNode
   /** The "Job complete" milestone shown after the phases (see JobCompleteRow): it ENDS the job. */
   completeRow?: ReactNode
+  /** Job complete: everything above it shows greyed out (Studio Ninja). Still usable - finishing the open
+   *  tasks is how a completed job gets closed - so it comes back to full strength on hover or focus. */
+  muted?: boolean
 }) {
   const { stages, allDone, attentionCount, nextAction } = board
 
@@ -128,6 +132,7 @@ export function ProjectWorkflow({
           </div>
         ) : null}
 
+        <div className={`flex flex-col gap-4 transition-opacity ${muted ? 'opacity-55 hover:opacity-100 focus-within:opacity-100' : ''}`}>
         {bookingRow}
 
         {/* Phases */}
@@ -405,6 +410,7 @@ export function ProjectWorkflow({
             + Add stage
           </button>
         )}
+        </div>
 
         {completeRow}
       </div>

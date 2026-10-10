@@ -27,27 +27,30 @@ export function LeadJobAcceptedRow({
   enquiryId,
   jobId,
   readOnly,
+  muted = false,
 }: {
   csrf: string
   enquiryId: string
   /** The job this lead became, once booked. */
   jobId: string | null
-  /** Archived: restore the lead first. */
+  /** Archived (restore it first) or "Job complete" ticked (untick it first). */
   readOnly: boolean
+  /** Greyed out while "Job complete" is ticked (Studio Ninja). */
+  muted?: boolean
 }) {
   const [confirming, setConfirming] = useState(false)
   const acceptError = useSearchParams().get('acceptError')
   const booked = jobId !== null
 
   return (
-    <section className="rounded-md border border-line-strong">
+    <section className={`rounded-md border border-line-strong ${muted ? 'opacity-55' : ''}`}>
       <div className="flex items-center gap-3 px-3 py-3">
         <button
           type="button"
           role="checkbox"
           aria-checked={booked}
           aria-label='Tick "Job accepted"'
-          title={booked ? 'This lead is a job' : readOnly ? 'Restore this lead first' : 'Tick when the client has confirmed the booking'}
+          title={booked ? 'This lead is a job' : muted ? 'Untick Job complete first' : readOnly ? 'Restore this lead first' : 'Tick when the client has confirmed the booking'}
           disabled={booked || readOnly}
           data-write="lock"
           onClick={() => setConfirming(true)}
