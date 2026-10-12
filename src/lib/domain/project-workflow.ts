@@ -301,6 +301,48 @@ export async function moveJobBackToLead(projectId: string, actorUserId: string |
 }
 
 /**
+ * Permanently delete jobs created by mistake (not "complete" - the job is removed, not archived). SAFE:
+ * a job with ANY recorded payment is KEPT (we never destroy the money ledger) and reported as skipped.
+ * For a deletable job it removes the job and everything scoped to it - its quote(s), invoice(s) + lines,
+ * contract(s), production tasks, requirements, team and change requests (Cascade) - and the lead it was
+ * converted from. Each job is its own transaction, so one skip never blocks the rest.
+ */
+export async function deleteProjects(
+  projectIds: string[],
+  actorUserId: string | null,
+): Promise<{ deleted: number; skipped: number }> {
+  let deleted = 0
+  let skipped = 0
+  for (const projectId of projectIds) {
+    const outcome = await prisma.$transaction(async (tx) => {
+      const project = await tx.project.findUnique({
+        where: { id: projectId },
+        select: { id: true, companyId: true, name: true, _count: { select: { payments: true } } },
+      })
+      if (!project) return 'missing'
+      // A recorded payment means money changed hands: the job stays (the ledger is never destroyed).
+      if (project._count.payments > 0) return 'skip'
+
+      const lead = await tx.enquiry.findFirst({ where: { convertedProjectId: projectId }, select: { id: true } })
+      // Restrict relations must be removed before the project; Cascade ones (work items, requirements,
+      // team members, change requests) go automatically with it.
+      await tx.quote.deleteMany({ where: lead ? { OR: [{ projectId }, { enquiryId: lead.id }] } : { projectId } })
+      await tx.invoice.deleteMany({ where: { projectId } }) // invoice lines cascade; no payments (guarded above)
+      await tx.contract.deleteMany({ where: { projectId } }) // contract versions cascade
+      await tx.project.delete({ where: { id: projectId } })
+      if (lead) await tx.enquiry.delete({ where: { id: lead.id } }) // its work items cascade
+      await tx.auditLog.create({
+        data: { companyId: project.companyId, actorUserId, action: 'project.deleted', entityType: 'Project', entityId: projectId, beforeData: { name: project.name, leadId: lead?.id ?? null } },
+      })
+      return 'deleted'
+    })
+    if (outcome === 'deleted') deleted++
+    else if (outcome === 'skip') skipped++
+  }
+  return { deleted, skipped }
+}
+
+/**
  * Confirm a booking: the moment a lead becomes a JOB. Called when the deposit is paid (from the finance
  * payment handler, inside the SAME transaction) and by Add job for a booking the client already confirmed
  * outside the app. A signed contract alone never calls this - the studio's policy is that the deposit holds

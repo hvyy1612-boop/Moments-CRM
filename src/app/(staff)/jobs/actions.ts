@@ -14,6 +14,7 @@ import {
   addProjectStage,
   addProjectStageBlock,
   addProjectTask,
+  deleteProjects,
   deleteProjectStage,
   moveJobBackToLead,
   setJobComplete,
@@ -111,6 +112,23 @@ export async function moveJobBackToLeadAction(formData: FormData): Promise<void>
   revalidatePath('/leads')
   revalidatePath(`/leads/${enquiryId}`)
   redirect(`/leads/${enquiryId}?toast=moved-to-lead`)
+}
+
+/**
+ * Permanently delete the selected jobs created by mistake (bulk, from the Jobs list selection bar). SAFE:
+ * a job with any recorded payment is kept (the money ledger is never destroyed) and reported back as
+ * "kept". Removes a deletable job with its quote(s), invoice(s), contract(s) and the lead it came from.
+ */
+export async function deleteJobsAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const ids = String(formData.get('ids') ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+  if (ids.length === 0) return
+  const { deleted, skipped } = await deleteProjects(ids, user.id)
+  revalidatePath('/jobs')
+  revalidatePath('/leads')
+  redirect(`/jobs?removed=${deleted}&kept=${skipped}`)
 }
 
 /** Save the draft version's lines + totals. */

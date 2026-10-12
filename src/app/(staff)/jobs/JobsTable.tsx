@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { DataTable, type DataColumn } from '@/components/ui/DataTable'
 import { useRowSelection } from '@/components/ui/useRowSelection'
 import { ExportBar } from '@/components/ui/ExportBar'
+import { deleteJobsAction } from './actions'
 import { COL } from '@/components/ui/tableColumns'
 import { formatSydneyDate } from '@/lib/time'
 import { JobRowMenu } from './JobRowMenu'
@@ -78,7 +79,7 @@ function Progress({ r }: { r: JobRow }) {
  * Progress is read-only and derived from the job's workflow; deadline-critical jobs (next task overdue or
  * due within 2 days) carry a warning icon and are floated to the top by the page so staff never miss them.
  */
-export function JobsTable({ rows, backParam }: { rows: JobRow[]; backParam: string }) {
+export function JobsTable({ rows, backParam, csrf, canDelete }: { rows: JobRow[]; backParam: string; csrf: string; canDelete: boolean }) {
   const { selectedIds, selection } = useRowSelection<JobRow>()
   const columns: DataColumn<JobRow>[] = [
     {
@@ -111,7 +112,19 @@ export function JobsTable({ rows, backParam }: { rows: JobRow[]; backParam: stri
 
   return (
     <>
-      <ExportBar count={selectedIds.length} reportHref={`/jobs/report?ids=${selectedIds.join(',')}`} className="mb-3" />
+      <ExportBar
+        count={selectedIds.length}
+        reportHref={`/jobs/report?ids=${selectedIds.join(',')}`}
+        className="mb-3"
+        {...(canDelete
+          ? {
+              deleteAction: deleteJobsAction,
+              csrf,
+              selectedIds,
+              deleteConfirm: `Delete ${selectedIds.length} selected job${selectedIds.length > 1 ? 's' : ''}? This permanently removes the job and its quote, invoice and the lead it came from. Any job with a recorded payment is kept. This can't be undone.`,
+            }
+          : {})}
+      />
       <DataTable
         ariaLabel="Jobs"
         columns={columns}
