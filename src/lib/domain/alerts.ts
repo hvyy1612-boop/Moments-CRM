@@ -1,22 +1,42 @@
 import { prisma } from '@/lib/db'
 
+export type AlertKind = 'enquiry' | 'payment' | 'overdue' | 'shoot'
+export type AlertCategory = 'activity' | 'alert'
+export type AlertTone = 'info' | 'warn' | 'danger'
+
 export type Alert = {
   id: string
-  kind: 'enquiry' | 'payment'
+  kind: AlertKind
+  // activity = something that happened (new enquiry, payment in); alert = something that needs action
+  // now (an overdue payment, a shoot coming up). The bell's "Alerts" tab shows only the latter.
+  category: AlertCategory
+  tone: AlertTone
   title: string
   detail: string | null
   href: string
   at: Date
 }
 
+const DAY = 86_400_000
+const money = (n: number) => `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
 /**
- * Recent business events staff should know about now (real data - NOT the audit trail, and NOT the
- * outbound client-email dispatch queue). Powers the top-nav notification bell. There is no per-user
- * read state in the schema, so the bell's badge counts items from the last 7 days rather than claiming
- * a persistent "unread" count. Never fabricates entries: an empty studio shows an empty bell.
+ * Recent business events AND standing alerts staff should know about now (real data - NOT the audit
+ * trail, and NOT the outbound client-email queue). Powers the top-nav notification bell and the
+ * /notifications page. Two categories:
+ *   - activity: new enquiries, payments received (time-stamped past events).
+ *   - alert: overdue payments and upcoming shoots (things that need attention).
+ * Never fabricates entries: an empty studio shows an empty bell. Read state is the single per-user
+ * marker User.notificationsSeenAt; "unread" (the badge) counts only PAST-dated items newer than it, so a
+ * future-dated shoot reminder never sticks in the badge after Mark all read (see the bell).
  */
 export async function getRecentAlerts(limit = 8): Promise<Alert[]> {
-  const [enquiries, payments] = await Promise.all([
+  const now = new Date()
+  const startOfToday = new Date(now)
+  startOfToday.setHours(0, 0, 0, 0)
+  const shootHorizon = new Date(startOfToday.getTime() + 8 * DAY) // the next 7 days (today .. +7)
+
+  const [enquiries, payments, overdue, shoots] = await Promise.all([
     prisma.enquiry.findMany({
       orderBy: { createdAt: 'desc' },
       take: limit,
@@ -25,36 +45,51 @@ export async function getRecentAlerts(limit = 8): Promise<Alert[]> {
     prisma.payment.findMany({
       orderBy: { createdAt: 'desc' },
       take: limit,
-      select: {
-        id: true,
-        amount: true,
-        createdAt: true,
-        projectId: true,
-        project: { select: { client: { select: { displayName: true } } } },
-      },
+      select: { id: true, amount: true, createdAt: true, projectId: true, project: { select: { client: { select: { displayName: true } } } } },
+    }),
+    prisma.invoice.findMany({
+      where: { dueAt: { lt: now }, status: { in: ['ISSUED', 'SENT', 'PARTIALLY_PAID', 'OVERDUE'] } },
+      orderBy: { dueAt: 'asc' },
+      take: 20,
+      select: { id: true, dueAt: true, total: true, amountPaid: true, project: { select: { client: { select: { displayName: true } } } } },
+    }),
+    prisma.project.findMany({
+      where: { lifecycleStatus: 'CONFIRMED', shootDate: { gte: startOfToday, lt: shootHorizon } },
+      orderBy: { shootDate: 'asc' },
+      take: 20,
+      select: { id: true, shootDate: true, client: { select: { displayName: true } } },
     }),
   ])
 
-  const money = (n: number) => `$${n.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const alerts: Alert[] = []
 
-  const alerts: Alert[] = [
-    ...enquiries.map((e) => ({
-      id: `enq_${e.id}`,
-      kind: 'enquiry' as const,
-      title: 'New enquiry',
-      detail: e.name,
-      href: `/leads/${e.id}`,
-      at: e.createdAt,
-    })),
-    ...payments.map((p) => ({
-      id: `pay_${p.id}`,
-      kind: 'payment' as const,
-      title: 'Payment received',
-      detail: `${p.project.client.displayName} · ${money(Number(p.amount))}`,
-      href: `/jobs/${p.projectId}`,
-      at: p.createdAt,
-    })),
-  ]
+  for (const e of enquiries) {
+    alerts.push({ id: `enq_${e.id}`, kind: 'enquiry', category: 'activity', tone: 'info', title: 'New enquiry', detail: e.name, href: `/leads/${e.id}`, at: e.createdAt })
+  }
+  for (const p of payments) {
+    alerts.push({ id: `pay_${p.id}`, kind: 'payment', category: 'activity', tone: 'info', title: 'Payment received', detail: `${p.project.client.displayName} · ${money(Number(p.amount))}`, href: `/jobs/${p.projectId}`, at: p.createdAt })
+  }
+  for (const inv of overdue) {
+    const owed = Number(inv.total) - Number(inv.amountPaid)
+    if (owed <= 0 || !inv.dueAt) continue // nothing actually owed (fully paid but still SENT): not an alert
+    const days = Math.max(1, Math.floor((now.getTime() - inv.dueAt.getTime()) / DAY))
+    alerts.push({ id: `ovd_${inv.id}`, kind: 'overdue', category: 'alert', tone: 'danger', title: 'Payment overdue', detail: `${inv.project.client.displayName} · ${money(owed)} · ${days} day${days > 1 ? 's' : ''} overdue`, href: `/finance/${inv.id}`, at: inv.dueAt })
+  }
+  for (const j of shoots) {
+    if (!j.shootDate) continue
+    alerts.push({ id: `shoot_${j.id}`, kind: 'shoot', category: 'alert', tone: 'warn', title: 'Upcoming shoot', detail: j.client.displayName, href: `/jobs/${j.id}`, at: j.shootDate })
+  }
 
-  return alerts.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, limit)
+  // Order: alerts that need action first (overdue before upcoming; most-overdue / soonest first), then
+  // activity newest-first. The Alerts tab filters to category === 'alert' regardless of this order.
+  alerts.sort((a, b) => {
+    if (a.category !== b.category) return a.category === 'alert' ? -1 : 1
+    if (a.category === 'alert') {
+      if (a.tone !== b.tone) return a.tone === 'danger' ? -1 : 1
+      return a.at.getTime() - b.at.getTime()
+    }
+    return b.at.getTime() - a.at.getTime()
+  })
+
+  return alerts.slice(0, limit)
 }
