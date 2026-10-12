@@ -14,9 +14,9 @@ export const runtime = 'nodejs'
 export const metadata: Metadata = { title: 'Notifications - Moments' }
 
 /**
- * "See all notifications": the full list behind the top-nav bell. Real events (new enquiries, payments
- * received) AND standing alerts (overdue payments, upcoming shoots) that are still UNREAD, with All /
- * Alerts tabs and Mark all read, driven by the per-user seen marker (Mark all read empties the list).
+ * "See all notifications": the full HISTORY behind the top-nav bell. Unlike the bell (an inbox that
+ * empties on read), this keeps read + unread so staff can look back: new enquiries, payments received,
+ * overdue payments and upcoming shoots, with All / Unread / Alerts tabs and Mark all read.
  */
 export default async function NotificationsPage() {
   const user = await requireRole('/notifications')

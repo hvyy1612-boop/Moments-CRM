@@ -7,12 +7,12 @@ import { Button } from '@/components/ui/Button'
 import { alertTint, KindIcon, when } from '@/components/notification-ui'
 import { markNotificationsReadAction } from './actions'
 
-type Tab = 'all' | 'alerts'
+type Tab = 'all' | 'unread' | 'alerts'
 
 /**
- * The full "See all notifications" list - an inbox of UNREAD items: All (everything unread) / Alerts (the
- * action-needed ones), Mark all read. An item shows while `at > seenAt`; Mark all read moves the marker
- * to now, so the list empties (every alert's `at` is a past timestamp - see getRecentAlerts).
+ * The full "See all notifications" HISTORY - unlike the bell (an inbox that empties on read), this page
+ * keeps everything so staff can look back at past notifications. All (read + unread) / Unread / Alerts
+ * tabs, per-item unread dots, Mark all read (clears the dots; the items stay). `when(displayAt ?? at)`.
  */
 export function NotificationsList({ alerts, seenAt }: { alerts: Alert[]; seenAt: Date | null }) {
   const [tab, setTab] = useState<Tab>('all')
@@ -22,8 +22,8 @@ export function NotificationsList({ alerts, seenAt }: { alerts: Alert[]; seenAt:
   const effectiveSeen = markedAt ?? seenAt
   const isUnread = (a: Alert) => !effectiveSeen || new Date(a.at).getTime() > new Date(effectiveSeen).getTime()
   const unread = alerts.filter(isUnread)
-  const unreadAlerts = unread.filter((a) => a.category === 'alert')
-  const visible = tab === 'alerts' ? unreadAlerts : unread
+  const alertItems = alerts.filter((a) => a.category === 'alert')
+  const visible = tab === 'unread' ? unread : tab === 'alerts' ? alertItems : alerts
 
   const markRead = () => {
     if (unread.length === 0) return
@@ -32,8 +32,9 @@ export function NotificationsList({ alerts, seenAt }: { alerts: Alert[]; seenAt:
   }
 
   const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: 'all', label: 'All', count: unread.length },
-    { key: 'alerts', label: 'Alerts', count: unreadAlerts.length },
+    { key: 'all', label: 'All', count: alerts.length },
+    { key: 'unread', label: 'Unread', count: unread.length },
+    { key: 'alerts', label: 'Alerts', count: alertItems.length },
   ]
 
   return (
@@ -61,7 +62,7 @@ export function NotificationsList({ alerts, seenAt }: { alerts: Alert[]; seenAt:
 
       {visible.length === 0 ? (
         <p className="rounded-md border border-line-strong bg-surface px-4 py-12 text-center text-sm text-ink-muted">
-          {tab === 'alerts' ? 'Nothing needs attention right now.' : "You're all caught up."}
+          {tab === 'unread' ? 'No unread notifications.' : tab === 'alerts' ? 'Nothing needs attention right now.' : 'No notifications yet.'}
         </p>
       ) : (
         <ul className="divide-y divide-line overflow-hidden rounded-md border border-line-strong bg-surface">
