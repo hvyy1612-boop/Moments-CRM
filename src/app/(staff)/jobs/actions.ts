@@ -70,12 +70,15 @@ export async function closeJobAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
   const projectId = String(formData.get('projectId') ?? '')
   if (!projectId) return
+  let closed = false
   try {
     await closeJob(projectId, user.id)
+    closed = true
   } catch {
     // Balance outstanding or tasks pending - leave the job as-is; the page reflects the real state.
   }
   revalidatePath(`/jobs/${projectId}`)
+  if (closed) redirect(`/jobs/${projectId}?toast=job-closed`)
 }
 
 /** Untick "Job accepted": the job goes back to being a lead (Awaiting booking confirmation). Refused once
@@ -87,13 +90,15 @@ export async function setJobCompleteAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
   const projectId = String(formData.get('projectId') ?? '')
   if (!projectId) return
+  const done = formData.get('done') === 'true'
   try {
-    await setJobComplete(projectId, formData.get('done') === 'true', user.id)
+    await setJobComplete(projectId, done, user.id)
   } catch (error) {
     redirect(`/jobs/${projectId}?completeError=${encodeURIComponent(error instanceof Error ? error.message : 'Could not update the job.')}`)
   }
   revalidatePath('/jobs')
   revalidatePath(`/jobs/${projectId}`)
+  redirect(`/jobs/${projectId}?toast=${done ? 'job-completed' : 'job-reopened'}`)
 }
 
 export async function moveJobBackToLeadAction(formData: FormData): Promise<void> {
@@ -416,8 +421,10 @@ export async function voidInvoiceAction(formData: FormData): Promise<void> {
   if (!can(user, 'MONEY_ADMIN')) return // ADMIN only (docs/33 §2); the button is hidden for others
   const invoiceId = String(formData.get('invoiceId') ?? '')
   if (!invoiceId) return
+  let voided = false
   try {
     await voidInvoice(invoiceId, user.id)
+    voided = true
   } catch {
     // Refused (e.g. money recorded since the page loaded): the re-render shows the real state.
   }
@@ -425,6 +432,7 @@ export async function voidInvoiceAction(formData: FormData): Promise<void> {
   revalidatePath(`/finance/${invoiceId}`)
   const projectId = String(formData.get('projectId') ?? '')
   if (projectId) revalidatePath(`/jobs/${projectId}`)
+  if (voided) redirect(`/finance/${invoiceId}?toast=invoice-voided`)
 }
 
 /** Delete a draft/unpaid invoice. Refused if it has payments (domain guards this). */
@@ -449,7 +457,8 @@ export async function deleteInvoiceAction(formData: FormData): Promise<void> {
   if (clientId) revalidatePath(`/clients/${clientId}`)
   // Only an in-app path: a single leading "/" (never "//host" or a full URL), so it can't redirect off-site.
   const back = String(formData.get('back') ?? '')
-  if (/^\/(?!\/)/.test(back)) redirect(back)
+  if (/^\/(?!\/)/.test(back)) redirect(back + (back.includes('?') ? '&' : '?') + 'toast=invoice-deleted')
+  redirect('/finance?toast=invoice-deleted')
 }
 
 /** Record a manual payment against an invoice. */
@@ -714,6 +723,7 @@ export async function addInternalNoteAction(formData: FormData): Promise<void> {
     data: { projectId, type: 'NOTE', direction: 'internal', internal: true, body, byUserId: user.id },
   })
   revalidatePath(`/jobs/${projectId}`)
+  redirect(`/jobs/${projectId}?toast=note-added`)
 }
 
 /** Update the client's extra contact details shown on the Overview (partner, preferred, instagram, phone, notes). */
@@ -738,6 +748,7 @@ export async function updateClientContactAction(formData: FormData): Promise<voi
     },
   })
   revalidatePath(`/jobs/${projectId}`)
+  redirect(`/jobs/${projectId}?toast=client-updated`)
 }
 
 /** Edit an internal team note; records which staff edited it and when (shown as a small line). */
@@ -754,6 +765,7 @@ export async function editInternalNoteAction(formData: FormData): Promise<void> 
     data: { body, editedByUserId: user.id, editedAt: new Date() },
   })
   revalidatePath(`/jobs/${projectId}`)
+  redirect(`/jobs/${projectId}?toast=note-saved`)
 }
 
 /** Delete an internal team note. */
@@ -766,4 +778,5 @@ export async function deleteInternalNoteAction(formData: FormData): Promise<void
   if (!projectId || !communicationId) return
   await prisma.communication.deleteMany({ where: { id: communicationId, projectId, internal: true } })
   revalidatePath(`/jobs/${projectId}`)
+  redirect(`/jobs/${projectId}?toast=note-deleted`)
 }

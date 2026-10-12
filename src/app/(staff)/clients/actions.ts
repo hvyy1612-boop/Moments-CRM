@@ -177,7 +177,7 @@ export async function updateClientFormAction(_prev: ClientFormState, formData: F
   }
   revalidatePath('/clients')
   revalidatePath(`/clients/${clientId}`)
-  redirect(`/clients/${clientId}`)
+  redirect(`/clients/${clientId}?toast=client-updated`)
 }
 
 /** Restore an archived client to the active list. */
@@ -189,6 +189,7 @@ export async function restoreClientAction(formData: FormData): Promise<void> {
   await restoreClient(clientId, user.id)
   revalidatePath('/clients')
   revalidatePath(`/clients/${clientId}`)
+  redirect(`/clients/${clientId}?toast=client-restored`)
 }
 
 /**
@@ -204,14 +205,16 @@ export async function removeClientAction(formData: FormData): Promise<void> {
   if (!(await csrfOk(formData))) throw new Error('Invalid request.')
   const clientId = String(formData.get('clientId') ?? '')
   if (!clientId) return
+  let archived = false
   if (await clientHasHistory(clientId)) {
     await archiveClient(clientId, user.id)
+    archived = true
   } else {
     // Empty client: safe to delete for good (deleteEmptyClients re-checks emptiness atomically).
     await deleteEmptyClients([clientId], user.id)
   }
   revalidatePath('/clients')
-  redirect('/clients')
+  redirect(archived ? '/clients?toast=client-archived' : '/clients?toast=client-removed')
 }
 
 /**
@@ -230,5 +233,6 @@ export async function deleteClientsAction(formData: FormData): Promise<void> {
   if (ids.length === 0) return
   await deleteEmptyClients(ids, user.id)
   revalidatePath('/clients')
+  redirect('/clients?toast=clients-removed')
 }
 

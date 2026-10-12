@@ -154,7 +154,7 @@ export async function declineQuoteAction(formData: FormData): Promise<void> {
     redirect(`/quotes/${quoteId}?declineError=${encodeURIComponent(error instanceof Error ? error.message : 'Could not decline the quote.')}`)
   }
   revalidatePath(`/quotes/${quoteId}`)
-  redirect(`/quotes/${quoteId}`)
+  redirect(`/quotes/${quoteId}?toast=quote-declined`)
 }
 
 /** Accept the quote. A lead's quote opens its booking file and the lead moves to "Awaiting booking
@@ -176,7 +176,7 @@ export async function acceptQuoteAction(formData: FormData): Promise<void> {
     redirect(`/quotes/${quoteId}?acceptError=${encodeURIComponent(error instanceof Error ? error.message : 'Could not accept the quote.')}`)
   }
   revalidatePath(`/quotes/${quoteId}`)
-  redirect(enquiryId ? `/leads/${enquiryId}` : projectId ? `/jobs/${projectId}` : `/quotes/${quoteId}`)
+  redirect((enquiryId ? `/leads/${enquiryId}` : projectId ? `/jobs/${projectId}` : `/quotes/${quoteId}`) + '?toast=quote-accepted')
 }
 
 /** Batch-delete the selected quotes from the list (accepted quotes are protected in the domain). Void
@@ -194,6 +194,7 @@ export async function deleteQuotesAction(formData: FormData): Promise<void> {
     // fall through to refresh
   }
   revalidatePath('/quotes')
+  redirect('/quotes?toast=quotes-deleted')
 }
 
 /** Revise a sent quote: a new DRAFT version supersedes the current one. */
@@ -209,5 +210,5 @@ export async function reviseQuoteAction(formData: FormData): Promise<void> {
     // fall through to refresh
   }
   revalidatePath(`/quotes/${quoteId}`)
-  redirect(`/quotes/${quoteId}/edit`)
+  redirect(`/quotes/${quoteId}/edit?toast=quote-revised`)
 }

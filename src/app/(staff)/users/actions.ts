@@ -2,6 +2,7 @@
 
 import { Prisma } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { setSignupOpen } from '@/lib/auth/register'
 import { cookies } from 'next/headers'
 import { z } from 'zod'
@@ -165,6 +166,7 @@ export async function setStaffActiveAction(formData: FormData): Promise<void> {
     },
   })
   revalidatePath('/users')
+  redirect(`/users?toast=${active ? 'staff-enabled' : 'staff-disabled'}`)
 }
 
 // ---------------------------------------------------------------- Remove (soft delete)
@@ -209,6 +211,7 @@ export async function removeStaffAction(formData: FormData): Promise<void> {
   })
   await revokeAllSessions(target.id)
   revalidatePath('/users')
+  redirect('/users?toast=staff-removed')
 }
 
 // ---------------------------------------------------------------- Sign-up switch
@@ -219,6 +222,8 @@ export async function setSignupOpenAction(formData: FormData): Promise<void> {
   if (!verifyCsrf(cookieStore.get(CSRF_COOKIE)?.value, formData.get('csrf'))) return
   const admin = await requireUserManager()
   if (!admin) return
-  await setSignupOpen(String(formData.get('open') ?? '') === '1', admin.id)
+  const open = String(formData.get('open') ?? '') === '1'
+  await setSignupOpen(open, admin.id)
   revalidatePath('/users')
+  redirect(`/users?toast=${open ? 'signup-open' : 'signup-closed'}`)
 }

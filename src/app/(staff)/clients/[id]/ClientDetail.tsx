@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { useActionState, useEffect, useState } from 'react'
 import { Alert } from '@/components/ui/Alert'
 import { IconButton } from '@/components/ui/IconButton'
+import { useToast } from '@/components/ui/ToastProvider'
 import { TextInput, Select, Textarea } from '@/components/ui/form'
 import { AddEnquiryButton } from '../../leads/AddEnquiryButton'
 import { restoreClientAction } from '../actions'
@@ -129,13 +130,15 @@ export function ClientDetail({
   const [editing, setEditing] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [state, formAction, pending] = useActionState(saveClientDetailAction, INITIAL)
+  const toast = useToast()
 
   useEffect(() => {
     if (state.status === 'saved') {
       setEditing(false)
       setDirty(false)
+      toast({ title: 'Client saved' })
     }
-  }, [state])
+  }, [state, toast])
 
   // After a failed save the form shows what was typed (React resets a form after every action, back to
   // each field's defaultValue - so the defaults follow the submitted values until the save succeeds).
