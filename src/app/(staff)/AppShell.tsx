@@ -90,8 +90,9 @@ export async function AppShell({
 }) {
   const items = NAV.filter((n) => !n.permission || can(user, n.permission))
   const initial = user.name.trim().charAt(0).toUpperCase() || 'U'
-  const alerts = await getRecentAlerts()
-  // The current user's "notifications seen" marker drives the bell's unread count + Unread tab.
+  // Fetch a wider window than the bell shows: the bell filters to UNREAD, so it needs enough candidates.
+  const alerts = await getRecentAlerts(20)
+  // The current user's "notifications seen" marker drives the bell's unread list.
   const me = await prisma.user.findUnique({ where: { id: user.id }, select: { notificationsSeenAt: true } })
 
   // Gmail-style nav dot: how many enquiries are still unread (never opened, not yet converted/declined).

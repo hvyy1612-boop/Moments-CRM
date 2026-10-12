@@ -14,7 +14,11 @@ export type Alert = {
   title: string
   detail: string | null
   href: string
+  // `at` drives sort + read-state (always in the PAST, so "Mark all read" can clear everything and leave
+  // the bell empty). `displayAt` is what the relative-time label shows - usually the same, but for an
+  // upcoming shoot `at` is when it entered the 7-day window while `displayAt` is the shoot date ("in 2d").
   at: Date
+  displayAt?: Date
 }
 
 const DAY = 86_400_000
@@ -27,8 +31,9 @@ const money = (n: number) => `$${n.toLocaleString('en-AU', { minimumFractionDigi
  *   - activity: new enquiries, payments received (time-stamped past events).
  *   - alert: overdue payments and upcoming shoots (things that need attention).
  * Never fabricates entries: an empty studio shows an empty bell. Read state is the single per-user
- * marker User.notificationsSeenAt; "unread" (the badge) counts only PAST-dated items newer than it, so a
- * future-dated shoot reminder never sticks in the badge after Mark all read (see the bell).
+ * marker User.notificationsSeenAt; the bell shows only UNREAD items (at > seenAt), so "Mark all read"
+ * empties it (inbox-style). Every alert's `at` is kept in the past (an upcoming shoot uses the moment it
+ * entered the 7-day window) so nothing re-surfaces after being read until a genuinely new event appears.
  */
 export async function getRecentAlerts(limit = 8): Promise<Alert[]> {
   const now = new Date()
@@ -77,7 +82,9 @@ export async function getRecentAlerts(limit = 8): Promise<Alert[]> {
   }
   for (const j of shoots) {
     if (!j.shootDate) continue
-    alerts.push({ id: `shoot_${j.id}`, kind: 'shoot', category: 'alert', tone: 'warn', title: 'Upcoming shoot', detail: j.client.displayName, href: `/jobs/${j.id}`, at: j.shootDate })
+    // `at` = when the shoot entered the 7-day window (a stable PAST timestamp, so Mark all read clears it);
+    // `displayAt` = the shoot date itself, so the label still reads "in 2d".
+    alerts.push({ id: `shoot_${j.id}`, kind: 'shoot', category: 'alert', tone: 'warn', title: 'Upcoming shoot', detail: j.client.displayName, href: `/jobs/${j.id}`, at: new Date(j.shootDate.getTime() - 7 * DAY), displayAt: j.shootDate })
   }
 
   // Order: alerts that need action first (overdue before upcoming; most-overdue / soonest first), then

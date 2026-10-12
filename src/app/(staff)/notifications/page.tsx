@@ -15,8 +15,8 @@ export const metadata: Metadata = { title: 'Notifications - Moments' }
 
 /**
  * "See all notifications": the full list behind the top-nav bell. Real events (new enquiries, payments
- * received) AND standing alerts (overdue payments, upcoming shoots), with All / Unread / Alerts tabs and
- * Mark all read, driven by the per-user seen marker.
+ * received) AND standing alerts (overdue payments, upcoming shoots) that are still UNREAD, with All /
+ * Alerts tabs and Mark all read, driven by the per-user seen marker (Mark all read empties the list).
  */
 export default async function NotificationsPage() {
   const user = await requireRole('/notifications')

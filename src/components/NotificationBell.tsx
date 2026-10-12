@@ -6,24 +6,21 @@ import type { Alert } from '@/lib/domain/alerts'
 import { alertTint, KindIcon, when } from '@/components/notification-ui'
 import { markNotificationsReadAction } from '@/app/(staff)/notifications/actions'
 
-type Tab = 'all' | 'unread' | 'alerts'
+type Tab = 'all' | 'alerts'
 
 /**
- * Top-nav notification bell. Surfaces recent workflow events (new enquiries, payments) AND standing
- * alerts (overdue payments, upcoming shoots) from real data - separate from Activity (the audit trail).
- * Read state is a single per-user marker (User.notificationsSeenAt): "unread" = PAST-dated items newer
- * than the marker (a future shoot reminder never sticks in the badge), and "Mark all read" moves the
- * marker to now. Tabs: All / Unread (count) / Alerts (count); the badge counts unread.
+ * Top-nav notification bell. An inbox of UNREAD items only: recent workflow events (new enquiries,
+ * payments) AND standing alerts (overdue payments, upcoming shoots) from real data. Read state is a
+ * single per-user marker (User.notificationsSeenAt): an item is shown while `at > seenAt`, and "Mark all
+ * read" moves the marker to now, so the bell empties (every alert's `at` is a past timestamp - see
+ * getRecentAlerts). Tabs: All (everything unread) / Alerts (the action-needed ones).
  */
 export function NotificationBell({
   alerts,
   seenAt,
-  canViewActivity,
 }: {
   alerts: Alert[]
   seenAt: Date | null
-  /** The Activity log is admin only, so other roles get no link to it (it would 404). */
-  canViewActivity: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<Tab>('all')
@@ -33,12 +30,12 @@ export function NotificationBell({
   const ref = useRef<HTMLDivElement>(null)
 
   // seenAt + a.at are server-provided dates (no wall clock), so unread is stable across SSR/hydration.
-  // Clamp to the past: a future-dated shoot reminder is shown but never counts as "unread".
+  // The bell shows unread only (at > seenAt); every a.at is in the past, so Mark all read empties it.
   const effectiveSeen = markedAt ?? seenAt
-  const isUnread = (a: Alert) => new Date(a.at).getTime() <= Date.now() && (!effectiveSeen || new Date(a.at).getTime() > new Date(effectiveSeen).getTime())
+  const isUnread = (a: Alert) => !effectiveSeen || new Date(a.at).getTime() > new Date(effectiveSeen).getTime()
   const unread = alerts.filter(isUnread)
-  const alertItems = alerts.filter((a) => a.category === 'alert')
-  const visible = tab === 'unread' ? unread : tab === 'alerts' ? alertItems : alerts
+  const unreadAlerts = unread.filter((a) => a.category === 'alert')
+  const visible = tab === 'alerts' ? unreadAlerts : unread
 
   const markRead = () => {
     if (unread.length === 0) return
@@ -56,9 +53,8 @@ export function NotificationBell({
   }, [open])
 
   const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: 'all', label: 'All', count: 0 },
-    { key: 'unread', label: 'Unread', count: unread.length },
-    { key: 'alerts', label: 'Alerts', count: alertItems.length },
+    { key: 'all', label: 'All', count: unread.length },
+    { key: 'alerts', label: 'Alerts', count: unreadAlerts.length },
   ]
 
   return (
@@ -110,7 +106,7 @@ export function NotificationBell({
 
           {visible.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-ink-muted">
-              {tab === 'unread' ? 'No unread notifications.' : tab === 'alerts' ? 'Nothing needs attention.' : "You're all caught up."}
+              {tab === 'alerts' ? 'Nothing needs attention.' : "You're all caught up."}
             </p>
           ) : (
             <ul className="max-h-96 overflow-y-auto py-1">
@@ -125,7 +121,7 @@ export function NotificationBell({
                       {a.detail ? <span className="block truncate text-sm text-ink-muted">{a.detail}</span> : null}
                     </span>
                     <span className="flex shrink-0 flex-col items-end gap-1">
-                      <span className="whitespace-nowrap text-xs text-muted">{when(a.at)}</span>
+                      <span className="whitespace-nowrap text-xs text-muted">{when(a.displayAt ?? a.at)}</span>
                       {isUnread(a) ? <span className="h-2 w-2 rounded-full bg-accent" aria-label="Unread" /> : null}
                     </span>
                   </Link>
@@ -134,15 +130,10 @@ export function NotificationBell({
             </ul>
           )}
 
-          <div className="flex items-center justify-between border-t border-line px-4 py-2">
+          <div className="border-t border-line px-4 py-2">
             <Link href="/notifications" onClick={() => setOpen(false)} className="text-xs font-medium text-accent-ink hover:underline">
               See all notifications
             </Link>
-            {canViewActivity ? (
-              <Link href="/activity" onClick={() => setOpen(false)} className="text-xs font-medium text-ink-muted hover:text-ink hover:underline">
-                Activity
-              </Link>
-            ) : null}
           </div>
         </div>
       ) : null}
