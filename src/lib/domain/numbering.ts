@@ -3,8 +3,8 @@ import { sydneyYmd, systemClock } from '@/lib/time'
 
 /**
  * One source of truth for human-facing record numbers: `<PREFIX><YYYY><4-digit>`, per company, reset each
- * calendar year (Sydney time). Client `C20260001`, Lead `L20260001` (DB type ENQUIRY; was `E` until
- * 2026-09-30), Quote `Q20260001`, Job `J20260001`, Invoice `I20260001`. Every type uses a single-letter
+ * calendar year (Sydney time). Client `C20260001`, Lead `L20260001` (DB type ENQUIRY), Quote
+ * `Q20260001`, Job `J20260001`, Invoice `I20260001`. Every type uses a single-letter
  * prefix so the numbers read consistently.
  *
  * Uniqueness is bulletproof by design (three layers):

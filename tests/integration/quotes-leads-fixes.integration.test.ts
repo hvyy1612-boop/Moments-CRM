@@ -5,7 +5,7 @@ import { createClient } from '@/lib/domain/client'
 import { convertEnquiry, createEnquiry } from '@/lib/domain/enquiry'
 import { clientVisibleQuoteVersionId, createQuoteForEnquiry, reviseQuote, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 
-/** Bug-scan 2026-10-05: quote revise / client link / lead conversion fixes against the (test) database. */
+/** Quote revise, client link and lead conversion, against the (test) database. */
 
 const email = () => `ql-${randomUUID().slice(0, 8)}@moments.test`
 let userId = ''

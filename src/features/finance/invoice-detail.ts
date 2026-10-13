@@ -15,7 +15,7 @@ export type Tone = 'neutral' | 'info' | 'good' | 'warn' | 'bad'
  *   - Paid          - settled in full
  *   - Uncollectible - written off; a debt that won't be recovered (the underlying VOID state)
  * The finer InvoiceStatus enum stays in the database for correctness; this only decides the words + tone.
- * Overdue is no longer a separate status - an unpaid invoice past its due date is still "Unpaid" but turns
+ * Overdue is not a separate status - an unpaid invoice past its due date is still "Unpaid" but turns
  * red (tone `bad`) via the `overdue` flag, so the urgency shows without adding a fourth label.
  */
 export function invoiceStatusView(status: string, opts?: { overdue?: boolean }): { label: string; tone: Tone } {

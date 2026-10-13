@@ -6,7 +6,7 @@ import { recordPayment } from '@/lib/domain/finance'
 import { createInvoice } from './helpers'
 import { acceptQuote, createQuote, createQuoteForEnquiry, saveQuoteDraft, sendQuote } from '@/lib/domain/quote'
 
-/** Lead -> Job logic made consistent (Studio Ninja model), 2026-10-06. */
+/** Lead -> Job logic consistent with the Studio Ninja model. */
 
 const email = () => `lj-${randomUUID().slice(0, 8)}@moments.test`
 const line = (price: string) => [{ description: 'Gold Wedding Package', quantity: 1, unitPrice: price }]

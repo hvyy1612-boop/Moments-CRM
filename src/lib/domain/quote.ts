@@ -145,7 +145,7 @@ export async function sendQuote(quoteId: string, actorUserId: string | null) {
 /**
  * The version the client's link shows: the current one, except while staff are revising a sent quote (the
  * current version is then a DRAFT) - the client keeps seeing the last version they were actually sent
- * until the new one is sent (owner decision 2026-10-05). Null when nothing was ever sent.
+ * until the new one is sent. Null when nothing was ever sent.
  */
 export async function clientVisibleQuoteVersionId(quoteId: string): Promise<string | null> {
   const quote = await prisma.quote.findUnique({ where: { id: quoteId }, select: { currentVersion: { select: { id: true, status: true } } } })

@@ -18,7 +18,7 @@ export type InvoiceDoc = {
   notes: string | null
   total: D
   amountPaid: D
-  /** Sum of the credit notes on this invoice; reduces the balance due (bug #5). */
+  /** Sum of the credit notes on this invoice; reduces the balance due. */
   creditsTotal?: D
   billingNameSnapshot: string
   billingEmailSnapshot: string | null
@@ -107,8 +107,8 @@ export function InvoiceDocument({ invoice }: { invoice: InvoiceDoc }) {
   const gstTotal = rows.reduce((sum, r) => sum.add(r.gst), new Prisma.Decimal(0))
   const total = invoice.total
   const paid = invoice.amountPaid
-  // Credit notes reduce the balance due, so the printable matches the ledger's credit-aware `owed`
-  // (bug #5) - never total - paid alone. Clamp at zero so an over-credited invoice never shows negative.
+  // Credit notes reduce the balance due, so the printable matches the ledger's credit-aware `owed`,
+  // never total - paid alone. Clamp at zero so an over-credited invoice never shows negative.
   const credits = invoice.creditsTotal ?? new Prisma.Decimal(0)
   const rawBalance = total.sub(paid).sub(credits)
   const balance = rawBalance.lessThan(0) ? new Prisma.Decimal(0) : rawBalance

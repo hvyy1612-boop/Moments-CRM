@@ -165,9 +165,9 @@ export async function approveChangeRequest(changeRequestId: string, actorUserId:
     if (!cr) throw new Error('Change request not found.')
     if (cr.status !== 'IMPACT_ASSESSMENT') throw new Error('Assess the change request before approving it.')
 
-    // Owner decision (2026-10-10): no value gate on approval - any staff member who can reach change
-    // requests (ADMIN or STUDIO, enforced in the server action) may approve any change, regardless of
-    // amount. Staff = Admin except the Activity log.
+    // No value gate on approval: any staff member who can reach change requests (ADMIN or STUDIO,
+    // enforced in the server action) may approve any change, regardless of amount. Staff = Admin
+    // except the Activity log.
 
     const updated = await tx.changeRequest.update({
       where: { id: changeRequestId },

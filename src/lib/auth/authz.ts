@@ -23,8 +23,7 @@ export type Permission =
   | 'AUDIT_LOG_VIEW'
   | 'SETTINGS_EDIT'
   // Heavy / irreversible money operations: mark an invoice uncollectible, refund a payment, delete
-  // invoices or quotes. Held by ADMIN and STUDIO (Staff) since 2026-10-10 - see STAFF_FULL below.
-  // (Supersedes the old ADMIN-only rule in docs/33 §2.)
+  // invoices or quotes. Held by ADMIN and STUDIO (Staff) - see STAFF_FULL below.
   | 'MONEY_ADMIN'
 
 // The everyday CRM work a staff member does. Admin gets this plus the sensitive/management ones.

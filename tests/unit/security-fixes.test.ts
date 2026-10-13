@@ -3,7 +3,7 @@ import { can, isReadOnly } from '@/lib/auth/authz'
 import { ROUTE_PERMISSIONS } from '@/lib/auth/permissions'
 import { csvCell } from '@/lib/csv'
 
-/** Bug-scan 2026-10-05: security fixes that need no database. */
+/** Security behaviour that needs no database. */
 
 describe('money operations are admin only', () => {
   it('only an ADMIN may refund, void or delete money records', () => {

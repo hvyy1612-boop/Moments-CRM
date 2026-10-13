@@ -39,8 +39,8 @@ export function deriveOpenStage(tasks: DeriveTask[]): OpenStage {
 }
 
 /**
- * After a checklist change, set the lead's status to match it, in BOTH directions (owner, 2026-10-10: the
- * list must show what is ticked inside; unticking moves it back). Only for the three checklist statuses -
+ * After a checklist change, set the lead's status to match it, in BOTH directions (the list must show
+ * what is ticked inside; unticking moves it back). Only for the three checklist statuses -
  * Quote sent, Awaiting booking confirmation, a booked or an archived lead are never changed by ticking.
  */
 export async function syncEnquiryStageFromTasks(tx: Tx, enquiryId: string, actorUserId: string) {

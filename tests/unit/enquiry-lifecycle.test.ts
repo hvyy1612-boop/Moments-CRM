@@ -62,7 +62,7 @@ describe('enquiry sales lifecycle', () => {
     // A tick in New enquiry stays New enquiry; a tick in Contacted shows Contacted.
     expect(deriveOpenStage([task('new', 'COMPLETED'), task('discussion'), task('quote')])).toBe('NEW_ENQUIRY')
     expect(deriveOpenStage([task('new'), task('discussion', 'COMPLETED'), task('quote')])).toBe('CONTACTED')
-    // A tick in Consultation shows Consultation even with earlier sections still open (owner, 2026-10-10).
+    // A tick in Consultation shows Consultation even with earlier sections still open.
     expect(deriveOpenStage([task('new'), task('discussion'), task('quote', 'COMPLETED')])).toBe('CONSULTATION')
     // An Auto row never counts.
     expect(deriveOpenStage([{ stage: 'quote', status: 'COMPLETED', type: 'AUTO' }])).toBe('NEW_ENQUIRY')

@@ -4,7 +4,7 @@ import { dueToneFor } from '@/features/enquiries/workflow'
 import { getInvoiceBalance, nextPaymentDue, type InvoiceMoneyInput } from '@/lib/domain/money'
 import { quoteValidityPassed } from '@/lib/domain/quote'
 
-/** Bug-scan 2026-10-05 (C): dates and figures that read wrong on screen. */
+/** Dates and figures that read wrong on screen. */
 
 const d = (n: number) => new Prisma.Decimal(n)
 const charge = (amount: number) => ({ type: 'CHARGE' as const, status: 'SUCCEEDED' as const, amount: d(amount) })

@@ -6,8 +6,8 @@ import type { ReactNode } from 'react'
  * and centring only - the uniform workspace gutter (horizontal padding) is owned once by `<main>` in
  * AppChrome, so there is never double padding and no page can end up flush against the sidebar.
  *
- * Studio decision (2026-09-29): every working page fills the workspace like the Calendar - no empty side
- * gutters on wide screens. Only focused single-column forms keep a readable measure.
+ * Every working page fills the workspace like the Calendar - no empty side gutters on wide screens.
+ * Only focused single-column forms keep a readable measure.
  *  - narrow   readable/form measure, centred   (focused single-column forms)
  *  - standard fills the workspace              (lists, detail pages, the default)
  *  - wide     fills the workspace              (dashboards, job workspace)

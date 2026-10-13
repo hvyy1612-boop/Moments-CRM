@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { createEnquiry } from '@/lib/domain/enquiry'
 import { addEnquiryStage, deleteEnquiryTask, toggleEnquiryTask, getEnquiryBoard, renameEnquiryStage } from '@/lib/domain/enquiry-workflow'
 
-/** Bug-scan 2026-10-05 (C): lead custom stages and stage sync, against the (test) database. */
+/** Lead custom stages and stage sync, against the (test) database. */
 
 let userId = ''
 beforeAll(async () => {

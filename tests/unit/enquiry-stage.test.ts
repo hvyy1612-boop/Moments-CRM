@@ -6,7 +6,7 @@ const disc = (status: string) => ({ stage: 'discussion', type: 'TODO', status })
 const quo = (status: string) => ({ stage: 'quote', type: 'TODO', status })
 
 // The lead's three checklist sections (New enquiry / Contacted / Consultation) drive the three early
-// statuses: the status is the furthest section with a ticked task (owner, 2026-10-10).
+// statuses: the status is the furthest section with a ticked task.
 describe('deriveOpenStage - the status shows the furthest section ticked inside', () => {
   it('a fresh lead (nothing ticked) is NEW_ENQUIRY', () => {
     expect(deriveOpenStage([nw('PENDING'), disc('PENDING'), quo('PENDING')])).toBe('NEW_ENQUIRY')

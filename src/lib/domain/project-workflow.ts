@@ -692,10 +692,10 @@ export async function toggleProjectTask(taskId: string, actorUserId: string) {
       })
       // Cascade reconciles only legitimate predecessors: earlier tasks in mandatory stages or the SAME
       // stage. It never sweeps a DIFFERENT optional stage (Pre-shoot / Video / Film / Album) - ticking a
-      // Delivery task must not silently complete unfinished optional add-on work (bug #4).
+      // Delivery task must not silently complete unfinished optional add-on work.
       // Optional add-on stages (Video / Film / Album) and staff custom stages run ALONGSIDE production, not
       // after it: ticking a task there only reconciles earlier tasks of that same stage, never the core
-      // Pre-shoot..Delivery checklist (bug-scan 2026-10-05: one video tick completed the whole job).
+      // Pre-shoot..Delivery checklist (a single video tick must not complete the whole job).
       const targetIsCore = stageRank.has(targetStage) && !optionalStages.has(targetStage)
       const ids = pending
         .filter((t) => rankOf(t) <= target)
@@ -758,7 +758,7 @@ export async function maybeAutoCompleteJob(tx: Tx, projectId: string, actorUserI
   ])
   if (total === 0 || pending > 0) return // checklist not finished
 
-  // Paid in full is a staff call, not a sum (owner, 2026-10-10): the "Final payment received" task is part of
+  // Paid in full is a staff call, not a sum: the "Final payment received" task is part of
   // the checklist, so a job only completes itself once staff have ticked it along with everything else.
 
   await tx.project.update({ where: { id: projectId }, data: { lifecycleStatus: 'COMPLETED' } })

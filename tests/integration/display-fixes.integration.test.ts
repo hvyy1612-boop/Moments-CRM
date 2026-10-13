@@ -7,7 +7,7 @@ import { createInvoiceWithLines, markOverdueInvoices, recordPayment } from '@/li
 import { confirmDirectBooking, getProjectBoard } from '@/lib/domain/project-workflow'
 import { sydneyLocalToUtc } from '@/lib/time'
 
-/** Bug-scan 2026-10-05 (C): dates and figures that read wrong on screen, against the (test) database. */
+/** Dates and figures that read wrong on screen, against the (test) database. */
 
 let companyId = ''
 const email = () => `disp-${randomUUID().slice(0, 8)}@moments.test`

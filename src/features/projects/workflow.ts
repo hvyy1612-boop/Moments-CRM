@@ -37,8 +37,8 @@ export function stageLabel(key: string): string {
 }
 
 /** The production workflow seeded for a new Job: staff (manual) tasks only, action-oriented names
- *  (Verb + Object). "Final payment received" is a staff task too (owner, 2026-10-10: staff confirm the money
- *  rather than the system working it out); "Shoot scheduled" likewise. Optional add-on stages (video/film/album) start empty
+ *  (Verb + Object). "Final payment received" is a staff task too (staff confirm the money rather than the
+ *  system working it out); "Shoot scheduled" likewise. Optional add-on stages (video/film/album) start empty
  *  and are added per package. */
 export const DEFAULT_PROJECT_TASKS: { stage: string; key: string; title: string; type: TaskType }[] = [
   { stage: 'preshoot', key: 'confirm_shoot_details', title: 'Confirm shoot details', type: 'TODO' },

@@ -58,7 +58,7 @@ export async function closeJob(projectId: string, actorUserId: string | null = n
       select: INVOICE_MONEY_SELECT,
     })
     // Close only a truly settled job: canonical isFullySettled (money.ts / docs/25 Rule M4b), never raw
-    // outstanding - so a job with no invoice or a deposit-only invoice cannot be closed (bug #3). Agreed
+    // outstanding - so a job with no invoice or a deposit-only invoice cannot be closed. Agreed
     // value = the accepted quote total, else null.
     const acceptedQuote = await tx.quoteVersion.findFirst({
       where: { quote: { projectId }, status: 'ACCEPTED' },
@@ -67,7 +67,7 @@ export async function closeJob(projectId: string, actorUserId: string | null = n
     })
     const agreed = acceptedQuote?.total ?? null
     const bal = getJobBalance(invoices.map(toInvoiceMoneyInput), agreed)
-    // Known agreed value -> canonical isFullySettled (blocks deposit-only / under-invoiced, bug #3).
+    // Known agreed value -> canonical isFullySettled (blocks deposit-only / under-invoiced).
     // No agreed value (no accepted quote) -> fall back to "nothing outstanding" so a genuinely paid-off
     // or zero-value job can still close (keeps the no-quote flow + its tests working, regression guard).
     const settled = bal.agreedValueKnown

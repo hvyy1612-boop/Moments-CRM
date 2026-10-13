@@ -698,7 +698,7 @@ export async function getInvoiceByToken(token: string) {
     },
   })
   if (!inv) return null
-  // Fold credit notes into one credits total so the printable balance matches the ledger (bug #5).
+  // Fold credit notes into one credits total so the printable balance matches the ledger.
   const creditsTotal = inv.creditNotes.reduce((s, c) => s.add(c.amount), new Prisma.Decimal(0))
   // This page is public (token link): hand the document ONLY the settings an invoice prints, never the
   // rest of Company Settings (e.g. the calendar subscription token).

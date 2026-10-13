@@ -104,7 +104,7 @@ export default async function InvoiceDetailPage({
     }),
   ])
 
-  // Credit-aware credits total for the printable so its balance matches the ledger (bug #5).
+  // Credit-aware credits total for the printable so its balance matches the ledger.
   const docCredits = inv.creditNotes.reduce((s, cn) => s.add(cn.amount), new Prisma.Decimal(0))
   const status = inv.status
   const unpaid = inv.amountPaid.lte(0)

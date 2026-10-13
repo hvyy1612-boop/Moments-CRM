@@ -8,7 +8,7 @@ import { createInvoice } from './helpers'
 import { addProjectStage, addProjectStageBlock, addProjectTask, getProjectBoard, seedProjectWorkflow, toggleProjectTask, updateProjectTask } from '@/lib/domain/project-workflow'
 import { addEnquiryTask, getEnquiryBoard, updateEnquiryTask } from '@/lib/domain/enquiry-workflow'
 
-/** Bug-scan 2026-10-05: workflow / calendar / cancellation fixes against the real (test) database. */
+/** Workflow, calendar and cancellation, against the real (test) database. */
 
 let userId = ''
 const email = () => `wf-${randomUUID().slice(0, 8)}@moments.test`

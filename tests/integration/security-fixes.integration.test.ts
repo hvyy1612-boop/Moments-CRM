@@ -10,7 +10,7 @@ import { convertEnquiry, createEnquiry } from '@/lib/domain/enquiry'
 import { getInvoiceByToken } from '@/lib/domain/finance'
 import { createInvoice } from './helpers'
 
-/** Bug-scan 2026-10-05: security fixes against the real (test) database. */
+/** Security behaviour against the real (test) database. */
 
 let companyId = ''
 let userId = ''
