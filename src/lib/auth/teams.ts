@@ -8,8 +8,6 @@ export const TEAMS = [
 
 export const ROLE_LABEL: Record<Role, string> = { ADMIN: 'Admin', STUDIO: 'Staff', SUPERVISOR: 'Supervisor' }
 
-export type TeamSlug = (typeof TEAMS)[number]['slug']
-
 export function teamBySlug(slug: string): (typeof TEAMS)[number] | undefined {
   return TEAMS.find((t) => t.slug === slug)
 }

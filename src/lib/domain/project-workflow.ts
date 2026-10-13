@@ -258,6 +258,40 @@ export async function moveJobBackToLead(projectId: string, actorUserId: string |
   })
 }
 
+export async function deleteProjects(
+  projectIds: string[],
+  actorUserId: string | null,
+): Promise<{ deleted: number; skipped: number }> {
+  let deleted = 0
+  let skipped = 0
+  for (const projectId of projectIds) {
+    const outcome = await prisma.$transaction(async (tx) => {
+      const project = await tx.project.findUnique({
+        where: { id: projectId },
+        select: { id: true, companyId: true, name: true, _count: { select: { payments: true } } },
+      })
+      if (!project) return 'missing'
+
+      if (project._count.payments > 0) return 'skip'
+
+      const lead = await tx.enquiry.findFirst({ where: { convertedProjectId: projectId }, select: { id: true } })
+
+      await tx.quote.deleteMany({ where: lead ? { OR: [{ projectId }, { enquiryId: lead.id }] } : { projectId } })
+      await tx.invoice.deleteMany({ where: { projectId } })
+      await tx.contract.deleteMany({ where: { projectId } })
+      await tx.project.delete({ where: { id: projectId } })
+      if (lead) await tx.enquiry.delete({ where: { id: lead.id } })
+      await tx.auditLog.create({
+        data: { companyId: project.companyId, actorUserId, action: 'project.deleted', entityType: 'Project', entityId: projectId, beforeData: { name: project.name, leadId: lead?.id ?? null } },
+      })
+      return 'deleted'
+    })
+    if (outcome === 'deleted') deleted++
+    else if (outcome === 'skip') skipped++
+  }
+  return { deleted, skipped }
+}
+
 export async function confirmBookingByDepositTx(tx: Tx, projectId: string, actorUserId: string | null) {
   const project = await tx.project.findUnique({ where: { id: projectId }, select: { companyId: true, lifecycleStatus: true } })
   if (!project) return

@@ -69,13 +69,6 @@ export async function validateSession(
   return { userId: session.userId, sessionId: session.id }
 }
 
-export async function revokeSession(sessionId: string, clock: Clock = systemClock): Promise<void> {
-  await prisma.session.updateMany({
-    where: { id: sessionId, revokedAt: null },
-    data: { revokedAt: clock.now() },
-  })
-}
-
 export async function revokeSessionByToken(token: string, clock: Clock = systemClock): Promise<void> {
   await prisma.session.updateMany({
     where: { tokenHash: hashToken(token), revokedAt: null },

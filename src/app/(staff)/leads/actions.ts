@@ -194,15 +194,19 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
   const op = String(formData.get('op') ?? '')
   if (!enquiryId) return
 
+  let toastCode: string
   switch (op) {
     case 'lost':
       await markEnquiryLost(enquiryId, 'Archived', user.id)
+      toastCode = 'lead-archived'
       break
     case 'cancel_job':
       await cancelBooking(enquiryId, user.id)
+      toastCode = 'booking-cancelled'
       break
     case 'reopen':
       await reopenEnquiry(enquiryId, user.id)
+      toastCode = 'lead-reopened'
       break
     default:
       return
@@ -210,6 +214,7 @@ export async function updateEnquiryAction(formData: FormData): Promise<void> {
   revalidatePath('/leads')
   revalidatePath(`/leads/${enquiryId}`)
   revalidatePath('/jobs')
+  redirect(`/leads/${enquiryId}?toast=${toastCode}`)
 }
 
 function readLeadTask(formData: FormData, type: string) {
@@ -349,6 +354,7 @@ export async function addEnquiryNoteAction(formData: FormData): Promise<void> {
   if (!enquiryId || !body.trim()) return
   await addEnquiryNote(enquiryId, body, user.id)
   revalidatePath(`/leads/${enquiryId}`)
+  redirect(`/leads/${enquiryId}?toast=note-added`)
 }
 
 export async function markEnquiryViewedAction(id: string): Promise<void> {

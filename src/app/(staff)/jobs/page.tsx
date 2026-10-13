@@ -36,7 +36,7 @@ function daysUntilSydney(due: Date, now: Date): number {
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; sort?: string; task?: string; tab?: string }>
+  searchParams: Promise<{ q?: string; sort?: string; task?: string; tab?: string; removed?: string; kept?: string }>
 }) {
   const user = await requireRole('/jobs')
   const cookieValue = (await cookies()).get(CSRF_COOKIE)?.value ?? ''
@@ -47,6 +47,8 @@ export default async function JobsPage({
   const sort: JobSortValue = SORTS.includes(sp.sort as JobSortValue) ? (sp.sort as JobSortValue) : JOB_DEFAULT_SORT
   const task = sp.task ?? ''
   const tab: 'active' | 'completed' = sp.tab === 'completed' ? 'completed' : 'active'
+  const removed = Number(sp.removed ?? 0) || 0
+  const kept = Number(sp.kept ?? 0) || 0
 
   const projects = await prisma.project.findMany({
 
@@ -176,6 +178,13 @@ export default async function JobsPage({
           actions={canEdit ? <AddEnquiryButton kind="job" csrf={csrf} /> : null}
         />
 
+        {removed > 0 || kept > 0 ? (
+          <div className="mb-4 rounded-md border border-line bg-sunk px-3 py-2 text-sm text-ink">
+            {removed > 0 ? <span><span className="font-semibold">{removed}</span> job{removed > 1 ? 's' : ''} deleted. </span> : null}
+            {kept > 0 ? <span><span className="font-semibold">{kept}</span> kept because {kept > 1 ? 'they have' : 'it has'} a recorded payment (refund first to remove).</span> : null}
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
           <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Job status">
             {([['active', 'Active', activeCount], ['completed', 'Completed', completedCount]] as const).map(([key, label, count]) => {
@@ -213,7 +222,7 @@ export default async function JobsPage({
                     : 'No jobs yet. Use Add job to create one.'}
             </p>
           ) : (
-            <JobsTable rows={rows} backParam={backParam} />
+            <JobsTable rows={rows} backParam={backParam} csrf={csrf} canDelete={canEdit} />
           )}
         </div>
       </PageContainer>

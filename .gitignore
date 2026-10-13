@@ -27,3 +27,8 @@ next-env.d.ts
 
 # Playwright output
 test-results/
+
+.vscode/
+.idea/
+/_internal/
+/backups/

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+
 
 type Level = 'info' | 'warn' | 'error'
 
@@ -12,8 +12,4 @@ export const logger = {
   info: (message: string, context?: Record<string, unknown>) => emit('info', message, context),
   warn: (message: string, context?: Record<string, unknown>) => emit('warn', message, context),
   error: (message: string, context?: Record<string, unknown>) => emit('error', message, context),
-}
-
-export function correlationId(): string {
-  return randomUUID().slice(0, 8)
 }

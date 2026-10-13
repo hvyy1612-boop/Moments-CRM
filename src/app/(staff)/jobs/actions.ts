@@ -14,6 +14,7 @@ import {
   addProjectStage,
   addProjectStageBlock,
   addProjectTask,
+  deleteProjects,
   deleteProjectStage,
   moveJobBackToLead,
   setJobComplete,
@@ -64,12 +65,15 @@ export async function closeJobAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
   const projectId = String(formData.get('projectId') ?? '')
   if (!projectId) return
+  let closed = false
   try {
     await closeJob(projectId, user.id)
+    closed = true
   } catch {
     // Balance outstanding or tasks pending - leave the job as-is; the page reflects the real state.
   }
   revalidatePath(`/jobs/${projectId}`)
+  if (closed) redirect(`/jobs/${projectId}?toast=job-closed`)
 }
 
 export async function setJobCompleteAction(formData: FormData): Promise<void> {
@@ -78,13 +82,15 @@ export async function setJobCompleteAction(formData: FormData): Promise<void> {
   const user = await requireStaff()
   const projectId = String(formData.get('projectId') ?? '')
   if (!projectId) return
+  const done = formData.get('done') === 'true'
   try {
-    await setJobComplete(projectId, formData.get('done') === 'true', user.id)
+    await setJobComplete(projectId, done, user.id)
   } catch (error) {
     redirect(`/jobs/${projectId}?completeError=${encodeURIComponent(error instanceof Error ? error.message : 'Could not update the job.')}`)
   }
   revalidatePath('/jobs')
   revalidatePath(`/jobs/${projectId}`)
+  redirect(`/jobs/${projectId}?toast=${done ? 'job-completed' : 'job-reopened'}`)
 }
 
 export async function moveJobBackToLeadAction(formData: FormData): Promise<void> {
@@ -103,6 +109,18 @@ export async function moveJobBackToLeadAction(formData: FormData): Promise<void>
   revalidatePath('/leads')
   revalidatePath(`/leads/${enquiryId}`)
   redirect(`/leads/${enquiryId}?toast=moved-to-lead`)
+}
+
+export async function deleteJobsAction(formData: FormData): Promise<void> {
+  const cookieStore = await cookies()
+  if (!csrfOk(cookieStore.get(CSRF_COOKIE)?.value, formData)) return
+  const user = await requireStaff()
+  const ids = String(formData.get('ids') ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+  if (ids.length === 0) return
+  const { deleted, skipped } = await deleteProjects(ids, user.id)
+  revalidatePath('/jobs')
+  revalidatePath('/leads')
+  redirect(`/jobs?removed=${deleted}&kept=${skipped}`)
 }
 
 export async function saveQuoteAction(
@@ -381,8 +399,10 @@ export async function voidInvoiceAction(formData: FormData): Promise<void> {
   if (!can(user, 'MONEY_ADMIN')) return
   const invoiceId = String(formData.get('invoiceId') ?? '')
   if (!invoiceId) return
+  let voided = false
   try {
     await voidInvoice(invoiceId, user.id)
+    voided = true
   } catch {
     // Refused (e.g. money recorded since the page loaded): the re-render shows the real state.
   }
@@ -390,6 +410,7 @@ export async function voidInvoiceAction(formData: FormData): Promise<void> {
   revalidatePath(`/finance/${invoiceId}`)
   const projectId = String(formData.get('projectId') ?? '')
   if (projectId) revalidatePath(`/jobs/${projectId}`)
+  if (voided) redirect(`/finance/${invoiceId}?toast=invoice-voided`)
 }
 
 export async function deleteInvoiceAction(formData: FormData): Promise<void> {
@@ -413,7 +434,8 @@ export async function deleteInvoiceAction(formData: FormData): Promise<void> {
   if (clientId) revalidatePath(`/clients/${clientId}`)
 
   const back = String(formData.get('back') ?? '')
-  if (/^\/(?!\/)/.test(back)) redirect(back)
+  if (/^\/(?!\/)/.test(back)) redirect(back + (back.includes('?') ? '&' : '?') + 'toast=invoice-deleted')
+  redirect('/finance?toast=invoice-deleted')
 }
 
 export async function recordPaymentAction(
@@ -655,6 +677,7 @@ export async function addInternalNoteAction(formData: FormData): Promise<void> {
     data: { projectId, type: 'NOTE', direction: 'internal', internal: true, body, byUserId: user.id },
   })
   revalidatePath(`/jobs/${projectId}`)
+  redirect(`/jobs/${projectId}?toast=note-added`)
 }
 
 export async function updateClientContactAction(formData: FormData): Promise<void> {
@@ -678,6 +701,7 @@ export async function updateClientContactAction(formData: FormData): Promise<voi
     },
   })
   revalidatePath(`/jobs/${projectId}`)
+  redirect(`/jobs/${projectId}?toast=client-updated`)
 }
 
 export async function editInternalNoteAction(formData: FormData): Promise<void> {
@@ -693,6 +717,7 @@ export async function editInternalNoteAction(formData: FormData): Promise<void> 
     data: { body, editedByUserId: user.id, editedAt: new Date() },
   })
   revalidatePath(`/jobs/${projectId}`)
+  redirect(`/jobs/${projectId}?toast=note-saved`)
 }
 
 export async function deleteInternalNoteAction(formData: FormData): Promise<void> {
@@ -704,4 +729,5 @@ export async function deleteInternalNoteAction(formData: FormData): Promise<void
   if (!projectId || !communicationId) return
   await prisma.communication.deleteMany({ where: { id: communicationId, projectId, internal: true } })
   revalidatePath(`/jobs/${projectId}`)
+  redirect(`/jobs/${projectId}?toast=note-deleted`)
 }

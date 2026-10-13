@@ -80,7 +80,8 @@ export async function AppShell({
 }) {
   const items = NAV.filter((n) => !n.permission || can(user, n.permission))
   const initial = user.name.trim().charAt(0).toUpperCase() || 'U'
-  const alerts = await getRecentAlerts()
+
+  const alerts = await getRecentAlerts(20)
 
   const me = await prisma.user.findUnique({ where: { id: user.id }, select: { notificationsSeenAt: true } })
 

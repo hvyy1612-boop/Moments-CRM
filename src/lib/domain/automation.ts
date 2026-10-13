@@ -9,12 +9,6 @@ export type AutomationSettings = {
   remindersActiveFrom: Date | null
 }
 
-export const AUTOMATION_DEFAULTS: AutomationSettings = {
-  clientEmailsEnabled: false,
-  internalFollowupsEnabled: false,
-  remindersActiveFrom: null,
-}
-
 export function readAutomationSettings(settings: unknown): AutomationSettings {
   const s = settings && typeof settings === 'object' && !Array.isArray(settings) ? (settings as Record<string, unknown>) : {}
   const a = s.automation && typeof s.automation === 'object' && !Array.isArray(s.automation) ? (s.automation as Record<string, unknown>) : {}

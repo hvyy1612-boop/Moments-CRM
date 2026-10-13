@@ -137,7 +137,7 @@ export async function declineQuoteAction(formData: FormData): Promise<void> {
     redirect(`/quotes/${quoteId}?declineError=${encodeURIComponent(error instanceof Error ? error.message : 'Could not decline the quote.')}`)
   }
   revalidatePath(`/quotes/${quoteId}`)
-  redirect(`/quotes/${quoteId}`)
+  redirect(`/quotes/${quoteId}?toast=quote-declined`)
 }
 
 export async function acceptQuoteAction(formData: FormData): Promise<void> {
@@ -156,7 +156,7 @@ export async function acceptQuoteAction(formData: FormData): Promise<void> {
     redirect(`/quotes/${quoteId}?acceptError=${encodeURIComponent(error instanceof Error ? error.message : 'Could not accept the quote.')}`)
   }
   revalidatePath(`/quotes/${quoteId}`)
-  redirect(enquiryId ? `/leads/${enquiryId}` : projectId ? `/jobs/${projectId}` : `/quotes/${quoteId}`)
+  redirect((enquiryId ? `/leads/${enquiryId}` : projectId ? `/jobs/${projectId}` : `/quotes/${quoteId}`) + '?toast=quote-accepted')
 }
 
 export async function deleteQuotesAction(formData: FormData): Promise<void> {
@@ -172,6 +172,7 @@ export async function deleteQuotesAction(formData: FormData): Promise<void> {
     // fall through to refresh
   }
   revalidatePath('/quotes')
+  redirect('/quotes?toast=quotes-deleted')
 }
 
 export async function reviseQuoteAction(formData: FormData): Promise<void> {
@@ -186,5 +187,5 @@ export async function reviseQuoteAction(formData: FormData): Promise<void> {
     // fall through to refresh
   }
   revalidatePath(`/quotes/${quoteId}`)
-  redirect(`/quotes/${quoteId}/edit`)
+  redirect(`/quotes/${quoteId}/edit?toast=quote-revised`)
 }

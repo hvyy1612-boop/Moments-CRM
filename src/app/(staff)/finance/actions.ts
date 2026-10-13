@@ -83,4 +83,5 @@ export async function deleteInvoicesAction(formData: FormData): Promise<void> {
     }
   }
   revalidatePath('/finance')
+  redirect('/finance?toast=invoices-deleted')
 }

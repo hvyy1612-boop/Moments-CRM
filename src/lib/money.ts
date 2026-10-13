@@ -11,10 +11,6 @@ export function formatAud(value: Prisma.Decimal): string {
   return `${negative ? '-' : ''}$${grouped}.${cents}`
 }
 
-export function isPriceOnEnquiry(value: Prisma.Decimal): boolean {
-  return value.isZero()
-}
-
 const GST_DIVISOR = new Prisma.Decimal(11)
 const ROUND_HALF_UP = 4
 

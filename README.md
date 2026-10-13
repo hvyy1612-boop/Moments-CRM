@@ -3,7 +3,6 @@
 A client management system for **Moments Photography & Film**, a Sydney wedding and portrait
 studio. It covers the journey from first enquiry through quotation, booking, payment and delivery.
 
-Built for a Master of ICT capstone.
 
 ## Stack
 
@@ -13,10 +12,6 @@ to Vercel with a Neon Postgres database.
 
 ## Project structure
 
-Folder names follow two conventions that cannot be renamed: `src/app/` paths ARE the URLs
-(Next.js App Router). Everything
-else is named for its purpose. Folders in `(brackets)` are route groups: they organise files
-by audience and never appear in the URL.
 
 ```
 moments-cms/
@@ -68,9 +63,8 @@ moments-cms/
 
 ## Prerequisites
 
-- **Node.js 22** (`.nvmrc` pins it; Node 20+ works). Run `nvm use` if you use nvm.
-- **PostgreSQL 16** via Homebrew (this project uses Homebrew rather than Docker):
-
+- **Node.js 22** 
+- **PostgreSQL 16** via Homebrew 
   ```bash
   brew install postgresql@16
   brew services start postgresql@16
@@ -126,7 +120,9 @@ audit → `passwordHash` grep → design-token grep → money-as-`number` grep �
 ## Deployment (Vercel + Neon)
 
 - Create a Neon Postgres database. Set `DATABASE_URL` to the **pooled** connection string and
-  `DIRECT_URL` to the **direct** one (used for migrations).
+  `DIRECT_URL` to the **direct** one (used for migrations). 
 - Configure the same environment variables in Vercel. `env.ts` refuses to boot if any required
   variable is missing (SEC-A08).
-- Scheduled jobs run as Vercel Cron routes; rate limiting is Postgres-backed (D-004, D-005).
+- Scheduled jobs run as Vercel Cron routes;
+- Rate limiting is Postgres
+

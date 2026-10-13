@@ -374,13 +374,6 @@ export function quoteValidityPassed(validUntil: Date | null, now: Date = systemC
   return validUntil != null && sydneyDateTimeParts(now).date > sydneyDateTimeParts(validUntil).date
 }
 
-export function effectiveQuoteStatus(status: string, validUntil: Date | null, now: Date = systemClock.now()): QuoteStatusValue {
-  if ((status === 'DRAFT' || status === 'SENT' || status === 'VIEWED') && quoteValidityPassed(validUntil, now)) {
-    return 'EXPIRED'
-  }
-  return status as QuoteStatusValue
-}
-
 export async function listQuotes(): Promise<QuoteListRow[]> {
   const quotes = await prisma.quote.findMany({
     orderBy: [{ seq: 'desc' }, { createdAt: 'desc' }],

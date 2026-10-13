@@ -67,7 +67,7 @@ export function TopNav({
         </span>
       ) : null}
       <CommandPalette />
-      <NotificationBell alerts={alerts} seenAt={notificationsSeenAt ?? null} canViewActivity={userRole === 'ADMIN'} />
+      <NotificationBell alerts={alerts} seenAt={notificationsSeenAt ?? null} />
 
       <div ref={menuRef} className="relative shrink-0">
         <button
