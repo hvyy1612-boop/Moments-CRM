@@ -38,5 +38,3 @@ export const enquirySchema = z.object({
   // separately). The single `name` field stays flexible for the public form.
   .refine((d) => !d.firstName?.includes('&'), { message: "Please write 'and' instead of '&' in a name.", path: ['firstName'] })
   .refine((d) => !d.lastName?.includes('&'), { message: "Please write 'and' instead of '&' in a name.", path: ['lastName'] })
-
-export type EnquiryInput = z.infer<typeof enquirySchema>

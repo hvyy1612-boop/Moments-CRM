@@ -16,11 +16,6 @@ export function formatAud(value: Prisma.Decimal): string {
   return `${negative ? '-' : ''}$${grouped}.${cents}`
 }
 
-/** A zero price means the studio has not published a figure yet (see the seed and OPEN-QUESTIONS). */
-export function isPriceOnEnquiry(value: Prisma.Decimal): boolean {
-  return value.isZero()
-}
-
 const GST_DIVISOR = new Prisma.Decimal(11)
 const ROUND_HALF_UP = 4 // Decimal.js rounding mode
 

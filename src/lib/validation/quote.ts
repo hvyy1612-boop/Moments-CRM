@@ -44,9 +44,4 @@ export const saveQuoteSchema = z.object({
     .transform((v) => (v ? Math.min(100, Math.max(0, Math.round(Number(v)) || 0)) : null)),
 })
 
-export const acceptQuoteSchema = z.object({
-  acceptedName: z.string().trim().min(1, 'Please type your name to accept.').max(120),
-})
-
 export type QuoteLineInput = z.infer<typeof quoteLineSchema>
-export type SaveQuoteInput = z.infer<typeof saveQuoteSchema>

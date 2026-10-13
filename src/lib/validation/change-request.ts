@@ -61,7 +61,3 @@ export const changeRequestPayloadSchema = z.discriminatedUnion('kind', [
 ])
 
 export type ChangeRequestPayload = z.infer<typeof changeRequestPayloadSchema>
-export type ReschedulePayload = z.infer<typeof reschedule>
-export type ScopeChangePayload = z.infer<typeof scopeChange>
-export type PriceDecreasePayload = z.infer<typeof priceDecrease>
-export type ProductionPayload = z.infer<typeof production>

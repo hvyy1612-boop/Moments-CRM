@@ -99,14 +99,6 @@ export async function validateSession(
   return { userId: session.userId, sessionId: session.id }
 }
 
-/** Revoke a single session (SEC-S07 self-service revoke, and logout). */
-export async function revokeSession(sessionId: string, clock: Clock = systemClock): Promise<void> {
-  await prisma.session.updateMany({
-    where: { id: sessionId, revokedAt: null },
-    data: { revokedAt: clock.now() },
-  })
-}
-
 /** Revoke whatever session a cookie token points at, valid or not (SEC-S03 rotation on login). */
 export async function revokeSessionByToken(token: string, clock: Clock = systemClock): Promise<void> {
   await prisma.session.updateMany({

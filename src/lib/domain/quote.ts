@@ -438,18 +438,6 @@ export function quoteValidityPassed(validUntil: Date | null, now: Date = systemC
   return validUntil != null && sydneyDateTimeParts(now).date > sydneyDateTimeParts(validUntil).date
 }
 
-/**
- * Effective (display) status: a non-accepted quote past its valid-until date reads as EXPIRED (docs/31).
- * Accepted/declined/superseded quotes never become expired. This is a pure derivation over the stored
- * status — the backend is the source of truth; acceptQuote enforces the same rule server-side.
- */
-export function effectiveQuoteStatus(status: string, validUntil: Date | null, now: Date = systemClock.now()): QuoteStatusValue {
-  if ((status === 'DRAFT' || status === 'SENT' || status === 'VIEWED') && quoteValidityPassed(validUntil, now)) {
-    return 'EXPIRED'
-  }
-  return status as QuoteStatusValue
-}
-
 /** All quotes for the Quotes list, newest first. Dual-reads the client from the enquiry (new) or the
  *  project (legacy) during the migration window (docs/31). Status reflects derived expiry. */
 export async function listQuotes(): Promise<QuoteListRow[]> {
