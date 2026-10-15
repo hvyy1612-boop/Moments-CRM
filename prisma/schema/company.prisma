@@ -1,0 +1,41 @@
+model Company {
+  id        String   @id @default(cuid()) @db.VarChar(30)
+  name      String   @db.VarChar(150)
+  abn       String?  @db.VarChar(20)
+  currency  String   @default("AUD") @db.VarChar(3)
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  users          User[]
+  clients        Client[]
+  projects       Project[]
+  enquiries      Enquiry[]
+  packages       Package[]
+  workItems      WorkItem[]
+  calendarEvents CalendarEvent[]
+  numberCounters NumberCounter[]
+
+  @@map("companies")
+}
+
+enum RecordNumberType {
+  CLIENT
+  ENQUIRY
+  QUOTE
+  JOB
+  INVOICE
+}
+
+model NumberCounter {
+  companyId String           @map("company_id") @db.VarChar(30)
+  type      RecordNumberType
+  year      Int
+  value     Int              @default(0)
+  updatedAt DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, type, year])
+  @@map("number_counter")
+}
