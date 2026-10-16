@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-src = '\n'.join(p.read_text() for p in sorted((ROOT / 'prisma/schema').glob('*.prisma')))
+src = (ROOT / 'prisma/schema.prisma').read_text()
 lines = src.splitlines()
 
 enums = {}

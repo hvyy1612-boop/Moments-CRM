@@ -150,7 +150,7 @@ export type EnqStage = {
 
   custom: boolean
   done: number
-  total: number
+  total: number // money-ok: task count
   tasks: EnqTaskRow[]
 }
 export type EnquiryBoard = { stages: EnqStage[]; allDone: boolean }

@@ -18,7 +18,7 @@ moments-cms/
 ├── README.md                    this file: setup, structure, verification
 │
 ├── prisma/
-│   ├── schema/                  the full data model split by domain: every model + enum
+│   ├── schema.prisma            the full data model: every model and enum
 │   ├── migrations/              versioned SQL, including triggers and partial unique indexes
 │   └── seed.ts                  idempotent seed (§13): packages, add-ons, demo records
 │
