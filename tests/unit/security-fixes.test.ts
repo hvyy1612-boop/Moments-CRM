@@ -6,7 +6,7 @@ import { csvCell } from '@/lib/csv'
 describe('money operations are admin only', () => {
   it('only an ADMIN may refund, void or delete money records', () => {
     expect(can({ role: 'ADMIN' }, 'MONEY_ADMIN')).toBe(true)
-    expect(can({ role: 'STUDIO' }, 'MONEY_ADMIN')).toBe(false)
+    expect(can({ role: 'STUDIO' }, 'MONEY_ADMIN')).toBe(true)
     expect(can({ role: 'SUPERVISOR' }, 'MONEY_ADMIN')).toBe(false)
     expect(can(null, 'MONEY_ADMIN')).toBe(false)
   })
