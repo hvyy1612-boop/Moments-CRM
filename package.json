@@ -58,7 +58,6 @@
     "vitest": "^4.1.0"
   },
   "prisma": {
-    "schema": "prisma/schema",
     "seed": "tsx prisma/seed.ts"
   },
   "overrides": {
