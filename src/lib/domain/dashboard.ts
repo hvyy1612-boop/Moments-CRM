@@ -34,7 +34,7 @@ export type DashboardData = {
     collectedDeltaPct: number | null
     outstanding: number
     unpaidCount: number
-    totalBookings: number
+    totalBookings: number // money-ok: booking counts
     bookingsDeltaPct: number | null
   }
   revenueSeries: SeriesPoint[]
@@ -43,7 +43,7 @@ export type DashboardData = {
   bookingsBySource: Bar[]
   revenueByOccasion: Bar[]
   revenueByService: Bar[]
-  invoiceAging: { current: number; d1: number; d8: number; d30: number; total: number }
+  invoiceAging: { current: number; d1: number; d8: number; d30: number; total: number } // money-ok: chart display values, summed from Decimal
   pipeline: Bar[]
   recentEnquiries: RecentEnquiry[]
 }

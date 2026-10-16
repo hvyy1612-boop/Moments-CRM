@@ -30,7 +30,7 @@ export type StoredDue = {
 export type DueSpec = {
   mode: DueMode
   anchor?: RelAnchor
-  amount?: number
+  amount?: number // money-ok: a count of days or weeks
   unit?: 'days' | 'weeks'
   date?: string
   time?: string
